@@ -44,9 +44,11 @@ import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabu
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { intervalCollectionsPerWeek, PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
 
+import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { OWNERSHIP_LABELS } from "@/lib/data/containers"
+import { OWNERSHIP_LABELS, SERVED_PUBLICLY } from "@/lib/data/containers"
 import { masterDataKindOf } from "@/lib/data/master-data"
+import { isSharedPointRecord } from "@/lib/data/properties"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
@@ -81,6 +83,7 @@ const KIND = {
   decommissionReason: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "decommission-reason" },
   movement: { owns: (record: BusinessRecord) => record.recordKind === "Stock movement", bare: true },
   subscription: { bare: true },
+  sharedPoint: { owns: isSharedPointRecord },
 } satisfies Record<string, ReferenceRule>
 
 /** The form's last day in from the wire's first day out (half-open), and back. */
@@ -306,8 +309,10 @@ export const CONTAINER_COMMANDS = {
   }),
   // The Registry's one door into service: the placement and the issue movement together.
   issue: lifecycle("placements", "issued into service", (input, record, context) => {
-    const subscriptionId = inputReference(input, "subscriptionId", "subscription", context, KIND.subscription)
-    if (subscriptionId === undefined) return refusal("subscriptionId", "Give the subscription's id")
+    // Under a subscription, or a public placement at one of the project's shared points (M12 of #293).
+    const publicly = said(input, "servedBy") === SERVED_PUBLICLY
+    const served = publicly ? inputReference(input, "sharedPointId", SHARED_POINT_PREFIX, context, KIND.sharedPoint) : inputReference(input, "subscriptionId", "subscription", context, KIND.subscription)
+    if (served === undefined) return publicly ? refusal("sharedPointId", "Pick a shared collection point the API holds") : refusal("subscriptionId", "Give the subscription's id")
     const wasteFractionId = inputReference(input, "wasteFractionId", "fraction", context, KIND.fraction)
     if (wasteFractionId === undefined) return refusal("wasteFractionId", PICK_FRACTION)
     const frequencyNamed = said(input, "serviceFrequencyId") !== undefined
@@ -315,7 +320,7 @@ export const CONTAINER_COMMANDS = {
     if (frequencyNamed && serviceFrequencyId === undefined) return refusal("serviceFrequencyId", PICK_FREQUENCY)
     const validFrom = said(input, "validFrom")
     if (validFrom === undefined || !ISO_DAY.test(validFrom)) return refusal("validFrom", "Give the first day it serves")
-    return bodyOf({ subscriptionId, wasteFractionId }, serviceFrequencyId === undefined ? {} : { serviceFrequencyId }, { validFrom }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
+    return bodyOf(publicly ? { sharedCollectionPointId: served } : { subscriptionId: served }, { wasteFractionId }, serviceFrequencyId === undefined ? {} : { serviceFrequencyId }, { validFrom }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
   }),
 } satisfies Record<string, RecordCommand<ContainerResource>>
 
@@ -368,7 +373,9 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     if (placement !== undefined) {
       facts["Waste fractions"] = nameVia(context, "fraction", placement.wasteFractionId)
       facts.Placement = periodOf(placement)
-      facts.Subscription = nameVia(context, "subscription", placement.subscriptionId)
+      if (placement.subscriptionId !== null) facts.Subscription = nameVia(context, "subscription", placement.subscriptionId)
+      // A public placement (M12 of #293): the project's own bin at its point, served under no subscription and charged to nobody.
+      if (placement.sharedCollectionPointId !== null) facts["Public placement"] = nameVia(context, SHARED_POINT_PREFIX, placement.sharedCollectionPointId)
       if (placement.effectiveServiceFrequencyId !== null) facts["Service frequency"] = nameVia(context, "frequency", placement.effectiveServiceFrequencyId)
     }
     if (resource.notes !== null) facts.Notes = resource.notes
@@ -398,7 +405,8 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
         assetStatus: state?.status ?? "",
         warehouseId: state?.warehouseId ? webIdVia(context, "warehouse", state.warehouseId) : "",
         placementId: placement?.id ?? "",
-        subscriptionId: placement ? webIdVia(context, "subscription", placement.subscriptionId) : "",
+        subscriptionId: placement?.subscriptionId ? webIdVia(context, "subscription", placement.subscriptionId) : "",
+        sharedPointId: placement?.sharedCollectionPointId ? webIdVia(context, SHARED_POINT_PREFIX, placement.sharedCollectionPointId) : "",
         wasteFraction: placement ? webIdVia(context, "fraction", placement.wasteFractionId) : "",
         serviceFrequencyId: placement?.serviceFrequencyId ? webIdVia(context, "frequency", placement.serviceFrequencyId) : "",
         [PROMISED_RATE_KEY]: placement === undefined ? "" : promisedRateOf(context, placement.effectiveServiceFrequencyId),

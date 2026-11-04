@@ -1139,16 +1139,19 @@ column wms.container_service_placement 5 updated_at timestamp with time zone not
 column wms.container_service_placement 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 7 valid_to date acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 8 container_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.container_service_placement 9 subscription_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 9 subscription_id uuid acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 10 waste_fraction_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 11 service_frequency_id uuid
+column wms.container_service_placement 12 shared_collection_point_id uuid
 constraint wms.container_service_placement container_service_placement_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.container_service_placement container_service_placement_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_container_id_project_key UNIQUE (company_id, project_id, container_id, id)
 constraint wms.container_service_placement container_service_placement_no_overlap EXCLUDE USING gist (company_id WITH =, container_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.container_service_placement container_service_placement_pkey PRIMARY KEY (id)
 constraint wms.container_service_placement container_service_placement_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.container_service_placement container_service_placement_served_exactly_one CHECK (((((subscription_id IS NOT NULL))::integer + ((shared_collection_point_id IS NOT NULL))::integer) = 1))
 constraint wms.container_service_placement container_service_placement_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
+constraint wms.container_service_placement container_service_placement_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 constraint wms.container_service_placement container_service_placement_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
@@ -1156,6 +1159,7 @@ index wms.container_service_placement container_service_placement_container_id_p
 index wms.container_service_placement container_service_placement_no_overlap CREATE INDEX container_service_placement_no_overlap ON wms.container_service_placement USING gist (company_id, container_id, daterange(valid_from, valid_to, '[)'::text))
 index wms.container_service_placement container_service_placement_pkey CREATE UNIQUE INDEX container_service_placement_pkey ON wms.container_service_placement USING btree (id)
 index wms.container_service_placement container_service_placement_service_frequency_id_idx CREATE INDEX container_service_placement_service_frequency_id_idx ON wms.container_service_placement USING btree (company_id, service_frequency_id)
+index wms.container_service_placement container_service_placement_shared_collection_point_id_idx CREATE INDEX container_service_placement_shared_collection_point_id_idx ON wms.container_service_placement USING btree (company_id, shared_collection_point_id)
 index wms.container_service_placement container_service_placement_subscription_id_idx CREATE INDEX container_service_placement_subscription_id_idx ON wms.container_service_placement USING btree (company_id, subscription_id)
 index wms.container_service_placement container_service_placement_waste_fraction_id_idx CREATE INDEX container_service_placement_waste_fraction_id_idx ON wms.container_service_placement USING btree (company_id, waste_fraction_id)
 trigger wms.container_service_placement container_service_placement_audit_trail enabled=O CREATE TRIGGER container_service_placement_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_service_placement FOR EACH ROW EXECUTE FUNCTION wms.audit_row('container', 'container_id')
@@ -4872,4 +4876,5 @@ journal 1793267564046 d11debc5f21b91706db12b266c1f9d1c9c0fc1d52f1ff23058b0a44641
 journal 1793268227594 2125da124d5ee7ff9696f7ba6262cee038ca4f70299587bd9787adb4629f251f
 journal 1793268880247 a9b2b87bfefab0d392d1c922804507e4aaac5ed2c6ad871ec91626f1524f1970
 journal 1793796531744 0265ef0514c7b1137879d0906ee20a80f184966d3cb6e017815d60b7a094605a
+journal 1793799967716 69211a9db7ef26f17b5eb0ca05c26144c7c7b5b1c49bcfe216140eb16e5528f7
 pgboss-version 42

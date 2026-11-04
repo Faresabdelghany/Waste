@@ -49,7 +49,7 @@ import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { customer, property } from "@waste/db/schema/customers"
+import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
@@ -967,5 +967,53 @@ describe("generation against a migrated database", { skip }, () => {
     }
     await generateA(march)
     assert.deepEqual(await residualOn("2027-03-01"), [a.bin1], "the scheme's area again, its western half in force since October; bin 2's placement ended then")
+  })
+  test("a public placement (M12 of #293) is a stop like any other: a litter bin at the project's point inside the area is planned at the point with no subscription behind it, one outside is not, and every subscribed container's stop is as it was", async () => {
+    // Company b, far from every other window: Monday 8 and Thursday 11 March 2027.
+    const week = { from: "2027-03-08", to: "2027-03-14" }
+    const square = "018f7c36-b000-7000-8000-000000000081"
+    const outside = "018f7c36-b000-7000-8000-000000000082"
+    const litter = "018f7c36-b000-7000-8000-000000000083"
+    const farLitter = "018f7c36-b000-7000-8000-000000000084"
+    const scoped = { companyId: b.company, projectId: b.project }
+    const pointValues = { kind: "surface", operatingModel: "municipal", accessMode: "open", billingMode: "municipal", status: "open" } as const
+    const generateB = async () => {
+      const runId = await runFor(b.scheme, b.company, b.project, week)
+      assert.equal((await runGeneration({ generationRunId: runId, companyId: b.company }, null, context())).kind, "succeeded")
+      const [run] = await ownerPool.db.select().from(generationRun).where(eq(generationRun.id, runId))
+      return run
+    }
+    const mondayOfB = async () => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, "2027-03-08")))
+      return row === undefined ? [] : await pickupsOf(row.id)
+    }
+    const before = await generateB()
+    const subscribedStops = (await mondayOfB()).map((stop) => [stop.containerId, stop.propertyId, stop.sharedCollectionPointId, stop.wasteFractionId])
+    assert.deepEqual(subscribedStops.map(([containerId]) => containerId), [b.bin1, b.bin3], "Parkvej's and Havnegade's bins, as the week before")
+
+    await ownerPool.db.insert(sharedCollectionPoint).values([
+      { id: square, ...scoped, ...pointValues, name: "Torvet", address: "Torvet 1", location: { type: "Point", coordinates: [12.56, 55.69] } },
+      { id: outside, ...scoped, ...pointValues, name: "Amager Strand", address: "Amager Strand 1", location: AMAGER },
+    ])
+    await ownerPool.db.insert(container).values([
+      { id: litter, ...scoped, label: "BIN-PUB-1", containerTypeId: b.containerType, ownership: "company" },
+      { id: farLitter, ...scoped, label: "BIN-PUB-2", containerTypeId: b.containerType, ownership: "company" },
+    ])
+    await ownerPool.db.insert(containerServicePlacement).values([
+      { ...scoped, validFrom: OPENED, containerId: litter, sharedCollectionPointId: square, wasteFractionId: b.wasteFraction },
+      { ...scoped, validFrom: OPENED, containerId: farLitter, sharedCollectionPointId: outside, wasteFractionId: b.wasteFraction },
+    ])
+    const after = await generateB()
+    assert.deepEqual([after.status, after.unlocated], ["succeeded", before.unlocated], "nothing new unlocated: a point is always located")
+    const monday = await mondayOfB()
+    const publicStop = monday.find((stop) => stop.containerId === litter)
+    assert.ok(publicStop, "the litter bin inside the square is planned")
+    assert.deepEqual([publicStop.propertyId, publicStop.sharedCollectionPointId, publicStop.wasteFractionId, publicStop.subscriptionId, publicStop.origin], [null, square, b.wasteFraction, null, "generation"])
+    assert.equal(monday.some((stop) => stop.containerId === farLitter), false, "the one outside the area is not")
+    assert.deepEqual(
+      monday.filter((stop) => stop.containerId !== litter).map((stop) => [stop.containerId, stop.propertyId, stop.sharedCollectionPointId, stop.wasteFractionId]),
+      subscribedStops,
+      "every subscribed stop as before, in its order",
+    )
   })
 })

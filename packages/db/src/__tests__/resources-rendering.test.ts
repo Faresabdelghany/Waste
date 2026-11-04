@@ -46,7 +46,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations
 import { serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { nonEmpty, oneOf, positive, subsetOf } from "../schema/checks"
 import { id, orderedWindow, projectScoped, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
-import { container, containerServicePlacement } from "../schema/containers"
+import { container } from "../schema/containers"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
@@ -580,6 +580,24 @@ const containerServicePlacementAsOf0004 = wms.table(
     tenantIndex(t, t.serviceFrequencyId),
   ],
 )
+/** container_service_placement as 0007 left it, its subscription required: the public placements (M12 of #293) since made it nullable beside a point, which public-placements-rendering.test.ts pins. */
+const containerServicePlacementAsOf0007 = wms.table(
+  "container_service_placement",
+  { ...id, ...projectScoped, ...timestamps, ...validity, containerId: uuid().notNull(), subscriptionId: uuid().notNull(), wasteFractionId: uuid().notNull(), serviceFrequencyId: uuid() },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.containerId], container),
+    projectReference(t, [t.subscriptionId], subscription),
+    projectReference(t, [t.serviceFrequencyId], serviceFrequency),
+    tenantReference(t, [t.wasteFractionId], wasteFraction),
+    projectKey(t, t.containerId),
+    validPeriod(t),
+    tenantIndex(t, t.subscriptionId),
+    tenantIndex(t, t.wasteFractionId),
+    tenantIndex(t, t.serviceFrequencyId),
+  ],
+)
 
 /** What 0007 does to the three tables, in the two diffs: everything added, then the token dropped and its checks re-spelled. */
 const altered = {
@@ -636,7 +654,7 @@ async function fileStatements(): Promise<{ all: string[]; guardAt: number; witho
 const generatedAlterations = async (): Promise<string[]> => [
   ...(await statementsBetween(
     { collectionGroup: collectionGroupAsOf0006, routeScheme: routeSchemeAsOf0006, containerServicePlacement: containerServicePlacementAsOf0004 },
-    { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement },
+    { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement: containerServicePlacementAsOf0007 },
   )),
   ...(await statementsBetween({ collectionGroup: collectionGroupBetween }, { collectionGroup: collectionGroupAsOf0007 })),
 ]

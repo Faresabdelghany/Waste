@@ -92,7 +92,7 @@ import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { bulkyBooking, bulkyBookingItem } from "@waste/db/schema/bulky"
 import { ticket, ticketBooking } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, desc, eq, lte } from "drizzle-orm"
+import { and, desc, eq, isNull, lte } from "drizzle-orm"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
@@ -206,7 +206,7 @@ type PlacementRead = Omit<PlacementFacts, "priceList"> & { priceListId: string |
 export async function placementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<PlacementRead | undefined> {
   const [row] = await tx
     .select({
-      subscriptionId: containerServicePlacement.subscriptionId,
+      subscriptionId: subscription.id,
       agreementId: agreement.id,
       agreementStatus: agreement.status,
       customerId: agreement.customerId,
@@ -230,6 +230,24 @@ export async function placementOn(tx: Tx, companyId: string, projectId: string, 
     product: { id: row.productId, unit: row.unit as ProductUnit, vatPercent: row.vatPercent },
     priceListId: row.priceListId,
   }
+}
+
+/** Whether the container stood under a public placement on the day (M12 of #293): a bin the project's contract pays for, with no subscription, whose stop is charged to nobody. */
+export async function publicPlacementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: containerServicePlacement.id })
+    .from(containerServicePlacement)
+    .where(
+      and(
+        eq(containerServicePlacement.companyId, companyId),
+        eq(containerServicePlacement.projectId, projectId),
+        eq(containerServicePlacement.containerId, containerId),
+        isNull(containerServicePlacement.subscriptionId),
+        validOn(containerServicePlacement, day),
+      ),
+    )
+    .limit(1)
+  return row !== undefined
 }
 
 /** The live event as the domain reads it: its parties, its quantity, its frozen price or null while blocked, its day, and whether a line names it. */
@@ -317,6 +335,7 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
     facts: {
       service: found.service,
       bookedForTicket: found.bookedForTicket,
+      publicService: found.containerId !== null && (await publicPlacementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)),
       job: await jobFacts(tx, companyId, found),
       kind,
       routeId: found.routeId,

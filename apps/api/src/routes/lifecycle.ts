@@ -104,6 +104,7 @@ import type { Tx } from "@waste/db/client"
 import { ASSET_STATE_COLUMNS } from "@waste/db/query/asset-state"
 import { subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { sharedCollectionPoint } from "@waste/db/schema/customers"
 import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
@@ -338,13 +339,14 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
       .select({
         id: containerServicePlacement.id,
         subscriptionId: containerServicePlacement.subscriptionId,
+        sharedCollectionPointId: containerServicePlacement.sharedCollectionPointId,
         validFrom: containerServicePlacement.validFrom,
         validTo: containerServicePlacement.validTo,
         subscriptionValidFrom: subscription.validFrom,
         subscriptionValidTo: subscription.validTo,
       })
       .from(containerServicePlacement)
-      .innerJoin(subscription, and(eq(subscription.companyId, companyId), eq(subscription.id, containerServicePlacement.subscriptionId)))
+      .leftJoin(subscription, and(eq(subscription.companyId, companyId), eq(subscription.id, containerServicePlacement.subscriptionId)))
       .where(and(ofContainer, lt(containerServicePlacement.validFrom, validTo)))
       .orderBy(desc(containerServicePlacement.validFrom))
       .limit(1)
@@ -353,9 +355,12 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
 
   let current = await inForce()
   const locked = new Set<string>()
-  while (current !== undefined && !locked.has(current.subscriptionId)) {
-    await lockRow(tx, subscription, { companyId, id: current.subscriptionId })
-    locked.add(current.subscriptionId)
+  // A public placement (M12 of #293) is held under its point's lock, as a subscribed one is under its subscription's.
+  while (current !== undefined) {
+    const id = current.subscriptionId ?? current.sharedCollectionPointId
+    if (id === null || locked.has(id)) break
+    await lockRow(tx, current.subscriptionId !== null ? subscription : sharedCollectionPoint, { companyId, id })
+    locked.add(id)
     current = await inForce()
   }
   if (current === undefined) {
@@ -366,7 +371,8 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
 
   const ends = current.validTo === null || current.validTo > validTo
   // The body's 400s first — the end after the start, and inside the subscription's period — then the state's 409, the order every route keeps.
-  if (ends) requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
+  // A public placement has no subscription's period to stay inside.
+  if (ends && current.subscriptionValidFrom !== null) requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
   const [later] = await tx
     .select({ validFrom: containerServicePlacement.validFrom })
     .from(containerServicePlacement)

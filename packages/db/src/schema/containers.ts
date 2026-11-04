@@ -12,7 +12,9 @@
 // note.
 //
 // `container_service_placement` is the container in service: which
-// subscription it serves, which fraction it takes and, where it differs from
+// subscription it serves — or, for a public placement (M12 of #293), at which
+// Shared Collection Point it stands for the project, a litter or dog bin with
+// no subscription and so no payer, exactly one of the two — which fraction it takes and, where it differs from
 // the product's, at which frequency. ADR-0003 has a placement name the
 // property or point, the agreement, the product and the fraction; naming the
 // subscription instead reaches the first three through one reference that
@@ -36,8 +38,9 @@ import { text, uuid } from "drizzle-orm/pg-core"
 
 import { subscription } from "./agreements"
 import { containerType, serviceFrequency, wasteFraction } from "./catalogue"
-import { oneOf } from "./checks"
+import { exactlyOne, oneOf } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
+import { sharedCollectionPoint } from "./customers"
 import { company, project } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
@@ -76,7 +79,10 @@ export const containerServicePlacement = wms.table(
     ...timestamps,
     ...validity,
     containerId: uuid().notNull(),
-    subscriptionId: uuid().notNull(),
+    /** The subscription the container serves; null for a public placement. */
+    subscriptionId: uuid(),
+    /** Where a public placement stands (M12 of #293): the project's own point, no subscription behind it; null for every subscribed placement, whose place is its subscription's. */
+    sharedCollectionPointId: uuid(),
     wasteFractionId: uuid().notNull(),
     /** An override of the product's cadence; null means the product's, read through a coalesce. */
     serviceFrequencyId: uuid(),
@@ -86,12 +92,15 @@ export const containerServicePlacement = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.containerId], container),
     projectReference(t, [t.subscriptionId], subscription),
+    projectReference(t, [t.sharedCollectionPointId], sharedCollectionPoint),
     projectReference(t, [t.serviceFrequencyId], serviceFrequency),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     // What the ledger points at: the placement of this container, by both columns.
     projectKey(t, t.containerId),
     validPeriod(t),
+    exactlyOne(t, "served", [t.subscriptionId, t.sharedCollectionPointId]),
     tenantIndex(t, t.subscriptionId),
+    tenantIndex(t, t.sharedCollectionPointId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.serviceFrequencyId),
   ],

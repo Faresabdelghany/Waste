@@ -253,6 +253,18 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       assert.equal(driven.pickups.length, 5, "the generated three and the office's two")
     })
 
+    test("a public bin (M12 of #293) is added by its container like any other, at the point it stands at for the project with its placement's fraction, though no subscription or agreement is behind it", async () => {
+      const litter = { id: testId(), label: "BIN-PUB-9" }
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const scoped = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
+        await tx.insert(container).values({ id: litter.id, ...scoped, label: litter.label, containerTypeId: ex.containerTypes.bin.id, ownership: "company" })
+        await tx.insert(containerServicePlacement).values({ id: testId(), ...scoped, validFrom: "2026-01-01", containerId: litter.id, sharedCollectionPointId: point.id, wasteFractionId: ex.fractions.residual.id })
+      })
+      const route = await seedRoute(pool, a, fleet, ex, { status: "planned" })
+      const stop = await added(route.id, { containerId: litter.id, note: "Overflowing, reported by phone" })
+      assert.deepEqual([stop.containerId, stop.origin, stop.propertyId, stop.sharedCollectionPointId, stop.wasteFractionId], [litter.id, "office", null, point.id, ex.fractions.residual.id])
+    })
+
     test("refuses a route that has started (409), then a body that names no stop or names what is not the project's (400 at the field), then a container placed nowhere that day or a place not served (409)", async () => {
       const active = await seedRoute(pool, a, fleet, ex, { status: "active", plannedDriverId: fleet.drivers.mads.id, plannedVehicleId: fleet.vehicles.wh24.id, deviceId: "device-111" })
       assert.equal((await refused(await add(active.id, { containerId: placed.id }), 409)).detail, activeAnd(active.label, ORDER_IS_FROZEN))

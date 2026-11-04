@@ -17,6 +17,15 @@
 // without counting it unlocated, and what a rule matches — the drift stamp —
 // still sees it.
 //
+// A public placement (M12 of #293) is a candidate too: a litter or dog bin
+// standing for the project at one of its Shared Collection Points, with no
+// subscription and so no agreement to be valid. The subscription and the
+// agreement are left joins on the day, and a row stands when its placement is
+// public or its agreement was found — which, for a subscribed placement, is
+// exactly the rows the inner joins kept: a subscription out of force on the
+// day finds no agreement either. A public placement's point is its own, and
+// it is never paused.
+//
 // One statement for every day of the walk, `unnest` over the dates, so a
 // year's run is one round trip and not three hundred; the domain's
 // `resolveStops` (@waste/domain/planning/generation) takes the rows from
@@ -74,7 +83,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       ${container.containerTypeId} as container_type_id,
       ${containerServicePlacement.wasteFractionId} as waste_fraction_id,
       ${subscription.propertyId} as property_id,
-      ${subscription.sharedCollectionPointId} as shared_collection_point_id,
+      coalesce(${subscription.sharedCollectionPointId}, ${containerServicePlacement.sharedCollectionPointId}) as shared_collection_point_id,
       (${place} is not null) as located,
       array(
         select ${planningAreaBoundary.planningAreaId}::text from ${planningAreaBoundary}
@@ -92,14 +101,17 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
     join ${containerServicePlacement}
       on ${containerServicePlacement.companyId} = ${container.companyId} and ${containerServicePlacement.projectId} = ${container.projectId} and ${containerServicePlacement.containerId} = ${container.id}
       and ${validOn(containerServicePlacement, sql`d.day`)}
-    join ${subscription}
+    left join ${subscription}
       on ${subscription.companyId} = ${containerServicePlacement.companyId} and ${subscription.projectId} = ${containerServicePlacement.projectId} and ${subscription.id} = ${containerServicePlacement.subscriptionId}
       and ${validOn(subscription, sql`d.day`)}
-    join ${agreement}
+    left join ${agreement}
       on ${agreement.companyId} = ${subscription.companyId} and ${agreement.projectId} = ${subscription.projectId} and ${agreement.id} = ${subscription.agreementId}
       and ${validOn(agreement, sql`d.day`)}
     left join ${property} on ${property.companyId} = ${subscription.companyId} and ${property.id} = ${subscription.propertyId}
-    left join ${sharedCollectionPoint} on ${sharedCollectionPoint.companyId} = ${subscription.companyId} and ${sharedCollectionPoint.id} = ${subscription.sharedCollectionPointId}
+    left join ${sharedCollectionPoint}
+      on ${sharedCollectionPoint.companyId} = ${containerServicePlacement.companyId}
+      and ${sharedCollectionPoint.id} = coalesce(${subscription.sharedCollectionPointId}, ${containerServicePlacement.sharedCollectionPointId})
+    where ${containerServicePlacement.subscriptionId} is null or ${agreement.id} is not null
     order by d.day, ${container.label}, ${container.id}
   `)
   for (const row of rows) {

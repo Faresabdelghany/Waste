@@ -119,7 +119,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
   const placements = await tx
     .select({
       containerId: containerServicePlacement.containerId,
-      subscriptionId: containerServicePlacement.subscriptionId,
+      subscriptionId: subscription.id,
       fraction: wasteFraction.name,
       validFrom: containerServicePlacement.validFrom,
       validTo: containerServicePlacement.validTo,

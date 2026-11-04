@@ -53,6 +53,7 @@ const pickupEvent = (kind: PickupEventFacts["kind"], values: Partial<PickupEvent
   liveEvent: null,
   service: "empty",
   bookedForTicket: false,
+  publicService: false,
   job: null,
   exception: null,
   liveException: null,
@@ -499,5 +500,27 @@ describe("billableFor a Site Visit (#393)", () => {
     const reversed = billableFor(visitEvent("site-visit-voided", { liveEvent: live({ invoiced: true }) }))
     assert.equal(reversed?.action, "reverse")
     assert.equal(billableFor(visitEvent("site-visit-voided")), undefined)
+  })
+})
+
+describe("billableActionsFor a stop of public service (M12 of #293)", () => {
+  /** A container under a public placement on the service date: no subscription, so nothing a placement of a payer would price. */
+  const publicStop = (kind: PickupEventFacts["kind"], values: Partial<PickupEventFacts> = {}) => pickupEvent(kind, { publicService: true, placement: null, ...values })
+
+  test("records nothing for a public bin's collection, generated or the office's, completed or corrected to completed: the project's contract pays for public service, so Finance is handed no blocked no-subscription event", () => {
+    assert.deepEqual(billableActionsFor(publicStop("pickup-completed")), [])
+    assert.deepEqual(billableActionsFor(publicStop("pickup-corrected")), [])
+    const job: JobChargeFacts = { product: { id: "repair-job", status: "active", unit: "job", vatPercent: 25 }, agreement: null, subscriptionId: null, priceList: null, items: null }
+    assert.deepEqual(billableActionsFor(publicStop("pickup-completed", { origin: "office", service: "repair", job })), [], "nor a work order at it")
+  })
+
+  test("charges no Pickup Exception at a public bin: there is no payer to charge", () => {
+    const exception: ExceptionFacts = { judgement: { ruleId: "rule", index: 1, free: false, productId: "fee" }, evidenceProofId: "proof", charge: null }
+    assert.deepEqual(billableActionsFor(publicStop("pickup-failed", { outcome: "failed", exception })), [])
+  })
+
+  test("leaves a subscribed stop as it was: the same container, no longer public, is a blocked no-subscription event where no placement was valid", () => {
+    const action = billableFor(pickupEvent("pickup-completed", { placement: null }))
+    assert.equal(action?.action === "record" ? action.draft.blockReason : undefined, "no-subscription")
   })
 })

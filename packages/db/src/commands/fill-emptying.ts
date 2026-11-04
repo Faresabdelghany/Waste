@@ -19,7 +19,7 @@
 // misfit takes it back.
 import { routeLabel } from "@waste/contracts/execution"
 import { fillEmptyingRoute, type EmptyingRoute, type FillEmptyingOutcome } from "@waste/domain/execution/fill-emptying"
-import { and, asc, eq, gte, inArray, lt, max, sql } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, max, or, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { validOn } from "../query/valid-on"
@@ -39,19 +39,32 @@ export type PlacementStop = { propertyId: string | null; sharedCollectionPointId
  * The place and the fraction of a container's stop on a service date: the
  * placement in force that day — the placement, its subscription and its
  * agreement each valid that day, generation's own eligibility — the place the
- * subscription names and the fraction the placement holds; undefined for a
- * container placed nowhere that day. Add stop reads it too.
+ * subscription names — or a public placement's own point — and the fraction
+ * the placement holds; undefined for a container placed nowhere that day. Add stop reads it too.
  */
 export async function placementStopOn(tx: Tx, scope: { companyId: string; projectId: string }, containerId: string, serviceDate: string): Promise<PlacementStop | undefined> {
   const [place] = await tx
-    .select({ propertyId: subscription.propertyId, sharedCollectionPointId: subscription.sharedCollectionPointId, wasteFractionId: containerServicePlacement.wasteFractionId })
+    .select({
+      propertyId: subscription.propertyId,
+      sharedCollectionPointId: sql<string | null>`coalesce(${subscription.sharedCollectionPointId}, ${containerServicePlacement.sharedCollectionPointId})`,
+      wasteFractionId: containerServicePlacement.wasteFractionId,
+    })
     .from(containerServicePlacement)
-    .innerJoin(
+    .leftJoin(
       subscription,
       and(eq(subscription.companyId, containerServicePlacement.companyId), eq(subscription.projectId, containerServicePlacement.projectId), eq(subscription.id, containerServicePlacement.subscriptionId), validOn(subscription, serviceDate)),
     )
-    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.projectId, subscription.projectId), eq(agreement.id, subscription.agreementId), validOn(agreement, serviceDate)))
-    .where(and(eq(containerServicePlacement.companyId, scope.companyId), eq(containerServicePlacement.projectId, scope.projectId), eq(containerServicePlacement.containerId, containerId), validOn(containerServicePlacement, serviceDate)))
+    .leftJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.projectId, subscription.projectId), eq(agreement.id, subscription.agreementId), validOn(agreement, serviceDate)))
+    .where(
+      and(
+        eq(containerServicePlacement.companyId, scope.companyId),
+        eq(containerServicePlacement.projectId, scope.projectId),
+        eq(containerServicePlacement.containerId, containerId),
+        validOn(containerServicePlacement, serviceDate),
+        // A public placement (M12 of #293) stands at its own point with no subscription; a subscribed one, as generation has it, only with its agreement in force too.
+        or(isNull(containerServicePlacement.subscriptionId), isNotNull(agreement.id)),
+      ),
+    )
     .limit(1)
   return place
 }
