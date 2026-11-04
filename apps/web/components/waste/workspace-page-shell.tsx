@@ -10,7 +10,7 @@ const publicModuleIdsByWorkspace: Partial<
   Record<WorkspaceId, readonly string[]>
 > = {
   // O11 of #290: a customer's bulky items booked onto a collection day; #393: the recycling centres' visit ledger.
-  operate: ["tickets", "bulky-bookings", "exceptions", "site-visits"],
+  operate: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house"],
   customers: [
     "properties",
     "groups",

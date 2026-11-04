@@ -1978,6 +1978,25 @@ const operate: WorkspaceDefinition = {
       ],
       records: [],
     },
+    {
+      // The scale house (M16a of #293): on the API only, so no fixture records; weighed in, out and voided, and its tares registered, through components/waste/commands/scale-house-surfaces.tsx.
+      id: "scale-house",
+      label: "Scale house",
+      title: "Scale house",
+      description: "The window of our own sites with a weighbridge: each vehicle weighed in at its gross and out at its tare, its load split by fraction and the municipality it came from, and the register of tares it may be weighed out on.",
+      entityLabel: "Scale ticket",
+      contextLabel: "Site · customer",
+      valueLabel: "Net weight",
+      primaryAction: "Weigh in",
+      metrics: [],
+      lifecycle: ["Weighed in", "Completed", "Voided"],
+      rules: [
+        "A ticket's lines sum to its net: the split is how much of what came from where.",
+        "One of our own vehicles' ticket is its route's unload, reviewed in Weight Control like any other.",
+        "A ticket is voided with its reason, never deleted: it is what the customer was handed.",
+      ],
+      records: [],
+    },
   ],
 }
 
