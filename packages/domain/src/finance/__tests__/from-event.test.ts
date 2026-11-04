@@ -97,7 +97,7 @@ const charge = (values: Partial<TicketChargeFacts> = {}): TicketChargeFacts => (
   ...values,
 })
 
-const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
+const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
 
 describe("billableFor a completed pickup", () => {
   test("under a per-pickup product with a placement, a signed agreement, a list, a row and a rate is a pickup event of quantity one, priced by the resolver on the service date, the winning row traceable", () => {
@@ -268,7 +268,7 @@ describe("billableFor a corrected pickup", () => {
       quantity: 2,
       price: { priceListRowId: null, unitPriceMinor: 1_500, netMinor: -3_000, vatPercent: 25, vatMinor: -750, currency: "DKK" },
       blockReason: null,
-      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null, visitId: null, unloadId: null },
+      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null },
     })
     // A reversal of nothing to reverse is a bug: a blocked event is cancelled, never reversed.
     assert.throws(() => reversalOf(live({ price: null })), /reversalOf: event live-event carries no price; a blocked event is cancelled, never reversed/)
@@ -287,7 +287,7 @@ describe("billableFor a completed ticket", () => {
           action,
           {
             action: "record",
-            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null } },
+            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null } },
           },
           resolution,
         )
@@ -300,7 +300,7 @@ describe("billableFor a completed ticket", () => {
   })
 
   test("with a product — the completion's or its kind's — is priced as a pickup is, on the day it closed, by the customer's conditions alone: no zone, no container type, no fraction (#291 C3)", () => {
-    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
+    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
     assert.deepEqual(billableFor(completedTicket({ charge: charge() })), {
       action: "record",
       draft: {
@@ -375,10 +375,12 @@ describe("billableFor every other kind", () => {
             ? visitEvent(kind as VisitEventFacts["kind"], { liveEvent: kind === "site-visit-voided" ? live() : null })
             : kind === "weight-reviewed"
               ? weightEvent()
-              : ({ kind } as EventFacts)
+              : kind === "scale-ticket-completed" || kind === "scale-ticket-voided"
+                ? ({ kind, ticketId: "scale-ticket", serviceDate: "2026-10-07", completed: kind === "scale-ticket-completed", agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: "customer", priceList: null }, lines: [{ lineId: "line", wasteFractionId: "fraction", netKg: 900, volumeLitres: null, product: null }], liveEvents: kind === "scale-ticket-voided" ? [live()] : [] } as EventFacts)
+                : ({ kind } as EventFacts)
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }
-    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed"])
+    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
     assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "alert-raised", "ticket-assigned"])
     assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"])
   })
@@ -404,7 +406,7 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
     quantity: 1,
     price: { priceListRowId: "fee", unitPriceMinor, netMinor: unitPriceMinor, vatPercent: 25, vatMinor: unitPriceMinor / 4, currency: "DKK" },
     blockReason: null,
-    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF, visitId: null, unloadId: null },
+    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF, visitId: null, unloadId: null, scaleTicketLineId: null },
   })
   const liveFee = (values: Partial<LiveEventFacts> = {}) => live({ id: "live-fee", productId: FEE, ...values })
 
@@ -477,7 +479,7 @@ describe("billableFor a Site Visit (#393)", () => {
         quantity: 1,
         price: { priceListRowId: "everyone", unitPriceMinor: 7_000, netMinor: 7_000, vatPercent: 25, vatMinor: 1_750, currency: "DKK" },
         blockReason: null,
-        links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: "visit", unloadId: null },
+        links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: "visit", unloadId: null, scaleTicketLineId: null },
       },
     })
   })
@@ -537,7 +539,7 @@ describe("billableActionsFor an Unload's weight review (O28 of #290)", () => {
           productId: TONNE,
           price: { priceListRowId: "gate-fee", unitPriceMinor: 128_125, netMinor: 128_125, vatPercent: 25, vatMinor: 32_031, currency: "DKK" },
           blockReason: null,
-          links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: UNLOAD },
+          links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: UNLOAD, scaleTicketLineId: null },
         },
       },
     ])

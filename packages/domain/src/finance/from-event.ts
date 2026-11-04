@@ -113,6 +113,16 @@
 // weight event with `weight-revised`, or reverses it once a line names it. A
 // refused load is never charged; the next accepted Unload carries its stops.
 //
+// A Scale Ticket (M16b of #293) is Finance's since `scale-ticket-completed`:
+// an account's completed ticket is a `scale-ticket` event per line, the line's
+// product sold by the tonne or the cubic metre priced under the ticket's
+// agreement on its weighed-out day — the tier on the line's quantity in that
+// unit, the amount the rate times its kilograms or litres (finance/window.ts)
+// — blocked as any event is. A ticket is charged once: one with live events is
+// charged already. A walk-in's ticket names no agreement and is never an
+// event; the window shows what is due. `scale-ticket-voided` cancels each live
+// event with `scale-ticket-voided`, or reverses it once a line names it.
+//
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
@@ -125,6 +135,7 @@ import { HIRE_UNIT } from "./hire"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow, type PricingOutcome } from "./pricing"
 import { RECURRING_UNIT } from "./recurring"
 import { chargedByWeight, weighedLoad } from "./tonnage"
+import { quantityOf, soldAtTheWindow, thousandthsOf, windowLoad } from "./window"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
 /** The events about a pickup that Finance reads: a missed stop's two (#293 M5) beside the completion and the correction. */
@@ -138,6 +149,10 @@ export type VisitEventKind = (typeof VISIT_EVENT_KINDS)[number]
 /** The event about an Unload's weight review that Finance reads (O28 of #290). */
 export const WEIGHT_EVENT_KINDS = ["weight-reviewed"] as const satisfies readonly OutboxKind[]
 export type WeightEventKind = (typeof WEIGHT_EVENT_KINDS)[number]
+
+/** The events about a Scale Ticket that Finance reads (M16b of #293). */
+export const SCALE_TICKET_EVENT_KINDS = ["scale-ticket-completed", "scale-ticket-voided"] as const satisfies readonly OutboxKind[]
+export type ScaleTicketEventKind = (typeof SCALE_TICKET_EVENT_KINDS)[number]
 
 /** The placement valid on the service date, with what it reaches: the subscription, the agreement it runs under, and the product it delivers. */
 export type PlacementFacts<Row extends PriceRow = PriceRow> = {
@@ -294,11 +309,36 @@ export type WeightReviewedFacts<Row extends PriceRow = PriceRow> = {
   liveEvents: readonly LiveEventFacts[]
 }
 
+/** One line of a Scale Ticket as the worker read it: its measure, its fraction, and the window's product it is sold by, or null where it names none. */
+export type ScaleTicketLineFacts = {
+  lineId: string
+  wasteFractionId: string
+  netKg: number
+  /** The declared volume, for a product sold by the cubic metre; null where none was declared. */
+  volumeLitres: number | null
+  product: { id: string; unit: ProductUnit; vatPercent: number | null } | null
+}
+
+/** A Scale Ticket's event as the worker reads it (M16b of #293): whether it stands completed now, its agreement priced on its weighed-out day, its lines, and its live events. */
+export type ScaleTicketEventFacts<Row extends PriceRow = PriceRow> = {
+  kind: ScaleTicketEventKind
+  ticketId: string
+  /** The weighed-out day on the project's clock, which each line is priced and billed on; null for a ticket never completed. */
+  serviceDate: string | null
+  /** Whether the ticket reads `completed` now: a completion delivered after the void is stale news. */
+  completed: boolean
+  /** An account's agreement with the list it is priced under; null for a walk-in's ticket, which is never an event. */
+  agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string; priceList: PricedList<Row> | null } | null
+  lines: readonly ScaleTicketLineFacts[]
+  /** The ticket's live `scale-ticket` events. */
+  liveEvents: readonly LiveEventFacts[]
+}
+
 /** Every other event, which this module reads the kind of and nothing else. */
-export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | VisitEventKind | WeightEventKind | "ticket-completed"> }
+export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | VisitEventKind | WeightEventKind | ScaleTicketEventKind | "ticket-completed"> }
 
 /** An outbox event as the worker hands it here: the kind, and the plain facts that kind's payload and the reads beside it give. */
-export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | VisitEventFacts | WeightReviewedFacts<Row> | OtherEventFacts
+export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | VisitEventFacts | WeightReviewedFacts<Row> | ScaleTicketEventFacts<Row> | OtherEventFacts
 
 /** What a billable event links to: the ids the event named, each null where it named none. */
 export type BillableEventLinks = {
@@ -312,6 +352,8 @@ export type BillableEventLinks = {
   visitId: string | null
   /** The Unload whose reviewed weight a `weight` event charges a share of (O28 of #290); null on every other kind. */
   unloadId: string | null
+  /** The Scale Ticket line a `scale-ticket` event charges for (M16b of #293); null on every other kind. */
+  scaleTicketLineId: string | null
 }
 
 /** The event the consumer records: what the writer takes from the draft, the rest being the outbox event's. */
@@ -326,7 +368,7 @@ export type BillableEventDraft = {
   price: PricedAmounts | null
   blockReason: BlockReason | null
   links: BillableEventLinks
-  /** On a `weight` event (O28 of #290): the stop's share of the Unload's reviewed net, whole kilograms; absent on every other kind. */
+  /** On a `weight` event (O28 of #290): the stop's share of the Unload's reviewed net, whole kilograms; on a `scale-ticket` event (M16b of #293) the line's net; absent on every other kind. */
   weightKg?: number | null
 }
 
@@ -347,7 +389,7 @@ const chargedOtherwise = (unit: ProductUnit): boolean => chargedByPeriod(unit) |
 /** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
 export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedOtherwise(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
 
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
 
 /** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. A bulky collection may also be charged at one sold by the item (#449). */
 export const chargesJob = (job: JobChargeFacts): boolean =>
@@ -539,9 +581,39 @@ function exceptionActionsFor<Row extends PriceRow>(event: PickupEventFacts<Row>,
   return [...(undone === undefined ? [] : [undone]), ...(draft === undefined ? [] : [{ action: "record" as const, draft }])]
 }
 
+/** One window line's event (M16b of #293): blocked `no-product` where the line names no product the window sells or the measure its unit needs, otherwise priced per unit under the ticket's agreement on its day, the tier on the line's quantity. */
+function scaleTicketDraft<Row extends PriceRow>(event: ScaleTicketEventFacts<Row>, agreement: NonNullable<ScaleTicketEventFacts<Row>["agreement"]>, serviceDate: string, line: ScaleTicketLineFacts, labels: PriceLabels): BillableEventDraft {
+  const base = { kind: "scale-ticket" as const, serviceDate, quantity: 1, weightKg: line.netKg, agreementId: agreement.id, subscriptionId: null, links: { ...NO_LINKS, scaleTicketLineId: line.lineId } }
+  const product = line.product
+  const thousandths = product === null || !soldAtTheWindow(product.unit) ? null : thousandthsOf(product.unit, line)
+  if (product === null || thousandths === null) return { ...base, productId: product?.id ?? null, price: null, blockReason: "no-product" }
+  const outcome = priceOccurrence(
+    {
+      agreement: { status: agreement.status },
+      priceList: agreement.priceList,
+      product,
+      quantity: 1,
+      input: { on: serviceDate, planningAreaId: null, customerKind: agreement.customerKind, containerTypeId: null, wasteFractionId: line.wasteFractionId, customerId: agreement.customerId, quantity: quantityOf(thousandths) },
+    },
+    labels,
+  )
+  if (outcome.price === null) return { ...base, productId: product.id, price: null, blockReason: outcome.blockReason }
+  const load = windowLoad(outcome.price, thousandths)
+  return load === null ? { ...base, productId: product.id, price: null, blockReason: "amount-too-large" } : { ...base, productId: product.id, price: load, blockReason: null }
+}
+
+/** What a Scale Ticket's event does (M16b of #293): an account's completed and uncharged ticket, an event per line; charged already, a walk-in's or stale news, nothing; a void, each live event cancelled or reversed. */
+export function scaleTicketActionsFor<Row extends PriceRow>(event: ScaleTicketEventFacts<Row>, labels: PriceLabels = {}): BillableAction[] {
+  if (event.kind === "scale-ticket-voided") return event.liveEvents.flatMap((live) => correctionOf(live, "scale-ticket-voided") ?? [])
+  const { agreement, serviceDate } = event
+  if (!event.completed || agreement === null || serviceDate === null || event.liveEvents.length > 0) return []
+  return event.lines.map((line) => ({ action: "record" as const, draft: scaleTicketDraft(event, agreement, serviceDate, line, labels) }))
+}
+
 /** Every action an event is worth, in order: a pickup's collection charge, then its exception charge (#293 M5); for any other event its one action, or none. */
 export function billableActionsFor<Row extends PriceRow>(event: EventFacts<Row>, labels: PriceLabels = {}): BillableAction[] {
   if (event.kind === "weight-reviewed") return weightActionsFor(event, labels)
+  if (event.kind === "scale-ticket-completed" || event.kind === "scale-ticket-voided") return scaleTicketActionsFor(event, labels)
   const first = billableFor(event, labels)
   return [...(first === undefined ? [] : [first]), ...(isPickupEvent(event) ? exceptionActionsFor(event, labels) : [])]
 }
@@ -597,6 +669,10 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
     case "weight-reviewed":
       // An Unload's review may charge several stops: `billableActionsFor` answers them all, and this its first.
       return weightActionsFor(event, labels)[0]
+    case "scale-ticket-completed":
+    case "scale-ticket-voided":
+      // A ticket may charge several lines: `billableActionsFor` answers them all, and this its first.
+      return scaleTicketActionsFor(event, labels)[0]
     default:
       return undefined
   }
