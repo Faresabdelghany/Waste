@@ -666,6 +666,13 @@
       "when": 1793819121112,
       "tag": "0094_septic_tanks",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793819252515,
+      "tag": "0095_transfer_stock",
+      "breakpoints": true
     }
   ]
 }

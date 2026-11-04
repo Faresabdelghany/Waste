@@ -138,6 +138,8 @@ export const unloadingStation = wms.table(
     closesAt: time(),
     /** Whether the station weighs what is delivered; the tickets themselves are Execution's. */
     weighbridge: boolean().notNull().default(false),
+    /** A Transfer Station (M17 of #293): it holds what is tipped there and sends it on in Outbound Loads; off for a site that treats or disposes of it. */
+    transfer: boolean().notNull().default(false),
     status: text().notNull(),
     notes: text(),
   },

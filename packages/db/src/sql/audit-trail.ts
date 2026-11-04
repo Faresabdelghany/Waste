@@ -83,6 +83,7 @@ import { collectionGroup, collectionGroupContainer, collectionGroupContainerType
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
 import { fillReading, sensor, sensorPairing } from "../schema/sensors"
+import { materialAdjustment, outboundLoad } from "../schema/haul-out"
 import { decommissionReason, stockMinimum, stockMovement } from "../schema/stock"
 import { wasteFractionEmissionFactor } from "../schema/sustainability"
 import { tankInspection, tankInstallation } from "../schema/tanks"
@@ -329,7 +330,10 @@ export const RIGHT_SIZING_AUDITED: readonly Audited[] = [{ table: rightSizingPro
 /** The tank register (M11 of #293): a Property's tanks, under the properties' module; their inspections are a ledger. */
 export const TANKS_AUDITED: readonly Audited[] = [{ table: tankInstallation, module: "customers.properties", parent: setOf(property, tankInstallation.propertyId) }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED]
+/** A transfer station's haul-out (M17 of #293): the Outbound Loads, under Route Studio › Weights beside the Unloads; the material adjustments are a ledger. */
+export const HAUL_OUT_AUDITED: readonly Audited[] = [{ table: outboundLoad, module: "route-studio.weights" }]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))
@@ -361,6 +365,7 @@ export const EXEMPT: readonly Exempt[] = [
   { table: message, why: "the delivery log (#291 C15): written once by the office's request with what was rendered, then moved by the worker's sends; its status, attempts and stamps are its history" },
   { table: fillReading, why: "a ledger of what a fill-level sensor sent, appended by the ingest in bulk; a trail of it would repeat every reading" },
   { table: scaleTicketLine, why: "a ledger of a completed ticket's split, written once with the completion its ticket's trail records; a voided ticket voids its lines with it" },
+  { table: materialAdjustment, why: LEDGER },
 ]
 
 /** The trigger function, once (migration 0019). */

@@ -107,6 +107,7 @@ import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
 import { scaleHouseRoutes } from "./routes/scale-house"
 import { SENSOR_BATCHES_PER_MINUTE, sensorRoutes } from "./routes/sensors"
+import { outboundLoadRoutes } from "./routes/outbound-loads"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
@@ -368,6 +369,7 @@ export function createApp({
   app.route("/", sensorRoutes(guard, { now, ingestAllowance: sensorIngestAllowance }))
   // The scale house (M16a of #293): the tare register and the window's tickets.
   app.route("/", scaleHouseRoutes(guard, { now }))
+  app.route("/", outboundLoadRoutes(guard, { now }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))

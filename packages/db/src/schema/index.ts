@@ -83,3 +83,4 @@ export * from "./route-messages"
 export * from "./inspections"
 // Septic-tank emptying (M11 of #293): the register of tank installations and their inspections.
 export * from "./tanks"
+export * from "./haul-out"
