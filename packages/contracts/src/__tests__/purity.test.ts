@@ -75,14 +75,18 @@
 // template naming a placeholder no message fills, or out of its channel's
 // shape, in the domain's sentences. O13 of #290 added
 // @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
-// check by the domain's cap. C19 of #291 added
+// check by the domain's cap. O20 of #290 added
+// @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
+// interval rule and bounds, and reads its due states. C19 of #291 added
 // @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
 // project's privacy policy by the domain's days and reads its purposes. M22 of #293 added
 // @waste/domain/access/branding: organisation.ts holds a project's branding to
 // its shapes and its colour to WCAG 2.1 AA's contrast.
 // O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
 // ingest's batch by the domain's cap and defaults a pairing's threshold to the
-// domain's.
+// domain's. O16 of #290 (part b) added @waste/domain/notifications/vocabulary:
+// notifications.ts reads the customer notices a project's rules map to
+// templates.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -114,6 +118,7 @@ definePurityTests({
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
+    "@waste/domain/notifications/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/privacy/retention",
@@ -127,6 +132,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/maintenance",
     "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",

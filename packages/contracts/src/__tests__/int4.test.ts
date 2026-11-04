@@ -39,6 +39,7 @@ import * as idsModule from "../ids"
 import * as importsModule from "../imports"
 import * as integrationsModule from "../integrations"
 import * as invoicesModule from "../invoices"
+import * as maintenanceModule from "../maintenance"
 import * as meModule from "../me"
 import * as organisationModule from "../organisation"
 import * as outboxModule from "../outbox"
@@ -88,6 +89,7 @@ import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
 import * as messagingModule from "../messaging"
+import * as notificationsModule from "../notifications"
 import * as weightControlModule from "../weight-control"
 import * as weighbridgeModule from "../weighbridge"
 import * as workOrderChargesModule from "../work-order-charges"
@@ -105,6 +107,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "allocations": allocationsModule,
   "audit": auditModule,
   "messaging": messagingModule,
+  "notifications": notificationsModule,
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
@@ -127,6 +130,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "imports": importsModule,
   "integrations": integrationsModule,
   "invoices": invoicesModule,
+  "maintenance": maintenanceModule,
   "me": meModule,
   "moves": movesModule,
   "organisation": organisationModule,

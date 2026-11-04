@@ -44,8 +44,8 @@ const EVENT_SHAPES = ["billable_event_kind_shape", "billable_event_origin_shape"
 /** The event's kinds as 0044 wrote them: today's through `hire`, before M5b's `pickup-exception` (#293). */
 const KINDS_AS_OF_0044 = BILLABLE_EVENT_KINDS.slice(0, BILLABLE_EVENT_KINDS.indexOf("hire") + 1)
 
-/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393) and the bulky item's (#449). */
-const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "item")
+/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393), the bulky item's (#449) and the weight charge's tonne (O28 of #290). */
+const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "item" && unit !== "tonne")
 
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
@@ -53,13 +53,17 @@ const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", 
 /** The clause 0054 added to the kind's shape (#393), which 0044's spelling lacks too. */
 const VISIT_CLAUSE = ` when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause and 0054's. */
+/** The clause the weight charges' migration added to the kind's shape (O28 of #290), which 0044's spelling lacks too. */
+const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
+
+/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause, 0054's and the weight charges'. */
 const checksAsOf0044 = (): Map<string, string> => {
   const checks = new Map(checksOf(billableEvent))
   const kindShape = checks.get("billable_event_kind_shape") ?? ""
   assert.ok(kindShape.includes(EXCEPTION_CLAUSE), "today's kind shape carries M5b's clause")
   assert.ok(kindShape.includes(VISIT_CLAUSE), "today's kind shape carries the visit's clause")
-  checks.set("billable_event_kind_shape", kindShape.replace(EXCEPTION_CLAUSE, "").replace(VISIT_CLAUSE, ""))
+  assert.ok(kindShape.includes(WEIGHT_CLAUSE), "today's kind shape carries the weight charge's clause")
+  checks.set("billable_event_kind_shape", kindShape.replace(EXCEPTION_CLAUSE, "").replace(VISIT_CLAUSE, "").replace(WEIGHT_CLAUSE, ""))
   return checks
 }
 

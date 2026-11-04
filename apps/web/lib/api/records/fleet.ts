@@ -55,6 +55,7 @@ import { fuelLabel } from "@/lib/data/resources-vocabulary"
 import { create, get, listAll, patch, put } from "../client"
 import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
+import { VEHICLE_MAINTENANCE_ACTIONS } from "./maintenance"
 import { VEHICLE_DEFECT_ACTIONS } from "./pre-trip"
 import { userAdapter } from "./organisation"
 import { shiftFact, shiftOf, shiftValues } from "./time-windows"
@@ -435,8 +436,8 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
       refused: (record) => `The compartments of ${record.name} were not saved`,
     },
   },
-  // When it is out of use (O6 of #290): periods of its own, recorded and removed from its details; and the defects its pre-trip checks found, resolved there (O13 of #290).
-  actions: { ...VEHICLE_AVAILABILITY_ACTIONS, ...VEHICLE_DEFECT_ACTIONS },
+  // When it is out of use (O6 of #290): periods of its own, recorded and removed from its details; the defects its pre-trip checks found, resolved there (O13 of #290); and its maintenance plans and orders (O20 of #290).
+  actions: { ...VEHICLE_AVAILABILITY_ACTIONS, ...VEHICLE_DEFECT_ACTIONS, ...VEHICLE_MAINTENANCE_ACTIONS },
 }
 
 // ---------------------------------------------------------------------------
