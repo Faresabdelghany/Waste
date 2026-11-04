@@ -6,6 +6,7 @@ import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { outboxEvent } from "@waste/db/schema/execution"
 import { company } from "@waste/db/schema/organisation"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
@@ -187,6 +188,14 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
       const linked = await raise({ ticketId: about.id })
       assert.equal(linked.ticketId, about.id, "a ticket named on the create links the alert from the start")
       assert.equal(linked.status, "new", "and linked is no status")
+
+      // Each raise is the staff notices' news (O16 of #290): `alert-raised`, the alert as answered, at its detection.
+      const [raised, ...more] = await withCompany(pool.db, a.companyId, (tx: Tx) =>
+        tx.select({ kind: outboxEvent.kind, aggregateKind: outboxEvent.aggregateKind, projectId: outboxEvent.projectId, occurredAt: outboxEvent.occurredAt, payload: outboxEvent.payload }).from(outboxEvent).where(eq(outboxEvent.aggregateId, seen.id)),
+      )
+      assert.equal(more.length, 0)
+      assert.deepEqual([raised.kind, raised.aggregateKind, raised.projectId, raised.occurredAt.toISOString()], ["alert-raised", "alert", seen.projectId, seen.detectedAt])
+      assert.deepEqual(Alert.parse(raised.payload), seen)
     })
 
     test("refuses an alert about nothing at `routeId`, in the contracts' words", async () => {

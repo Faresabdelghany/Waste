@@ -75,14 +75,19 @@
 // statements themselves.
 //
 // Migration 0054 (#393, M4 of #293) grew them by the recycling-centre visits'
-// two kinds on a `site-visit`, so `CHANGED_IN_0054` maps the outbox as
-// drizzle-kit wrote it as of 0054 onto its 0040 spelling;
+// two kinds on a `site-visit`, so `CHANGED_IN_0054`, next in the outbox's chain, maps the
+// outbox as drizzle-kit wrote it as of 0054 onto its 0040 spelling;
 // site-visits-rendering.test.ts pins the statements themselves.
+//
+// Migration 0083 (O16 of #290) grew them by the staff notifications'
+// `alert-raised` and `ticket-assigned` on an `alert`, so `CHANGED_IN_0083`
+// maps the outbox as drizzle-kit wrote it as of 0083 onto its 0054 spelling;
+// staff-notifications-rendering.test.ts pins the statements themselves.
 //
 // The weight charges' migration (O28 of #290) grew the outbox's kinds by the
 // weight review's `weight-reviewed`, so `CHANGED_FOR_WEIGHT_CHARGES`, now
 // first of the outbox's chain, maps the outbox as drizzle-kit writes it now
-// onto its 0054 spelling; weight-charges-rendering.test.ts pins the
+// onto its 0083 spelling; weight-charges-rendering.test.ts pins the
 // statements themselves.
 //
 // Migration 0055 (O23 of #290) gave `pickup` the stop it was moved from, with
@@ -192,10 +197,11 @@ const stampsShape = (() => {
  * three kinds and its ticket beside them (Issue #109); as of 0010, Finance's
  * two and its invoice and settlement after those (Issue #112); as of 0040, the
  * Registry's decided application after them (M7 of #293); as of 0054, the
- * recycling-centre visits' two after it (#393); today, the weight review's
- * after those (O28 of #290, the weight charges' migration).
+ * recycling-centre visits' two after it (#393); as of 0083, the staff
+ * notifications' two and their alert after those (O16 of #290); today, the
+ * weight review's after them (O28 of #290, the weight charges' migration).
  */
-const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "weight-charges"): string =>
+const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "0083" | "weight-charges"): string =>
   createTable("outbox_event", "project", [
     '"kind" text NOT NULL',
     '"aggregate_kind" text NOT NULL',
@@ -222,6 +228,7 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "we
       ...(asOf >= "0010" ? ["invoice-issued", "settlement-closed"] : []),
       ...(asOf >= "0040" ? ["application-decided"] : []),
       ...(asOf >= "0054" ? ["site-visit-recorded", "site-visit-voided"] : []),
+      ...(asOf >= "0083" ? ["alert-raised", "ticket-assigned"] : []),
       ...(asOf === "weight-charges" ? ["weight-reviewed"] : []),
     ),
     oneOfCheck(
@@ -235,6 +242,7 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "we
       ...(asOf >= "0010" ? ["invoice", "settlement"] : []),
       ...(asOf >= "0040" ? ["application"] : []),
       ...(asOf >= "0054" ? ["site-visit"] : []),
+      ...(asOf >= "0083" ? ["alert"] : []),
     ),
   ])
 
@@ -322,10 +330,13 @@ const CHANGED_IN_0060 = new Map([[driverCommandTable("0060"), driverCommandTable
 /** What 0075 changed on one of the seven (O13 of #290): the receipt's CREATE TABLE as drizzle-kit generates it now onto what 0060 says. Applied first of all; pre-trip-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0075 = new Map([[driverCommandTable("0075"), driverCommandTable("0060")]])
 
-/** What the weight charges' migration changed on one of the seven (O28 of #290): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054. Applied first of all. */
-const CHANGED_FOR_WEIGHT_CHARGES = new Map([[outboxEventTable("weight-charges"), outboxEventTable("0054")]])
+/** What the weight charges' migration changed on one of the seven (O28 of #290): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0083. Applied first of the outbox's chain; weight-charges-rendering.test.ts pins the statements themselves. */
+const CHANGED_FOR_WEIGHT_CHARGES = new Map([[outboxEventTable("weight-charges"), outboxEventTable("0083")]])
 
-/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0040. Applied after the weight charges'. */
+/** What 0083 changed on one of the seven (O16 of #290): the outbox's CREATE TABLE as drizzle-kit generated it as of 0083 onto what it generated as of 0054. Applied after the weight charges'; staff-notifications-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0083 = new Map([[outboxEventTable("0083"), outboxEventTable("0054")]])
+
+/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0040. Applied after `CHANGED_IN_0083`. */
 const CHANGED_IN_0054 = new Map([[outboxEventTable("0054"), outboxEventTable("0040")]])
 
 /** What 0040 changed on one of the seven (M7 of #293): the outbox's CREATE TABLE as drizzle-kit generated it as of 0040 onto what it generated as of 0010. Applied after `CHANGED_IN_0054`, one file at a time. */
@@ -731,6 +742,7 @@ const generatedHead = async (): Promise<string[]> => [
     .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0053.get(statement) ?? statement)
     .map((statement) => CHANGED_FOR_WEIGHT_CHARGES.get(statement) ?? statement)
+    .map((statement) => CHANGED_IN_0083.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0045.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0040.get(statement) ?? statement)
@@ -786,7 +798,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0012.keys()) assert.ok([...CHANGED_IN_0013.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_FOR_WEIGHT_CHARGES.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_FOR_WEIGHT_CHARGES.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0083.keys()) assert.ok([...CHANGED_FOR_WEIGHT_CHARGES.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_IN_0083.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0040.keys()) assert.ok([...CHANGED_IN_0054.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0045.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0040.values(), ...CHANGED_IN_0045.values()].includes(statement), statement.split("\n")[0])
@@ -802,6 +815,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0038.size, 2, "the stop's and the proof's contaminant code")
     assert.equal(CHANGED_IN_0040.size, 1, "the outbox's decided application")
     assert.equal(CHANGED_IN_0054.size, 1, "the outbox's recycling-centre visits")
+    assert.equal(CHANGED_IN_0083.size, 1, "the outbox's staff notifications")
     assert.equal(CHANGED_FOR_WEIGHT_CHARGES.size, 1, "the outbox's weight review")
     assert.equal(CHANGED_IN_0053.size, 1, "the stop's bulky booking")
     assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")

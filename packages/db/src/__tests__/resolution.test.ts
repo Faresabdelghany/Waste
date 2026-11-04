@@ -83,6 +83,8 @@ const ids = (n: "a" | "b") => ({
   other: `018f7c33-${n}000-7000-8000-0000000000e2`,
   third: `018f7c33-${n}000-7000-8000-0000000000e3`,
   fourth: `018f7c33-${n}000-7000-8000-0000000000e4`,
+  fifth: `018f7c33-${n}000-7000-8000-0000000000e5`,
+  sixth: `018f7c33-${n}000-7000-8000-0000000000e6`,
   /** A second project of the same company, with rows of its own that a record of the first may not name. */
   harbor: `018f7c33-${n}000-7000-8000-0000000000f1`,
   harborProperty: `018f7c33-${n}000-7000-8000-0000000000f2`,
@@ -590,7 +592,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
     }
   })
 
-  test("the outbox takes Resolution's three kinds about a ticket, and nothing about an alert", () =>
+  test("the outbox takes Resolution's kinds about a ticket, and an alert's raise about an alert alone (O16 of #290)", () =>
     seeded(async (tx) => {
       const event = { companyId: a.company, projectId: a.project, aggregateKind: "ticket", aggregateId: a.ticket, occurredAt: at(9), payload: { id: a.ticket, status: "open" } } as const
       await tx.insert(outboxEvent).values([
@@ -598,8 +600,11 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
         { ...event, id: a.other, kind: "ticket-completed" },
         { ...event, id: a.third, kind: "ticket-rejected" },
       ])
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.fourth, kind: "alert-raised" })), refusedWith("23514", /outbox_event_kind_one_of/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.fourth, kind: "ticket-opened", aggregateKind: "alert" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))
+      await tx.insert(outboxEvent).values([
+        { ...event, id: a.fourth, kind: "ticket-assigned" },
+        { ...event, id: a.fifth, kind: "alert-raised", aggregateKind: "alert" },
+      ])
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.sixth, kind: "alert-acknowledged", aggregateKind: "alert" })), refusedWith("23514", /outbox_event_kind_one_of/), "an alert's acknowledgement is nobody's news")
     }))
 
   test("ticket_booking (#422) keeps every booking: one ticket per stop (23505), the stop of the ticket's own project and company (23503), and the API role appends and never rewrites (42501)", async () => {

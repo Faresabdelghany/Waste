@@ -46,7 +46,7 @@ export function channelShapeIssue(template: { channel: MessageChannel; subject: 
   return undefined
 }
 
-/** Whether the customer's consent governs a message of this purpose: a service message's, never a billing one's. */
+/** Whether the customer's consent governs a message of this purpose: a service message's, never a billing one's or a staff one's. */
 export const needsConsent = (purpose: MessagePurpose): boolean => purpose === "service"
 
 /** An address as a log line tells it: an e-mail's first letter and domain, a phone's last two digits. */
