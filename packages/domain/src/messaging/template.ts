@@ -14,7 +14,7 @@ import type { MessageChannel, MessagePurpose } from "./vocabulary"
  * invoice's number, a collection's day) adds its names here and its values
  * where it queues.
  */
-export const MESSAGE_VARIABLES = ["recipientName", "customerName", "companyName", "collectionDate"] as const
+export const MESSAGE_VARIABLES = ["recipientName", "customerName", "companyName", "collectionDate", "ticketNumber", "replyText"] as const
 export type MessageVariable = (typeof MESSAGE_VARIABLES)[number]
 /** The values every message fills. */
 export const EVERY_MESSAGE_FILLS = ["recipientName", "customerName", "companyName"] as const satisfies readonly MessageVariable[]
@@ -22,7 +22,8 @@ export const EVERY_MESSAGE_FILLS = ["recipientName", "customerName", "companyNam
  * A message's values: the three every message fills, and those its sender
  * has — `collectionDate`, the day of the collection a booking's notice is
  * about (O16 of #290, part b), which an office's send from a customer's
- * details does not have.
+ * details does not have; and a ticket's notice its `ticketNumber` and, for a
+ * reply, the `replyText` (C18 of #291).
  */
 export type MessageValues = Readonly<Record<(typeof EVERY_MESSAGE_FILLS)[number], string>> & Readonly<Partial<Record<MessageVariable, string>>>
 
