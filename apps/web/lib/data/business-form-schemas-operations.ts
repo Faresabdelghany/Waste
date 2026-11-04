@@ -10,6 +10,7 @@ import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
 import { INSPECTION_FORM } from "@/lib/data/inspections"
 import { FUEL_TYPE_OPTIONS, VEHICLE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
+import { WEIGH_IN_FORM } from "@/lib/data/scale-house"
 
 /**
  * The licence classes the fleet forms offer (issue #37): the driver form's
@@ -674,6 +675,17 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   {
+    // A weighbridge's tickets (O27 of #290): sent by the weighbridge, matched or dismissed in a ticket's details, never made here.
+    key: "route-studio.weighbridge",
+    mode: "disabled",
+    recordKind: "Weighbridge ticket",
+    title: "Weighbridge tickets",
+    description: "A station's weighbridge sends its tickets; each is matched to the route its vehicle ran, or waits for the office.",
+    submitLabel: "Match ticket",
+    disabledReason: "Tickets come from the weighbridge. Open an unmatched ticket to match it to a route or dismiss it.",
+    sections: [{ id: "ticket", title: "Ticket", fields: [{ id: "note", label: "Note", type: "textarea" }] }],
+  },
+  {
     key: "route-studio.weights",
     mode: "action",
     recordKind: "Weight capture or adjustment",
@@ -888,6 +900,8 @@ export const operationsBusinessFormSchemas = [
     ],
     execution: { kind: "create-record", initialStatus: "Booked", completionMessage: "Bulky collection booked." },
   },
+  // The scale house (M16a of #293): the module's form is Weigh in; Register tare, Weigh out and Void are the surfaces' own.
+  WEIGH_IN_FORM,
   {
     // Recycling-centre visits (#393): on the Pilot a visit is checked in on
     // the attendant's own page, /check-in (components/waste/check-in/), and the

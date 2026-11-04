@@ -62,9 +62,11 @@ export type OfficeUnload = {
   /** Why the station refused the load (O9 of #290), null for one it took; a correction copies its original's. */
   refusalReason: string | null
   refusalNote: string | null
+  /** Whose reading it is: the office's, `dispatch`, unless a weighbridge's ticket is written as it (`integration`, O27 of #290). */
+  source?: "dispatch" | "integration"
 }
 
-/** Appends one office unload — `dispatch`, no session, no device, no location, no photo, a server-minted id — and answers the row with the reading a new row has. */
+/** Appends one office unload — `dispatch`, or a weighbridge's `integration`, no session, no device, no location, no photo, a server-minted id — and answers the row with the reading a new row has. */
 export async function appendUnload(tx: Tx, companyId: string, draft: OfficeUnload): Promise<UnloadRow> {
   const [row] = await tx
     .insert(unload)
@@ -76,7 +78,7 @@ export async function appendUnload(tx: Tx, companyId: string, draft: OfficeUnloa
       sessionId: null,
       unloadingStationId: draft.unloadingStationId,
       wasteFractionId: draft.wasteFractionId,
-      source: "dispatch",
+      source: draft.source ?? "dispatch",
       occurredAt: draft.occurredAt,
       recordedBy: draft.recordedBy,
       deviceId: null,

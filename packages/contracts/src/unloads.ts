@@ -30,6 +30,11 @@
 // weighed on board since the route's last unload of it against the
 // weighbridge's net, within the project's tolerance or above it, null where no
 // stop was weighed.
+//
+// A weighbridge's ticket matched to a route is an Unload of `source =
+// integration` (O27 of #290, weighbridge.ts); where the driver recorded the
+// same load too, each reads the other in `possibleDuplicates` until the desk
+// rejects or corrects one.
 import { refusalIssue, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
 import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
@@ -115,6 +120,8 @@ export const Unload = z
     refusal: z.object({ reason: UnloadRefusalReason, note: Paragraph.nullable() }).nullable().default(null),
     /** The load on board against the weighbridge, null where no stop of its fraction was weighed; absent from a row the outbox carried before, read as none. */
     load: LoadReading.nullable().default(null),
+    /** The open Unloads of the same route and fraction it may duplicate (O27 of #290): a weighbridge's and one recorded by hand, until the desk rejects one; absent from a row the outbox carried before, read as none. */
+    possibleDuplicates: z.array(Id).default([]),
   })
   .refine(weightsPaired, bothGrossAndTare)
   .refine(weightsAddUp, netIsGrossLessTare)

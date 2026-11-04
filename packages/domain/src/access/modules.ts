@@ -23,6 +23,8 @@ export const MODULE_KEYS = [
   "operate.driver-app",
   // The recycling centres' visit ledger and the attendant's check-in (M4 of #293).
   "operate.site-visits",
+  // The scale house's window: the tare register and the tickets weighed at our own sites (M16a of #293).
+  "operate.scale-house",
   // An inspector's visits to containers and properties, with findings and photos (M23 of #293).
   "operate.inspections",
   // Map Planning
@@ -33,6 +35,8 @@ export const MODULE_KEYS = [
   "route-studio.routes",
   "route-studio.pickups",
   "route-studio.weights",
+  // A weighbridge's tickets read automatically and matched to routes (O27 of #290).
+  "route-studio.weighbridge",
   // Fleet
   "fleet.vehicles",
   "fleet.drivers",

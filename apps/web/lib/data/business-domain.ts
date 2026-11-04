@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "inspections", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "inspections", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -230,7 +230,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Dispatcher",
       "Compliance manager",
     ],
-    moduleIds: ["live", "schemes", "routes", "pickups", "weights"],
+    moduleIds: ["live", "schemes", "routes", "pickups", "weights", "weighbridge"],
     boundaryNote:
       "Live Operations owns current execution state. Route Schemes are recurring master data; every dated Route generates its Pickups, whose outcomes and proof stay on those same records.",
   },
@@ -442,6 +442,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "A Site Visit is one arrival at a recycling centre, admitted or refused with the reason; its charge is the Visit Rule's, made a billable event by Finance, and a mistake is voided, never deleted.",
   },
   {
+    key: "operate.scale-house",
+    workspaceId: "operate",
+    moduleId: "scale-house",
+    primaryBlueprintModule: "M24",
+    supportingBlueprintModules: ["M03", "M11", "M16"],
+    canonicalOwner: "Operate · Scale house",
+    personas: ["Site attendant", "Operations manager"],
+    upstream: ["M03", "M08", "M09"],
+    downstream: ["M11", "M16"],
+    boundaryNote:
+      "A Scale Ticket is one vehicle weighed in and out at one of our own sites, its load split by fraction and origin; one of our own vehicles' becomes its route's unload, and a mistake is voided, never deleted.",
+  },
+  {
     key: "operate.inspections",
     workspaceId: "operate",
     moduleId: "inspections",
@@ -479,6 +492,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M13", "M16", "M18", "M19", "M23"],
     boundaryNote:
       "Weight control validates execution evidence; financial eligibility remains owned by Billable Events.",
+  },
+  {
+    key: "route-studio.weighbridge",
+    workspaceId: "route-studio",
+    moduleId: "weighbridge",
+    primaryBlueprintModule: "M11",
+    supportingBlueprintModules: ["M16", "M23"],
+    canonicalOwner: "Route Studio · Weighbridge",
+    personas: ["Operations manager", "Dispatcher"],
+    upstream: ["M09", "M11", "M22"],
+    downstream: ["M11", "M16"],
+    boundaryNote:
+      "A weighbridge's ticket becomes a route's unload once matched; Weight Control reviews it as any other.",
   },
   {
     key: "operate.driver-app",

@@ -28,7 +28,7 @@ const MIGRATION = "0055_moved_stops.sql"
 
 const referenced = { company, project, route, container, property, sharedCollectionPoint, wasteFraction, subscription, warehouse, contaminantCode, bulkyBooking }
 
-/** What 0095 (M23 of #293) added to the stop since: its fill estimate's column and check, each naming `fill_level`. */
+/** What 0092 (M23 of #293) added to the stop since: its fill estimate's column and check, each naming `fill_level`. */
 const since0055 = (statement: string): boolean => statement.includes('"fill_level"')
 
 /** What drizzle-kit writes for 0055: the pickup from its 0053 spelling to today's, less what a later file added. */

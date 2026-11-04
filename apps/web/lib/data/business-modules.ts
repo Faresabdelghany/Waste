@@ -1979,6 +1979,25 @@ const operate: WorkspaceDefinition = {
       records: [],
     },
     {
+      // The scale house (M16a of #293): on the API only, so no fixture records; weighed in, out and voided, and its tares registered, through components/waste/commands/scale-house-surfaces.tsx.
+      id: "scale-house",
+      label: "Scale house",
+      title: "Scale house",
+      description: "The window of our own sites with a weighbridge: each vehicle weighed in at its gross and out at its tare, its load split by fraction and the municipality it came from, and the register of tares it may be weighed out on.",
+      entityLabel: "Scale ticket",
+      contextLabel: "Site · customer",
+      valueLabel: "Net weight",
+      primaryAction: "Weigh in",
+      metrics: [],
+      lifecycle: ["Weighed in", "Completed", "Voided"],
+      rules: [
+        "A ticket's lines sum to its net: the split is how much of what came from where.",
+        "One of our own vehicles' ticket is its route's unload, reviewed in Weight Control like any other.",
+        "A ticket is voided with its reason, never deleted: it is what the customer was handed.",
+      ],
+      records: [],
+    },
+    {
       // Field inspections (M23 of #293): on the API only, so no fixture records; recorded through the module's form, its photos and Close in its details (components/waste/commands/inspection-surfaces.tsx).
       id: "inspections",
       label: "Inspections",
@@ -3622,7 +3641,7 @@ const resources: WorkspaceDefinition = {
       records: [],
     },
     {
-      // The fill-level Sensors (O26 of #290, row 9.10): on the API only, so no fixture records; the office's pane is O26's last part. The containers' fixture facts (Sensor, Fill level) stay the prototype's until then.
+      // The fill-level Sensors (O26 of #290, row 9.10): on the API only, so no fixture records (lib/api/records/sensors.ts); a sensor's pairing and readings are its details' (components/waste/commands/sensor-surfaces.tsx). The containers' fixture facts (Sensor, Fill level) are the prototype's.
       id: "sensors",
       label: "Sensors",
       title: "Fill-level Sensors",
@@ -3692,6 +3711,26 @@ const routeStudioLiveModule: ModuleDefinition = {
     "Monitor active routes, vehicle freshness, current stops, exceptions, and dispatcher actions alongside Route Studio master data.",
 }
 
+/** A weighbridge's tickets (O27 of #290): read from the API alone, so it holds no fixture records. */
+const routeStudioWeighbridgeModule: ModuleDefinition = {
+  id: "weighbridge",
+  label: "Weighbridge",
+  title: "Weighbridge Tickets",
+  description: "Tickets a station's weighbridge sent, matched to the routes their vehicles ran and written as their unloads, or waiting for the office.",
+  entityLabel: "Weighbridge ticket",
+  contextLabel: "Station · route",
+  valueLabel: "Net weight",
+  primaryAction: "Match ticket",
+  metrics: [],
+  records: [],
+  lifecycle: ["Unmatched", "Matched", "Dismissed"],
+  rules: [
+    "A ticket is the weighbridge's: the office matches it to a route or dismisses it, and never edits it.",
+    "A matched ticket is its route's unload, reviewed in Weight Control like any other.",
+    "Where the driver recorded the same load, both unloads read as possible duplicates until one is rejected.",
+  ],
+}
+
 const routeStudio: WorkspaceDefinition = {
   id: "route-studio",
   label: "Route Studio",
@@ -3703,6 +3742,7 @@ const routeStudio: WorkspaceDefinition = {
     requireWorkspaceModule(operate, "routes"),
     requireWorkspaceModule(operate, "pickups"),
     requireWorkspaceModule(operate, "weights"),
+    routeStudioWeighbridgeModule,
   ],
 }
 
@@ -3720,6 +3760,8 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     requireWorkspaceModule(operate, "driver-app"),
     // Recycling-centre visits (M4 of #293): the ledger, beside the attendant's own /check-in.
     requireWorkspaceModule(operate, "site-visits"),
+    // The scale house (M16a of #293): the window's tickets and its tare register.
+    requireWorkspaceModule(operate, "scale-house"),
     // Field inspections (M23 of #293): an inspector's visits, their findings and photos.
     requireWorkspaceModule(operate, "inspections"),
   ],
