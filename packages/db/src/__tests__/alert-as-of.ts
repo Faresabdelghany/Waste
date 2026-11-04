@@ -96,6 +96,8 @@ export const RESOLVED_SHAPE = `(${column("resolved_by")} is null or ${column("re
 export const ALERT_RULES_AS_OF_0034 = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"] as const
 /** The rules 0061 spelled, before the fill-level sensors' migration (O26 of #290) added `fill-threshold`. */
 export const ALERT_RULES_AS_OF_0061 = [...ALERT_RULES_AS_OF_0034, "position-stale"] as const
+/** The rules the fill-level sensors' migration (O26 of #290) spelled, before vehicle maintenance's (O20 of #290) added `maintenance-due`. */
+export const ALERT_RULES_AS_OF_0081 = [...ALERT_RULES_AS_OF_0061, "fill-threshold"] as const
 
 export const RULE_SHAPE = `(${column("rule")} is null) = (${column("rule_key")} is null)`
 /** One alert per occurrence, whatever its status, but for one the worker cleared. */
