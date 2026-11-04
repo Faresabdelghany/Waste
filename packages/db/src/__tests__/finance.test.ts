@@ -445,6 +445,8 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       [
         { column: "next_invoice_number", default: "1000", nullable: "NO" },
         { column: "next_route_number", default: "1000", nullable: "NO" },
+        // The scale house's (M16a of #293), added later; a fresh database migrated to the head carries it too.
+        { column: "next_scale_ticket_number", default: "1000", nullable: "NO" },
         { column: "next_ticket_number", default: "1000", nullable: "NO" },
       ],
     )

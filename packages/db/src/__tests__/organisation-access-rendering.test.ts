@@ -122,7 +122,7 @@ const companyTable = (counters: boolean): string =>
     '\t"registration_number" text NOT NULL,',
     '\t"country" text NOT NULL,',
     '\t"status" text NOT NULL,',
-    ...(counters ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,', '\t"next_ticket_number" integer DEFAULT 1000 NOT NULL,', '\t"next_invoice_number" integer DEFAULT 1000 NOT NULL,'] : []),
+    ...(counters ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,', '\t"next_ticket_number" integer DEFAULT 1000 NOT NULL,', '\t"next_invoice_number" integer DEFAULT 1000 NOT NULL,', '\t"next_scale_ticket_number" integer DEFAULT 1000 NOT NULL,'] : []),
     ...(counters ? IDENTITY_SHAPES.map(([column]) => `\t"${column}" text,`) : []),
     ...(counters ? ['\t"postal_address" text,'] : []),
     '\tCONSTRAINT "company_country_registration_number_key" UNIQUE("country","registration_number"),',
@@ -143,7 +143,9 @@ const companyTable = (counters: boolean): string =>
  * finance-rendering.test.ts pins; #291 C4: `company` gained the invoice
  * identity and `project` its payment terms and reference scheme in 0037,
  * which finance-settings-rendering.test.ts pins; #291 C5: `company` gained
- * its postal address in 0041, which invoice-parties-rendering.test.ts pins),
+ * its postal address in 0041, which invoice-parties-rendering.test.ts pins;
+ * M16a of #293: `company` gained `next_scale_ticket_number` in the scale
+ * house's migration, which scale-house-rendering.test.ts pins),
  * each through an `ALTER TABLE`: the
  * statement as drizzle-kit generates it now, and as it generated it as of
  * 0002. An applied file is never edited, so 0002 is held to the earlier

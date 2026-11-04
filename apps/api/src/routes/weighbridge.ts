@@ -195,7 +195,7 @@ async function batchContext(tx: Tx, principal: Principal, codes: readonly string
 }
 
 /** The routes a vehicle's session spanned at an instant, and its routes that ran on the instant's day on its project's clock. */
-async function routesOf(tx: Tx, companyId: string, truck: { id: string; projectId: string; timezone: string }, at: Date): Promise<{ sessionRouteIds: string[]; dayRouteIds: string[] }> {
+export async function routesOf(tx: Tx, companyId: string, truck: { id: string; projectId: string; timezone: string }, at: Date): Promise<{ sessionRouteIds: string[]; dayRouteIds: string[] }> {
   const [sessions, days] = await Promise.all([
     tx
       .select({ routeId: session.routeId })
@@ -218,7 +218,7 @@ async function routesOf(tx: Tx, companyId: string, truck: { id: string; projectI
 }
 
 /** Writes a matched ticket's Unload on its route under the route's lock, and emits `unload-recorded` with it; answers the Unload's id. */
-async function writeUnload(tx: Tx, principal: Principal, ticket: { routeId: string; wasteFractionId: string; unloadingStationId: string; weighedAt: Date; grossKg: number | null; tareKg: number | null; netKg: number; ticketNumber: string }): Promise<{ unloadId: string; projectId: string }> {
+export async function writeUnload(tx: Tx, principal: Principal, ticket: { routeId: string; wasteFractionId: string; unloadingStationId: string; weighedAt: Date; grossKg: number | null; tareKg: number | null; netKg: number; ticketNumber: string }): Promise<{ unloadId: string; projectId: string }> {
   await lockRow(tx, route, { companyId: principal.companyId, id: ticket.routeId })
   const [ran] = await tx.select({ projectId: route.projectId }).from(route).where(and(eq(route.companyId, principal.companyId), eq(route.id, ticket.routeId)))
   if (ran === undefined) throw new Error(`route ${ticket.routeId} vanished under its lock`)
