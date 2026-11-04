@@ -1,6 +1,6 @@
 // `outbox_event` as 0010 (Issue #112) left it and 0033 still had it: the
 // outbox's vocabulary as Execution's, Resolution's and Finance's news, before
-// the Registry's decided application (M7 of #293); and as 0040 left it, before
+// the Registry's decided application (M7 of #293); as 0040 left it, before
 // the recycling-centre visits' two kinds about a `site-visit` (#393, migration
 // 0054); and as 0054 left it, before the staff notifications' `alert-raised` and
 // `ticket-assigned` and their `alert` (O16 of #290); and as 0083 left it,
@@ -11,8 +11,10 @@
 // staff-notifications-rendering.test.ts from 0054's to 0083's and
 // booking-notices-rendering.test.ts from 0083's to 0084's, before the
 // service notifications' `ticket-replied` (C18 of #291), and
-// service-notifications-rendering.test.ts from 0084's, since an applied file is
-// never edited and the schema module spells the table as it is today.
+// service-notifications-rendering.test.ts from 0084's to 0085's, before the
+// weight review's `weight-reviewed` (O28 of #290), and
+// weight-charges-rendering.test.ts from 0085's, since an applied file is never
+// edited and the schema module spells the table as it is today.
 import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"
 import { jsonb, text, timestamp, uuid } from "drizzle-orm/pg-core"
@@ -23,8 +25,11 @@ import { company, project } from "../schema/organisation"
 import { companyReference, indexOn, tenantIndex, tenantReference } from "../schema/references"
 import { wms } from "../schema/wms"
 
+/** The outbox's vocabulary as of 0085: everything until the weight review's kind (O28 of #290), about an aggregate already there. */
+export const OUTBOX_KINDS_AS_OF_0085 = OUTBOX_KINDS.filter((kind) => kind !== "weight-reviewed")
+
 /** The outbox's vocabulary as of 0084: everything until the service notifications' reply (C18 of #291), which no aggregate of its own carries. */
-export const OUTBOX_KINDS_AS_OF_0084 = OUTBOX_KINDS.filter((kind) => kind !== "ticket-replied")
+export const OUTBOX_KINDS_AS_OF_0084 = OUTBOX_KINDS_AS_OF_0085.filter((kind) => kind !== "ticket-replied")
 export const OUTBOX_AGGREGATES_AS_OF_0084 = OUTBOX_AGGREGATES
 
 /** The outbox's vocabulary as of 0083: everything until the booking notices' kinds and aggregate (O16 of #290, part b). */
@@ -43,7 +48,7 @@ export const OUTBOX_AGGREGATES_AS_OF_0040 = OUTBOX_AGGREGATES_AS_OF_0054.filter(
 export const OUTBOX_KINDS_AS_OF_0010 = OUTBOX_KINDS_AS_OF_0040.filter((kind) => kind !== "application-decided")
 export const OUTBOX_AGGREGATES_AS_OF_0010 = OUTBOX_AGGREGATES_AS_OF_0040.filter((aggregate) => aggregate !== "application")
 
-/** The outbox table as 0010, 0040, 0054, 0083 or 0084 left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the earlier lists. */
+/** The outbox table as 0010, 0040, 0054, 0083, 0084 or 0085 left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the earlier lists. */
 const outboxEventAsOf = (kinds: readonly string[], aggregates: readonly string[]) =>
   wms.table(
   "outbox_event",
@@ -74,3 +79,4 @@ export const outboxEventAsOf0040 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0040, OUTB
 export const outboxEventAsOf0054 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0054, OUTBOX_AGGREGATES_AS_OF_0054)
 export const outboxEventAsOf0083 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0083, OUTBOX_AGGREGATES_AS_OF_0083)
 export const outboxEventAsOf0084 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0084, OUTBOX_AGGREGATES_AS_OF_0084)
+export const outboxEventAsOf0085 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0085, OUTBOX_AGGREGATES)

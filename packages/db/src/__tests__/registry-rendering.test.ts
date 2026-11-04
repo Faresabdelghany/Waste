@@ -64,9 +64,13 @@
 // and site-visits-rendering.test.ts pins the statements.
 //
 // The item unit's migration (#449) gave it `item`, a bulky-waste booking's things priced
-// by their count: `CHANGED_FOR_ITEM_UNIT`, first of the product's chain, maps
-// today's product onto 0054's, and item-product-unit-rendering.test.ts pins
-// the statements.
+// by their count: `CHANGED_FOR_ITEM_UNIT` maps the product as it wrote it
+// onto 0054's, and item-product-unit-rendering.test.ts pins the statements.
+//
+// The weight charges' migration (O28 of #290) gave it `tonne`, a collection
+// charged by its reviewed weight: `CHANGED_FOR_WEIGHT_CHARGES`, now first of
+// the product's chain, maps today's product onto the item unit's, and
+// weight-charges-rendering.test.ts pins the statements.
 //
 // Migration 0056 (O14 of #290) gave `property` and `agreement` their service
 // window and its check: `CHANGED_IN_0056`, first of both chains, maps today's
@@ -167,10 +171,10 @@ const CHANGED_IN_0007 = new Map([[placementTable(true), placementTable(false)]])
 /** What 0004 created and 0007 dropped: the index on the placement's project, which its key now leads with. */
 const DROPPED_IN_0007 = [index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id")]
 
-/** product as drizzle-kit wrote it as of 0004, as of 0010 with the invoice name, code and VAT rate (Issue #112), as of 0044 (M14 of #293) with the `day` unit and a hire's free days, as of 0054 (#393) with the `visit` unit, and as it writes it since the item unit's migration (#449), with the `item` unit. */
-const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit"): string => {
+/** product as drizzle-kit wrote it as of 0004, as of 0010 with the invoice name, code and VAT rate (Issue #112), as of 0044 (M14 of #293) with the `day` unit and a hire's free days, as of 0054 (#393) with the `visit` unit, as of the item unit's migration (#449) with the `item` unit, and as it writes it since the weight charges' (O28 of #290), with the `tonne` unit. */
+const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit" | "weight-charges"): string => {
   const finance = asOf !== "0004"
-  const hire = asOf === "0044" || asOf === "0054" || asOf === "item-unit"
+  const hire = asOf === "0044" || asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges"
   return createTable("product", "project", [
     '"name" text NOT NULL',
     '"kind" text NOT NULL',
@@ -185,7 +189,7 @@ const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit"): st
     uniqueKey("product_project_key", "company_id", "project_id", "id"),
     oneOfCheck("product", "kind", "container-collection", "recurring-service", "additional-service"),
     oneOfCheck("product", "status", "draft", "active", "inactive"),
-    oneOfCheck("product", "unit", "pickup", "month", "job", ...(hire ? ["day"] : []), ...(asOf === "0054" || asOf === "item-unit" ? ["visit"] : []), ...(asOf === "item-unit" ? ["item"] : [])),
+    oneOfCheck("product", "unit", "pickup", "month", "job", ...(hire ? ["day"] : []), ...(asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges" ? ["visit"] : []), ...(asOf === "item-unit" || asOf === "weight-charges" ? ["item"] : []), ...(asOf === "weight-charges" ? ["tonne"] : [])),
     ...(finance ? [`CONSTRAINT "product_vat_percent_range" CHECK (${ref("product", "vat_percent")} between 0 and 100)`] : []),
     ...(hire ? [`CONSTRAINT "product_free_days_shape" CHECK (${ref("product", "free_days")} is null or (${ref("product", "unit")} = 'day' and ${ref("product", "free_days")} between 0 and 366))`] : []),
   ])
@@ -210,7 +214,10 @@ const agreementTable = (asOf: "0004" | "0010" | "0056"): string =>
     oneOfCheck("agreement", "billing_cadence", "monthly", "quarterly", "annual", "manual"),
   ])
 
-/** What the item unit's migration changed (#449): the product's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054. Applied first. */
+/** What the weight charges' migration changed (O28 of #290): the product's CREATE TABLE as drizzle-kit generates it now onto what it generated as of the item unit's. Applied first. */
+const CHANGED_FOR_WEIGHT_CHARGES = new Map([[productTable("weight-charges"), productTable("item-unit")]])
+
+/** What the item unit's migration changed (#449): the product's CREATE TABLE as drizzle-kit generated it then onto what it generated as of 0054. Applied after the weight charges'. */
 const CHANGED_FOR_ITEM_UNIT = new Map([[productTable("item-unit"), productTable("0054")]])
 
 /** What 0054 changed (#393): the product's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0044. Applied after the item unit's. */
@@ -405,7 +412,7 @@ const expected = [
     positiveCheck("service_frequency", "days_between"),
     `CONSTRAINT "service_frequency_shape" CHECK ((${ref("service_frequency", "collections_per_week")} is not null or (${ref("service_frequency", "weeks_between")} is null and ${ref("service_frequency", "days_between")} is null)) and (${ref("service_frequency", "weeks_between")} is null or ${ref("service_frequency", "days_between")} is null))`,
   ]),
-  productTable("item-unit"),
+  productTable("weight-charges"),
   customerTable(true),
   propertyTable("0062"),
   partyTable(true),
@@ -556,6 +563,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement) && !ADDED_BY_DATED_PARTIES.includes(statement))
       .map((statement) => CHANGED_BY_DATED_PARTIES.get(statement) ?? statement)
+      .map((statement) => CHANGED_FOR_WEIGHT_CHARGES.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_ITEM_UNIT.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_HAZARDOUS.get(statement) ?? CHANGED_IN_0062.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0056.get(statement) ?? statement)
@@ -573,7 +581,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_FOR_ITEM_UNIT.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_WEIGHT_CHARGES.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_ITEM_UNIT.keys()) assert.ok([...CHANGED_FOR_WEIGHT_CHARGES.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_FOR_ITEM_UNIT.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0062.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0056.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0062.values()].includes(statement), statement.split("\n")[0])
