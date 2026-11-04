@@ -15,14 +15,18 @@
 // coming back finds the same controller rather than a second one draining
 // the same rows. Leaving hands it no session, so nothing is sent under a
 // token this page no longer holds; it is never disposed, since React's
-// development double mount would leave it dead.
+// development double mount would leave it dead. It opens the display cache
+// beside the queue and registers the app shell's service worker (O25 of
+// #290), so the app opens and reads the day with no signal.
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
 
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { whoOf } from "@/lib/api/session"
+import { registerShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
 import { APP_VERSION } from "@/lib/driver/app-version"
 import { openCommandQueue } from "@/lib/driver/command-queue"
 import { createDriverApp, type DriverAppController, type DriverAppState } from "@/lib/driver/driver-app"
+import { openReadSnapshot } from "@/lib/driver/read-snapshot"
 
 const DriverAppContext = createContext<DriverAppController | null>(null)
 
@@ -33,6 +37,7 @@ function driverAppOfThisTab(): DriverAppController {
   if (typeof window === "undefined") return createDriverApp({ openQueue: () => Promise.reject(new Error("no IndexedDB on the server")) })
   tabController ??= createDriverApp({
     openQueue: () => openCommandQueue(window.indexedDB),
+    openSnapshot: () => openReadSnapshot(window.indexedDB),
     geolocation: navigator.geolocation ?? null,
     appVersion: APP_VERSION,
   })
@@ -48,6 +53,10 @@ export function DriverAppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     app.setSession(who === null ? null : { who, client })
   }, [app, who, client])
+
+  useEffect(() => {
+    void registerShell(window, SHELL_ENABLED)
+  }, [])
 
   useEffect(() => {
     void app.load()

@@ -78,9 +78,39 @@ describe("a stale position (O8 of #290)", () => {
   })
 })
 
+describe("a filling container (O26 of #290)", () => {
+  const reading = { rule: "fill-threshold" as const, containerId: "bin", containerLabel: "BIN-82014", sensorIdentifier: "S-401", fillPercent: 88, thresholdPercent: 85, measuredAt: "2026-10-29 07:40" }
+
+  test("is a medium service risk from the telemetry about the container, naming the sensor, the reading and the threshold", () => {
+    const alert = alertOfRule(reading)
+    assert.deepEqual([alert.rule, alert.kind, alert.severity, alert.source], ["fill-threshold", "service-risk", "medium", "telemetry"])
+    assert.equal(alert.title, "BIN-82014 is 88% full")
+    assert.equal(alert.details, "Sensor S-401 read 88% at 2026-10-29 07:40, at or past the full threshold of 85%: empty it before it overflows.")
+    assert.deepEqual([alert.containerId, alert.routeId, alert.driverId, alert.vehicleId, alert.ticketId], ["bin", null, null, null, null])
+  })
+
+  test("ends with what the fill-driven emptying came to, where the pairing books one", () => {
+    const route = { id: "r", label: "RC-1042", operatingDate: "2026-10-30", routeSchemeId: "s", collectionGroupId: "g" }
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "booked", route } }).details, /overflows\. An emptying is booked on RC-1042 on 2026-10-30\.$/)
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "refused", route, reason: "WH-24 has no compartment for Glass, which the stop collects" } }).details, /No emptying is booked on RC-1042: WH-24 has no compartment for Glass, which the stop collects\.$/)
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "no-schedule" } }).details, /no emptying of it is planned to bring forward\.$/)
+  })
+
+  test("is high once the bin reads full", () => {
+    const alert = alertOfRule({ ...reading, fillPercent: 100 })
+    assert.deepEqual([alert.severity, alert.title], ["high", "BIN-82014 is full"])
+  })
+})
+
 describe("when a condition clears", () => {
   test("each rule resolves its alert with a note of its own", () => {
     assert.deepEqual(Object.keys(CLEARED_NOTES), [...ALERT_RULES])
+    const soon = alertOfRule({ rule: "maintenance-due", vehicleId: "truck", vehicleLabel: "WH-24", planName: "Annual service", overdue: false, nextDueOn: "2026-11-12", nextDueKm: 190_000, nextDueHours: null })
+    assert.deepEqual([soon.rule, soon.kind, soon.severity, soon.source, soon.vehicleId], ["maintenance-due", "resource", "medium", "rule", "truck"])
+    assert.equal(soon.title, "Annual service is due soon on WH-24")
+    assert.match(soon.details, /^Coming up to its next service at 2026-11-12 · 190,000 km\./)
+    const overdue = alertOfRule({ rule: "maintenance-due", vehicleId: "truck", vehicleLabel: "WH-24", planName: "Annual service", overdue: true, nextDueOn: null, nextDueKm: null, nextDueHours: 6_500 })
+    assert.deepEqual([overdue.severity, overdue.title], ["high", "Annual service is overdue on WH-24"])
     for (const note of Object.values(CLEARED_NOTES)) assert.match(note, /^Cleared: /)
   })
 })

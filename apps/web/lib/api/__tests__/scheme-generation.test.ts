@@ -406,7 +406,7 @@ describe("the scheme after its run", () => {
     const unsaved = loaded({ records: [record], serverIds: new Map() }, 1)
     assert.equal((await rereadRecord(clientOver(fetch), routeSchemesModule, unsaved, record, options)).kind, "refused")
     const project = projectAdapter.toRecord(
-      { id: PROJECT_ID, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false },
+      { id: PROJECT_ID, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
       { fixtures: [], resolve: NOTHING_RESOLVED, now: NOW },
     )
     const organisation = loaded({ records: [project], serverIds: new Map([[project.id, PROJECT_ID]]) }, 1)

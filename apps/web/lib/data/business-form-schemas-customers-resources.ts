@@ -1861,6 +1861,41 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     ],
   },
   {
+    // The fill-level Sensors (O26 of #290): a sensor registered by its
+    // network identifier; its pairing with a container is its own command.
+    key: "resources.sensors",
+    mode: "create",
+    recordKind: "Sensor",
+    title: "New sensor",
+    description: "A fill-level sensor the company owns, by the identifier its network knows it by: the key a vendor's integration sends its readings under.",
+    submitLabel: "Save sensor",
+    nameField: "identifier",
+    contextFieldIds: ["projectId", "network"],
+    sections: [
+      {
+        id: "identity",
+        title: "Identity",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: projectRelation },
+          { id: "identifier", label: "Identifier", type: "text", required: true, description: "The device's identifier on its network, such as a LoRaWAN DevEUI. Unique across the company." },
+          {
+            id: "network",
+            label: "Network",
+            type: "select",
+            required: true,
+            defaultValue: "lorawan",
+            options: [
+              { value: "lorawan", label: "LoRaWAN" },
+              { value: "sigfox", label: "Sigfox" },
+              { value: "nb-iot", label: "NB-IoT" },
+            ],
+          },
+          { id: "notes", label: "Notes", type: "textarea" },
+        ],
+      },
+    ],
+  },
+  {
     // The Drop-off Points (#293 M3c): a project's recycling centres and bring
     // banks, on the API. The weekly hours and the exceptions are typed as text
     // and read by lib/data/drop-off-points.ts in the domain's words.

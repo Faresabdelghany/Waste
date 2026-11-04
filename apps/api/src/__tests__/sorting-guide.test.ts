@@ -24,6 +24,10 @@ const ItemPage = Page(SortingGuideItem)
 /** A slug no other run of this file has taken: the key is unique across every company on the shared database. */
 const freshSlug = (name: string) => `${name}-${testId().replaceAll("-", "").slice(-12)}`
 
+
+/** A project that set no branding. */
+const UNBRANDED = { brandColor: null, logoUrl: null, accessibilityStatementUrl: null }
+
 describe("the sorting guide and the public door", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
@@ -154,7 +158,19 @@ describe("the sorting guide and the public door", { skip: database.skip }, () =>
       const response = await anyone(`/public/${slug}`)
       assert.equal(response.status, 200)
       assert.equal(response.headers.get("cache-control"), PUBLIC_CACHE)
-      assert.deepEqual(PublishedProject.parse(await response.json()), { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen" })
+      assert.deepEqual(PublishedProject.parse(await response.json()), { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen", branding: UNBRANDED })
+    })
+
+    test("a project's branding reaches its public pages as it set it, and none again once it clears it (M22)", async () => {
+      const branding = { brandColor: "#1f6f3f", logoUrl: "https://kommune.example/logo.svg", accessibilityStatementUrl: "https://kommune.example/tilgaengelighed" }
+      assert.equal((await olivia(`/projects/${a.projects.copenhagen.id}/branding`, { method: "PUT", body: branding })).status, 200)
+      try {
+        assert.deepEqual(PublishedProject.parse(await (await anyone(`/public/${slug}`)).json()).branding, branding)
+        assert.deepEqual((await search(slug, "glasflaske")).project.branding, branding, "every answer naming the project carries it")
+      } finally {
+        assert.equal((await olivia(`/projects/${a.projects.copenhagen.id}/branding`, { method: "PUT", body: UNBRANDED })).status, 200)
+      }
+      assert.deepEqual(PublishedProject.parse(await (await anyone(`/public/${slug}`)).json()).branding, UNBRANDED)
     })
 
     test("a slug nobody publishes under, and a path segment that is no slug, are the same 404", async () => {
@@ -166,7 +182,7 @@ describe("the sorting guide and the public door", { skip: database.skip }, () =>
 
     test("a search finds the project's published items, best first, with the fraction, the instructions and the spelling that matched", async () => {
       const answer = await search(slug, "glasflaske")
-      assert.deepEqual(answer.project, { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen" }, "the project searched, so a page asks once")
+      assert.deepEqual(answer.project, { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen", branding: UNBRANDED }, "the project searched, so a page asks once")
       assert.equal(answer.query, "glasflaske")
       assert.deepEqual(answer.matches, [
         {

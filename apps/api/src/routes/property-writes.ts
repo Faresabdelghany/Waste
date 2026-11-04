@@ -14,20 +14,31 @@
 // and point where the body sets neither. An id the register does not hold is
 // a 400 on `addressId`. A typed address is no longer the register's, so a
 // patch of `address` alone lets the id and the parts go.
+//
+// A party holds its role over a period (#374). The property reads the parties
+// in force on its project's today and those from a later day, a move booked
+// ahead, which `heldFromToday` says in SQL from the request's clock and the
+// party's project, so a page spanning projects is one statement. A body names
+// the set in force today and the server dates it: a create's parties begin
+// today, and `PUT …/parties` ends today a party it leaves out — deleting one
+// begun today, a same-day correction — begins today one it adds, and never
+// touches a party from a later day or one that has ended. History is never
+// deleted, so the parties' own read is the record of who held a property when.
 import type { Address } from "@waste/contracts/addresses"
 import type { AddressParts } from "@waste/domain/registry/address"
-import type { Property, PropertyCreate, PropertyKind, PropertyParty, PropertyPartyRole, PropertyPatch, PropertyStatus } from "@waste/contracts/customers"
+import type { Property, PropertyCreate, PropertyKind, PropertyParty, PropertyPartyHeld, PropertyPartyRole, PropertyPatch, PropertyStatus } from "@waste/contracts/customers"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { property, propertyParty } from "@waste/db/schema/customers"
-import { and, asc, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm"
+import { projectToday } from "@waste/db/commands/project-clock"
+import { and, asc, eq, inArray, isNull, lte, or, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
-import { entriesFor, replaceSet, requirePartyCustomers, writeEntries, type Entry, type MemberSet, type Parent } from "./members"
-import { refuseDuplicate, stampsOf } from "./shared"
+import { requirePartyCustomers, type Entry, type Parent } from "./members"
+import { refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
 import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
 export const propertyColumns = {
@@ -57,28 +68,50 @@ export const propertyColumns = {
 
 export type PropertyRow = Pick<typeof property.$inferSelect, keyof typeof propertyColumns>
 
-/** The parties of a Property: a Customer of this company, and what it is to the property. */
-export const parties: MemberSet<typeof propertyParty> = {
-  table: propertyParty,
-  parentId: propertyParty.propertyId,
-  entryId: propertyParty.customerId,
-  rowOf: (entry, parent) => ({
-    id: newId(),
-    companyId: parent.companyId,
-    projectId: parent.projectId,
-    propertyId: parent.id,
-    customerId: entry.id,
-    role: entry.role,
-  }),
-  require: requirePartyCustomers,
+/** The day `now` falls on in the project of the party row a statement reads, on that project's clock. */
+const partyDay = (now: Date): SQL =>
+  sql`(select (${now.toISOString()}::timestamptz at time zone p."timezone")::date from "wms"."project" p where p."company_id" = ${propertyParty.companyId} and p."id" = ${propertyParty.projectId})`
+
+/** A party in force on its project's today, or from a later day: what a property reads (#374). */
+export const heldFromToday = (now: Date): SQL => or(isNull(propertyParty.validTo), sql`${propertyParty.validTo} > ${partyDay(now)}`) as SQL
+
+/** A party in force on its project's today: who a customer is to a property now, the portal's and a ticket's question. */
+export const partyInForce = (now: Date): SQL => and(lte(propertyParty.validFrom, partyDay(now)), heldFromToday(now)) as SQL
+
+/** The parties of a page of properties in one statement, held from today, grouped by property in read order: the customer, the role, then the first day. */
+export async function partiesOf(tx: Tx, companyId: string, propertyIds: readonly string[], now: Date): Promise<Map<string, PropertyPartyHeld[]>> {
+  const grouped = new Map<string, PropertyPartyHeld[]>()
+  if (propertyIds.length === 0) return grouped
+  const rows = await tx
+    .select({ propertyId: propertyParty.propertyId, customerId: propertyParty.customerId, role: propertyParty.role, validFrom: propertyParty.validFrom, validTo: propertyParty.validTo })
+    .from(propertyParty)
+    .where(and(eq(propertyParty.companyId, companyId), inArray(propertyParty.propertyId, [...propertyIds]), heldFromToday(now)))
+    .orderBy(asc(propertyParty.propertyId), asc(propertyParty.customerId), asc(propertyParty.role), asc(propertyParty.validFrom))
+  for (const { propertyId, role, ...party } of rows) {
+    const held = grouped.get(propertyId) ?? []
+    held.push({ ...party, role: role as PropertyPartyRole })
+    grouped.set(propertyId, held)
+  }
+  return grouped
 }
 
-/** The two spellings of one party: the wire's, and the set mechanics' (routes/members.ts). */
-const partyOf = (entry: Entry): PropertyParty => ({ customerId: entry.id, role: entry.role as PropertyPartyRole })
+/** A party's row beginning on `from`, still running. */
+const partyRow = (parent: Parent, party: PropertyParty, from: string): typeof propertyParty.$inferInsert => ({
+  id: newId(),
+  companyId: parent.companyId,
+  projectId: parent.projectId,
+  propertyId: parent.id,
+  customerId: party.customerId,
+  role: party.role,
+  validFrom: from,
+})
+
+/** The two spellings of one party: the wire's, and the set mechanics' (routes/members.ts), which hold its customer to this company. */
 export const entryOf = (party: PropertyParty): Entry => ({ id: party.customerId, role: party.role })
+const partyKey = (party: PropertyParty): string => `${party.customerId} ${party.role}`
 
 /** The row on the wire, with the parties the page loaded for it. `kind` and `status` are text with a CHECK in the database and an enum here; the point is the contracts' `FlatPoint`, since the column is `geometry(Point, 4326)`, flat, and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
-export function propertyOf(row: PropertyRow, held: readonly Entry[]): Property {
+export function propertyOf(row: PropertyRow, held: readonly PropertyPartyHeld[]): Property {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -93,7 +126,7 @@ export function propertyOf(row: PropertyRow, held: readonly Entry[]): Property {
     driverInstructions: row.driverInstructions,
     serviceWindow: serviceWindowOf(row),
     status: row.status as PropertyStatus,
-    parties: held.map(partyOf),
+    parties: [...held],
     ...stampsOf(row),
   }
 }
@@ -138,8 +171,8 @@ function registerValues(body: { addressId?: string | null; registryId?: string |
 }
 
 /** One property on the wire, its parties read back the way a page reads them, so an answer equals the next read. */
-export async function propertyWithParties(tx: Tx, companyId: string, row: PropertyRow): Promise<Property> {
-  return propertyOf(row, await entriesFor(tx, parties, companyId, row.id))
+export async function propertyWithParties(tx: Tx, companyId: string, row: PropertyRow, now: Date): Promise<Property> {
+  return propertyOf(row, (await partiesOf(tx, companyId, [row.id], now)).get(row.id) ?? [])
 }
 
 /** `unique (company_id, project_id, name)`: a name is one property's inside a project, and free in the next. */
@@ -171,8 +204,8 @@ export async function findProperty(tx: Tx, principal: Principal, id: string): Pr
   return row
 }
 
-/** Registers a property in one of the caller's projects, with the parties it starts with; `found` is what the register said of the body's `addressId`. */
-export async function createProperty(tx: Tx, principal: Principal, body: PropertyCreate, found?: Address | null): Promise<Property> {
+/** Registers a property in one of the caller's projects, with the parties it starts with, each from the project's today on `now`; `found` is what the register said of the body's `addressId`. */
+export async function createProperty(tx: Tx, principal: Principal, body: PropertyCreate, now: () => Date, found?: Address | null): Promise<Property> {
   const { parties: asked, serviceWindow, addressId: _named, ...given } = body
   requireProject(principal, given.projectId)
   const fromRegister = registerValues(body, found)
@@ -181,20 +214,22 @@ export async function createProperty(tx: Tx, principal: Principal, body: Propert
   if (address === undefined) throw invalidRequest("body", [{ path: "address", message: "Give the address, typed or as the address register's addressId" }])
   const values = { ...given, ...fromRegister, address }
   const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
-  const entries = asked.map(entryOf)
-  await parties.require(tx, parent, entries)
+  await requirePartyCustomers(tx, parent, asked.map(entryOf))
   const [row] = await refuseDuplicate(collisions(values), () =>
     tx
       .insert(property)
       .values({ ...values, ...serviceWindowValues(serviceWindow), id: parent.id, companyId: parent.companyId })
       .returning(propertyColumns),
   )
-  await writeEntries(tx, parties, parent, entries)
-  return await propertyWithParties(tx, parent.companyId, row)
+  if (asked.length > 0) {
+    const today = await projectToday(tx, parent, now)()
+    await tx.insert(propertyParty).values(asked.map((party) => partyRow(parent, party, today)))
+  }
+  return await propertyWithParties(tx, parent.companyId, row, now())
 }
 
 /** Changes one property of the caller's projects; a 404 for one they do not reach. `found` is what the register said of the body's `addressId`. */
-export async function patchProperty(tx: Tx, principal: Principal, id: string, body: PropertyPatch, found?: Address | null): Promise<Property> {
+export async function patchProperty(tx: Tx, principal: Principal, id: string, body: PropertyPatch, now: () => Date, found?: Address | null): Promise<Property> {
   const { serviceWindow, addressId, ...given } = body
   // The path's row first (404), then the body's id (400), as a route judges them.
   if (addressId != null && (await findProperty(tx, principal, id)) === undefined) throw noSuchProperty(id)
@@ -212,20 +247,51 @@ export async function patchProperty(tx: Tx, principal: Principal, id: string, bo
       .returning(propertyColumns),
   )
   if (row === undefined) throw noSuchProperty(id)
-  return await propertyWithParties(tx, principal.companyId, row)
+  return await propertyWithParties(tx, principal.companyId, row, now())
 }
 
-/** Replaces a property's parties whole; a 404 for a property the caller does not reach. */
-export async function setPropertyParties(tx: Tx, principal: Principal, id: string, asked: readonly PropertyParty[]): Promise<Property> {
-  const row = await replaceSet(tx, parties, principal.companyId, asked.map(entryOf), (stamped) =>
-    tx
-      .update(property)
-      .set(stamped)
-      .where(and(propertyScope(principal), eq(property.id, id)))
-      .returning(propertyColumns),
-  )
+/** What a party added today meets when the customer already holds that role from a later day: a move booked ahead. */
+const PARTY_OVERLAP = "property_party_no_overlap"
+const heldAhead = "A customer the body adds already holds that role at this property from a later day; that day's change stands, so add them from it instead"
+
+/**
+ * Replaces a property's parties in force today on its project's clock (#374);
+ * a 404 for a property the caller does not reach. The property's row is
+ * stamped first, which is also what answers "no such property here", then the
+ * customers are held to this company, then the set in force today is read and
+ * compared with the body by customer and role: a party the body leaves out
+ * ends today, or is deleted where it began today — a same-day correction, not
+ * a role anybody held — and a party the body adds begins today. A party from
+ * a later day, or one already ended, is not today's set and is never touched;
+ * a party added today that the same customer holds in the same role from a
+ * later day is refused (409), since the exclusion constraint would.
+ */
+export async function setPropertyParties(tx: Tx, principal: Principal, id: string, asked: readonly PropertyParty[], now: () => Date): Promise<Property> {
+  const [row] = await tx
+    .update(property)
+    .set(stamp())
+    .where(and(propertyScope(principal), eq(property.id, id)))
+    .returning(propertyColumns)
   if (row === undefined) throw noSuchProperty(id)
-  return await propertyWithParties(tx, principal.companyId, row)
+  const parent: Parent = { companyId: principal.companyId, projectId: row.projectId, id: row.id }
+  await requirePartyCustomers(tx, parent, asked.map(entryOf))
+  const today = await projectToday(tx, parent, now)()
+  const current = await tx
+    .select({ id: propertyParty.id, customerId: propertyParty.customerId, role: propertyParty.role, validFrom: propertyParty.validFrom })
+    .from(propertyParty)
+    .where(and(eq(propertyParty.companyId, parent.companyId), eq(propertyParty.propertyId, parent.id), lte(propertyParty.validFrom, today), or(isNull(propertyParty.validTo), sql`${propertyParty.validTo} > ${today}`)))
+  const kept = new Set(asked.map(partyKey))
+  const held = new Set(current.map((party) => partyKey({ customerId: party.customerId, role: party.role as PropertyPartyRole })))
+  const leaving = current.filter((party) => !kept.has(partyKey({ customerId: party.customerId, role: party.role as PropertyPartyRole })))
+  const corrected = leaving.filter((party) => party.validFrom === today).map((party) => party.id)
+  const ended = leaving.filter((party) => party.validFrom !== today).map((party) => party.id)
+  if (corrected.length > 0) await tx.delete(propertyParty).where(and(eq(propertyParty.companyId, parent.companyId), inArray(propertyParty.id, corrected)))
+  if (ended.length > 0) await tx.update(propertyParty).set({ validTo: today }).where(and(eq(propertyParty.companyId, parent.companyId), inArray(propertyParty.id, ended)))
+  const added = asked.filter((party) => !held.has(partyKey(party)))
+  if (added.length > 0) {
+    await refuseOverlap({ [PARTY_OVERLAP]: heldAhead }, () => tx.insert(propertyParty).values(added.map((party) => partyRow(parent, party, today))))
+  }
+  return await propertyWithParties(tx, principal.companyId, row, now())
 }
 
 /** The properties of one of the caller's projects at an address, compared as a person reads it: case and spacing aside. In creation order, without their parties, which `propertyWithParties` reads for the one a caller settles on. */

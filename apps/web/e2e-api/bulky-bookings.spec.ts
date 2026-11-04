@@ -142,7 +142,7 @@ test("Settings › Bulky schedules adds an area's schedule; the office books a b
   await pick(add, page, "Planning area", area.name)
   await pick(add, page, "Frequency", "Daily")
   await add.getByLabel("Slots a day").fill("2")
-  await pick(add, page, "Charged at", bulky.name)
+  await pick(add, page, "Charged at", `${bulky.name} · per job`)
   await add.getByLabel("First day in force").fill(today)
   const [scheduled] = await Promise.all([answerOf(page, "POST", "/bulky-schedules"), add.getByRole("button", { name: "Add schedule" }).click()])
   expect(scheduled.status(), await scheduled.text()).toBe(201)

@@ -134,7 +134,7 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
         "the negotiated row always wins for the housing association",
       )
       assert.deepEqual([housing.blockReason, housing.createdBy, housing.sourceEventId, housing.overrideReason, housing.note, housing.subscriptionId], [null, a.users.olivia.id, null, null, "Extra emptying agreed by phone", null])
-      assert.deepEqual(housing.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null })
+      assert.deepEqual(housing.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null })
       assert.deepEqual([housing.cancelledAt, housing.cancelledBy, housing.cancelReason, housing.invoiceLineId], [null, null, null, null])
 
       const anna = await entered(manual({ agreementId: fx.agreements.anna.id, quantity: 2 }))
@@ -264,7 +264,7 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
     test("answers an event blocked with no subscription as it stands: there is no agreement to price under", async () => {
       const orphan = await consumerEvent(pool, a, {
         projectId: copenhagen,
-        draft: { kind: "pickup", serviceDate: fx.day, agreementId: null, subscriptionId: null, productId: null, quantity: 1, price: null, blockReason: "no-subscription", links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1], ticketId: null, reversesEventId: null, proofId: null, visitId: null } },
+        draft: { kind: "pickup", serviceDate: fx.day, agreementId: null, subscriptionId: null, productId: null, quantity: 1, price: null, blockReason: "no-subscription", links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1], ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null } },
       })
       const same = await commanded(orphan.id, "reprice")
       assert.deepEqual([same.status, same.blockReason, same.updatedAt], ["blocked", "no-subscription", orphan.updatedAt])
@@ -450,7 +450,7 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
   describe("the consumer's door", () => {
     test("records an event with no person and the outbox event's id, and the database refuses the same event twice: the idempotency key", async () => {
       const sourceEventId = testId()
-      const first = await consumerEvent(pool, a, { projectId: copenhagen, draft: { kind: "ticket", serviceDate: fx.day, agreementId: fx.agreements.anna.id, subscriptionId: null, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: (await ticketEvent(pool, a, fx)).links.ticketId, reversesEventId: null, proofId: null, visitId: null } }, sourceEventId })
+      const first = await consumerEvent(pool, a, { projectId: copenhagen, draft: { kind: "ticket", serviceDate: fx.day, agreementId: fx.agreements.anna.id, subscriptionId: null, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: (await ticketEvent(pool, a, fx)).links.ticketId, reversesEventId: null, proofId: null, visitId: null, unloadId: null } }, sourceEventId })
       assert.deepEqual([first.createdBy, first.sourceEventId, first.status], [null, sourceEventId, "blocked"])
       assert.deepEqual(await read(first.id), first, "the row as recorded is the row as read")
       await assert.rejects(

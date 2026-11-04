@@ -153,4 +153,18 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
     assert.match(lines.at(-2) ?? "", /no Storage key/)
     assert.match(lines.at(-1) ?? "", /PROOF_RETENTION_DAYS is unset/)
   })
+  test("a project whose privacy policy names days of its own (#291 C19) is held to them, the deployment's setting unset or not", async () => {
+    // Ten days: the young one is past them too — the three removed before are asked again and count nothing — and the disputed ones stay under their open ticket.
+    const owner = createDb(withDatabaseName(roles.adminUrl, name), { max: 1 })
+    try {
+      await owner.sql`update wms.project set proof_retention_days = 10 where id = ${tenant.projectId}`
+      removed.length = 0
+      assert.deepEqual(await purgeProofObjects(context({ proofRetentionDays: undefined })), { removed: 1 })
+      assert.deepEqual(removed, [young])
+      assert.equal(lines.at(-1), "proofs: removed 1 photos and signatures older than their project's days, of 4 past them")
+    } finally {
+      await owner.sql`update wms.project set proof_retention_days = null where id = ${tenant.projectId}`
+      await owner.close()
+    }
+  })
 })

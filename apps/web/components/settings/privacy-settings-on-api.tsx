@@ -5,20 +5,29 @@
 // audit log's read without a row (`GET /audit-events`, under `view` on
 // `configure.privacy`), newest first, a page at a time, each request one
 // entry naming the rows it touched (`companyHistoryEntriesOf`). Beside it, the
-// two controls the platform truly enforces. The GPS purpose, the monitoring
-// register and every retention policy are C19's (#381) and have no API yet,
-// so they are not shown here; fixture mode keeps the browser's pane
+// two controls the platform truly enforces, and each project's privacy policy
+// (#291 C19): the days its positions and its photos and signatures are kept
+// and why it records positions, read with the project (`configure.organization`)
+// and written whole through `PUT /projects/:id/privacy-policy` under `edit` on
+// `configure.privacy` (lib/data/privacy-policy.ts), the worker's purges
+// reading it the next night. Fixture mode keeps the browser's pane
 // (`configure.privacy`).
 
 import { useState } from "react"
-import { ArrowClockwise } from "@phosphor-icons/react/dist/ssr"
+import { ArrowClockwise, PencilSimple } from "@phosphor-icons/react/dist/ssr"
 import type { AuditEvent } from "@waste/contracts/audit"
+import { toast } from "sonner"
 
-import { AssetPanelShell } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow } from "@/components/settings/asset-management-settings"
 import { useReport } from "@/components/insight/use-report"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
-import { useServerResolver } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, useServerResolver } from "@/components/waste/business-record-store"
 import { allows } from "@/lib/api/grants"
 import { problemSentence } from "@/lib/api/problem"
 import { typed } from "@/lib/api/records/adapter"
@@ -26,7 +35,13 @@ import { COMPANY_HISTORY_MODULE, companyHistoryPage } from "@/lib/api/records/au
 import { shownOn } from "@/lib/api/records/clock"
 import { problemOfError } from "@/lib/api/records/server-records"
 import type { Problem } from "@/lib/api/problem"
+import { PRIVACY_POLICY_MODULE, replacePrivacyPolicy } from "@/lib/api/privacy"
 import { companyHistoryEntriesOf } from "@/lib/data/audit-history"
+import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import { GPS_PURPOSE_OPTIONS, gpsPurposeLabel, privacyPolicyFormOf, privacyPolicyFromForm, privacyPolicyOf, retentionLabel, retentionRefusalOf, type PrivacyPolicyForm } from "@/lib/data/privacy-policy"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+
+const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 
 /** What the platform enforces whatever a setting says: each true of the code, never a policy of the browser's. */
 export const ENFORCED_PRIVACY_CONTROLS = [
@@ -80,9 +95,11 @@ export function PrivacySettingsOnApi() {
     <AssetPanelShell
       heading="Administration"
       title="Privacy, audit & retention"
-      description="Who changed what across the company, newest first, and the controls the platform enforces."
+      description="How long each project keeps personal data and why it records positions, who changed what across the company, and the controls the platform enforces."
       toolbar={null}
     >
+      <RetentionPolicies />
+
       <section className="space-y-3 rounded-xl border border-border/60 p-4" aria-labelledby="privacy-enforced">
         <h3 id="privacy-enforced" className="text-sm font-semibold">
           Enforced by the platform
@@ -153,3 +170,152 @@ export function PrivacySettingsOnApi() {
     </AssetPanelShell>
   )
 }
+
+/** Each project's privacy policy (#291 C19), and its edit where the role may write the privacy module. */
+function RetentionPolicies() {
+  const { me } = useApiSession()
+  const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
+  const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-")).sort((a, b) => a.name.localeCompare(b.name))
+  const editable = allows(me?.role.grants, PRIVACY_POLICY_MODULE, "edit")
+  const [editing, setEditing] = useState<BusinessRecord | null>(null)
+  const emptyMessage = organisation.pending
+    ? "Reading the projects from the API…"
+    : organisation.notGranted
+      ? "The projects are not shown to your role."
+      : organisation.problem
+        ? `The projects could not be read from the API: ${organisation.problem.detail ?? organisation.problem.title}`
+        : "No projects yet."
+
+  return (
+    <section className="space-y-3 rounded-xl border border-border/60 p-4" aria-labelledby="privacy-retention">
+      <div className="space-y-1">
+        <h3 id="privacy-retention" className="text-sm font-semibold">
+          Retention and GPS purpose
+        </h3>
+        <p className="text-xs text-muted-foreground">How long each project keeps its drivers&apos; positions and its stops&apos; photos and signatures, removed by the nightly purge, and why it records positions. A project with no days of its own keeps the deployment&apos;s setting.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <Table className="min-w-[640px]" aria-label="Retention by project">
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead>Project</TableHead>
+              <TableHead>Positions kept</TableHead>
+              <TableHead>Photos and signatures kept</TableHead>
+              <TableHead>GPS purpose</TableHead>
+              {editable && <TableHead className="w-16 text-right">Edit</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {projects.length === 0 ? (
+              <EmptyRow colSpan={editable ? 5 : 4} message={emptyMessage} hint="Projects are created under Company & projects." />
+            ) : (
+              projects.map((project) => {
+                const policy = privacyPolicyOf(project)
+                return (
+                  <TableRow key={project.id}>
+                    <TableCell className="font-medium">{project.name}</TableCell>
+                    <TableCell className="text-sm">{retentionLabel(policy.positionRetentionDays)}</TableCell>
+                    <TableCell className="text-sm">{retentionLabel(policy.proofRetentionDays)}</TableCell>
+                    <TableCell className="text-sm">{gpsPurposeLabel(policy.gpsPurpose)}</TableCell>
+                    {editable && (
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" aria-label={`Edit ${project.name}'s privacy policy`} disabled={!organisation.ready} onClick={() => setEditing(project)}>
+                          <PencilSimple className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      {editing !== null && <PolicyDialog key={editing.id} project={editing} onClose={() => setEditing(null)} />}
+    </section>
+  )
+}
+
+function PolicyDialog({ project, onClose }: { project: BusinessRecord; onClose: () => void }) {
+  const client = useApiClient()
+  const state = useServerModuleState("configure", "organization")
+  const { refreshModule } = useBusinessRecordStore()
+  const [form, setForm] = useState<PrivacyPolicyForm>(() => privacyPolicyFormOf(privacyPolicyOf(project)))
+  const [saving, setSaving] = useState(false)
+  const body = privacyPolicyFromForm(form)
+  const serverId = state?.serverIds.get(project.id)
+  const positionsRefusal = retentionRefusalOf("positions", form.positionRetentionDays)
+  const proofsRefusal = retentionRefusalOf("proofs", form.proofRetentionDays)
+
+  const save = () => {
+    if (client === null || serverId === undefined || body === null) return
+    setSaving(true)
+    replacePrivacyPolicy(client, serverId, body).then(
+      () => {
+        toast.success("Privacy policy saved", { description: `${project.name}'s data is purged by it from tonight.` })
+        void refreshModule("configure", "organization")
+        onClose()
+      },
+      (error: unknown) => {
+        setSaving(false)
+        toast.error("The policy was not saved", { description: problemSentence(problemOfError(error)) })
+      },
+    )
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            save()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{project.name}&apos;s privacy policy</DialogTitle>
+            <DialogDescription>Leave a period empty to keep the deployment&apos;s setting for it.</DialogDescription>
+          </DialogHeader>
+          <div className="my-4 grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="policy-positions">Positions kept (days)</Label>
+              <Input id="policy-positions" inputMode="numeric" value={form.positionRetentionDays} aria-invalid={positionsRefusal !== null} onChange={(event) => setForm({ ...form, positionRetentionDays: event.target.value })} />
+              {positionsRefusal !== null && <p className="text-xs text-destructive">{positionsRefusal}</p>}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="policy-proofs">Photos and signatures kept (days)</Label>
+              <Input id="policy-proofs" inputMode="numeric" value={form.proofRetentionDays} aria-invalid={proofsRefusal !== null} onChange={(event) => setForm({ ...form, proofRetentionDays: event.target.value })} />
+              {proofsRefusal !== null && <p className="text-xs text-destructive">{proofsRefusal}</p>}
+              <p className="text-xs text-muted-foreground">A stop an open ticket names keeps its evidence until the ticket closes.</p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="policy-purpose">GPS purpose</Label>
+              <Select value={form.gpsPurpose === "" ? "none" : form.gpsPurpose} onValueChange={(value) => setForm({ ...form, gpsPurpose: value === "none" ? "" : (value as PrivacyPolicyForm["gpsPurpose"]) })}>
+                <SelectTrigger id="policy-purpose" aria-label="GPS purpose">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not declared</SelectItem>
+                  {GPS_PURPOSE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || body === null || serverId === undefined}>
+              Save policy
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

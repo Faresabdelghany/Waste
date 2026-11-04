@@ -58,6 +58,8 @@ import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
+import { notificationRuleRoutes } from "./routes/notification-rules"
+import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
@@ -66,6 +68,7 @@ import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
 import { preTripRoutes } from "./routes/pre-trip-checks"
+import { maintenanceRoutes } from "./routes/maintenance"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -93,12 +96,14 @@ import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { reportRoutes } from "./routes/reports"
 import { addressLookup, addressRoutes } from "./routes/addresses"
+import { moveRoutes } from "./routes/moves"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
+import { SENSOR_BATCHES_PER_MINUTE, sensorRoutes } from "./routes/sensors"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
@@ -171,6 +176,8 @@ export type AppOptions = {
   routingEngine?: QuotaEngine
   /** Each public client's requests a minute on the public door (ADR-0010); a test injects one with a small allowance or a pinned clock. */
   publicAllowance?: Allowance
+  /** Each company's ingest batches a minute at `POST /sensor-readings` (O26 of #290); a test injects a small allowance or a pinned clock. */
+  sensorIngestAllowance?: Allowance
   /** An address's calendar feed's own allowance, per client and address and per client across addresses; a test injects small bounds or a pinned clock. */
   feedAllowance?: FeedAllowance
   /** The socket's peer address, the public door's client where no trusted proxy names one: server.ts reads the Node request's; a test has none. */
@@ -196,6 +203,7 @@ export function createApp({
   routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
   publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
   feedAllowance = new FeedAllowance(FEED_REQUESTS_PER_ADDRESS, FEED_ADDRESSES_PER_CLIENT, now),
+  sensorIngestAllowance = new Allowance(SENSOR_BATCHES_PER_MINUTE, now),
   peer = () => undefined,
   trustedProxies = 0,
   storage = null,
@@ -256,6 +264,8 @@ export function createApp({
   // The authenticated routes, each module given the guard to put on its routes.
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
+  app.route("/", notificationRoutes(guard))
+  app.route("/", notificationRuleRoutes(guard))
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))
@@ -277,6 +287,7 @@ export function createApp({
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
   app.route("/", agreementRoutes(guard, { now, jobs }))
+  app.route("/", moveRoutes(guard, { now }))
   // A customer's Applications and the office's Decisions (M7 of #293): a decision is stamped with the app's clock.
   app.route("/", applicationRoutes(guard, { now }))
   app.route("/", subscriptionPauseRoutes(guard, { now, jobs }))
@@ -303,6 +314,7 @@ export function createApp({
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
   app.route("/", preTripRoutes(guard, { now }))
+  app.route("/", maintenanceRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses
@@ -336,6 +348,8 @@ export function createApp({
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", decommissionReasonRoutes(guard))
+  // Fill-level Sensors (O26 of #290): a pairing's day and the ingest's clock are the project's on the app's clock, and the ingest is bounded per company.
+  app.route("/", sensorRoutes(guard, { now, ingestAllowance: sensorIngestAllowance }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))

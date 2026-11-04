@@ -52,8 +52,9 @@ import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
 import { WasteFraction } from "./catalogue"
+import { ContainerIdentifier } from "./containers"
 import { IsoDateTime } from "./dates"
-import { CommandOutcome, DriverCommandKind, DriverPickupReason, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
+import { CommandOutcome, DriverCommandKind, DriverPickupReason, IdentificationMethod, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
 import { Driver, Vehicle } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
@@ -127,10 +128,20 @@ export type PositionFix = z.infer<typeof PositionFix>
 
 const inOrder = (points: readonly { at: string }[]): boolean => points.every((point, index) => index === 0 || Date.parse(point.at) > Date.parse(points[index - 1].at))
 
+/**
+ * The code a driver read off the bin to confirm the stop's container (O19 of
+ * #290) — its label, barcode, RFID tag or serial number — and how it was
+ * read. The door judges it against the stop's own container and refuses an
+ * arrival whose code names another at `body.identification.code`, so the
+ * receipt of an applied one is the confirmation.
+ */
+export const Identification = z.strictObject({ code: Label, method: IdentificationMethod })
+export type Identification = z.infer<typeof Identification>
+
 /** The sixteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
-  arrive: z.strictObject({ pickupId: Id, ...located }),
+  arrive: z.strictObject({ pickupId: Id, identification: Identification.optional(), ...located }),
   "complete-pickup": z.strictObject({ pickupId: Id, note: Paragraph.optional(), ...located }),
   "skip-pickup": z.strictObject({ pickupId: Id, reason: DriverPickupReason, note: Paragraph.optional(), ...located }),
   "fail-pickup": z.strictObject({ pickupId: Id, reason: DriverPickupReason, note: Paragraph.optional(), ...located }),
@@ -315,8 +326,38 @@ export const DriverPickup = Pickup.extend({
   replacementContainerLabel: Label.nullable().default(null),
   /** A bulky collection's items (O11 of #290): what the driver takes away, as the booking lists them; empty for any other service, and absent from an answer before it, read as none. */
   bulkyItems: z.array(z.object({ description: Label, quantity: PositiveInt })).default([]),
+  /** When the driver last confirmed the stop's container by its code (O19 of #290): the device's instant of the latest applied `arrive` that carried an identification, or null. Absent from an answer before it, read as null. */
+  containerConfirmedAt: IsoDateTime.nullable().default(null),
 })
 export type DriverPickup = z.infer<typeof DriverPickup>
+
+/** `GET /driver/routes/:id/identify?code=`: a code read off a bin (O19 of #290). */
+export const DriverIdentifyQuery = z.object({ code: Label })
+export type DriverIdentifyQuery = z.infer<typeof DriverIdentifyQuery>
+
+/** A stop of the route whose container — or, on a swap, whose replacement — the code names, and by which of its identifiers. */
+export const DriverIdentifiedStop = z.object({
+  pickupId: Id,
+  position: PositiveInt,
+  containerId: Id,
+  containerLabel: Label,
+  matchedBy: ContainerIdentifier,
+  /** Whether the code names the replacement a swap brings rather than the container standing there. */
+  replacement: z.boolean(),
+})
+export type DriverIdentifiedStop = z.infer<typeof DriverIdentifiedStop>
+
+/**
+ * What a code names on one of the driver's routes: the stops it names, by
+ * position — none when it names no container on this route, which is all a
+ * device learns of a code, since the door reads only the route's own
+ * containers.
+ */
+export const DriverIdentification = z.object({
+  code: Label,
+  stops: z.array(DriverIdentifiedStop),
+})
+export type DriverIdentification = z.infer<typeof DriverIdentification>
 
 /** `GET /driver/routes/:id`: `RouteDetail` with the pickups' places joined — the one read that denormalises for the wire what the device otherwise gets by sync. */
 export const DriverRouteDetail = z

@@ -39,6 +39,7 @@ import * as idsModule from "../ids"
 import * as importsModule from "../imports"
 import * as integrationsModule from "../integrations"
 import * as invoicesModule from "../invoices"
+import * as maintenanceModule from "../maintenance"
 import * as meModule from "../me"
 import * as organisationModule from "../organisation"
 import * as outboxModule from "../outbox"
@@ -69,7 +70,9 @@ import * as routingQuotaModule from "../routing-quota"
 import * as serviceAreasModule from "../service-areas"
 import * as serviceProviderActivitiesModule from "../service-provider-activities"
 import * as serviceProviderPricesModule from "../service-provider-prices"
+import * as movesModule from "../moves"
 import * as pickupExceptionsModule from "../pickup-exceptions"
+import * as sensorsModule from "../sensors"
 import * as sessionsModule from "../sessions"
 import * as shiftsModule from "../shifts"
 import * as siteVisitsModule from "../site-visits"
@@ -86,6 +89,7 @@ import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
 import * as messagingModule from "../messaging"
+import * as notificationsModule from "../notifications"
 import * as weightControlModule from "../weight-control"
 import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
@@ -102,6 +106,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "allocations": allocationsModule,
   "audit": auditModule,
   "messaging": messagingModule,
+  "notifications": notificationsModule,
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
@@ -124,7 +129,9 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "imports": importsModule,
   "integrations": integrationsModule,
   "invoices": invoicesModule,
+  "maintenance": maintenanceModule,
   "me": meModule,
+  "moves": movesModule,
   "organisation": organisationModule,
   "outbox": outboxModule,
   "pagination": paginationModule,
@@ -155,6 +162,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "service-areas": serviceAreasModule,
   "service-provider-activities": serviceProviderActivitiesModule,
   "service-provider-prices": serviceProviderPricesModule,
+  "sensors": sensorsModule,
   "sessions": sessionsModule,
   "shifts": shiftsModule,
   "site-visits": siteVisitsModule,

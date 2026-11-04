@@ -64,6 +64,14 @@ _Avoid_: Contact (the prototype's word for a person Customer), representative, u
 A physical service address or cadastral location where service is delivered.
 _Avoid_: Customer, contact
 
+**Party**:
+What a Customer is to a Property — owner, payer, tenant, administrator or service contact — from a day until a day. One customer may hold several roles at one property, each once at a time.
+_Avoid_: Contact, occupant (that is the tenant role)
+
+**Move**:
+A Property changing occupant on a day: the outgoing customer's parties and subscriptions there end, and the incoming customer takes the same roles and a new agreement with the same products, the containers staying in service. A sale is a move of the owner.
+_Avoid_: Transfer (a container's stock movement), change of service (a subscription's own)
+
 **Property Group**:
 A managed grouping of properties that share administration, reporting, service rules, or agreements.
 _Avoid_: Shared collection point, customer
@@ -138,6 +146,14 @@ _Avoid_: Inspection report, vehicle audit, service
 A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
 _Avoid_: Fault, damage report, container defect (a container's)
 
+**Maintenance Plan**:
+A Vehicle's service at intervals — every so many days, kilometres or engine hours, whichever comes first — counted from its last service, the day and the readings then. It is due soon within two weeks, 1,000 km or 50 hours of a limit and overdue past one, judged against the newest odometer and engine hours a Pre-trip Check read; the office is alerted either way. A plan is retired, never deleted.
+_Avoid_: Service schedule, maintenance interval, PM
+
+**Maintenance Order**:
+Work the office opens on a Vehicle: a Maintenance Plan's service, or a one-off — a repair, a Vehicle Defect mended. It is completed once, on the day the work was done with the readings then, or cancelled; completing a plan's order is the plan's service done, and the plan counts from it.
+_Avoid_: Work Order (a Work Order is a Pickup's), job card, repair ticket
+
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
 _Avoid_: Actual assignment, route, vehicle
@@ -189,6 +205,18 @@ _Avoid_: Reorder level, safety stock, par level
 **Decommission Reason**:
 Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
 _Avoid_: Scrap code, disposal reason, retirement reason
+
+**Sensor**:
+A fill-level device the company owns, identified by the identifier its network knows it by, which reports how full the Container it is paired with is. A Sensor is retired rather than deleted; a retired one's readings are refused.
+_Avoid_: Device (the Driver App's phone), IoT unit, tag
+
+**Sensor Pairing**:
+The effective-dated record that a Sensor measures a Container, with the full threshold, in whole percent, at which the container is full enough to raise an Alert. A Sensor measures one Container at a time, and a Container is measured by one Sensor at a time; the pairing is the bin's, not its place's, so it outlives a move. A pairing may book an emptying: a filling then puts the office's emptying of the container on the earliest route of its round ahead of its next scheduled emptying, where one runs and its vehicle takes the bin, and the Alert says what came of it.
+_Avoid_: Installation, assignment, mounting
+
+**Fill Reading**:
+One measurement a Sensor sent: when it was measured, how full the Container was in whole percent, and the battery and signal strength where the vendor reports them. Readings are a ledger a vendor's integration appends; a reading is tied to the Sensor Pairing in force on its day.
+_Avoid_: Telemetry (as the record), ping, measurement
 
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
@@ -249,11 +277,11 @@ A Pickup the office books whose service is not an emptying: a delivery, a remova
 _Avoid_: Job, task (a Ticket's kind), collection
 
 **Bulky Booking**:
-A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
+A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement: once for a Product sold by the job, or at its items' count for one sold by the item. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
 _Avoid_: Order, reservation, appointment, Work Order (a Work Order is of a container)
 
 **Bulky Schedule**:
-A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
+A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job or by the item. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
 _Avoid_: Bulky route, slot calendar, Route Scheme (a scheme generates Routes; a schedule only offers days)
 
 **Pickup Exception**:
@@ -326,8 +354,16 @@ _Avoid_: Notification template, letter
 One e-mail or text message rendered from a Message Template to a Customer or one of its Contact Persons, kept on the delivery log with the address it went to and how its sending stands: queued, sent, failed, or withheld for want of consent. Sent through a log-only sender until a card-free provider is chosen.
 _Avoid_: Notification, SMS (one channel of it), mail
 
+**Staff Notice**:
+An e-mail to one of the company's own User Accounts that it asked for in Settings › Notifications: an Alert raised at or above the severity it picked, in a project where it reads alerts, or a Ticket assigned to it. Its text is the platform's, never a Message Template's, no consent governs it, and it is kept on the delivery log beside the Messages, read by its recipient alone. Nothing is sent until asked for.
+_Avoid_: Notification, alert e-mail (an Alert is the condition, not the e-mail)
+
+**Customer Notice**:
+A Message a project sends a Customer on its own account when something happens to them — a Bulky Booking booked, cancelled, collected or not collected; a reminder the afternoon before a scheduled collection; the office's reply on a Ticket naming them, and its completion; a Route of theirs cancelled or running late — from the service Message Template its notification rule names for that notice. The rule is the opt-in: a notice no rule names is never sent, and there is no default text. Consent is honoured as for any service Message. The two about a Route are broadcasts: they reach the Customers its stops serve, within the notification Planning Areas the rule names, or the whole Project where it names none.
+_Avoid_: Notification, alert, automatic e-mail, push
+
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, or a Container filled past its Sensor Pairing's threshold — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
 **Team**:
@@ -349,6 +385,10 @@ _Avoid_: Service fee, job price
 **Hire**:
 What a Subscription to a Product sold by the day charges each of its containers: the days it stands on site, from the day it is delivered to the day it is taken back, by calendar month in arrears, each placement's Free Days not charged. A pause of the Subscription does not stop a Hire, since the container still stands there.
 _Avoid_: Rental (a Product sold by the month is a recurring charge), demurrage
+
+**Weight Charge**:
+What a Subscription to a Product sold by the tonne charges a stop: its share of an Unload's net once the office's weight review approves that weight, at the price per tonne on the Route's service date. The share is the Unload's net split among the stops it carried, by what each weighed on board where every one was weighed, in equal parts otherwise. A review that takes the approval back cancels the charge, or reverses it once invoiced; a Service Provider is paid its own price per tonne for the same weight.
+_Avoid_: Gate fee (a gate fee is a price per tonne by fraction on the list), tonnage invoice
 
 **Free Days**:
 A Hire Product's first days of each placement on site, charged nothing, counted from the delivery across the months.

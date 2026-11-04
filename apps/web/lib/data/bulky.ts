@@ -8,9 +8,10 @@
 // components/waste/commands/bulky-surfaces.tsx, the adapter
 // lib/api/records/bulky-bookings.ts.
 import type { BulkyAvailableDay, BulkySchedule, BulkyScheduleCreate, BulkySchedulePatch } from "@waste/contracts/bulky"
-import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
+import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX, isBulkyProductUnit } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import { addDays, OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, serviceDayOf } from "@waste/domain/route-schemes/recurrence"
 
@@ -38,6 +39,16 @@ export const BULKY_STATUS_LABELS: Readonly<Record<BulkyBookingStatus, string>> =
 
 /** The items one booking lists at most, and the most of one item: the API's own caps. */
 export { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX as ITEMS_MAX }
+
+/** A product as the schedules pane offers it. */
+type OfferedProduct = { id: string; name: string; unit: ProductUnit; status: ProductStatus }
+
+/** The products a schedule may charge: the project's active ones sold by the job or by the item (#449), and the one it charges now whatever it is. */
+export const bulkyProductsOffered = <P extends OfferedProduct>(products: readonly P[], kept: string | undefined): P[] =>
+  products.filter((candidate) => (isBulkyProductUnit(candidate.unit) && candidate.status === "active") || candidate.id === kept)
+
+/** A product named with what a booking is charged of it: "Bulky collection · per item", charged the booking's item count, or "· per job", the booking once. */
+export const bulkyProductLabel = (product: Pick<OfferedProduct, "name" | "unit">): string => `${product.name} · per ${product.unit}`
 
 /** One item as the dialog edits it: the count a string, as an input holds it. */
 export type ItemRow = { description: string; quantity: string }

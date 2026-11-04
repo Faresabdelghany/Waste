@@ -3,9 +3,12 @@
 // days and never more than the domain's ceiling of thirty, which is also what
 // is kept when the setting is unset (@waste/domain/execution/positions) — the
 // one retention here with a default, since keeping a track for good by
-// omission is the mistake the ceiling exists to rule out. Nightly, across
-// companies, by the fix's own instant: a missed night or a retention lowered
-// is caught up by the next.
+// omission is the mistake the ceiling exists to rule out. A project whose
+// privacy policy names days of its own (#291 C19) is kept those instead, under
+// the same ceiling (`effectiveRetentionDays`, @waste/domain/privacy/retention),
+// read off its row in the same statement. Nightly, across companies, by the
+// fix's own instant: a missed night or a retention lowered is caught up by
+// the next.
 //
 // The delete runs as the worker role, the one write it makes: migration
 // 0060 grants `wms_worker` DELETE on `session_position` and on no other
@@ -16,7 +19,7 @@
 // backlog never holds a long lock or one large transaction on the Pilot's
 // small pool. Nothing else of the session is touched: the receipt never held
 // the points (routes/driver.ts, `withoutPoints`).
-import { positionRetentionDays } from "@waste/domain/execution/positions"
+import { POSITION_RETENTION_CEILING_DAYS, positionRetentionDays } from "@waste/domain/execution/positions"
 import { sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
@@ -27,24 +30,30 @@ export const PURGE_POSITIONS_SCHEDULE = "40 3 * * *"
 /** Rows deleted per statement. */
 export const PURGE_BATCH = 5_000
 
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export type PurgePositionsData = {
   /** Where the purge came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
-/** What a night came to: the positions removed, and the days they were older than. */
+/** What a night came to: the positions removed, and the deployment's days — a project with a policy of its own was held to its own. */
 export type PurgePositionsOutcome = { removed: number; days: number }
 
-/** Deletes one batch of positions fixed before the instant, oldest first, across companies, as the worker role; answers how many went. */
-async function deleteBatch(worker: JobContext["worker"], before: string): Promise<number> {
+/**
+ * Deletes one batch of positions past their project's days, oldest first,
+ * across companies, as the worker role; answers how many went. A project's
+ * days are its policy's where it names them, else `days` — the deployment's
+ * — and never past the ceiling, which the database also holds its policy to.
+ */
+async function deleteBatch(worker: JobContext["worker"], now: string, days: number): Promise<number> {
   const rows = await worker.db.execute<{ id: string }>(sql`
     delete from wms.session_position
      where id in (
-       select id from wms.session_position
-        where fixed_at < ${before}::timestamptz
-        order by fixed_at
+       select fix.id
+         from wms.session_position fix
+         join wms.project project on project.company_id = fix.company_id and project.id = fix.project_id
+        where fix.fixed_at < ${now}::timestamptz - make_interval(days => least(coalesce(project.position_retention_days, ${days}::integer), ${POSITION_RETENTION_CEILING_DAYS}::integer))
+        order by fix.fixed_at
         limit ${PURGE_BATCH}
      )
     returning id
@@ -54,10 +63,10 @@ async function deleteBatch(worker: JobContext["worker"], before: string): Promis
 
 export async function purgePositions(context: JobContext): Promise<PurgePositionsOutcome> {
   const days = positionRetentionDays(context.positionRetentionDays)
-  const before = new Date(context.now().getTime() - days * DAY_MS).toISOString()
+  const now = context.now().toISOString()
   let removed = 0
   for (;;) {
-    const batch = await deleteBatch(context.worker, before)
+    const batch = await deleteBatch(context.worker, now, days)
     removed += batch
     if (batch < PURGE_BATCH) break
   }

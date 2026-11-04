@@ -12,17 +12,16 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { customer, property } from "@waste/db/schema/customers"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { pickup, route as route_ } from "@waste/db/schema/execution"
-import { eq } from "drizzle-orm"
+import { outboxEvent, pickup, route as route_ } from "@waste/db/schema/execution"
+import { and, asc, eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
-import { dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 
 import { createApp } from "../app"
 import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedules"
 import { INACTIVE_CUSTOMER } from "../routes/bulky-bookings"
 import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
 import { bulkyKeepsTheDay } from "../routes/routes"
-import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -75,6 +74,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     bulky: testId(),
     collection: testId(),
     draft: testId(),
+    byItem: testId(),
     fraction: testId(),
     customer: testId(),
     stranger: testId(),
@@ -103,6 +103,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
         { id: ids.bulky, ...scoped, name: "Bulky collection", kind: "additional-service", unit: "job", status: "active" },
         { id: ids.collection, ...scoped, name: "Residual 240 L", kind: "container-collection", unit: "pickup", status: "active" },
         { id: ids.draft, ...scoped, name: "Bulky collection (draft)", kind: "additional-service", unit: "job", status: "draft" },
+        { id: ids.byItem, ...scoped, name: "Bulky collection per item", kind: "additional-service", unit: "item", status: "active" },
       ])
       const organisation = (id: string, name: string) => ({ id, companyId: a.companyId, kind: "organisation", name, registrationNumber: String(randomInt(10_000_000, 100_000_000)), status: "active" })
       await tx.insert(customer).values([organisation(ids.customer, "Parkvej Boligforening"), organisation(ids.stranger, "Another Housing")])
@@ -141,10 +142,19 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     return BulkyAvailability.parse(await response.json())
   }
   let schedule: BulkySchedule
+  /** The outbox rows about one booking, oldest first, read as `wms_api` under the fence. */
+  const eventsAbout = (aggregateId: string) =>
+    withCompany(pool.db, a.companyId, (tx: Tx) =>
+      tx
+        .select({ kind: outboxEvent.kind, aggregateKind: outboxEvent.aggregateKind, projectId: outboxEvent.projectId, occurredAt: outboxEvent.occurredAt, payload: outboxEvent.payload })
+        .from(outboxEvent)
+        .where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, aggregateId)))
+        .orderBy(asc(outboxEvent.id)),
+    )
 
   test("a schedule is an area's Tuesdays with two slots each, charged at a product sold by the job; one of an area is in force at a time", async () => {
     const body = { projectId: a.projects.copenhagen.id, planningAreaId: ids.area, frequency: "weekly", serviceDays: ["tuesday"], slotsPerDay: 2, productId: ids.bulky, validFrom: "2027-01-01" }
-    assert.deepEqual((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.collection }), 400)).errors, [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
+    assert.deepEqual((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.collection }), 400)).errors, [{ path: "productId", message: A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM }])
     assert.equal((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.draft }), 409)).detail, unofferedBulkyProduct("draft"))
     schedule = await created(olivia, "/bulky-schedules", await post(olivia, "/bulky-schedules", body), BulkySchedule)
     assert.deepEqual([schedule.holidayPolicy, schedule.weekRotation, schedule.validTo], ["skip", null, null])
@@ -156,6 +166,14 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     )
     await refused(await other(`/bulky-schedules/${schedule.id}`), 404)
     assert.match((await refused(await ungranted("/bulky-schedules"), 403)).detail ?? "", /view on route-studio\.schemes/)
+  })
+
+  test("a schedule may charge a product sold by the item instead (#449), which a booking is then charged by its items' count", async () => {
+    const byItem = await patch(olivia, `/bulky-schedules/${schedule.id}`, { productId: ids.byItem })
+    assert.equal(byItem.status, 200, JSON.stringify(await byItem.clone().json()))
+    assert.equal(BulkySchedule.parse(await byItem.json()).productId, ids.byItem)
+    const back = await patch(olivia, `/bulky-schedules/${schedule.id}`, { productId: ids.bulky })
+    assert.equal(back.status, 200, JSON.stringify(await back.clone().json()))
   })
 
   test("a place's days are its area's Tuesdays after today, each with its slots left; a place outside every scheduled area or with no location is refused", async () => {
@@ -174,6 +192,11 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     assert.deepEqual(answer.days.map((day) => [day.booked, day.left]), [[1, 1]])
     assert.deepEqual(BulkyBooking.parse(await (await olivia(`/bulky-bookings/${made.id}`)).json()), made)
     await refused(await other(`/bulky-bookings/${made.id}`), 404)
+    // The customer notices' news (O16 of #290, part b): the booking as answered, at the request's clock.
+    const [news, ...more] = await eventsAbout(made.id)
+    assert.equal(more.length, 0)
+    assert.deepEqual([news.kind, news.aggregateKind, news.projectId, news.occurredAt.toISOString()], ["bulky-booking-booked", "bulky-booking", a.projects.copenhagen.id, NOW.toISOString()])
+    assert.deepEqual(BulkyBooking.parse(news.payload), made)
   })
 
   test("a booking is refused another customer's agreement, today, a day that is no collection day, a place the agreement serves nothing at, and a full day", async () => {
@@ -225,6 +248,9 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     assert.deepEqual([again.status, again.stop], ["booked", null])
     const cancelled = BulkyBooking.parse(await (await post(olivia, `/bulky-bookings/${made.id}/cancel`, { reason: "Customer called" })).json())
     assert.deepEqual([cancelled.status, cancelled.cancelReason, cancelled.cancelledBy], ["cancelled", "Customer called", a.users.olivia.id])
+    const news = await eventsAbout(made.id)
+    assert.deepEqual(news.map((event) => event.kind), ["bulky-booking-booked", "bulky-booking-cancelled"], "a move, a routing and a removal are nobody's news; the cancel is the customer's")
+    assert.deepEqual(BulkyBooking.parse(news[1].payload), cancelled)
     assert.equal((await refused(await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), 409)).detail, onlyABookedBooking("cancelled", "route"))
   })
 

@@ -12,7 +12,10 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
+import { BRAND_COLOR_PATTERN, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN } from "@waste/domain/access/branding"
 import { BIC_PATTERN, FIK_CREDITOR_PATTERN, IBAN_PATTERN, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
+import { RETENTION_DAYS_BOUNDS } from "@waste/domain/privacy/retention"
+import { GPS_PURPOSES } from "@waste/domain/privacy/vocabulary"
 import { getTableConfig, PgDialect, text, uuid } from "drizzle-orm/pg-core"
 
 import { CASING } from "../casing"
@@ -63,7 +66,22 @@ const IDENTITY_SHAPES: Array<[string, string]> = [
   ["fik_creditor_number", FIK_CREDITOR_PATTERN],
 ]
 
-/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme, 0045 the weighbridge's tolerance (O9 of #290) and 0048 its hold for review (M14 of #293). */
+/** The privacy policy's checks (#291 C19), as 0077 adds them: each kind's days within its bounds, and the purpose one of the vocabulary's. */
+const PRIVACY_POLICY_CHECKS = [
+  `\tCONSTRAINT "project_position_retention_range" CHECK (${ref("project", "position_retention_days")} between ${RETENTION_DAYS_BOUNDS.positions.min} and ${RETENTION_DAYS_BOUNDS.positions.max}),`,
+  `\tCONSTRAINT "project_proof_retention_range" CHECK (${ref("project", "proof_retention_days")} between ${RETENTION_DAYS_BOUNDS.proofs.min} and ${RETENTION_DAYS_BOUNDS.proofs.max}),`,
+  `\tCONSTRAINT "project_gps_purpose_one_of" CHECK (${ref("project", "gps_purpose")} in (${GPS_PURPOSES.map((purpose) => `'${purpose}'`).join(", ")})),`,
+]
+
+/** The branding's checks (M22 of #293), as 0079 adds them: the colour's shape, and each address https within the length. */
+const httpsShape = (column: string) => `${ref("project", column)} ~ '${HTTPS_ADDRESS_PATTERN}' and char_length(${ref("project", column)}) <= ${HTTPS_ADDRESS_MAX}`
+const BRANDING_CHECKS = [
+  `\tCONSTRAINT "project_brand_color_shape" CHECK (${ref("project", "brand_color")} ~ '${BRAND_COLOR_PATTERN}'),`,
+  `\tCONSTRAINT "project_logo_url_shape" CHECK (${httpsShape("logo_url")}),`,
+  `\tCONSTRAINT "project_accessibility_statement_url_shape" CHECK (${httpsShape("accessibility_statement_url")})`,
+]
+
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme, 0045 the weighbridge's tolerance (O9 of #290), 0048 its hold for review (M14 of #293) 0077 its privacy policy (#291 C19) and 0079 its branding (M22 of #293). */
 const projectTable = (era: "0002" | "today"): string => {
   const planning = era === "today"
   const published = era === "today"
@@ -75,7 +93,7 @@ const projectTable = (era: "0002" | "today"): string => {
     '\t"timezone" text NOT NULL,',
     '\t"status" text NOT NULL,',
     ...(planning ? ['\t"weekend" text[] DEFAULT \'{saturday,sunday}\' NOT NULL,', '\t"holiday_list" text,'] : []),
-    ...(published ? ['\t"public_slug" text,', '\t"payment_terms_days" integer DEFAULT 30 NOT NULL,', `\t"payment_reference_scheme" text DEFAULT 'none' NOT NULL,`, '\t"weight_tolerance_percent" integer DEFAULT 5 NOT NULL,', '\t"hold_for_review" boolean DEFAULT false NOT NULL,'] : []),
+    ...(published ? ['\t"public_slug" text,', '\t"payment_terms_days" integer DEFAULT 30 NOT NULL,', `\t"payment_reference_scheme" text DEFAULT 'none' NOT NULL,`, '\t"weight_tolerance_percent" integer DEFAULT 5 NOT NULL,', '\t"hold_for_review" boolean DEFAULT false NOT NULL,', '\t"position_retention_days" integer,', '\t"proof_retention_days" integer,', '\t"gps_purpose" text,', '\t"brand_color" text,', '\t"logo_url" text,', '\t"accessibility_statement_url" text,'] : []),
     '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
     '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
     ...(published ? ['\tCONSTRAINT "project_public_slug_key" UNIQUE("public_slug"),'] : []),
@@ -92,7 +110,7 @@ const projectTable = (era: "0002" | "today"): string => {
             : []),
         ]
       : []),
-    ...(published ? [`\tCONSTRAINT "project_public_slug_shape" CHECK (${PUBLIC_SLUG}),`, `\tCONSTRAINT "project_weight_tolerance_percent_range" CHECK (${TOLERANCE_RANGE})`] : []),
+    ...(published ? [`\tCONSTRAINT "project_public_slug_shape" CHECK (${PUBLIC_SLUG}),`, `\tCONSTRAINT "project_weight_tolerance_percent_range" CHECK (${TOLERANCE_RANGE}),`, ...PRIVACY_POLICY_CHECKS, ...BRANDING_CHECKS] : []),
   ])
 }
 

@@ -13,6 +13,11 @@
 // `customers.contacts`: `view` to read the log, `create` to send. A
 // message's template is one of the caller's projects', and so is the
 // message, which takes its template's project.
+//
+// The log is the customers': a staff notice (O16 of #290), the same table's
+// row to one of the company's own user accounts, is left out of both reads
+// here and read by its recipient alone, at `GET /me/notices`
+// (routes/notifications.ts).
 import { Message, MessageCreate, MessageListQuery, type MessageChannel, type MessagePurpose, type MessageStatus } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
@@ -20,7 +25,7 @@ import { queueMessage, SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { customer } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
-import { and, desc, eq, lt } from "drizzle-orm"
+import { and, desc, eq, isNotNull, lt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -41,12 +46,13 @@ export const PICK_A_CUSTOMER = "Pick a customer the company has"
 
 const noSuchMessage = (id: string) => problem(404, { detail: `No message ${id} in the projects this account works in` })
 
-const columns = {
+export const messageColumns = {
   id: message.id,
   projectId: message.projectId,
   templateId: message.templateId,
   customerId: message.customerId,
   contactId: message.contactId,
+  userAccountId: message.userAccountId,
   channel: message.channel,
   purpose: message.purpose,
   recipient: message.recipient,
@@ -62,14 +68,15 @@ const columns = {
   updatedAt: message.updatedAt,
 }
 
-type Row = Pick<typeof message.$inferSelect, keyof typeof columns>
+type Row = Pick<typeof message.$inferSelect, keyof typeof messageColumns>
 
-const messageOf = (row: Row): Message => ({
+export const messageOf = (row: Row): Message => ({
   id: row.id,
   projectId: row.projectId,
   templateId: row.templateId,
   customerId: row.customerId,
   contactId: row.contactId,
+  userAccountId: row.userAccountId,
   channel: row.channel as MessageChannel,
   purpose: row.purpose as MessagePurpose,
   recipient: row.recipient,
@@ -84,10 +91,11 @@ const messageOf = (row: Row): Message => ({
   ...stampsOf(row),
 })
 
-const scope = (principal: Principal) => and(eq(message.companyId, principal.companyId), inProjects(message.projectId, principal))
+/** The customers' messages of the caller's projects: what both reads of the log are bounded by. */
+const scope = (principal: Principal) => and(eq(message.companyId, principal.companyId), inProjects(message.projectId, principal), isNotNull(message.customerId))
 
 async function findMessage(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx.select(columns).from(message).where(and(scope(principal), eq(message.id, id))).limit(1)
+  const [row] = await tx.select(messageColumns).from(message).where(and(scope(principal), eq(message.id, id))).limit(1)
   return row
 }
 
@@ -99,7 +107,7 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
         operationId: "listMessages",
         summary: "The delivery log",
         description:
-          "One page of the messages of the caller's projects, newest first, narrowed to a customer (`customerId`), a project (`projectId`) or a status (`status`). Each says what was rendered, the address it went to, and how its sending stands: `queued` for the worker, `sent`, `failed` past its attempts, or `withheld` because the customer allows no service messages.",
+          "One page of the customers' messages of the caller's projects, newest first (a staff notice is its recipient's, at `GET /me/notices`), narrowed to a customer (`customerId`), a project (`projectId`) or a status (`status`). Each says what was rendered, the address it went to, and how its sending stands: `queued` for the worker, `sent`, `failed` past its attempts, or `withheld` because the customer allows no service messages.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of messages.", MessagePage),
@@ -118,7 +126,7 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
         const after = afterCursor(cursor)
         const rows = await c
           .get("tx")
-          .select(columns)
+          .select(messageColumns)
           .from(message)
           .where(
             and(
@@ -183,7 +191,7 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
       describeRoute({
         operationId: "getMessage",
         summary: "One message",
-        description: "One message of the delivery log, in a project the caller works in, as its sending now stands.",
+        description: "One customer's message of the delivery log, in a project the caller works in, as its sending now stands; a staff notice is its recipient's, at `GET /me/notices`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The message.", Message),

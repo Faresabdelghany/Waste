@@ -120,7 +120,8 @@ test("a properties file writes a property and its parties into its project, and 
   await expect(page.getByTestId("import-result-card")).toContainText("1 of 1 rows · 1 new")
 
   const written = (await listAll<Property>(api, "/properties", { projectId: project.id })).find((property) => property.address === address)
-  expect(written?.parties).toEqual([{ customerId: owner.id, role: "owner" }])
+  // A party holds its role from the day it was written (#374): who, and as what, is the file's.
+  expect(written?.parties.map(({ customerId, role }) => ({ customerId, role }))).toEqual([{ customerId: owner.id, role: "owner" }])
   // No reason typed: the history says which file wrote it.
   if (written === undefined) throw new Error(`no property at ${address}`)
   expect((await historyOf(api, "property", written.id))[0]?.reason).toBe(`CSV import ${fileName}`)

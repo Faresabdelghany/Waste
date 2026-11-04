@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, entriesInOrder, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, entriesInOrder, keptNotice, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
@@ -241,3 +241,9 @@ function sessionOf() {
     lastSeenAt: "2027-01-15T06:00:00.000Z",
   }
 }
+
+describe("a read the display cache stands in for (O25 of #290)", () => {
+  test("says it is the server's last answer and when it came, on the phone's clock", () => {
+    assert.equal(keptNotice("2027-01-15T06:42:10.000Z", "Europe/Copenhagen"), "Offline copy: the server's answer at 07:42. What you do now is sent when the connection returns.")
+  })
+})

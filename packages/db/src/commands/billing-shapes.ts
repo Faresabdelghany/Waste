@@ -67,6 +67,8 @@ export const eventColumns = {
   reversesEventId: billableEvent.reversesEventId,
   evidenceProofId: billableEvent.evidenceProofId,
   visitId: billableEvent.visitId,
+  unloadId: billableEvent.unloadId,
+  weightKg: billableEvent.weightKg,
   chargePeriodFrom: billableEvent.chargePeriodFrom,
   chargePeriodTo: billableEvent.chargePeriodTo,
   chargedDays: billableEvent.chargedDays,
@@ -95,14 +97,15 @@ export type EventReading = EventRow & { invoiceLineId: string | null; reversalId
 /** The reading a row has the instant it is written: no line and no reversal name it yet, by construction. */
 export const UNNAMED = { invoiceLineId: null, reversalId: null }
 
-/** The six links as the wire carries them, off the row's six columns: the evidence a Pickup Exception's charge names is its `proofId` (#293 M5), and a recycling-centre visit's charge its `visitId` (#393). */
-export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" | "reversesEventId" | "evidenceProofId" | "visitId">): BillableEventLinks => ({
+/** The seven links as the wire carries them, off the row's seven columns: the evidence a Pickup Exception's charge names is its `proofId` (#293 M5), a recycling-centre visit's charge its `visitId` (#393), and a weight charge its `unloadId` (O28 of #290). */
+export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" | "reversesEventId" | "evidenceProofId" | "visitId" | "unloadId">): BillableEventLinks => ({
   routeId: row.routeId,
   pickupId: row.pickupId,
   ticketId: row.ticketId,
   reversesEventId: row.reversesEventId,
   proofId: row.evidenceProofId,
   visitId: row.visitId,
+  unloadId: row.unloadId,
 })
 
 /** The status the domain reads off a row and the two rows that may name it. */
@@ -122,6 +125,7 @@ export function eventOf(row: EventReading): BillableEvent {
     subscriptionId: row.subscriptionId,
     productId: row.productId,
     quantity: row.quantity,
+    weightKg: row.weightKg,
     unitPriceMinor: row.unitPriceMinor,
     netMinor: row.netMinor,
     vatPercent: row.vatPercent,

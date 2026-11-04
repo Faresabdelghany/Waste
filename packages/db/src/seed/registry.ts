@@ -518,6 +518,9 @@ function seededPropertySpec(index: number): PropertySpec {
 }
 
 /** The explicit properties, then the fifty seeded ones: `PROPERTIES[EXPLICIT_PROPERTIES.length + index]` is `seededPropertySpec(index)`. */
+/** The first day every seeded party holds its role (#374): the seeded agreements' year. */
+const PARTIES_FROM = "2026-01-01"
+
 const PROPERTIES: readonly PropertySpec[] = [...EXPLICIT_PROPERTIES, ...Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index) => seededPropertySpec(index))]
 const SEEDED_PROPERTIES: readonly PropertySpec[] = PROPERTIES.slice(EXPLICIT_PROPERTIES.length)
 
@@ -1073,6 +1076,8 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     propertyId: propertyId(party.property),
     customerId: customerId(party.customer),
     role: party.role,
+    // Every seeded party holds its role from the seeded year's first day, the agreements' own.
+    validFrom: PARTIES_FROM,
   }))
 
   // Members, by each group's and point's rule over the properties of its project.
@@ -1274,7 +1279,8 @@ export async function applyRegistry(tx: Tx): Promise<number> {
     property.notes,
     property.status,
   ])
-  changed += await upsertOwned(tx, propertyParty, rows.propertyParties, [propertyParty.propertyId, propertyParty.customerId, propertyParty.role])
+  // A party's end is the office's (a move ends it), so a run never puts an ended one back; its first day is the seed's.
+  changed += await upsertOwned(tx, propertyParty, rows.propertyParties, [propertyParty.propertyId, propertyParty.customerId, propertyParty.role, propertyParty.validFrom])
   changed += await upsertOwned(tx, propertyGroup, rows.propertyGroups, [propertyGroup.name, propertyGroup.purpose, propertyGroup.responsibleCustomerId, propertyGroup.status])
   changed += await upsertOwned(tx, propertyGroupMember, rows.propertyGroupMembers, [
     propertyGroupMember.propertyGroupId,

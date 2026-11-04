@@ -190,8 +190,8 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     })
   }
 
-  test("works the seven kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339): a missed stop's two for its Pickup Exception (#293 M5), and a Site Visit's two (M4 of #293)", () => {
-    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided"])
+  test("works the eight kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339): a missed stop's two for its Pickup Exception (#293 M5), a Site Visit's two (M4 of #293) and an Unload's weight review (O28 of #290)", () => {
+    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed"])
     assert.deepEqual(recordBillableEvents.map((job) => job.queue), FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance")))
     for (const job of recordBillableEvents) assert.equal(job.schedule, undefined, "sent by the relay, never by a cron")
   })
@@ -211,7 +211,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       [first.billableEventId, "pickup", "ready", FIXTURE_DAY, tenant.agreements.anna.id, bin.subscriptionId, tenant.products.residual.id, 1],
     )
     assert.deepEqual([recorded.priceListRowId, recorded.unitPriceMinor, recorded.netMinor, recorded.vatPercent, recorded.vatMinor, recorded.currency], [tenant.priceList.rows.residualCentrum.id, 13_500, 13_500, 25, 3_375, "DKK"], "the Centrum row wins: the scheme names the planning area, and a row naming it scores over the default")
-    assert.deepEqual(recorded.links, { routeId: seeded.id, pickupId, ticketId: null, reversesEventId: null, proofId: null, visitId: null })
+    assert.deepEqual(recorded.links, { routeId: seeded.id, pickupId, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null })
     assert.deepEqual([recorded.createdBy, recorded.sourceEventId, recorded.blockReason, recorded.cancelledAt], [null, event.id, null, null])
 
     // At-least-once: the same job again is one row. The redelivery finds the pickup's live event and the domain says nothing; the index behind it (`billable_event_source_event_id_idx`) is the word for the race two workers make, proved below on the reversal.
@@ -317,7 +317,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const washJob = await handle(published("pickup-completed", wash, office(wash, washed.containerId, "wash")))
     assert.deepEqual(await job(washJob), ["recorded", "job", "ready", tenant.agreements.anna.id, washed.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
     const [recorded] = await eventsOfPickup(wash)
-    assert.deepEqual([recorded.links, recorded.quantity, recorded.priceListRowId], [{ routeId: stops.id, pickupId: wash, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, 1, tenant.priceList.rows.bulky.id])
+    assert.deepEqual([recorded.links, recorded.quantity, recorded.priceListRowId], [{ routeId: stops.id, pickupId: wash, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }, 1, tenant.priceList.rows.bulky.id])
     assert.deepEqual(await job(await handle(published("pickup-completed", delivery, office(delivery, stock.containerId, "deliver")))), ["recorded", "job", "ready", tenant.agreements.housing.id, delivered.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
     // A repair the project prices nothing for records nothing, as an office stop did before; a removal mapped to a product sold by the pickup is the office's to fix, blocked.
     assert.deepEqual([(await handle(published("pickup-completed", repair, office(repair, washed.containerId, "repair")))).did, await eventsOfPickup(repair)], ["nothing", []])
@@ -344,6 +344,25 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await handle(published("pickup-completed", collected, payload))).did, "nothing", "charged once")
     await movePickup(pool, tenant, collected, "failed")
     assert.equal((await handle(published("pickup-corrected", collected, { ...payload, status: "failed", reason: "not-presented" }))).did, "cancelled")
+  })
+
+  test("a bulky booking at a product sold by the item is charged its items' count (#449): a sofa and two mattresses are three at the row's price", async () => {
+    const bulky = tenant.products.bulky.id
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(product).set({ unit: "item" }).where(eq(product.id, bulky)))
+    try {
+      const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id, items: [1, 2] })
+      const stops = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.havnegade.id, origin: "office", service: "bulky", bulkyBookingId: booking.id }], FIXTURE_DAY, { adHoc: true })
+      const [collected] = stops.pickupIds
+      const payload = { ...pickupPayload(stops.id, collected, null, "completed"), origin: "office", service: "bulky", bulkyBookingId: booking.id }
+      const recorded = await handle(published("pickup-completed", collected, payload))
+      const row = (await allEvents()).find((candidate) => candidate.id === recorded.billableEventId)
+      assert.deepEqual(
+        [recorded.did, row?.kind, row?.status, row?.productId, row?.quantity, row?.unitPriceMinor, row?.netMinor, row?.vatMinor, row?.blockReason],
+        ["recorded", "job", "ready", bulky, 3, 35_000, 105_000, 26_250, null],
+      )
+    } finally {
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(product).set({ unit: "job" }).where(eq(product.id, bulky)))
+    }
   })
 
   test("a cancelled bulky booking is charged nothing, whatever a stop of it says (O11 of #290)", async () => {
@@ -493,7 +512,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       ["reversal", "ready", original.serviceDate, original.agreementId, original.subscriptionId, original.productId, 1, null],
     )
     assert.deepEqual([reversal.unitPriceMinor, reversal.netMinor, reversal.vatPercent, reversal.vatMinor, reversal.currency], [10_000, -10_000, 25, -2_500, "DKK"])
-    assert.deepEqual(reversal.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: original.id, proofId: null, visitId: null })
+    assert.deepEqual(reversal.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: original.id, proofId: null, visitId: null, unloadId: null })
     assert.deepEqual([reversal.createdBy, reversal.sourceEventId], [null, correction.id])
     assert.equal((await eventsOfPickup(pickupId))[0].status, "reversed", "the original reads reversed now")
 
@@ -563,7 +582,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       [recorded.kind, recorded.status, recorded.blockReason, recorded.serviceDate, recorded.agreementId, recorded.subscriptionId, recorded.productId, recorded.quantity, recorded.netMinor, recorded.createdBy],
       ["ticket", "blocked", "no-product", "2026-10-08", tenant.agreements.housing.id, null, null, 1, null, null],
     )
-    assert.deepEqual(recorded.links, { routeId: null, pickupId: null, ticketId: direct.id, reversesEventId: null, proofId: null, visitId: null })
+    assert.deepEqual(recorded.links, { routeId: null, pickupId: null, ticketId: direct.id, reversesEventId: null, proofId: null, visitId: null, unloadId: null })
 
     // Through the pickup it names: the placement's agreement on the route's service date, with that placement's subscription.
     const bin = await placeBin(pool, tenant, "BIN-TICKET-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
