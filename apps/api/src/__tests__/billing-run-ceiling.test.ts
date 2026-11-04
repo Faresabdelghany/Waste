@@ -11,12 +11,12 @@ import { and, count, eq, inArray, sql } from "drizzle-orm"
 
 import { newId, type IdMinter } from "../ids"
 import { notCancelled } from "../routes/billable-events"
-import { BILLING_RUN_MAX_EVENTS, runBilling, type Transact } from "../routes/billing-runs"
+import { BILLING_RUN_MAX_EVENTS, previewBilling, runBilling, type Transact } from "../routes/billing-runs"
 import { type BillingFixtures } from "./billing-fixtures"
 import { billingRunCalls, NOON, setUpBillingRuns, tearDownBillingRuns, type BillingRunSuite } from "./billing-run-suite"
 import { type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { testId, type Tenant } from "./tenant"
+import { type Tenant } from "./tenant"
 
 const database = databaseUnderTest()
 /** The owner sweeps the proofs the fixtures append and the invoices and lines the runs write, which `wms_api` may not delete. */
@@ -44,59 +44,42 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
 
   after(() => tearDownBillingRuns(suite))
 
-  const { refused, manual, entered, readEvent, readInvoice, period, run, preview, written, byId } = billingRunCalls(() => suite)
+  const { refused, manual, entered, readEvent, readInvoice, period, run, written, byId } = billingRunCalls(() => suite)
 
   describe("the ceiling, the lock and the scope", () => {
     test("excludes alone a payer whose own ready events are more than one batch takes, too-many-events, and invoices every other payer; the preview says the same (#329)", async () => {
-      assert.equal(BILLING_RUN_MAX_EVENTS, 5_000)
+      // The rule over a batch of two, the run's and the preview's both, rather than over 5 001 rows: Anna's three are more than a batch, the housing association's one is not.
+      assert.equal(BILLING_RUN_MAX_EVENTS, 5_000, "the batch size the API and the worker run at")
       const day = "2027-01-05"
-      const rows = Array.from({ length: BILLING_RUN_MAX_EVENTS + 1 }, () => ({
-        id: testId(),
-        companyId: a.companyId,
-        projectId: copenhagen,
-        kind: "manual",
-        serviceDate: day,
-        agreementId: fx.agreements.anna.id,
-        productId: fx.products.residual.id,
-        quantity: 1,
-        unitPriceMinor: 12_000,
-        netMinor: 12_000,
-        vatPercent: 25,
-        vatMinor: 3_000,
-        currency: "DKK",
-        priceListRowId: fx.rows.residual.id,
-        createdBy: a.users.olivia.id,
-      }))
-      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        for (let start = 0; start < rows.length; start += 500) await tx.insert(billableEvent).values(rows.slice(start, start + 500))
-      })
+      const annas = [await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id })), await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id })), await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))]
       const housing = await entered(manual({ serviceDate: day }))
+      const scope = { companyId: a.companyId, projectId: copenhagen }
+      const january = { periodFrom: "2027-01-01", periodTo: "2027-01-31" }
+      const previewed = await withCompany(pool.db, a.companyId, (tx: Tx) => previewBilling(tx, scope, january, () => NOON, 2))
+      const done = await runBilling((work) => withCompany(pool.db, a.companyId, work), { ...scope, ...january, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON, batchMax: 2 })
       try {
-        const january = period("2027-01-01", "2027-01-31")
-        const previewed = await preview(january)
-        const done = await run(january)
-        assert.equal(done.status, "completed")
-        assert.deepEqual([done.eventCount, done.invoiceCount], [1, 1], "the housing association's one event, on its one invoice")
+        assert.equal(done.run.status, "completed")
+        assert.deepEqual([done.run.eventCount, done.invoiceIds.length], [1, 1], "the housing association's one event, on its one invoice")
         assert.equal((await readInvoice(done.invoiceIds[0])).customerId, fx.customers.housing.id)
         assert.deepEqual(
           done.exclusions.filter((exclusion) => exclusion.reason === "too-many-events").map((exclusion) => [exclusion.customerId, exclusion.eventCount]),
-          [[fx.customers.anna.id, BILLING_RUN_MAX_EVENTS + 1]],
-          "Anna's 5 001 alone, refused rather than split across invoices",
+          [[fx.customers.anna.id, 3]],
+          "Anna's three alone, refused rather than split across invoices",
         )
         assert.deepEqual([previewed.eventCount, previewed.invoiceCount], [1, 1], "the preview answers the run")
         assert.deepEqual(
           previewed.exclusions.filter((exclusion) => exclusion.reason === "too-many-events").map((exclusion) => [exclusion.customerId, exclusion.eventCount]),
-          [[fx.customers.anna.id, BILLING_RUN_MAX_EVENTS + 1]],
+          [[fx.customers.anna.id, 3]],
         )
         assert.equal((await readEvent(housing.id)).status, "invoiced")
-        assert.equal((await readEvent(rows[0].id)).status, "ready", "a refused payer's events wait for the office")
+        assert.equal((await readEvent(annas[0].id)).status, "ready", "a refused payer's events wait for the office")
       } finally {
         // Out of every later run's reach: no catch-up of a later test finds them.
         await withCompany(pool.db, a.companyId, (tx: Tx) =>
           tx
             .update(billableEvent)
             .set({ cancelledAt: NOON, cancelReason: "other", cancelledBy: a.users.olivia.id })
-            .where(inArray(billableEvent.id, rows.map((row) => row.id))),
+            .where(inArray(billableEvent.id, annas.map((event) => event.id))),
         )
       }
     })

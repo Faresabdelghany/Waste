@@ -392,9 +392,11 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
  * one is invoiced and excluded no more. The earlier events the run would
  * catch up (#447) are listed as their lines, oldest first, and counted in
  * the totals, with how many it would leave for a later run. `now` is the caller's clock: the
- * hires due by the project's today, as a run then would mint them.
+ * hires due by the project's today, as a run then would mint them. `batchMax`
+ * is the run's batch size, `BILLING_RUN_MAX_EVENTS` unless a test says, as
+ * `runBilling`'s is.
  */
-export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod, now: () => Date): Promise<BillingRunPreview> {
+export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod, now: () => Date, batchMax: number = BILLING_RUN_MAX_EVENTS): Promise<BillingRunPreview> {
   const today = await projectToday(tx, scope, now)()
   // A run is for a closed period (M14 of #293): no charge reaches a day still to come, and no month is left undue past every later run's reach.
   if (period.periodTo > today) throw new RefusedField("periodTo", PERIOD_ENDS_BY_TODAY)
@@ -408,7 +410,7 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
   const own = new Map<string, number>()
   for (const event of selection.events) if (!event.catchUp) own.set(event.payerCustomerId, (own.get(event.payerCustomerId) ?? 0) + 1)
   for (const charge of priced) own.set(charge.payerCustomerId, (own.get(charge.payerCustomerId) ?? 0) + 1)
-  const tooMany = new Map([...own].filter(([, events]) => events > BILLING_RUN_MAX_EVENTS))
+  const tooMany = new Map([...own].filter(([, events]) => events > batchMax))
   const groups = selection.groups.filter((group) => !tooMany.has(group.payerCustomerId))
   const pricedRun = priced.filter((charge) => !tooMany.has(charge.payerCustomerId))
   const readyCount = groups.reduce((sum, group) => sum + group.events.length, 0) + pricedRun.length
