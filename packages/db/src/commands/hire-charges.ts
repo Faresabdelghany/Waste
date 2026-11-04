@@ -74,7 +74,7 @@ export async function planHireCharges(tx: Tx, scope: Scope, period: BillingPerio
     .select({
       id: containerServicePlacement.id,
       containerId: containerServicePlacement.containerId,
-      subscriptionId: containerServicePlacement.subscriptionId,
+      subscriptionId: subscription.id,
       wasteFractionId: containerServicePlacement.wasteFractionId,
       validFrom: containerServicePlacement.validFrom,
       validTo: containerServicePlacement.validTo,

@@ -41,6 +41,7 @@ const placement = {
   projectId: OTHER,
   containerId: THIRD,
   subscriptionId: THIRD,
+  sharedCollectionPointId: null,
   wasteFractionId: THIRD,
   serviceFrequencyId: null,
   effectiveServiceFrequencyId: THIRD,
@@ -115,6 +116,11 @@ describe("ContainerServicePlacement", () => {
     assert.deepEqual(ContainerServicePlacement.parse(overridden), overridden)
   })
 
+  test("is a public placement at a Shared Collection Point with no subscription, its cadence its own override or none (M12 of #293)", () => {
+    const publicBin = { ...placement, subscriptionId: null, sharedCollectionPointId: OTHER, serviceFrequencyId: OTHER, effectiveServiceFrequencyId: OTHER }
+    assert.deepEqual(ContainerServicePlacement.parse(publicBin), publicBin)
+  })
+
   test("answers the effective frequency it read through the coalesce, which may be null when neither has one", () => {
     const neither = { ...placement, serviceFrequencyId: null, effectiveServiceFrequencyId: null }
     assert.deepEqual(ContainerServicePlacement.parse(neither), neither)
@@ -157,6 +163,23 @@ describe("ContainerServicePlacementCreate", () => {
       assert.deepEqual(refusal(ContainerServicePlacementCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
     refusesWhatTheServerOwns(ContainerServicePlacementCreate, body)
+  })
+})
+
+describe("ContainerServicePlacementCreate of a public placement (M12 of #293)", () => {
+  const body = { sharedCollectionPointId: THIRD, wasteFractionId: THIRD, validFrom: "2026-01-01" }
+
+  test("names the Shared Collection Point the bin stands at in place of a subscription", () => {
+    assert.deepEqual(ContainerServicePlacementCreate.parse(body), body)
+    assert.deepEqual(ContainerServicePlacementCreate.parse({ ...body, subscriptionId: null }), { ...body, subscriptionId: null }, "the other given as null, as a form sends it")
+  })
+
+  test("names exactly one of the two: both, or neither, is refused at subscriptionId", () => {
+    for (const both of [{ ...body, subscriptionId: OTHER }, { wasteFractionId: THIRD, validFrom: "2026-01-01", subscriptionId: null, sharedCollectionPointId: null }]) {
+      const issues = refusal(ContainerServicePlacementCreate.safeParse(both))
+      assert.deepEqual(issues.map((issue) => issue.path), ["subscriptionId"])
+      assert.match(issues[0].message, /exactly one of subscriptionId and sharedCollectionPointId/)
+    }
   })
 })
 

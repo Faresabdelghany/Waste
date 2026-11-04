@@ -65,7 +65,7 @@ describe("the container form on the Pilot", () => {
     const unplacedForm = containerEditForm(unplaced)
     assert.ok(unplacedForm.sections.flatMap((section) => section.fields).find((field) => field.id === "projectId")?.readOnly)
     assert.ok(!fieldIdsOf(unplacedForm).includes("wasteFraction"))
-    const placed = containerAdapter.toRecord({ ...bin91007, placements: [{ id: "01a0d2a4-a280-7015-8000-000000000007", ...STAMPS, projectId: copenhagen.id, containerId: bin91007.id, subscriptionId, wasteFractionId: organic.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom: "2026-01-01", validTo: "2026-09-01" }] }, context)
+    const placed = containerAdapter.toRecord({ ...bin91007, placements: [{ id: "01a0d2a4-a280-7015-8000-000000000007", ...STAMPS, projectId: copenhagen.id, containerId: bin91007.id, subscriptionId, sharedCollectionPointId: null, wasteFractionId: organic.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom: "2026-01-01", validTo: "2026-09-01" }] }, context)
     assert.deepEqual(fieldIdsOf(containerEditForm(placed)).slice(-3), ["wasteFraction", "serviceFrequencyId", "placementTo"])
     const values = containerFormValues(placed)
     assert.equal(values.containerId, "BIN-91007")
@@ -85,7 +85,7 @@ describe("the container's command dialogs", () => {
   /** What a person fills in, by the dialog's field ids. */
   const filled: Record<ContainerCommand, BusinessFormValues> = {
     receive: { warehouseId: warehouse, occurredAt: "", reference: "DN-4471" },
-    issue: { subscriptionId, wasteFractionId: organicRecord.id, serviceFrequencyId: "", validFrom: "2026-10-01", occurredAt: "", reference: "" },
+    issue: { servedBy: "subscription", subscriptionId, sharedPointId: "", wasteFractionId: organicRecord.id, serviceFrequencyId: "", validFrom: "2026-10-01", occurredAt: "", reference: "" },
     return: { warehouseId: warehouse, toKind: "warehouse", lastDay: "2026-09-29", occurredAt: "", reason: "", reference: "" },
     transfer: { warehouseId: warehouse, toKind: "maintenance", occurredAt: "", reason: "Cracked lid", reference: "" },
     decommission: { decommissionReasonId: wornOutRecord.id, reason: "Burnt out", lastDay: "", occurredAt: "", reference: "" },

@@ -730,3 +730,35 @@ test("Shared points: planned in the browser open with its members, read back, it
   await expect(page.getByText(`${container.label} was not issued into service`)).toBeVisible()
   await expect(page.getByText("The subscription's shared collection point is closed; a placement needs an open or restricted point")).toBeVisible()
 })
+
+test("a litter bin issued publicly at one of the project's shared points (M12 of #293): no subscription named, read back in service at its point, its record naming the point", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const name = uniqueName("E2E Torvet")
+  const madePoint = await api.post("/shared-collection-points", {
+    data: { projectId: project.id, name, kind: "surface", address: "Torvet 1, 2100 København Ø", location: { type: "Point", coordinates: [12.5717, 55.7012] }, operatingModel: "municipal", accessMode: "open", billingMode: "municipal", status: "open" },
+  })
+  expect(madePoint.status(), "POST /shared-collection-points").toBe(201)
+  const point = (await madePoint.json()) as SharedCollectionPoint
+  const container = await receivedContainerThroughApi(api, project.id)
+
+  await openLoaded(page, "/resources?module=containers", "/containers")
+  await (await rowNamed(page, container.label)).click()
+  await page.getByTestId("container-commands").getByRole("button", { name: "Issue into service", exact: true }).click()
+  const issue = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Issue into service" }) })
+  await expect(issue).toBeVisible()
+  await pickOne(page, issue, "Serves", /^Publicly, at a shared point/)
+  await expect(issue.getByRole("combobox", { name: /^Subscription/ })).toHaveCount(0)
+  await pickOne(page, issue, "Shared point", new RegExp(escapeRegExp(name)))
+  await pickOne(page, issue, "Waste fraction", /^Residual/)
+  await issue.getByLabel("First day in service").fill("2026-10-01")
+  const [issued] = await Promise.all([answerOf(page, "POST", `/containers/${container.id}/placements`), issue.getByRole("button", { name: "Issue into service", exact: true }).click()])
+  expect(issued.status(), await issued.text()).toBe(201)
+  expect(JSON.parse(issued.request().postData() ?? "{}")).toMatchObject({ sharedCollectionPointId: point.id, validFrom: "2026-10-01" })
+  expect(JSON.parse(issued.request().postData() ?? "{}")).not.toHaveProperty("subscriptionId")
+  expect(await issued.json()).toMatchObject({ containerId: container.id, subscriptionId: null, sharedCollectionPointId: point.id })
+
+  const placements = await listAll<{ subscriptionId: string | null; sharedCollectionPointId: string | null }>(api, "/placements", { sharedCollectionPointId: point.id, validOn: "2026-10-05" })
+  expect(placements).toEqual([expect.objectContaining({ subscriptionId: null, sharedCollectionPointId: point.id })])
+  await expect(page.getByRole("dialog").getByText(name).first()).toBeVisible()
+  await expect(page.getByRole("dialog").getByText("Public placement")).toBeVisible()
+})

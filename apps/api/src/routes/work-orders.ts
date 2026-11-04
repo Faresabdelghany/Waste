@@ -87,11 +87,16 @@ async function moveFor(tx: Tx, driver: Principal, stop: CompletedStop & { servic
     await issueContainer(tx, driver, taken, { subscriptionId: stop.subscriptionId as string, wasteFractionId: stop.wasteFractionId, validFrom: day }, says)
     return
   }
-  // The placement in force as the swap reads it, before the return ends it: its subscription, fraction and cadence go to the replacement.
+  // The placement in force as the swap reads it, before the return ends it: its subscription — or a public placement's point (M12 of #293) — fraction and cadence go to the replacement.
   const [inForce] =
     stop.service === "swap"
       ? await tx
-          .select({ subscriptionId: containerServicePlacement.subscriptionId, wasteFractionId: containerServicePlacement.wasteFractionId, serviceFrequencyId: containerServicePlacement.serviceFrequencyId })
+          .select({
+            subscriptionId: containerServicePlacement.subscriptionId,
+            sharedCollectionPointId: containerServicePlacement.sharedCollectionPointId,
+            wasteFractionId: containerServicePlacement.wasteFractionId,
+            serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
+          })
           .from(containerServicePlacement)
           .where(and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.containerId, taken.id), validOn(containerServicePlacement, day)))
           .orderBy(desc(containerServicePlacement.validFrom))
@@ -104,7 +109,7 @@ async function moveFor(tx: Tx, driver: Principal, stop: CompletedStop & { servic
     }
     if (inForce === undefined) throw new ProblemError(409, { detail: `Container ${taken.label} has no placement in force on ${day} for its replacement to take over` })
     const replacement = await containerRef(tx, companyId, stop.replacementContainerId as string)
-    await issueContainer(tx, driver, replacement, { subscriptionId: inForce.subscriptionId, wasteFractionId: inForce.wasteFractionId, serviceFrequencyId: inForce.serviceFrequencyId, validFrom: day }, says)
+    await issueContainer(tx, driver, replacement, { subscriptionId: inForce.subscriptionId, sharedCollectionPointId: inForce.sharedCollectionPointId, wasteFractionId: inForce.wasteFractionId, serviceFrequencyId: inForce.serviceFrequencyId, validFrom: day }, says)
   }
 }
 

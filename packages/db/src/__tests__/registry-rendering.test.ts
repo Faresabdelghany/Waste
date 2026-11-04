@@ -82,6 +82,13 @@
 // property's chain, maps today's CREATE TABLE onto 0056's, and
 // address-register-rendering.test.ts pins the statements.
 //
+// The public placements (M12 of #293) made the placement's subscription
+// nullable beside the Shared Collection Point a public placement stands at,
+// exactly one of the two: `CHANGED_BY_PUBLIC_PLACEMENTS`, first of the
+// placement's chain, maps today's CREATE TABLE onto 0007's, and
+// `ADDED_BY_PUBLIC_PLACEMENTS` is the point's reference and index, left out;
+// public-placements-rendering.test.ts pins the statements.
+//
 // The dated parties (#374) gave `property_party` its period, with the
 // exclusion constraint in place of the unique key over the property, the
 // customer and the role, and an index on the property, which the key no
@@ -154,19 +161,32 @@ const tables = {
 
 const MIGRATION = "0004_registry.sql"
 
-/** container_service_placement as drizzle-kit writes it today, with the through-the-container project key 0007 added, and as it wrote it as of 0004, without. */
-const placementTable = (resources: boolean): string =>
+/** container_service_placement as drizzle-kit writes it since the public placements (M12 of #293), its subscription nullable beside the point a public placement stands at and exactly one of the two; as of 0007, with the through-the-container project key; and as it wrote it as of 0004, without. */
+const placementTable = (asOf: "0004" | "0007" | "public"): string =>
   createTable("container_service_placement", "dated", [
     '"container_id" uuid NOT NULL',
-    '"subscription_id" uuid NOT NULL',
+    asOf === "public" ? '"subscription_id" uuid' : '"subscription_id" uuid NOT NULL',
+    ...(asOf === "public" ? ['"shared_collection_point_id" uuid'] : []),
     '"waste_fraction_id" uuid NOT NULL',
     '"service_frequency_id" uuid',
-    ...(resources ? [uniqueKey("container_service_placement_container_id_project_key", "company_id", "project_id", "container_id", "id")] : []),
+    ...(asOf !== "0004" ? [uniqueKey("container_service_placement_container_id_project_key", "company_id", "project_id", "container_id", "id")] : []),
     validityCheck("container_service_placement"),
+    ...(asOf === "public"
+      ? [`CONSTRAINT "container_service_placement_served_exactly_one" CHECK ((${ref("container_service_placement", "subscription_id")} is not null)::int + (${ref("container_service_placement", "shared_collection_point_id")} is not null)::int = 1)`]
+      : []),
   ])
 
 /** What 0007 changed on a table 0004 created. */
-const CHANGED_IN_0007 = new Map([[placementTable(true), placementTable(false)]])
+const CHANGED_IN_0007 = new Map([[placementTable("0007"), placementTable("0004")]])
+
+/** What the public placements changed (M12 of #293): the placement's CREATE TABLE as drizzle-kit generates it now onto 0007's. Applied first; public-placements-rendering.test.ts pins the statements. */
+const CHANGED_BY_PUBLIC_PLACEMENTS = new Map([[placementTable("public"), placementTable("0007")]])
+
+/** The reference and the index the public placements added (M12 of #293): a public placement's point. */
+const ADDED_BY_PUBLIC_PLACEMENTS = [
+  projectFkTo("container_service_placement", "shared_collection_point_id", "shared_collection_point"),
+  index("container_service_placement", "container_service_placement_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
+]
 
 /** What 0004 created and 0007 dropped: the index on the placement's project, which its key now leads with. */
 const DROPPED_IN_0007 = [index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id")]
@@ -466,7 +486,7 @@ const expected = [
     uniqueKey("container_project_key", "company_id", "project_id", "id"),
     oneOfCheck("container", "ownership", "company", "customer", "unrecorded"),
   ]),
-  placementTable(true),
+  placementTable("public"),
   companyFk("waste_fraction"),
   companyFk("container_type"),
   companyFk("service_frequency"),
@@ -515,6 +535,7 @@ const expected = [
   projectFk("container_service_placement"),
   projectFkTo("container_service_placement", "container_id", "container"),
   projectFkTo("container_service_placement", "subscription_id", "subscription"),
+  projectFkTo("container_service_placement", "shared_collection_point_id", "shared_collection_point"),
   projectFkTo("container_service_placement", "service_frequency_id", "service_frequency"),
   tenantFk("container_service_placement", "waste_fraction_id", "waste_fraction"),
   index("product", "product_container_type_id_idx", "company_id", "container_type_id"),
@@ -541,6 +562,7 @@ const expected = [
   index("subscription", "subscription_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
   index("container", "container_container_type_id_idx", "company_id", "container_type_id"),
   index("container_service_placement", "container_service_placement_subscription_id_idx", "company_id", "subscription_id"),
+  index("container_service_placement", "container_service_placement_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
   index("container_service_placement", "container_service_placement_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
   index("container_service_placement", "container_service_placement_service_frequency_id_idx", "company_id", "service_frequency_id"),
 ]
@@ -561,7 +583,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement, the product, the agreement and the two places in their earlier spelling, what 0010 added left out, and the index 0007 dropped back in. */
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
-      .filter((statement) => !ADDED_IN_0010.includes(statement) && !ADDED_BY_DATED_PARTIES.includes(statement))
+      .filter((statement) => !ADDED_IN_0010.includes(statement) && !ADDED_BY_DATED_PARTIES.includes(statement) && !ADDED_BY_PUBLIC_PLACEMENTS.includes(statement))
+      .map((statement) => CHANGED_BY_PUBLIC_PLACEMENTS.get(statement) ?? statement)
       .map((statement) => CHANGED_BY_DATED_PARTIES.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_WEIGHT_CHARGES.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_ITEM_UNIT.get(statement) ?? statement)
@@ -580,7 +603,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_BY_PUBLIC_PLACEMENTS.keys(), ...ADDED_BY_PUBLIC_PLACEMENTS]) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0007.keys()) assert.ok([...CHANGED_BY_PUBLIC_PLACEMENTS.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_FOR_WEIGHT_CHARGES.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_FOR_ITEM_UNIT.keys()) assert.ok([...CHANGED_FOR_WEIGHT_CHARGES.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_FOR_ITEM_UNIT.values()].includes(statement), statement.split("\n")[0])

@@ -1281,7 +1281,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(required("/agreements"), ["projectId", "number", "customerId", "payerCustomerId", "billingCadence", "currency", "validFrom"])
     assert.deepEqual(required("/agreements/{id}/subscriptions"), ["productId", "validFrom"])
     assert.deepEqual(required("/containers"), ["projectId", "label", "containerTypeId"])
-    assert.deepEqual(required("/containers/{id}/placements"), ["subscriptionId", "wasteFractionId", "validFrom"])
+    assert.deepEqual(required("/containers/{id}/placements"), ["wasteFractionId", "validFrom"], "a subscription or a public placement's point, exactly one (M12 of #293)")
 
     for (const path of ["/agreements", "/agreements/{id}/subscriptions", "/containers", "/placements"]) {
       const page = document.paths[path].get.responses["200"].content["application/json"].schema
@@ -1349,7 +1349,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/decommission-reasons"), { get: "listDecommissionReasons", post: "createDecommissionReason" })
     assert.deepEqual(operations("/decommission-reasons/{id}"), { get: "getDecommissionReason", patch: "patchDecommissionReason" })
     assert.deepEqual(required("/containers/{id}/adjust"), ["toKind", "reason"])
-    assert.deepEqual(required("/containers/{id}/placements"), ["subscriptionId", "wasteFractionId", "validFrom"])
+    assert.deepEqual(required("/containers/{id}/placements"), ["wasteFractionId", "validFrom"], "a subscription or a public placement's point, exactly one (M12 of #293)")
     assert.ok(Object.keys(document.paths["/containers/{id}/placements"].post.requestBody?.content["application/json"].schema.properties ?? {}).includes("occurredAt"))
 
     for (const path of ["/containers/{id}/movements", "/stock-movements"]) {

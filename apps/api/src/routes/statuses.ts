@@ -96,9 +96,9 @@ export const placeOf = (propertyStatus: PropertyStatus | undefined, sharedCollec
   sharedCollectionPointStatus: sharedCollectionPointStatus ?? null,
 })
 
-/** What names the place, and how its sentence begins: a subscription and a stop the office adds at an address (#111) name it themselves, a placement reaches it through its subscription. */
-type PlaceReference = "subscription" | "placement" | "stop" | "booking"
-const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's", stop: "The", booking: "The" }
+/** What names the place, and how its sentence begins: a subscription, a public placement (M12 of #293) and a stop the office adds at an address (#111) name it themselves, a placement reaches it through its subscription. */
+type PlaceReference = "subscription" | "placement" | "public placement" | "stop" | "booking"
+const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's", "public placement": "The", stop: "The", booking: "The" }
 
 /** A Customer an agreement names, in either field: active, or the sentence for that field. Nothing named is nothing to gate. */
 export function refuseInactiveCustomer(status: CustomerStatus | undefined, path: Party): void {

@@ -15,8 +15,10 @@
 // it: `assetStatus`, and `warehouseId` for the containers standing in a
 // warehouse, in stock or in maintenance.
 //
-// A placement says which subscription the container serves, which fraction it
-// takes and, where it differs from the product's, at which frequency. The
+// A placement says which subscription the container serves — or, a public
+// placement (M12 of #293), at which Shared Collection Point it stands with no
+// subscription — which fraction it takes and, where it differs from the
+// product's, at which frequency. The
 // override is `serviceFrequencyId` and the answer is
 // `effectiveServiceFrequencyId`: the coalesce of the placement's and the
 // product's, read on every request and never written, which is why it is on
@@ -102,7 +104,10 @@ export const ContainerServicePlacement = z
     ...stamped,
     projectId: Id,
     containerId: Id,
-    subscriptionId: Id,
+    /** The subscription the container serves; null for a public placement. */
+    subscriptionId: Id.nullable(),
+    /** Where a public placement stands (M12 of #293): a litter or dog bin the project serves at its Shared Collection Point, with no subscription and so no payer; null for every subscribed placement, whose place is its subscription's. */
+    sharedCollectionPointId: Id.nullable(),
     wasteFractionId: Id,
     /** The override; null means the Product's cadence. */
     serviceFrequencyId: Id.nullable(),
@@ -112,6 +117,14 @@ export const ContainerServicePlacement = z
   })
   .refine(validityOrdered, endsAfterItStarts)
 export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement>
+
+const servedByOne = {
+  message: "Give exactly one of subscriptionId and sharedCollectionPointId: a container serves a subscription, or stands for the project at a Shared Collection Point",
+  path: ["subscriptionId"],
+}
+/** A null counts as not given, as a form with both fields sends it. */
+const servedOnce = (body: { subscriptionId?: string | null; sharedCollectionPointId?: string | null }) =>
+  [body.subscriptionId, body.sharedCollectionPointId].filter((served) => served != null).length === 1
 
 /**
  * The container is the path's and the project is the container's, so neither
@@ -123,17 +136,21 @@ export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement
  * container's `return` or `decommission`, which end it and append the
  * movement together, so the strict object refuses the member by name.
  */
-export const ContainerServicePlacementCreate = z.strictObject({
-  subscriptionId: Id,
-  wasteFractionId: Id,
-  serviceFrequencyId: Id.nullable().optional(),
-  /** The first day the container serves here; the end is the ledger's to set. */
-  validFrom: IsoDate,
-  /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
-  occurredAt: IsoDateTime.optional(),
-  /** A delivery note or a ticket the issue quotes; the movement's. */
-  reference: Label.optional(),
-})
+export const ContainerServicePlacementCreate = z
+  .strictObject({
+    subscriptionId: Id.nullable().optional(),
+    /** A public placement's point, given in place of a subscription (M12 of #293). */
+    sharedCollectionPointId: Id.nullable().optional(),
+    wasteFractionId: Id,
+    serviceFrequencyId: Id.nullable().optional(),
+    /** The first day the container serves here; the end is the ledger's to set. */
+    validFrom: IsoDate,
+    /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
+    occurredAt: IsoDateTime.optional(),
+    /** A delivery note or a ticket the issue quotes; the movement's. */
+    reference: Label.optional(),
+  })
+  .refine(servedOnce, servedByOne)
 export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePlacementCreate>
 
 /** Corrects a placement the ledger has already ended, its fraction or its override; a placement that starts on another day or serves another subscription is another placement. */
