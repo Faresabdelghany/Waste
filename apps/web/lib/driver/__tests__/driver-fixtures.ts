@@ -82,6 +82,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     wasteFractionName: "Residual",
     replacementContainerLabel: null,
     bulkyItems: [],
+    containerConfirmedAt: null,
     ...overrides,
   }
 }

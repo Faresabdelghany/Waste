@@ -118,7 +118,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
     location: TOWN_HALL,
     status: "active",
   })
-  await tx.insert(propertyParty).values({ id: own.propertyParty, companyId: own.company, projectId: own.project, propertyId: own.property, customerId: own.customer, role: "owner" })
+  await tx.insert(propertyParty).values({ id: own.propertyParty, companyId: own.company, projectId: own.project, propertyId: own.property, customerId: own.customer, role: "owner", validFrom: OPENED })
   await tx.insert(propertyGroup).values({ id: own.propertyGroup, companyId: own.company, projectId: own.project, name: "Parkvej housing", purpose: "administration", responsibleCustomerId: own.customer, status: "active" })
   await tx.insert(propertyGroupMember).values({ id: own.propertyGroupMember, companyId: own.company, projectId: own.project, propertyGroupId: own.propertyGroup, propertyId: own.property, role: "member" })
   await tx.insert(sharedCollectionPoint).values({
@@ -247,7 +247,7 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
         refusedWith("23503", /product_container_type_id_fk/),
       )
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(propertyParty).values({ id: a.spare, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: b.customer, role: "payer" })),
+        tx.transaction((savepoint) => savepoint.insert(propertyParty).values({ id: a.spare, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: b.customer, role: "payer", validFrom: OPENED })),
         refusedWith("23503", /property_party_customer_id_fk/),
       )
       await assert.rejects(
@@ -268,7 +268,7 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
       )
       // The same rows within the tenant land.
       await tx.insert(product).values({ id: a.spare, companyId: a.company, projectId: a.project, name: "Borrowed", kind: "container-collection", status: "draft", unit: "pickup", containerTypeId: a.containerType })
-      await tx.insert(propertyParty).values({ id: a.other, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "payer" })
+      await tx.insert(propertyParty).values({ id: a.other, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "payer", validFrom: OPENED })
     }))
 
   test("a subscription cannot name the property or the product of another project of its own company, and a placement cannot name its container or its subscription (23503)", () =>
@@ -414,6 +414,22 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
       await tx.insert(agreement).values(second("2026-07-01"))
       // Another number over the same period is another agreement, not an overlap.
       await tx.insert(agreement).values({ ...second(OPENED), id: a.other, number: "AGR-2409" })
+    }))
+
+  test("one role of a customer at a property at a time (23P01 property_party_no_overlap), the next one beginning the day the last ended (#374)", () =>
+    seeded(async (tx) => {
+      const again = (validFrom: string) => ({ id: a.spare, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "owner", validFrom })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(propertyParty).values(again("2026-07-01"))), refusedWith("23P01", /property_party_no_overlap/))
+      // The period is half-open, so the customer may hold the role again from the day it ended.
+      await tx.update(propertyParty).set({ validTo: "2026-07-01" }).where(eq(propertyParty.id, a.propertyParty))
+      await tx.insert(propertyParty).values(again("2026-07-01"))
+      // Another role over the same period is another party, not an overlap.
+      await tx.insert(propertyParty).values({ ...again(OPENED), id: a.other, role: "payer" })
+      // An empty or reversed period is refused by the check before the constraint is asked.
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(propertyParty).values({ ...again("2026-08-01"), id: a.third, role: "tenant", validTo: "2026-08-01" })),
+        refusedWith("23514", /property_party_validity/),
+      )
     }))
 
   test("one subscription per agreement, product and place at a time, and one placement per container (23P01)", () =>

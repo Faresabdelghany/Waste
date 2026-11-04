@@ -2,7 +2,7 @@
 -- days, kilometres or engine hours from its last service
 -- (`vehicle_maintenance_plan`), the Maintenance Orders that do the work
 -- (`maintenance_order`, keyed into a plan of the same vehicle), and the
--- alert's rule grown by `maintenance-due`, the worker's sixth. Below
+-- alert's rule grown by `maintenance-due`, the worker's seventh. Below
 -- drizzle-kit's statements: each table's fence, trigger and audit trail. No
 -- row present changes meaning: no alert holds the new rule yet.
 CREATE TABLE "wms"."maintenance_order" (
@@ -63,7 +63,7 @@ CREATE INDEX "maintenance_order_project_id_idx" ON "wms"."maintenance_order" USI
 CREATE INDEX "maintenance_order_plan_id_idx" ON "wms"."maintenance_order" USING btree ("company_id","plan_id");--> statement-breakpoint
 CREATE INDEX "maintenance_order_closed_by_idx" ON "wms"."maintenance_order" USING btree ("company_id","closed_by");--> statement-breakpoint
 CREATE INDEX "vehicle_maintenance_plan_project_id_idx" ON "wms"."vehicle_maintenance_plan" USING btree ("company_id","project_id");--> statement-breakpoint
-ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK ("wms"."alert"."rule" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale', 'maintenance-due'));
+ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK ("wms"."alert"."rule" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale', 'fill-threshold', 'maintenance-due'));
 --> statement-breakpoint
 ALTER TABLE "wms"."maintenance_order" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint

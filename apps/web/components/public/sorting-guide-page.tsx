@@ -9,6 +9,7 @@ import Link from "next/link"
 import { headers } from "next/headers"
 import { notFound } from "next/navigation"
 
+import { ProjectFooter, ProjectMark } from "@/components/public/project-brand"
 import { PublicNav } from "@/components/public/public-nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,14 +35,10 @@ export async function SortingGuidePage({ params, searchParams }: SortingGuidePag
   if (page.kind === "not-published") notFound()
 
   return (
-    <main className="min-h-svh bg-background">
+    <main className="public-page min-h-svh bg-background">
       <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
         <header className="space-y-2">
-          {page.kind === "published" && (
-            <p lang={page.project.language} className="text-sm font-medium text-muted-foreground">
-              {page.project.name}
-            </p>
-          )}
+          {page.kind === "published" && <ProjectMark project={page.project} />}
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">{COPY.title}</h1>
           <p className="text-base text-muted-foreground">{COPY.intro}</p>
           {page.kind === "published" && <PublicNav slug={slug} current="sorting" />}
@@ -62,6 +59,7 @@ export async function SortingGuidePage({ params, searchParams }: SortingGuidePag
             <section aria-live="polite" className="mt-8">
               <GuideResults slug={slug} view={page.guide} language={page.project.language} />
             </section>
+            <ProjectFooter project={page.project} />
           </>
         ) : (
           <p role="status" className="mt-8 rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">

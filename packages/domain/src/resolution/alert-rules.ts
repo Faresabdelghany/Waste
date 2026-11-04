@@ -19,10 +19,18 @@
 // telemetry. A device not heard from at all is the silent session's alert,
 // not this one.
 //
-// O20 of #290 added a sixth: a vehicle's maintenance plan due within its
+// O26 of #290 added a sixth: a container whose fill-level Sensor's newest
+// reading is at or past its pairing's full threshold, raised from the
+// telemetry and about the container. One filling is one alert: the worker
+// keys it by the last reading below the threshold, so it is raised again only
+// once the bin has read low in between. Where the pairing books an emptying,
+// the alert ends with what booking came to (execution/fill-emptying.ts).
+//
+// O20 of #290 added a seventh: a vehicle's maintenance plan due within its
 // margins, or past a limit (resources/maintenance.ts) — medium while due soon,
 // high once overdue, about the vehicle. The facts come in already judged: the
 // state, the next limits and the readings the plan was judged on.
+import { emptyingSentence, type FillEmptyingOutcome } from "../execution/fill-emptying"
 import { nextDueLine } from "../resources/maintenance"
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "./vocabulary"
 
@@ -44,6 +52,7 @@ export type RuleOccurrence =
   | { rule: "licence-expiring"; driverId: string; driverName: string; licenceExpiry: string; today: string }
   | { rule: "ticket-overdue"; ticketId: string; ticketLabel: string; subject: string; due: string }
   | { rule: "position-stale"; routeId: string; routeLabel: string; driverId: string; driverName: string; vehicleId: string | null; lastFix: string | null }
+  | { rule: "fill-threshold"; containerId: string; containerLabel: string; sensorIdentifier: string; fillPercent: number; thresholdPercent: number; measuredAt: string; emptying?: FillEmptyingOutcome }
   | { rule: "maintenance-due"; vehicleId: string; vehicleLabel: string; planName: string; overdue: boolean; nextDueOn: string | null; nextDueKm: number | null; nextDueHours: number | null }
 
 /** An alert as a rule raises it: everything but its project, its key and its instants. */
@@ -136,6 +145,19 @@ export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
         vehicleId: occurrence.vehicleId,
         driverId: occurrence.driverId,
       }
+    case "fill-threshold": {
+      const full = occurrence.fillPercent >= 100
+      return {
+        rule: occurrence.rule,
+        kind: "service-risk",
+        severity: full ? "high" : "medium",
+        source: "telemetry",
+        title: full ? `${occurrence.containerLabel} is full` : `${occurrence.containerLabel} is ${occurrence.fillPercent}% full`,
+        details: `Sensor ${occurrence.sensorIdentifier} read ${occurrence.fillPercent}% at ${occurrence.measuredAt}, at or past the full threshold of ${occurrence.thresholdPercent}%: empty it before it overflows.${occurrence.emptying === undefined ? "" : ` ${emptyingSentence(occurrence.emptying)}`}`,
+        ...NO_SUBJECT,
+        containerId: occurrence.containerId,
+      }
+    }
     case "maintenance-due":
       return {
         rule: occurrence.rule,
@@ -158,5 +180,6 @@ export const CLEARED_NOTES: Readonly<Record<AlertRule, string>> = {
   "licence-expiring": "Cleared: the licence was renewed, or has run out and is raised again as expired, or the driver is no longer active.",
   "ticket-overdue": "Cleared: the ticket was closed, or given a later due date.",
   "position-stale": "Cleared: a position came in, or the session was paused or ended, or the route ended.",
+  "fill-threshold": "Cleared: the sensor read below the threshold again, or the pairing ended.",
   "maintenance-due": "Cleared: the service was done, or the plan changed or was retired, or it is overdue now and raised again as such.",
 }

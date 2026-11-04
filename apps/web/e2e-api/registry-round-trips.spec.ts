@@ -556,7 +556,8 @@ test("Properties: created in the browser with its owner and its point, read back
   expect(JSON.parse(put.request().postData() ?? "{}")).toEqual({ parties: [{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }] })
   const read = (await (await api.get(`/properties/${property.id}`)).json()) as Property
   expect(read.name).toBe(`${name} B`)
-  expect([...read.parties].sort(byParty)).toEqual([{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }].sort(byParty))
+  // Each party holds its role from a day (#374); who, and as what, is what the form wrote.
+  expect(read.parties.map(({ customerId, role }) => ({ customerId, role })).sort(byParty)).toEqual([{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }].sort(byParty))
 
   // Inactive is the lifecycle's move the wire spells, behind the governed dialog.
   await sheet.getByRole("button", { name: "Inactive", exact: true }).click()

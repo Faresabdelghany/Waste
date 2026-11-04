@@ -14,8 +14,11 @@ import { PLAIN_ROLE, PUBLIC_ROLE } from "./roles"
 import { project } from "./schema/organisation"
 import { COMPANY_SETTING } from "./tenant"
 
+/** A published project's branding (M22 of #293): its one colour and two https addresses, each null where the project set none. */
+export type PublishedBranding = { brandColor: string | null; logoUrl: string | null; accessibilityStatementUrl: string | null }
+
 /** The published project a public request reads inside: what its own row lets an anonymous reader know. */
-export type PublishedProject = { id: string; companyId: string; name: string; language: string; timezone: string; slug: string }
+export type PublishedProject = { id: string; companyId: string; name: string; language: string; timezone: string; slug: string; branding: PublishedBranding }
 
 if (!PLAIN_ROLE.test(PUBLIC_ROLE)) throw new Error(`public-door: ${PUBLIC_ROLE} is not a plain role name`)
 
@@ -38,13 +41,16 @@ export async function withPublishedProject<T>(db: Db, slug: string, fn: (tx: Tx,
         language: project.language,
         timezone: project.timezone,
         slug: project.publicSlug,
+        brandColor: project.brandColor,
+        logoUrl: project.logoUrl,
+        accessibilityStatementUrl: project.accessibilityStatementUrl,
         company: sql<string>`set_config(${COMPANY_SETTING}, ${project.companyId}::text, true)`,
       })
       .from(project)
       .where(eq(project.publicSlug, slug))
       .limit(1)
     if (found?.slug == null) return undefined
-    const { company: _company, ...published } = found
-    return fn(tx, { ...published, slug: found.slug })
+    const { company: _company, brandColor, logoUrl, accessibilityStatementUrl, ...published } = found
+    return fn(tx, { ...published, slug: found.slug, branding: { brandColor, logoUrl, accessibilityStatementUrl } })
   })
 }

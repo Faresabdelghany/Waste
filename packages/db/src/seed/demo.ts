@@ -56,7 +56,9 @@
 // The role charters are not spelled here: they are
 // @waste/domain/access/system-roles, the same data the web's permission matrix
 // draws, written through `normaliseGrants` so the rows are what the API would
-// compute for the same grant set.
+// compute for the same grant set — by the row builders every company made
+// outside the seed starts from too (commands/provision-company.ts, C33 of
+// #291), here on the seed's fixed ids.
 //
 // What this seed reserves on a database it shares with the test suites, and
 // what a per-tenant test file must therefore not use:
@@ -78,11 +80,11 @@
 //
 // The reverse holds too: the seed must not write over what a test owns, which
 // `seed.test.ts` checks for the one company a test file commits rows under.
-import { normaliseGrants } from "@waste/domain/access/grants"
-import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
+import type { SystemRoleKey } from "@waste/domain/access/system-roles"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 import { createDb, type Tx } from "../client"
+import { systemGrantRows, systemRoleRows } from "../commands/provision-company"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { applyEmissions, EMISSIONS_COUNTS, EMISSIONS_IDS, type EmissionsCounts } from "./emissions"
@@ -213,30 +215,11 @@ const SERVICE_PROVIDERS: (typeof serviceProvider.$inferInsert)[] = [
   },
 ]
 
-const ROLES: (typeof role.$inferInsert)[] = SYSTEM_ROLES.map((systemRole) => ({
-  id: DEMO_IDS.roles[systemRole.key],
-  companyId: COMPANY_ID,
-  key: systemRole.key,
-  name: systemRole.name,
-  scope: systemRole.scope,
-  description: systemRole.description,
-  system: systemRole.system,
-}))
-
-// One row per action a charter allows. `normaliseGrants` is the rule the API
-// applies to a grant set it stores (@waste/domain/access/grants); the charters
-// already satisfy it, so this changes nothing today and keeps the seed right
-// if a charter is ever spelled loosely.
-const GRANTS: (typeof roleGrant.$inferInsert)[] = SYSTEM_ROLES.flatMap((systemRole) =>
-  normaliseGrants(systemRole.grants).flatMap((grant) =>
-    grant.actions.map((action) => ({
-      companyId: COMPANY_ID,
-      roleId: DEMO_IDS.roles[systemRole.key],
-      moduleKey: grant.moduleKey,
-      action,
-    })),
-  ),
-)
+// The system roles and their grants, as every company starts with them
+// (commands/provision-company.ts), on the seed's fixed role ids.
+const roleIdOf = (key: SystemRoleKey) => DEMO_IDS.roles[key]
+const ROLES: (typeof role.$inferInsert)[] = systemRoleRows(COMPANY_ID, roleIdOf)
+const GRANTS: (typeof roleGrant.$inferInsert)[] = systemGrantRows(COMPANY_ID, roleIdOf)
 
 // Each account is an Invitation (`invited`) until Supabase Auth's access token
 // hook binds a Login to it on first sign-in: `auth_user_id` is null here and

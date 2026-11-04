@@ -12,6 +12,8 @@ import {
   DriverCommandBatchOutcome,
   DriverCommandEnvelope,
   DriverCommandReceipt,
+  DriverIdentification,
+  DriverIdentifyQuery,
   DriverMe,
   DriverPickup,
   DriverRouteDetail,
@@ -142,6 +144,27 @@ describe("DriverCommand", () => {
       assert.ok(refusal(DriverCommand.safeParse(command("record-unload", body))).some((issue) => issue.path === `body.${member}`), member)
     }
     assert.equal(DriverCommand.safeParse(command("arrive", { pickupId: THIRD, location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } })).success, false, "a flat point")
+  })
+
+  test("an arrival may carry the code read off the bin and how it was read (O19 of #290), the code saying something and the method the vocabulary's", () => {
+    const arrive = (identification: unknown) => DriverCommand.safeParse(command("arrive", { pickupId: THIRD, identification }))
+    assert.equal(arrive({ code: "WH82014", method: "camera" }).success, true)
+    assert.equal(arrive({ code: "BIN-82014", method: "typed" }).success, true)
+    assert.deepEqual(refusal(arrive({ code: "WH82014", method: "nfc" })).map((issue) => issue.path), ["body.identification.method"])
+    assert.deepEqual(refusal(arrive({ code: "  ", method: "typed" })).map((issue) => issue.path), ["body.identification.code"])
+    assert.deepEqual(refusal(arrive({ code: "WH82014", method: "typed", matchedBy: "barcode" })).map((issue) => issue.path), ["body.identification"], "which identifier matched is the server's to say")
+  })
+})
+
+describe("the identify read (O19 of #290)", () => {
+  test("asks by a code that says something, and answers the stops it names by which identifier", () => {
+    assert.equal(DriverIdentifyQuery.safeParse({ code: "WH82014" }).success, true)
+    assert.equal(DriverIdentifyQuery.safeParse({ code: " " }).success, false)
+    assert.equal(DriverIdentifyQuery.safeParse({}).success, false)
+    const stop = { pickupId: THIRD, position: 1, containerId: COMPANY, containerLabel: "BIN-82014", matchedBy: "rfid", replacement: false }
+    assert.deepEqual(DriverIdentification.parse({ code: "E200", stops: [stop] }), { code: "E200", stops: [stop] })
+    assert.deepEqual(DriverIdentification.parse({ code: "E200", stops: [] }).stops, [], "a code naming no container on the route")
+    assert.equal(DriverIdentification.safeParse({ code: "E200", stops: [{ ...stop, matchedBy: "qr" }] }).success, false)
   })
 })
 
@@ -294,8 +317,11 @@ describe("what the door answers and stores", () => {
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
     const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, ...STAMPS }
-    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [] }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [], containerConfirmedAt: null }
     assert.deepEqual(DriverPickup.parse(joined), joined)
+    const { containerConfirmedAt: _, ...beforeTheScan } = joined
+    assert.deepEqual(DriverPickup.parse(beforeTheScan), joined, "an answer from before the scan (O19 of #290) reads as never confirmed")
+    assert.equal(DriverPickup.parse({ ...joined, containerConfirmedAt: "2026-10-05T06:41:00.000Z" }).containerConfirmedAt, "2026-10-05T06:41:00.000Z")
     assert.deepEqual(DriverPickup.parse({ ...joined, location: null }), { ...joined, location: null }, "a property not yet geocoded has no point")
     assert.deepEqual(DriverPickup.parse({ ...joined, driverInstructions: null }), { ...joined, driverInstructions: null }, "a place that tells the driver nothing")
     const addressOnly = { ...joined, containerId: null, origin: "office", containerLabel: null, note: "Re-collection of T-8831" }

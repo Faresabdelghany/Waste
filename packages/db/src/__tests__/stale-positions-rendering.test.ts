@@ -3,15 +3,13 @@
 // Postgres has no ALTER for a check. Then migration 0061, which is exactly
 // those statements under its header: no table is new, so nothing is
 // hand-written, and no alert present names the new rule. The file is found
-// by its name, not its number, which it takes at its turn. Migration 0067
-// (O20 of #290) grew the rules again, so the file is held to the list as 0061
-// left it. No database.
+// by its name, not its number, which it takes at its turn. The fill-level
+// sensors' migration (O26 of #290) has since added `fill-threshold`, so the
+// rules 0061 spelled are `ALERT_RULES_AS_OF_0061`. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
-
-import { ALERT_RULES } from "@waste/domain/resolution/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { normalised, statementsOf } from "../sql/hand-written"
@@ -32,7 +30,6 @@ async function migrationText(): Promise<string> {
 describe("the stale-position rule as drizzle-kit writes it", () => {
   test("the rules are 0034's four and `position-stale`, last", () => {
     assert.deepEqual([...ALERT_RULES_AS_OF_0061], [...ALERT_RULES_AS_OF_0034, "position-stale"])
-    assert.deepEqual([...ALERT_RULES], [...ALERT_RULES_AS_OF_0061, "maintenance-due"], "and 0079's, after them")
   })
 
   test("the migration is the rule's check respelt, under its header, and nothing hand-written", async () => {

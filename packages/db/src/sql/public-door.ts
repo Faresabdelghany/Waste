@@ -237,9 +237,16 @@ export const SEASONS_DOOR: readonly PublicDoorTable[] = [
   },
 ]
 
+/**
+ * What a project's branding (M22 of #293) opens to its published pages: the
+ * one colour and the two https addresses the project chose, on the project
+ * row 0017's policy already shows. Nothing else of the project.
+ */
+export const BRANDING_DOOR: readonly PublicDoorTable[] = [{ table: project, columns: [project.brandColor, project.logoUrl, project.accessibilityStatementUrl], rows: null }]
+
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -301,3 +308,6 @@ export const dropOffDoorStatements = (): string[] => [...publicGrantStatements(D
 
 /** What the seasons' migration carries for the door (O17 of #290), below the table's own statements: its grant, then its policy. */
 export const seasonsDoorStatements = (): string[] => [...publicGrantStatements(SEASONS_DOOR), ...publicPolicyStatements(SEASONS_DOOR)]
+
+/** What the branding's migration carries for the door, below its columns: the grant alone, the project keeping 0017's policy. */
+export const brandingDoorStatements = (): string[] => publicGrantStatements(BRANDING_DOOR)

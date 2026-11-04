@@ -98,9 +98,9 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       ])
       // Anna is two things to her address; Bo one thing to his.
       await tx.insert(propertyParty).values([
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "tenant" },
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "payer" },
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.bos, customerId: portal.bo, role: "owner" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "tenant", validFrom: "2026-01-01" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "payer", validFrom: "2026-01-01" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.bos, customerId: portal.bo, role: "owner", validFrom: "2026-01-01" },
       ])
       await tx.insert(agreement).values({ id: registry.agreement, companyId: a.companyId, projectId: copenhagen, number: "AGR-1", customerId: portal.anna, payerCustomerId: portal.anna, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" })
       await tx.insert(sharedCollectionPoint).values({
@@ -316,8 +316,10 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       const detail = await read(second.id)
       assert.deepEqual(detail.events.map((event) => [event.kind, event.status, event.assigneeUserAccountId, event.body, event.visibility, event.resolution, event.objectKey, event.recordedBy, event.sourceEventId]), [["created", "open", a.users.viewer.id, null, "internal", null, null, a.users.olivia.id, null]])
       assert.deepEqual(detail.alerts, [])
-      const [openedEvent, ...more] = await eventsAbout(second.id)
+      const [openedEvent, assignedEvent, ...more] = await eventsAbout(second.id)
       assert.equal(more.length, 0)
+      assert.deepEqual([assignedEvent.kind, assignedEvent.aggregateKind, assignedEvent.occurredAt.toISOString()], ["ticket-assigned", "ticket", NOON.toISOString()], "opened with an assignee, the assignment follows for the staff notices (O16 of #290)")
+      assert.deepEqual(Ticket.parse(assignedEvent.payload), second)
       assert.deepEqual([openedEvent.kind, openedEvent.aggregateKind, openedEvent.projectId, openedEvent.occurredAt.toISOString(), openedEvent.publishedAt], ["ticket-opened", "ticket", second.projectId, NOON.toISOString(), null])
       assert.deepEqual(Ticket.parse(openedEvent.payload), second, "the payload is the ticket as answered")
 
@@ -485,7 +487,9 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
         ["assigned", "open", a.users.viewer.id, "Vera knows the street"],
         ["assigned", "open", null, null],
       ], "one event per move, none for the repeat")
-      assert.equal((await eventsAbout(fresh.id)).length, 1, "an assignment is nobody else's news")
+      const outbox = await eventsAbout(fresh.id)
+      assert.deepEqual(outbox.map((event) => event.kind), ["ticket-opened", "ticket-assigned"], "the assignment to Vera is the staff notices' news (O16 of #290); the repeat and the clearing are nobody's")
+      assert.deepEqual(Ticket.parse(outbox[1].payload), assigned, "the payload is the ticket as answered")
     })
 
     test("holds the account to the company and the project (400), and a closed ticket refuses whatever the body says (409)", async () => {
@@ -706,8 +710,8 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
           ["status-changed", "completed", "internal", "answered", "Answered with the stop's record."],
         ],
       )
-      assert.deepEqual((await eventsAbout(answered.id)).map((event) => event.kind), ["ticket-opened", "ticket-completed"])
-      assert.deepEqual(Ticket.parse((await eventsAbout(answered.id))[1].payload), answered, "the completion carries the ticket as answered")
+      assert.deepEqual((await eventsAbout(answered.id)).map((event) => event.kind), ["ticket-opened", "ticket-replied", "ticket-completed"], "the reply is the customer's news (C18 of #291)")
+      assert.deepEqual(Ticket.parse((await eventsAbout(answered.id))[2].payload), answered, "the completion carries the ticket as answered")
 
       for (const [values, why] of [
         [{ links: stop(0) }, "a collected stop"],
@@ -745,12 +749,14 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(detail.status, "open", "the reply alone moves nothing")
       assert.deepEqual([detail.events.at(-1)?.kind, detail.events.at(-1)?.visibility, detail.events.at(-1)?.body], ["comment", "customer", `${COLLECTED}\n\nThe bin was emptied on time.`])
       assert.equal(detail.updatedAt, fresh.updatedAt, "nothing of the row moves")
-      assert.deepEqual((await eventsAbout(fresh.id)).map((event) => event.kind), ["ticket-opened"], "a reply is nobody else's news")
+      const replied = await eventsAbout(fresh.id)
+      assert.deepEqual(replied.map((event) => event.kind), ["ticket-opened", "ticket-replied"], "a reply is the customer's news, the notices' (C18 of #291)")
+      assert.deepEqual(TicketEvent.parse(replied[1].payload), detail.events.at(-1), "carrying the history row as the route answers it")
 
       const done = TicketDetail.parse(await (await reply(fresh.id, { complete: true })).json())
       assert.deepEqual([done.status, done.resolution, done.closedAt], ["completed", "answered", NOON.toISOString()])
       assert.deepEqual(done.events.slice(-2).map((event) => [event.kind, event.status, event.body]), [["comment", "open", COLLECTED], ["status-changed", "completed", "Answered with the stop's record."]], "the reply is written before the completion, stamped with the status it met")
-      assert.deepEqual((await eventsAbout(fresh.id)).map((event) => event.kind), ["ticket-opened", "ticket-completed"])
+      assert.deepEqual((await eventsAbout(fresh.id)).map((event) => event.kind), ["ticket-opened", "ticket-replied", "ticket-replied", "ticket-completed"])
 
       const before = (await history(fresh.id)).length
       assert.equal((await refused(await reply(fresh.id, { complete: true }), 409)).detail, `Ticket ${fresh.label} is completed; reopen it first`)
@@ -788,7 +794,7 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(after.events.at(-1)?.id, row.id)
       const customers = TicketEvent.parse(await (await comment(done.id, { body: "We are sorry", visibility: "customer" })).json())
       assert.equal(customers.visibility, "customer")
-      assert.equal((await eventsAbout(done.id)).length, 2, "a comment is nobody else's news")
+      assert.deepEqual((await eventsAbout(done.id)).map((event) => event.kind).slice(2), ["ticket-replied"], "an internal comment is nobody else's news; the customer's is theirs")
       const viewers = await comment((await opened()).id, { body: "From Vera" }, viewer)
       assert.equal(viewers.status, 201, "create is the grant, as it is for opening a ticket")
     })

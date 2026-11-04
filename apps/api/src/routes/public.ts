@@ -54,6 +54,9 @@ import { describeJson } from "./shared"
 /** How long anyone may keep a public answer: a minute, so a published change shows within one. */
 export const PUBLIC_CACHE = "public, max-age=60"
 
+/** The published project as its public pages name it, its ids kept inside the door. */
+const publicProjectOf = ({ slug, name, language, timezone, branding }: PublishedProjectRow): PublishedProject => ({ slug, name, language, timezone, branding })
+
 const NOT_PUBLISHED = "No project is published under that slug: it was never published, or it has been unpublished."
 const TOO_MANY = "This address has asked more than its allowance for the minute; ask again after the seconds Retry-After names."
 
@@ -98,8 +101,7 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
       door,
       validate("param", PublicSlugParam),
       (c) => {
-        const { slug, name, language, timezone } = c.get("published")
-        const body: PublishedProject = { slug, name, language, timezone }
+        const body: PublishedProject = publicProjectOf(c.get("published"))
         return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )
@@ -144,8 +146,7 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
           fraction: entry.fractionKey === null || entry.fractionName === null ? null : { key: entry.fractionKey, name: entry.fractionName },
           instructions: entry.instructions,
         }))
-        const { slug, name, language, timezone } = published
-        const body: SortingGuideAnswer = { project: { slug, name, language, timezone }, query: q, matches }
+        const body: SortingGuideAnswer = { project: publicProjectOf(published), query: q, matches }
         return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )
@@ -171,8 +172,7 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
         const published = c.get("published")
         const today = dayInTimezone(now(), published.timezone)
         const addresses = await searchAddresses(c.get("tx"), { companyId: published.companyId, projectId: published.id }, q, today)
-        const { slug, name, language, timezone } = published
-        const body: AddressMatches = { project: { slug, name, language, timezone }, addresses }
+        const body: AddressMatches = { project: publicProjectOf(published), addresses }
         return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )
@@ -198,9 +198,8 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
         const { weeks } = c.req.valid("query")
         const published = c.get("published")
         const { address, from, to, days } = await collectionDaysFor(c.get("tx"), published, id, weeks)
-        const { slug, name, language, timezone } = published
         const body: PublicCollectionDays = {
-          project: { slug, name, language, timezone },
+          project: publicProjectOf(published),
           address,
           from,
           to,
@@ -273,9 +272,8 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
         const from = dayInTimezone(now(), published.timezone)
         const to = addDays(from, DROP_OFF_WEEK_DAYS - 1)
         const map = await readDropOffMap(c.get("tx"), { companyId: published.companyId, projectId: published.id }, { fractionKey, from, to })
-        const { slug, name, language, timezone } = published
         const body: PublicDropOffPoints = {
-          project: { slug, name, language, timezone },
+          project: publicProjectOf(published),
           fraction: map.fraction === null || map.fraction === "unknown" ? null : { key: map.fraction.key, name: map.fraction.name },
           from,
           truncated: map.truncated,

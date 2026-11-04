@@ -25,6 +25,7 @@
     "./visits/__tests__/*": null,
     "./service-providers/__tests__/*": null,
     "./messaging/__tests__/*": null,
+    "./notifications/__tests__/*": null,
     "./privacy/__tests__/*": null,
     "./*": "./src/*.ts"
   },

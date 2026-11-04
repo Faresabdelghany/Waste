@@ -24,7 +24,7 @@ import {
 } from "../collection-days"
 
 const day = (date: string, fractions: string[], status: "collected" | "skipped" = "collected"): PublicCollectionDay => ({ date, serviceDate: date, fractions, status, note: null })
-const project = { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen" }
+const project = { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 
 describe("the calendar's bounds", () => {
   test("are the contracts', spelled again: the web imports them as types only", () => {
