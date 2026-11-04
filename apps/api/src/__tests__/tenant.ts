@@ -30,6 +30,7 @@ import { driverCommand, outboxEvent, pickup, proofOfService, route, session, ses
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
+import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scale-house"
 import {
   accountingAccount,
   accountingExport,
@@ -370,6 +371,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A weighbridge's ticket names the Unload it was written as (O27 of #290): it goes first.
     await owner.db.delete(weighbridgeTicket).where(eq(weighbridgeTicket.companyId, companyId))
     await owner.db.delete(fillReading).where(eq(fillReading.companyId, companyId))
+    // A scale ticket's lines are a ledger, and the ticket names its Unload and its tare (M16a of #293): all three go before the Unload.
+    await owner.db.delete(scaleTicketLine).where(eq(scaleTicketLine.companyId, companyId))
+    await owner.db.delete(scaleTicket).where(eq(scaleTicket.companyId, companyId))
+    await owner.db.delete(vehicleTare).where(eq(vehicleTare.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
@@ -377,6 +382,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(weighbridgeTicket).where(eq(weighbridgeTicket.companyId, companyId))
+    await tx.delete(scaleTicket).where(eq(scaleTicket.companyId, companyId))
+    await tx.delete(vehicleTare).where(eq(vehicleTare.companyId, companyId))
     await tx.delete(importRun).where(eq(importRun.companyId, companyId))
     await tx.delete(accountingProductAccount).where(eq(accountingProductAccount.companyId, companyId))
     await tx.delete(accountingVatCode).where(eq(accountingVatCode.companyId, companyId))

@@ -76,3 +76,5 @@ export * from "./weighbridge"
 export * from "./sensors"
 // Vehicle maintenance (O20 of #290): a vehicle's service plans and the Maintenance Orders that do them.
 export * from "./maintenance"
+// The scale house (M16a of #293): the tare register and the window's tickets with their lines.
+export * from "./scale-house"

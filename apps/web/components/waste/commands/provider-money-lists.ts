@@ -38,6 +38,12 @@ export const WEIGHTS_LIST: ModuleList = {
   initial: { statuses: [REVIEW_LABELS.captured] },
 }
 
+/** The scale house (M16a of #293): its tickets and its registered tares together, by status. */
+export const SCALE_HOUSE_LIST: ModuleList = {
+  readers: () => ({ statuses: status }),
+  initial: {},
+}
+
 /** A weighbridge's tickets (O27 of #290) open on what waits for the office, and filter by the route a ticket was matched to. */
 export const WEIGHBRIDGE_LIST: ModuleList = {
   readers: () => ({ statuses: status, routes: fact("Route") }),

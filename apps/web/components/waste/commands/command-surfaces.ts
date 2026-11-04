@@ -48,8 +48,9 @@ import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfac
 import { AccountingExportSurface, ExportPeriodSurface } from "./accounting-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
-import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHBRIDGE_LIST, WEIGHTS_LIST } from "./provider-money-lists"
+import { PROVIDER_PRICES_LIST, SCALE_HOUSE_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHBRIDGE_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { ScaleHousePrimarySurface, ScaleHouseRowSurface } from "./scale-house-surfaces"
 import { SensorPairingSurface } from "./sensor-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
@@ -215,6 +216,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "route-studio.weights": { primary: RecordUnloadSurface, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
   // A weighbridge's tickets (O27 of #290): sent by the weighbridge, never made by the office; an unmatched one matched or dismissed in its details, the queue first.
   "route-studio.weighbridge": { primary: null, rowActions: WeighbridgeTicketSurface, list: WEIGHBRIDGE_LIST },
+  // The scale house (M16a of #293): Weigh in and Register tare at the window; a ticket weighed out or voided, a tare re-weighed or retired, in its details.
+  "operate.scale-house": { primary: ScaleHousePrimarySurface, rowActions: ScaleHouseRowSurface, list: SCALE_HOUSE_LIST },
   // #291 C24: a provider's team invited through its own dialog on a provider's role, a member switched off and on in its details; the module lists the accounts, never the roles it reads beside them.
   "service-providers.service-provider-workspace": { primary: InviteTeamMemberSurface, rowActions: TeamMemberCommandsSurface, list: TEAM_LIST },
 }

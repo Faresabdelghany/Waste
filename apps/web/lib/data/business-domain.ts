@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -440,6 +440,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M16"],
     boundaryNote:
       "A Site Visit is one arrival at a recycling centre, admitted or refused with the reason; its charge is the Visit Rule's, made a billable event by Finance, and a mistake is voided, never deleted.",
+  },
+  {
+    key: "operate.scale-house",
+    workspaceId: "operate",
+    moduleId: "scale-house",
+    primaryBlueprintModule: "M24",
+    supportingBlueprintModules: ["M03", "M11", "M16"],
+    canonicalOwner: "Operate · Scale house",
+    personas: ["Site attendant", "Operations manager"],
+    upstream: ["M03", "M08", "M09"],
+    downstream: ["M11", "M16"],
+    boundaryNote:
+      "A Scale Ticket is one vehicle weighed in and out at one of our own sites, its load split by fraction and origin; one of our own vehicles' becomes its route's unload, and a mistake is voided, never deleted.",
   },
   {
     key: "route-studio.pickups",

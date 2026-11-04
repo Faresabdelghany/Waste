@@ -624,6 +624,13 @@
       "when": 1793800727146,
       "tag": "0088_weighbridge_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793803421661,
+      "tag": "0089_scale_house",
+      "breakpoints": true
     }
   ]
 }

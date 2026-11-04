@@ -81,6 +81,9 @@ function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonl
 /** The modules of the recycling centres' visits (M4 of #293): the plates, the cards and a household's visit history are personal data the office keeps, never a Service Provider's to read. */
 const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.site-access"]
 
+/** The Operate modules a Service Provider never reads: the visits', and the scale house's window (M16a of #293), whose tickets name the office's customers and walk-ins. */
+const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.scale-house"]
+
 /** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {
   return { moduleKey, actions }
@@ -232,7 +235,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW_EDIT),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW, VISIT_MODULES),
+      workspace("operate", VIEW, OFFICE_OPERATE),
       // The restricted service provider workspace reads these grants live:
       // fleet is fully self-managed, tickets can be raised, and service
       // provider users are fully administered by the manager. The routes it
@@ -263,7 +266,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW, VISIT_MODULES),
+      workspace("operate", VIEW, OFFICE_OPERATE),
     ),
   },
   {
@@ -301,6 +304,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     description: "Recycling-centre check-in and the visit ledger",
     system: true,
     // A recycling centre's staff (M4 of #293): the check-in records a visit and the ledger reads it, the register of plates and cards is read to answer a visitor, and nothing else. The web lands the role on `/check-in`, as a driver's lands on `/driver`.
-    grants: charter(only("operate.site-visits", ["view", "create"]), only("customers.site-access", VIEW)),
+    // The scale house's window too (M16a of #293): the tare register and the tickets, weighed in, completed and voided at the site.
+    grants: charter(only("operate.site-visits", ["view", "create"]), only("customers.site-access", VIEW), only("operate.scale-house", VIEW_EDIT_CREATE)),
   },
 ]
