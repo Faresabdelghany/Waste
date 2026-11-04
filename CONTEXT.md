@@ -72,6 +72,14 @@ _Avoid_: Contact, occupant (that is the tenant role)
 A Property changing occupant on a day: the outgoing customer's parties and subscriptions there end, and the incoming customer takes the same roles and a new agreement with the same products, the containers staying in service. A sale is a move of the owner.
 _Avoid_: Transfer (a container's stock movement), change of service (a subscription's own)
 
+**Tank Installation**:
+A septic tank, holding tank, small treatment plant or grease separator at a Property, with what it holds, where it lets its water out and how many months lie between emptyings. A Container stands for it in the plan, one tank at a time, so it is planned, stopped at and billed as any container is; its next emptying falls due its interval after the last one, not on a calendar's day.
+_Avoid_: Septic (a kind of it), well, cesspit
+
+**Tank Inspection**:
+What the office found when it inspected a Tank Installation — approved, remarks, defects or failed — with its findings and when it is next due. Appended, never rewritten.
+_Avoid_: Pre-trip check (a vehicle's), audit
+
 **Property Group**:
 A managed grouping of properties that share administration, reporting, service rules, or agreements.
 _Avoid_: Shared collection point, customer

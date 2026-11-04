@@ -107,9 +107,15 @@
 // pre-trip-rendering.test.ts pins the statements themselves.
 //
 // Migration 0092 (M23 of #293) grew it by `record-fill` and gave the stop its
-// fill estimate, so `CHANGED_IN_0092` maps today's two spellings onto 0075's
-// and 0055's, applied before both; inspections-rendering.test.ts pins the
+// fill estimate, so `CHANGED_IN_0092` maps its two spellings onto 0075's
+// and 0055's, applied after 0094's; inspections-rendering.test.ts pins the
 // statements themselves.
+//
+// Migration 0094 (M11 of #293) grew the receipt's kind by `record-volume` and
+// the proof by its `volume` kind and the `volume_litres` it carries, so
+// `CHANGED_IN_0094` maps today's spelling of both onto 0092's and 0038's,
+// applied first of all; tanks-rendering.test.ts pins the statements
+// themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -159,13 +165,16 @@ const throughRouteFk = (table: string, column: string, target: string): string =
 
 const sessionShape = (table: string): string => `CONSTRAINT "${table}_session_shape" CHECK ((${ref(table, "source")} = 'driver-app') = (${ref(table, "session_id")} is not null))`
 
-/** The proof's kind CASE, spelled as the file spells it, kind by kind. */
-const kindShape = (() => {
+/** The proof's kind CASE, spelled as the file spells it, kind by kind: as 0008 wrote it, and as 0094 (M11 of #293) did with the `volume` kind and every other kind forbidding its litres. */
+const kindShape = (asOf: "0008" | "0094"): string => {
   const column = (name: string) => ref("proof_of_service", name)
   const none = (name: string) => `${column(name)} is null`
   const some = (name: string) => `${column(name)} is not null`
-  const bare = [none("reason"), none("object_key"), none("weight_kg"), none("outcome")].join(" and ")
-  const reasoned = [some("reason"), none("object_key"), none("weight_kg"), none("outcome")].join(" and ")
+  const tanks = asOf >= "0094"
+  /** The weight column and, since 0094, the litres beside it: the weight given or not, the litres given only by a volume. */
+  const measures = (weight: boolean, litres = false) => [weight ? some("weight_kg") : none("weight_kg"), ...(tanks ? [litres ? some("volume_litres") : none("volume_litres")] : [])]
+  const bare = [none("reason"), none("object_key"), ...measures(false), none("outcome")].join(" and ")
+  const reasoned = [some("reason"), none("object_key"), ...measures(false), none("outcome")].join(" and ")
   const clauses = [
     `when 'arrival' then ${bare}`,
     `when 'completion' then ${bare}`,
@@ -174,14 +183,15 @@ const kindShape = (() => {
     `when 'problem' then ${reasoned} and ${some("note")}`,
     `when 'route-started' then ${bare}`,
     `when 'route-ended' then ${bare}`,
-    `when 'photo' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
-    `when 'weight' then ${[none("reason"), none("object_key"), some("weight_kg"), none("outcome")].join(" and ")}`,
-    `when 'signature' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
+    `when 'photo' then ${[none("reason"), some("object_key"), ...measures(false), none("outcome")].join(" and ")}`,
+    `when 'weight' then ${[none("reason"), none("object_key"), ...measures(true), none("outcome")].join(" and ")}`,
+    ...(tanks ? [`when 'volume' then ${[none("reason"), none("object_key"), ...measures(false, true), none("outcome")].join(" and ")}`] : []),
+    `when 'signature' then ${[none("reason"), some("object_key"), ...measures(false), none("outcome")].join(" and ")}`,
     `when 'note' then ${bare} and ${some("note")}`,
-    `when 'correction' then ${[none("object_key"), none("weight_kg"), some("outcome"), some("note")].join(" and ")} and ${column("source")} = 'dispatch'`,
+    `when 'correction' then ${[none("object_key"), ...measures(false), some("outcome"), some("note")].join(" and ")} and ${column("source")} = 'dispatch'`,
   ]
   return `CONSTRAINT "proof_of_service_kind_shape" CHECK (case ${column("kind")} ${clauses.join(" ")} else false end)`
-})()
+}
 
 const stampsShape = (() => {
   const column = (name: string) => ref("route", name)
@@ -295,8 +305,8 @@ const unloadTable = (asOf: "0008" | "0010" | "0045"): string => {
 /** What 0045 changed on one of the seven (O9 of #290): the unload's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first; weighbridge-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0045 = new Map([[unloadTable("0045"), unloadTable("0010")]])
 
-/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060) and by `pre-trip-check` (O13 of #290, migration 0075) and by `record-fill` (M23 of #293, migration 0092) — and as it wrote it as of 0075, 0060 and 0008. */
-const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092"): string =>
+/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060), by `pre-trip-check` (O13 of #290, migration 0075), by `record-fill` (M23 of #293, migration 0092) and by `record-volume` (M11 of #293, migration 0094) — and as it wrote it as of 0092, 0075, 0060 and 0008. */
+const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092" | "0094"): string =>
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -329,6 +339,7 @@ const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092"): string =>
       ...(asOf >= "0060" ? ["record-positions"] : []),
       ...(asOf >= "0075" ? ["pre-trip-check"] : []),
       ...(asOf >= "0092" ? ["record-fill"] : []),
+      ...(asOf >= "0094" ? ["record-volume"] : []),
     ),
     oneOfCheck("driver_command", "outcome", "applied", "rejected"),
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
@@ -479,8 +490,8 @@ const ADDED_IN_0032 = [
   index("pickup", "pickup_replacement_container_id_idx", "company_id", "replacement_container_id"),
 ]
 
-/** proof_of_service as drizzle-kit wrote it as of 0008, and as it writes it since 0038 (M5 of #293): the contaminant code an outcome is tagged with, on the kinds that record one. */
-const proofTable = (asOf: "0008" | "0038"): string =>
+/** proof_of_service as drizzle-kit wrote it as of 0008, as of 0038 (M5 of #293): the contaminant code an outcome is tagged with, on the kinds that record one, and as it writes it since 0094 (M11 of #293): the litres a tank was emptied of, the `volume` kind's. */
+const proofTable = (asOf: "0008" | "0038" | "0094"): string =>
   createLedger("proof_of_service", [
     '"route_id" uuid NOT NULL',
     '"pickup_id" uuid',
@@ -495,20 +506,22 @@ const proofTable = (asOf: "0008" | "0038"): string =>
     '"reason" text',
     '"note" text',
     '"weight_kg" integer',
+    ...(asOf >= "0094" ? ['"volume_litres" integer'] : []),
     '"object_key" text',
     '"outcome" text',
     ...(asOf >= "0038" ? ['"contaminant_code_id" uuid'] : []),
-    oneOfCheck("proof_of_service", "kind", ...PROOF_KINDS),
+    oneOfCheck("proof_of_service", "kind", ...PROOF_KINDS.filter((kind) => asOf >= "0094" || kind !== "volume")),
     oneOfCheck("proof_of_service", "source", ...SOURCES),
     oneOfCheck("proof_of_service", "reason", ...REASONS),
     oneOfCheck("proof_of_service", "outcome", ...PICKUP_OUTCOMES),
     geometryCheck("proof_of_service", "location"),
     positiveCheck("proof_of_service", "location_accuracy_m"),
     positiveCheck("proof_of_service", "weight_kg"),
+    ...(asOf >= "0094" ? [positiveCheck("proof_of_service", "volume_litres")] : []),
     // A stop's kinds name a pickup, the route's two name none, and three may stand on the route alone.
-    `CONSTRAINT "proof_of_service_pickup_shape" CHECK ((${ref("proof_of_service", "kind")} in (${list("arrival", "completion", "skip", "failure", "weight", "signature", "correction")}) and ${ref("proof_of_service", "pickup_id")} is not null) or (${ref("proof_of_service", "kind")} in (${list("route-started", "route-ended")}) and ${ref("proof_of_service", "pickup_id")} is null) or ${ref("proof_of_service", "kind")} in (${list("problem", "photo", "note")}))`,
+    `CONSTRAINT "proof_of_service_pickup_shape" CHECK ((${ref("proof_of_service", "kind")} in (${list("arrival", "completion", "skip", "failure", "weight", ...(asOf >= "0094" ? ["volume"] : []), "signature", "correction")}) and ${ref("proof_of_service", "pickup_id")} is not null) or (${ref("proof_of_service", "kind")} in (${list("route-started", "route-ended")}) and ${ref("proof_of_service", "pickup_id")} is null) or ${ref("proof_of_service", "kind")} in (${list("problem", "photo", "note")}))`,
     sessionShape("proof_of_service"),
-    kindShape,
+    kindShape(asOf >= "0094" ? "0094" : "0008"),
     ...(asOf >= "0038"
       ? [`CONSTRAINT "proof_of_service_contaminant_code_shape" CHECK (${ref("proof_of_service", "contaminant_code_id")} is null or ${ref("proof_of_service", "kind")} in (${list("completion", "skip", "failure", "correction")}))`]
       : []),
@@ -518,6 +531,12 @@ const proofTable = (asOf: "0008" | "0038"): string =>
 const CHANGED_IN_0038 = new Map([
   [pickupTable("0038"), pickupTable("0032")],
   [proofTable("0038"), proofTable("0008")],
+])
+
+/** What 0094 changed on two of the seven (M11 of #293): the receipt's and the proof's CREATE TABLE as drizzle-kit generates them now onto what 0092 and 0038 say. Applied first of all; tanks-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0094 = new Map([
+  [driverCommandTable("0094"), driverCommandTable("0092")],
+  [proofTable("0094"), proofTable("0038")],
 ])
 
 /** What 0038 added to the two beside the columns: each one's key into the contaminant codes and its index. */
@@ -538,7 +557,7 @@ const ADDED_IN_0053 = [
   index("pickup", "pickup_bulky_booking_id_idx", "company_id", "bulky_booking_id"),
 ]
 
-/** What 0092 changed on two of the seven (M23 of #293): the receipt's kind grown by `record-fill` and the stop's fill estimate, each CREATE TABLE as drizzle-kit generates it now onto what 0075 and 0055 say. Applied first of all; inspections-rendering.test.ts pins the statements themselves. */
+/** What 0092 changed on two of the seven (M23 of #293): the receipt's kind grown by `record-fill` and the stop's fill estimate, each CREATE TABLE as drizzle-kit generated it as of 0092 onto what 0075 and 0055 say. Applied after `CHANGED_IN_0094`; inspections-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0092 = new Map([
   [driverCommandTable("0092"), driverCommandTable("0075")],
   [pickupTable("0092"), pickupTable("0055")],
@@ -600,9 +619,9 @@ const expected = [
     `"last_seen_at" ${INSTANT} NOT NULL`,
     uniqueKey("session_route_id_project_key", "company_id", "project_id", "route_id", "id"),
   ]),
-  proofTable("0038"),
+  proofTable("0094"),
   unloadTable("0045"),
-  driverCommandTable("0092"),
+  driverCommandTable("0094"),
   outboxEventTable("weight-charges"),
   companyFk("route"),
   projectFk("route"),
@@ -762,6 +781,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
     .filter((statement) => !ADDED_IN_0055.includes(statement) && !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0094.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0092.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0075.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0060.get(statement) ?? statement)
@@ -806,14 +826,15 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0038 and 0024 changed are ones the schema generates today, the one 0032 changed is what 0038 maps the pickup back to, the one 0023 changed is what 0032 maps it back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0092.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0094.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0092.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0094.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0075.keys()) assert.ok([...CHANGED_IN_0092.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0060.keys()) assert.ok([...CHANGED_IN_0075.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0055.keys()) assert.ok([...CHANGED_IN_0092.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0055) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0053.keys()) assert.ok([...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0053) assert.ok(today.includes(statement), statement)
-    for (const statement of CHANGED_IN_0038.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0053.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0038.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0053.values()].includes(statement) || [...CHANGED_IN_0094.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0038) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0024.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0032.keys()) assert.ok([...CHANGED_IN_0038.values()].includes(statement), statement.split("\n")[0])
@@ -855,6 +876,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0060.size, 1, "the receipt's record-positions")
     assert.equal(CHANGED_IN_0075.size, 1, "the receipt's pre-trip-check")
     assert.equal(CHANGED_IN_0092.size, 2, "the receipt's record-fill and the stop's fill estimate")
+    assert.equal(CHANGED_IN_0094.size, 2, "the receipt's record-volume and the proof's volume")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
@@ -918,12 +940,12 @@ describe("the sync role and the publication", () => {
 describe("the checks of this context", () => {
   test("the proof's CASE is built from the domain's PROOF_SHAPES, one WHEN per kind, and the pickup shape names the kinds that may stand on the route", () => {
     const checks = checksOf(proofOfService)
-    assert.equal(`CONSTRAINT "proof_of_service_kind_shape" CHECK (${checks.get("proof_of_service_kind_shape")})`, kindShape)
+    assert.equal(`CONSTRAINT "proof_of_service_kind_shape" CHECK (${checks.get("proof_of_service_kind_shape")})`, kindShape("0094"))
     for (const kind of PROOF_KINDS) assert.ok(checks.get("proof_of_service_kind_shape")?.includes(`when '${kind}' then`), kind)
     assert.deepEqual(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "optional"), ["problem", "photo", "note"])
     assert.deepEqual(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "none"), ["route-started", "route-ended"])
     const pickupShape = checks.get("proof_of_service_pickup_shape") ?? ""
-    assert.match(pickupShape, /in \('arrival', 'completion', 'skip', 'failure', 'weight', 'signature', 'correction'\) and .*"pickup_id" is not null/)
+    assert.match(pickupShape, /in \('arrival', 'completion', 'skip', 'failure', 'weight', 'volume', 'signature', 'correction'\) and .*"pickup_id" is not null/)
     assert.match(pickupShape, /in \('route-started', 'route-ended'\) and .*"pickup_id" is null/)
     assert.match(pickupShape, /or .*"kind" in \('problem', 'photo', 'note'\)$/)
   })

@@ -15,6 +15,7 @@ import { property as propertyTable, sharedCollectionPoint } from "@waste/db/sche
 import { pickup as pickupTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
+import { tankInstallation } from "@waste/db/schema/tanks"
 import { withCompany } from "@waste/db/tenant"
 import {
   alreadyOnRoute,
@@ -286,6 +287,20 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
             .set({ location: null, notes: null, driverInstructions: null })
             .where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id))),
         )
+      }
+    })
+
+    test("a stop whose container stands for a tank on the route's day carries the tank, what the driver pumps; any other stop none (M11 of #293)", async () => {
+      const route = await minted({ pickups: 2 })
+      const tankId = testId()
+      await withCompany(pool.db, a.companyId, (tx) =>
+        tx.insert(tankInstallation).values({ id: tankId, companyId: a.companyId, projectId: a.projects.copenhagen.id, propertyId: fixtures.property.id, containerId: fixtures.containers[0].id, kind: "holding-tank", volumeLitres: 6000, outlet: "none", emptyingIntervalMonths: 12, validFrom: "2020-01-01" }),
+      )
+      try {
+        const found = await detail(route.id)
+        assert.deepEqual(found.pickups.map((pickup) => pickup.tank), [{ kind: "holding-tank", volumeLitres: 6000, outlet: "none" }, null])
+      } finally {
+        await withCompany(pool.db, a.companyId, (tx) => tx.delete(tankInstallation).where(and(eq(tankInstallation.companyId, a.companyId), eq(tankInstallation.id, tankId))))
       }
     })
 

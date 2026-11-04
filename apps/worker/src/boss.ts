@@ -182,7 +182,7 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
 
 /**
  * Moves what waits on each queue some job `inherits` onto every job that
- * inherits it: the waiting jobs (created, due for a retry, or active under a
+ * inherits it but one that `startsFresh`: the waiting jobs (created, due for a retry, or active under a
  * process that is gone) copied to each heir with their data and completed on
  * the source, in one transaction on the worker's pool, so a job is moved
  * whole or not at all. A source that does not exist is nothing to move.
@@ -190,7 +190,8 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
  */
 export async function drainInherited(boss: PgBoss, jobs: readonly AnyJob[], context: Pick<JobContext, "worker" | "log">): Promise<Map<string, number>> {
   const heirs = new Map<string, string[]>()
-  for (const job of jobs) if (job.inherits !== undefined) heirs.set(job.inherits, [...(heirs.get(job.inherits) ?? []), job.queue])
+  // A job that starts fresh is no heir: the backlog stays for the others, or expires (`startsFresh`).
+  for (const job of jobs) if (job.inherits !== undefined && job.startsFresh !== true) heirs.set(job.inherits, [...(heirs.get(job.inherits) ?? []), job.queue])
   const moved = new Map<string, number>()
   for (const [source, targets] of heirs) {
     if ((await boss.getQueue(source)) === null) continue

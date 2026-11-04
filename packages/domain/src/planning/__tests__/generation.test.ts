@@ -10,6 +10,7 @@ import { describe, test } from "node:test"
 import { WALK_CAP_DAYS } from "../../route-schemes/generation"
 import { ruleSignature } from "../../route-schemes/container-drift"
 import type { SchemeCalendar } from "../../route-schemes/occurrences"
+import type { TankGate } from "../../route-schemes/due-from-last"
 import type { SchemeRecurrence } from "../../route-schemes/recurrence"
 import {
   compatibilityKey,
@@ -280,6 +281,7 @@ const candidate = (containerId: string, label: string, values: Partial<StopCandi
   located: true,
   containedIn: ["area-1"],
   paused: false,
+  tank: null,
   ...values,
 })
 
@@ -287,6 +289,8 @@ const residualRule: StopRule = { fractionIds: ["residual"], containerTypeIds: []
 const ruleGroup = (id: string, position: number, rule: StopRule): StopGroup => ({ id, position, stopSource: "rule", rule, pickedContainerIds: [] })
 const manualGroup = (id: string, position: number, picked: string[]): StopGroup => ({ id, position, stopSource: "manual", rule: null, pickedContainerIds: picked })
 const noCompatibility: ReadonlySet<string> = new Set()
+/** A day no tank is judged on: no candidate of these tests is a tank unless it says so. */
+const ANY_DAY: TankGate = { day: "2026-06-01", held: new Set() }
 
 describe("ruleMatches and ruleMatchSet", () => {
   test("a rule matches on the fraction, restricts by container type only where it names any, and asks compatibility of the vehicle type it names", () => {
@@ -318,7 +322,7 @@ describe("a rule's own planning area (O30 of #290, row 2.17)", () => {
 
   test("two rule groups of one day, each within its own area, take their own containers; the first in position order still wins one inside both", () => {
     const candidates = [candidate("c1", "BIN-1", { containedIn: ["area-1", "area-north"] }), candidate("c2", "BIN-2"), candidate("c3", "BIN-3", { containedIn: ["area-north"] })]
-    const { stops } = resolveStops([ruleGroup("south", 1, residualRule), ruleGroup("north", 2, { ...residualRule, planningAreaId: "area-north" })], candidates, noCompatibility)
+    const { stops } = resolveStops([ruleGroup("south", 1, residualRule), ruleGroup("north", 2, { ...residualRule, planningAreaId: "area-north" })], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(stops.get("south")?.map((stop) => stop.containerId), ["c1", "c2"])
     assert.deepEqual(stops.get("north")?.map((stop) => stop.containerId), ["c3"])
   })
@@ -340,7 +344,7 @@ describe("a rule's own planning area (O30 of #290, row 2.17)", () => {
 describe("resolveStops", () => {
   test("a rule group's stops are its match set numbered 1..n; a manual group's are its picks in picked order with the day's place and fraction", () => {
     const candidates = [candidate("c2", "BIN-2"), candidate("c1", "BIN-1"), candidate("c9", "BIN-9", { wasteFractionId: "glass", sharedCollectionPointId: "point-9", propertyId: null })]
-    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("glass", 2, ["c9"])], candidates, noCompatibility)
+    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("glass", 2, ["c9"])], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(unlocated, [])
     assert.deepEqual(stops.get("residual"), [
       { containerId: "c1", position: 1, propertyId: "property-of-c1", sharedCollectionPointId: null, wasteFractionId: "residual" },
@@ -351,7 +355,7 @@ describe("resolveStops", () => {
 
   test("manual groups claim first in position order, then rule groups in position order take what is left: a container is on one route a day", () => {
     const candidates = [candidate("c1", "BIN-1"), candidate("c2", "BIN-2"), candidate("c3", "BIN-3")]
-    const { stops } = resolveStops([ruleGroup("first-rule", 1, residualRule), manualGroup("picked", 3, ["c2"]), ruleGroup("second-rule", 2, residualRule)], candidates, noCompatibility)
+    const { stops } = resolveStops([ruleGroup("first-rule", 1, residualRule), manualGroup("picked", 3, ["c2"]), ruleGroup("second-rule", 2, residualRule)], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(stops.get("picked")?.map((stop) => stop.containerId), ["c2"])
     assert.deepEqual(stops.get("first-rule")?.map((stop) => [stop.containerId, stop.position]), [["c1", 1], ["c3", 2]])
     assert.deepEqual(stops.get("second-rule"), [], "the first rule group won every match")
@@ -359,7 +363,7 @@ describe("resolveStops", () => {
 
   test("a rule match whose place has no location and a pick with no placement valid that day are unlocated, once each, and get no stop — a pick a manual group planned is not among them, though a rule wanted it too", () => {
     const candidates = [candidate("c1", "BIN-1"), candidate("c5", "BIN-5", { located: false, containedIn: [] })]
-    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5", "c7"]), manualGroup("picked-too", 3, ["c7"])], candidates, noCompatibility)
+    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5", "c7"]), manualGroup("picked-too", 3, ["c7"])], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(unlocated, ["c7"], "c7 has no placement that day and gets no stop; c5 is planned by the pick, so the rule that would have wanted it does not count it unlocated")
     assert.deepEqual(stops.get("residual")?.map((stop) => stop.containerId), ["c1"])
     // A manual pick is planned as picked, the place aside: c5 has a placement that day, so it is a stop.
@@ -370,13 +374,13 @@ describe("resolveStops", () => {
   test("a container a manual group planned is not counted unlocated for a rule group that would have wanted it: it has a stop, written from the pick's place, and the run's count is of containers nobody planned", () => {
     // c5's place has no geometry; a manual group picks it and a rule group's fraction matches it. One stop on the manual group, nothing unlocated.
     const candidates = [candidate("c1", "BIN-1"), candidate("c5", "BIN-5", { located: false, containedIn: [] })]
-    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c5"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility)
+    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c5"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(stops.get("picked")?.map((stop) => stop.containerId), ["c5"])
     assert.deepEqual(stops.get("residual")?.map((stop) => stop.containerId), ["c1"])
     assert.deepEqual(unlocated, [], "planned by the pick, so not unlocated for the rule")
     // The same container with no manual group wanting it is unlocated as before; group order does not matter, since manual groups claim first whatever their position.
-    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule)], candidates, noCompatibility).unlocated, ["c5"])
-    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5"])], candidates, noCompatibility).unlocated, [])
+    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule)], candidates, noCompatibility, ANY_DAY).unlocated, ["c5"])
+    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5"])], candidates, noCompatibility, ANY_DAY).unlocated, [])
   })
 
   test("a container whose subscription is paused that day (#291) has no stop from a manual group or a rule group, and is not unlocated: it is not wanted, not lost", () => {
@@ -386,7 +390,7 @@ describe("resolveStops", () => {
       candidate("c3", "BIN-3", { paused: true, located: false, containedIn: [] }),
       candidate("c4", "BIN-4", { paused: true }),
     ]
-    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c4", "c1"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility)
+    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c4", "c1"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(stops.get("picked")?.map((stop) => [stop.containerId, stop.position]), [["c1", 1]], "the paused pick is passed over, and the next takes its position")
     assert.deepEqual(stops.get("residual"), [], "c1 is the pick's, and the rest are paused")
     assert.deepEqual(unlocated, [], "a paused container is not one nobody could place, located or not")
@@ -397,9 +401,32 @@ describe("resolveStops", () => {
     )
   })
 
+  test("a tank (M11 of #293) is planned from its due date on, once: before it, or with a stop held on an earlier date, it waits like a pause — no stop, not unlocated, still in the drift stamp", () => {
+    const tank = (lastEmptiedOn: string | null) => ({ lastEmptiedOn, intervalMonths: 12 })
+    const candidates = [
+      candidate("c1", "TANK-1", { tank: tank("2025-06-01") }),
+      candidate("c2", "TANK-2", { tank: tank("2025-07-01") }),
+      candidate("c3", "TANK-3", { tank: tank(null) }),
+      candidate("c4", "TANK-4", { tank: tank("2025-01-01") }),
+      candidate("c5", "TANK-5", { tank: tank("2025-07-01"), located: false, containedIn: [] }),
+      candidate("c6", "BIN-6"),
+    ]
+    const gate: TankGate = { day: "2026-06-01", held: new Set(["c4"]) }
+    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c2"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility, gate)
+    assert.deepEqual(stops.get("picked"), [], "c2 is due on 1 July: its pick waits")
+    assert.deepEqual(stops.get("residual")?.map((stop) => stop.containerId), ["c6", "c1", "c3"], "in label order: a bin that is no tank, the tank due on the day, and the one never emptied")
+    assert.deepEqual(unlocated, [], "a tank that waits is not wanted that day, so not unlocated")
+    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule)], candidates, noCompatibility, { day: "2026-07-01", held: new Set() }).unlocated, ["c5"], "once due, a tank with no location is")
+    assert.deepEqual(
+      ruleMatchSet(candidates, residualRule, noCompatibility).map((match) => match.containerId),
+      ["c6", "c1", "c2", "c3", "c4"],
+      "the drift stamp reads what the rule matches: waiting is not drift",
+    )
+  })
+
   test("a rule group without a rule, or a day nothing is contained on, plans no stops and reports nothing unlocated it can place", () => {
     const outside = [candidate("c1", "BIN-1", { containedIn: [] })]
-    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), { ...ruleGroup("empty", 2, residualRule), rule: null }], outside, noCompatibility)
+    const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), { ...ruleGroup("empty", 2, residualRule), rule: null }], outside, noCompatibility, ANY_DAY)
     assert.deepEqual([stops.get("residual"), stops.get("empty"), unlocated], [[], [], []])
     assert.equal(noBoundaryInForce("2026-10-05"), "No planning area boundary in force on 2026-10-05; rule groups match no containers that day")
   })

@@ -81,3 +81,5 @@ export * from "./scale-house"
 export * from "./route-messages"
 // Field inspections (M23 of #293): an inspector's visits to containers and properties, and their photos.
 export * from "./inspections"
+// Septic-tank emptying (M11 of #293): the register of tank installations and their inspections.
+export * from "./tanks"

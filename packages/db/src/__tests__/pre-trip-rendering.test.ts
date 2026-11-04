@@ -32,8 +32,8 @@ const respelt = (table: string, column: string, name: string, values: readonly s
   `ALTER TABLE "wms"."${table}" ADD ${oneOfCheck(table, column, ...values).replace(/^CONSTRAINT "[^"]+"/, `CONSTRAINT "${name}"`)};`,
 ]
 
-/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0092 added (M23 of #293). */
-const KINDS_AS_OF_0075 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-fill")
+/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0092 added (M23 of #293), and `record-volume`, which 0094 added (M11 of #293). */
+const KINDS_AS_OF_0075 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-fill" && kind !== "record-volume")
 
 /** What drizzle-kit wrote into the tables already applied: the five checks respelt. */
 const ALTERED = [
@@ -85,7 +85,7 @@ describe("pre-trip inspection as drizzle-kit writes it", () => {
 
   test("the receipt's kinds grew by pre-trip-check, and a ticket's by vehicle-defect", () => {
     assert.equal(KINDS_AS_OF_0075.at(-1), "pre-trip-check")
-    assert.equal(KINDS_AS_OF_0075.length, DRIVER_COMMAND_KINDS.length - 1, "one kind added since")
+    assert.equal(KINDS_AS_OF_0075.length, DRIVER_COMMAND_KINDS.length - 2, "two kinds added since")
     assert.ok((TICKET_KINDS as readonly string[]).includes("vehicle-defect"))
   })
 })

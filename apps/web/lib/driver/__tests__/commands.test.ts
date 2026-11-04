@@ -1,4 +1,4 @@
-// The Driver App's commands (Issue #145, O1, O2, O8 and O13 of #290, M23 of #293): the door's seventeen kinds, which
+// The Driver App's commands (Issue #145, O1, O2, O8 and O13 of #290, M11 and M23 of #293): the door's eighteen kinds, which
 // of them carry a position or name an object, and the ids the browser mints for them — UUIDv7
 // through @waste/domain/ids over the browser's clock and randomness, each
 // after the last so the queue's key order is the order of the taps.
@@ -47,10 +47,10 @@ describe("the pilot's commands", () => {
     assert.equal(wholeKilograms("  "), undefined)
   })
 
-  test("a command carries a position exactly where its body takes one: never pause, resume, a note, a weight, the positions or a fill estimate, whose strict bodies would refuse it", () => {
+  test("a command carries a position exactly where its body takes one: never pause, resume, a note, a weight, the positions, a fill estimate or a tank's litres, whose strict bodies would refuse it", () => {
     assert.deepEqual(
       PILOT_COMMAND_KINDS.filter((kind) => !takesLocation(kind)),
-      ["pause", "resume", "add-weight", "add-note", "record-positions", "record-fill"],
+      ["pause", "resume", "add-weight", "add-note", "record-positions", "record-fill", "record-volume"],
     )
     for (const kind of PILOT_COMMAND_KINDS) assert.equal(takesLocation(kind), "location" in COMMAND_BODIES[kind].shape, kind)
   })

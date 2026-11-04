@@ -1,5 +1,5 @@
 // The Driver App's commands (Issue #145, decided on #125; O1, O2, O8 and O13
-// of #290, M23 of #293): the driver door's seventeen kinds, each an
+// of #290, M11 and M23 of #293): the driver door's eighteen kinds, each an
 // envelope of `@waste/contracts/driver-commands`, imported as a type only, so
 // no zod reaches the browser (CLAUDE.md, contracts). The door parses each
 // body against its kind and answers a shape mistake as that command's
@@ -36,6 +36,7 @@ export const PILOT_COMMAND_KINDS = [
   "record-positions",
   "pre-trip-check",
   "record-fill",
+  "record-volume",
 ] as const
 export type PilotCommandKind = (typeof PILOT_COMMAND_KINDS)[number]
 
@@ -64,8 +65,8 @@ export const NOTE_MAX = 2000
 /** The body a kind takes. */
 export type PilotBody<Kind extends PilotCommandKind> = Extract<PilotCommand, { kind: Kind }>["body"]
 
-/** The kinds whose strict bodies take no position: `pause` and `resume` carry nothing at all, a weight, a note and a fill estimate only themselves, and `record-positions` its fixes, each with its own (O8 of #290). */
-const WITHOUT_LOCATION: ReadonlySet<PilotCommandKind> = new Set(["pause", "resume", "add-weight", "add-note", "record-fill", "record-positions"])
+/** The kinds whose strict bodies take no position: `pause` and `resume` carry nothing at all, a weight, a note, a fill estimate and a tank's litres only themselves, and `record-positions` its fixes, each with its own (O8 of #290). */
+const WITHOUT_LOCATION: ReadonlySet<PilotCommandKind> = new Set(["pause", "resume", "add-weight", "add-note", "record-fill", "record-positions", "record-volume"])
 
 /** Whether the kind's body takes the tap's position. */
 export function takesLocation(kind: PilotCommandKind): boolean {

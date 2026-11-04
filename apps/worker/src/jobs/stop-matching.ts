@@ -15,7 +15,12 @@
 // the subscription is in force that day (#291, slice 10): a paused row is
 // still a candidate, `paused`, so the domain passes it over in every group
 // without counting it unlocated, and what a rule matches — the drift stamp —
-// still sees it.
+// still sees it. And the tank installation it stands for that day (M11 of
+// #293), whose due-from-last cadence the domain judges each day by
+// (`tankWaits`): its interval, and its last emptying — the container's latest
+// completed stop (`lastEmptyings`, @waste/db/query/tank-emptyings, the reading
+// the API's register answers too), else the register's word for one before
+// the platform — read once for the run's tanks after the statement.
 //
 // One statement for every day of the walk, `unnest` over the dates, so a
 // year's run is one round trip and not three hundred; the domain's
@@ -36,11 +41,13 @@
 // fence bounds it to the company as it bounds every request; the project is a
 // `where` beside it.
 import type { Tx } from "@waste/db/client"
+import { lastEmptyings } from "@waste/db/query/tank-emptyings"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { planningAreaBoundary } from "@waste/db/schema/planning-areas"
+import { tankInstallation } from "@waste/db/schema/tanks"
 import type { StopCandidate } from "@waste/domain/planning/generation"
 import { sql } from "drizzle-orm"
 
@@ -55,7 +62,13 @@ type Row = {
   located: boolean
   contained_in: string[]
   paused: boolean
+  /** The interval of the tank it stands for that day; null for a container that stands for none. */
+  tank_interval_months: number | null
+  tank_last_emptied_on: string | null
 }
+
+/** The later of two days, either of which may be absent. */
+const later = (a: string | null, b: string | null): string | null => (a === null ? b : b === null ? a : a > b ? a : b)
 
 /**
  * The stop candidates of a project for each of the days, keyed by day: the
@@ -86,7 +99,9 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       exists (
         select 1 from ${subscriptionPause}
         where ${subscriptionPause.companyId} = ${subscription.companyId} and ${subscriptionPause.subscriptionId} = ${subscription.id} and ${validOn(subscriptionPause, sql`d.day`)}
-      ) as paused
+      ) as paused,
+      tank.emptying_interval_months as tank_interval_months,
+      tank.last_emptied_on::text as tank_last_emptied_on
     from unnest(${sql.param([...days])}::text[]::date[]) as d(day)
     join ${container} on ${container.companyId} = ${scope.companyId} and ${container.projectId} = ${scope.projectId}
     join ${containerServicePlacement}
@@ -100,8 +115,13 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       and ${validOn(agreement, sql`d.day`)}
     left join ${property} on ${property.companyId} = ${subscription.companyId} and ${property.id} = ${subscription.propertyId}
     left join ${sharedCollectionPoint} on ${sharedCollectionPoint.companyId} = ${subscription.companyId} and ${sharedCollectionPoint.id} = ${subscription.sharedCollectionPointId}
+    left join lateral (
+      select ${tankInstallation.emptyingIntervalMonths} as emptying_interval_months, ${tankInstallation.lastEmptiedOn} as last_emptied_on from ${tankInstallation}
+      where ${tankInstallation.companyId} = ${container.companyId} and ${tankInstallation.containerId} = ${container.id} and ${validOn(tankInstallation, sql`d.day`)}
+    ) as tank on true
     order by d.day, ${container.label}, ${container.id}
   `)
+  const emptyings = await lastEmptyings(tx, scope.companyId, [...new Set(rows.filter((row) => row.tank_interval_months !== null).map((row) => row.container_id))])
   for (const row of rows) {
     byDay.get(row.service_date)?.push({
       containerId: row.container_id,
@@ -113,6 +133,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       located: row.located,
       containedIn: row.contained_in,
       paused: row.paused,
+      tank: row.tank_interval_months === null ? null : { lastEmptiedOn: later(emptyings.get(row.container_id)?.on ?? null, row.tank_last_emptied_on), intervalMonths: row.tank_interval_months },
     })
   }
   return byDay

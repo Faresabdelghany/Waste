@@ -346,14 +346,34 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     for (const day of days) if (!covered.has(day)) counts.warnings.push(noGroupBoundaryInForce(groupOf.get(group.id)?.name ?? group.id, day))
   }
 
-  // Every group's stops per day, the tie-breaks applied once per day over the groups that write that day.
+  // A tank's emptying is planned once (M11 of #293): a tank with an open stop this run does not write — the office's own, or one on a route it leaves as it is — waits on every day, and one the run plans waits on its later days (`tankWaits`).
+  const refreshed = new Set(plan.decisions.flatMap((decision) => (decision.kind === "refresh" || decision.kind === "cancel" || decision.kind === "trim" ? [decision.routeId] : [])))
+  const tanks = [...new Set([...candidatesByDay.values()].flatMap((candidates) => candidates.filter((candidate) => candidate.tank !== null).map((candidate) => candidate.containerId)))]
+  const held = new Set(
+    tanks.length === 0
+      ? []
+      : (
+          await tx
+            .select({ containerId: pickup.containerId, routeId: pickup.routeId, origin: pickup.origin })
+            .from(pickup)
+            .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+            .where(and(eq(pickup.companyId, companyId), inArray(pickup.containerId, tanks), eq(pickup.status, "planned"), sql`${route.status} <> 'cancelled'`, gte(route.serviceDate, plan.walk.from)))
+        )
+          .filter((stop) => stop.origin === "office" || !refreshed.has(stop.routeId))
+          .flatMap((stop) => (stop.containerId === null ? [] : [stop.containerId])),
+  )
+
+  // Every group's stops per day, the tie-breaks applied once per day over the groups that write that day, in date order so a tank's first due day takes it.
   const stopsByDay = new Map<string, ReturnType<typeof resolveStops>>()
   const unlocated = new Set<string>()
-  for (const day of new Set(writing.map((decision) => decision.serviceDate))) {
+  for (const day of [...new Set(writing.map((decision) => decision.serviceDate))].sort()) {
     const running = writing.filter((decision) => decision.serviceDate === day).map((decision) => stopGroupOf.get(decision.groupId)!)
-    const resolved = resolveStops(running, candidatesByDay.get(day) ?? [], compatible)
+    const candidates = candidatesByDay.get(day) ?? []
+    const resolved = resolveStops(running, candidates, compatible, { day, held: new Set(held) })
     stopsByDay.set(day, resolved)
     for (const id of resolved.unlocated) unlocated.add(id)
+    const tankIds = new Set(candidates.filter((candidate) => candidate.tank !== null).map((candidate) => candidate.containerId))
+    for (const stops of resolved.stops.values()) for (const stop of stops) if (tankIds.has(stop.containerId)) held.add(stop.containerId)
   }
   counts.unlocated = unlocated.size
 

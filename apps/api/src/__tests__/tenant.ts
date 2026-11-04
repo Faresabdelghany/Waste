@@ -32,6 +32,7 @@ import { fieldInspection, fieldInspectionPhoto, rightSizingProposal } from "@was
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scale-house"
+import { tankInspection, tankInstallation } from "@waste/db/schema/tanks"
 import {
   accountingAccount,
   accountingExport,
@@ -346,6 +347,8 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    // A tank's inspections (M11 of #293), a ledger naming the tank and an account.
+    await owner.db.delete(tankInspection).where(eq(tankInspection.companyId, companyId))
     await owner.db.delete(accountingExportLine).where(eq(accountingExportLine.companyId, companyId))
     await owner.db.delete(accountingExportVoucher).where(eq(accountingExportVoucher.companyId, companyId))
     await owner.db.delete(accountingExport).where(eq(accountingExport.companyId, companyId))
@@ -487,6 +490,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // The fill-level sensors (O26 of #290): a pairing names its sensor and its container, so both go before the containers; the readings went above, as the owner.
     await tx.delete(sensorPairing).where(eq(sensorPairing.companyId, companyId))
     await tx.delete(sensor).where(eq(sensor.companyId, companyId))
+    // A tank names its container and its property (M11 of #293): it goes before both.
+    await tx.delete(tankInstallation).where(eq(tankInstallation.companyId, companyId))
     // An Application names a customer, a place and a subscription (M7 of #293): it goes before all three.
     await tx.delete(application).where(eq(application.companyId, companyId))
     await tx.delete(subscriptionPause).where(eq(subscriptionPause.companyId, companyId))

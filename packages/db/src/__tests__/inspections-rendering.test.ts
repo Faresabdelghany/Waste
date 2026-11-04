@@ -63,8 +63,8 @@ describe("field inspections as drizzle-kit writes them", () => {
     assert.match(text, /^-- Field inspections and the driver's fill estimate \(M23a of #293/)
   })
 
-  test("the receipt's kinds grew by record-fill, last", () => {
-    assert.equal(DRIVER_COMMAND_KINDS.at(-1), "record-fill")
+  test("the receipt's kinds grew by record-fill, last as of 0092 (0094's record-volume follows it)", () => {
+    assert.equal(DRIVER_COMMAND_KINDS.at(-2), "record-fill")
   })
 })
 

@@ -44,6 +44,7 @@ import { createDb, type Database, type Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
+import { tankInstallation } from "@waste/db/schema/tanks"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
@@ -910,6 +911,49 @@ describe("generation against a migrated database", { skip }, () => {
     assert.equal(resumed.unlocated, 1)
     assert.deepEqual(await stopsOn(b.residualGroup, "2026-10-15"), [b.bin1, b.bin3], "the Thursday after: bin 1 is back")
     assert.deepEqual(await stopsOn(b.glassGroup, "2026-10-15"), [b.glassBin], "and so is the pick")
+  })
+
+  test("a tank (M11 of #293) is a stop on the first service day on or after its emptying falls due, and on no other; an emptying completed moves the next a year on, and the later routes drop it", async () => {
+    // Company b again, far from its other windows: bin 3 at Havnegade stands for a tank last emptied on 3 March 2026, due on Wednesday 3 March 2027.
+    const march = { from: "2027-03-01", to: "2027-03-14" }
+    const [tank] = await ownerPool.db
+      .insert(tankInstallation)
+      .values({ companyId: b.company, projectId: b.project, propertyId: b.havnegade, containerId: b.bin3, kind: "septic-tank", volumeLitres: 3000, outlet: "soakaway", emptyingIntervalMonths: 12, lastEmptiedOn: "2026-03-03", validFrom: OPENED })
+      .returning({ id: tankInstallation.id })
+    const generateB = async () => {
+      const runId = await runFor(b.scheme, b.company, b.project, march)
+      const outcome = await runGeneration({ generationRunId: runId, companyId: b.company }, null, context())
+      assert.equal(outcome.kind, "succeeded")
+    }
+    const stopsOn = async (day: string): Promise<string[]> => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, day)))
+      return row === undefined ? [] : (await pickupsOf(row.id)).map((stop) => stop.containerId ?? "")
+    }
+    try {
+      await generateB()
+      assert.equal((await stopsOn("2027-03-01")).includes(b.bin3), false, "Monday the 1st: not yet due")
+      assert.deepEqual(await stopsOn("2027-03-04"), [b.bin1, b.bin3], "Thursday the 4th: the first service day on or after the 3rd")
+      for (const day of ["2027-03-08", "2027-03-11"]) assert.equal((await stopsOn(day)).includes(b.bin3), false, `${day}: its stop is held on the 4th`)
+      await generateB()
+      assert.deepEqual(await stopsOn("2027-03-04"), [b.bin1, b.bin3], "a second run plans it on the same day, and once")
+      assert.equal((await stopsOn("2027-03-08")).includes(b.bin3), false)
+
+      // The tanker empties it on the 4th.
+      const [thursday] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, "2027-03-04")))
+      await ownerPool.db
+        .update(pickup)
+        .set({ status: "completed", outcomeAt: new Date("2027-03-04T09:00:00Z") })
+        .where(and(eq(pickup.routeId, thursday.id), eq(pickup.containerId, b.bin3)))
+      await ownerPool.db
+        .update(tankInstallation)
+        .set({ lastEmptiedOn: null })
+        .where(eq(tankInstallation.id, tank.id))
+      await generateB()
+      for (const day of ["2027-03-08", "2027-03-11"]) assert.equal((await stopsOn(day)).includes(b.bin3), false, `${day}: due again on 4 March 2028`)
+      assert.ok((await stopsOn("2027-03-04")).includes(b.bin3), "the emptying it was stays on its route")
+    } finally {
+      await ownerPool.db.delete(tankInstallation).where(eq(tankInstallation.id, tank.id))
+    }
   })
 
   test("a season runs the scheme at its own cadence (O17 of #290): every other week in summer, the routes between not written; the season gone, the next run writes them", async () => {
