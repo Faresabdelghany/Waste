@@ -17,9 +17,6 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { BILLABLE_EVENT_KINDS, CANCEL_REASONS } from "@waste/domain/finance/vocabulary"
-import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
-
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { billableEvent } from "../schema/finance"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
@@ -31,20 +28,21 @@ import { touchUpdatedAt } from "../sql/touch-updated-at"
 import { OUTBOX_AGGREGATES_AS_OF_0054, OUTBOX_KINDS_AS_OF_0054 } from "./outbox-as-of"
 import { checksOf, index, oneOfCheck, projectFkTo, ref } from "./rendering"
 import { statementsFor } from "./specimen"
+import { BILLABLE_EVENT_KINDS_AS_OF_WEIGHT_CHARGES, CANCEL_REASONS_AS_OF_WEIGHT_CHARGES, kindShapeAsOfWeightCharges, PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES } from "./window-prices-as-of"
 
 const NEW_TABLES = { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleStep, visitRuleFreeFraction }
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The units 0054 wrote: every unit before the item (#449) and the tonne (O28 of #290), which later migrations added. */
-const UNITS_AS_OF_0054 = PRODUCT_UNITS.filter((unit) => unit !== "item" && unit !== "tonne")
+/** The units 0054 wrote: every unit as of the weight charges' (window-prices-as-of.ts) before the item (#449) and the tonne (O28 of #290), which later migrations added. */
+const UNITS_AS_OF_0054 = PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES.filter((unit) => unit !== "item" && unit !== "tonne")
 
 /** The clause the weight charges' migration added to the kind's shape (O28 of #290), after 0054's. */
 const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's vocabularies as 0054 spelled them: today's less what the weight charges' migration added (O28 of #290). */
-const KINDS_AS_OF_0054 = BILLABLE_EVENT_KINDS.filter((kind) => kind !== "weight")
-const REASONS_AS_OF_0054 = CANCEL_REASONS.filter((reason) => reason !== "weight-revised")
+/** The event's vocabularies as 0054 spelled them: the weight charges' (window-prices-as-of.ts) less what that migration added (O28 of #290). */
+const KINDS_AS_OF_0054 = BILLABLE_EVENT_KINDS_AS_OF_WEIGHT_CHARGES.filter((kind) => kind !== "weight")
+const REASONS_AS_OF_0054 = CANCEL_REASONS_AS_OF_WEIGHT_CHARGES.filter((reason) => reason !== "weight-revised")
 
 /** The clause 0054 adds to the event's kind shape. */
 const VISIT_CLAUSE = `when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
@@ -68,7 +66,7 @@ const ALTERED = (): string[] => {
     alter("billable_event", `ADD CONSTRAINT "billable_event_visit_shape" CHECK (${events.get("billable_event_visit_shape")})`),
     alter("billable_event", `ADD ${oneOfCheck("billable_event", "kind", ...KINDS_AS_OF_0054)}`),
     alter("billable_event", `ADD ${oneOfCheck("billable_event", "cancel_reason", ...REASONS_AS_OF_0054)}`),
-    alter("billable_event", `ADD CONSTRAINT "billable_event_kind_shape" CHECK (${events.get("billable_event_kind_shape")?.replace(WEIGHT_CLAUSE, "")})`),
+    alter("billable_event", `ADD CONSTRAINT "billable_event_kind_shape" CHECK (${kindShapeAsOfWeightCharges().replace(WEIGHT_CLAUSE, "")})`),
   ]
 }
 

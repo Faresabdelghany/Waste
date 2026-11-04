@@ -112,6 +112,7 @@ import { company, project, serviceProvider } from "./organisation"
 import { planningArea } from "./planning-areas"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { ticket } from "./resolution"
+import { scaleTicketLine } from "./scale-house"
 import { siteVisit } from "./site-visits"
 import { wms } from "./wms"
 
@@ -173,6 +174,8 @@ export const priceListRow = wms.table(
     indexLabel: text(),
     /** 320 for +3.2 %; a negative figure is a deflator. */
     indexBasisPoints: integer(),
+    /** A quantity tier (M16b of #293): the row applies from this many of its product's unit; null for a row of any quantity, judged as every row was before tiers. Part of the row's key beside its conditions, so a list may hold one row per tier. */
+    fromQuantity: integer(),
     /** The condition set as one NOT NULL value the exclusion constraint can key on, since a nullable column may not be in its key. Never on the wire. */
     conditionKey: text()
       .notNull()
@@ -193,6 +196,7 @@ export const priceListRow = wms.table(
     validPeriod(t),
     oneOf(t.customerKind, CUSTOMER_KINDS),
     check(tableObjectName(t.id.table, "unit_price_not_negative", "priceListRow"), sql`${t.unitPriceMinor} >= 0`),
+    positive(t.fromQuantity),
     // The three index columns are null together or none of them, and a row is not indexed from itself; a null passes the last, as the provider price's shape.
     check(
       tableObjectName(t.id.table, "index_shape", "priceListRow"),
@@ -387,6 +391,8 @@ export const billableEvent = wms.table(
     /** On a `weight` event (O28 of #290): the Unload whose reviewed net it charges a share of, and that share in whole kilograms; the event's quantity stays one, its unit price the weighed load's amount. */
     unloadId: uuid(),
     weightKg: integer(),
+    /** On a `scale-ticket` event (M16b of #293): the Scale Ticket line it charges, priced per tonne or per cubic metre; `weight_kg` is the line's net. */
+    scaleTicketLineId: uuid(),
     /** On a `subscription` event, a recurring charge (#291 C2): the charge period, half-open, and how many of its days were charged of the days it has — what the unit price was prorated by. On a `hire` event (M14 of #293) the calendar month, its charged days (the quantity) and the month's days. */
     chargePeriodFrom: date(),
     chargePeriodTo: date(),
@@ -424,6 +430,7 @@ export const billableEvent = wms.table(
     projectReference(t, [t.ticketId], ticket),
     projectReference(t, [t.visitId], siteVisit),
     projectReference(t, [t.unloadId], unload),
+    projectReference(t, [t.scaleTicketLineId], scaleTicketLine),
     // The hire's placement, through its container: the placement's project key, the stock ledger's reference.
     projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     // The reversed event is one of the same project, through the table's own project key.
@@ -457,14 +464,16 @@ export const billableEvent = wms.table(
     // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), a recycling-centre visit's its visit (#393), and a weight charge its Unload and its stop (O28 of #290).
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
-      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'visit' then ${t.visitId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'weight' then ${t.unloadId} is not null and ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'visit' then ${t.visitId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'weight' then ${t.unloadId} is not null and ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'scale-ticket' then ${t.scaleTicketLineId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
     ),
     // Only a Pickup Exception's charge names its evidence (#293 M5).
     check(tableObjectName(t.id.table, "evidence_shape", "billableEvent"), sql`${t.evidenceProofId} is null or ${t.kind} = 'pickup-exception'`),
     // Only a recycling-centre visit's charge names its visit (#393).
     check(tableObjectName(t.id.table, "visit_shape", "billableEvent"), sql`${t.visitId} is null or ${t.kind} = 'visit'`),
     // Only a weight charge names its Unload, and it carries its share of the weight with it (O28 of #290).
-    check(tableObjectName(t.id.table, "weight_shape", "billableEvent"), sql`(${t.kind} = 'weight') = (${t.unloadId} is not null) and (${t.unloadId} is null) = (${t.weightKg} is null)`),
+    check(tableObjectName(t.id.table, "weight_shape", "billableEvent"), sql`(${t.kind} = 'weight') = (${t.unloadId} is not null) and (${t.kind} in ('weight', 'scale-ticket')) = (${t.weightKg} is not null)`),
+    // A window line's charge (M16b of #293) names its line, and only it does.
+    check(tableObjectName(t.id.table, "scale_ticket_shape", "billableEvent"), sql`(${t.kind} = 'scale-ticket') = (${t.scaleTicketLineId} is not null)`),
     // An event is a person's or the consumer's, never both and never neither; a recurring charge and a hire are the billing run's, neither (#291 C2, M14 of #293).
     check(
       tableObjectName(t.id.table, "origin_shape", "billableEvent"),
@@ -480,10 +489,12 @@ export const billableEvent = wms.table(
     // A hold's instant and reason come together, and a person only with them: the project's auto-hold holds with no person; only a priced event is held, since a blocked one is not ready to hold back.
     check(tableObjectName(t.id.table, "hold_shape", "billableEvent"), sql`(${t.heldAt} is null) = (${t.holdReason} is null) and (${t.heldBy} is null or ${t.heldAt} is not null) and (${t.heldAt} is null or ${t.blockReason} is null)`),
     // The consumer's idempotency key: one row of a kind per outbox event — a tagged collection's charge and its exception's are two of one (#293 M5) — a reversal keyed by the event it undoes, and a weight charge by its stop, below.
-    uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId, t.kind).where(sql`${t.sourceEventId} is not null and ${t.kind} not in ('reversal', 'weight')`),
+    uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId, t.kind).where(sql`${t.sourceEventId} is not null and ${t.kind} not in ('reversal', 'weight', 'scale-ticket')`),
     // A weight review charges each stop its Unload carried once (O28 of #290): one weight row per outbox event and stop.
     uniqueIndex(tableObjectName(t.companyId.table, "weight_charge_idx", "billableEvent")).on(t.companyId, t.sourceEventId, t.pickupId).where(sql`${t.kind} = 'weight'`),
     tenantIndex(t, t.unloadId),
+    // One charge per window line (M16b of #293): the line's ticket is charged once, and the index is the reference's.
+    uniqueIndex(tableObjectName(t.companyId.table, "scale_ticket_charge_idx", "billableEvent")).on(t.companyId, t.scaleTicketLineId).where(sql`${t.kind} = 'scale-ticket'`),
     // The billing run's idempotency key for a recurring charge (#291 C2): one per subscription and charge period, so a run again charges nothing twice.
     uniqueIndex(tableObjectName(t.companyId.table, "subscription_charge_idx", "billableEvent")).on(t.companyId, t.subscriptionId, t.chargePeriodFrom).where(sql`${t.kind} = 'subscription'`),
     // The run's key for a hire (M14 of #293): one per placement and month, so a run again charges no day twice. A cancelled charge keeps its key, as a recurring charge's does (#291 C2): the office's cancel is never undone by the next run, and a month cancelled by mistake is entered again by hand.

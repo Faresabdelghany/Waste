@@ -80,7 +80,8 @@
 // and the rows — read only under a product sold by the tonne, since no other
 // is charged here; and the Unload's live weight events under their locks.
 import { isChargeable, judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
-import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts, WeighedStopFacts, WeightReviewedFacts } from "@waste/domain/finance/from-event"
+import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, ScaleTicketEventFacts, ScaleTicketLineFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts, WeighedStopFacts, WeightReviewedFacts } from "@waste/domain/finance/from-event"
+import { soldAtTheWindow } from "@waste/domain/finance/window"
 import { chargedByWeight, stopsCarried, tonnageShares } from "@waste/domain/finance/tonnage"
 import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
@@ -95,6 +96,8 @@ import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
 import { priceVisitCharge, type VisitRow } from "@waste/db/commands/site-visits"
+import { liveScaleTicketEventsOf, windowLinesOf } from "@waste/db/commands/window-prices"
+import { scaleTicket } from "@waste/db/schema/scale-house"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
@@ -654,4 +657,49 @@ export async function weightFacts(tx: Tx, companyId: string, unloadId: string): 
     weighed.push({ pickupId: share.pickupId, weightKg: share.weightKg, planningAreaId: onRoute.planningAreaId, containerTypeId: stop.containerTypeId, wasteFractionId: stop.wasteFractionId, placement: priced })
   }
   return { facts: { ...base, stops: weighed }, live }
+}
+
+/**
+ * A Scale Ticket's event as the domain reads it (M16b of #293): the ticket
+ * under its row lock — its completion and its void, on two queues, take turns
+ * — completed now or not; its weighed-out day on its project's clock; an
+ * account's agreement; its lines, each with its product's rows on the
+ * agreement's list in force on that day where it could be priced; and its
+ * live `scale-ticket` events. A ticket that is not there is a broken key and
+ * thrown.
+ */
+export async function scaleTicketFacts(tx: Tx, companyId: string, kind: ScaleTicketEventFacts["kind"], ticketId: string): Promise<{ facts: ScaleTicketEventFacts; live: EventReading[] }> {
+  await lockRow(tx, scaleTicket, { companyId, id: ticketId })
+  const [found] = await tx
+    .select({ projectId: scaleTicket.projectId, status: scaleTicket.status, agreementId: scaleTicket.agreementId, weighedOutAt: scaleTicket.weighedOutAt })
+    .from(scaleTicket)
+    .where(and(eq(scaleTicket.companyId, companyId), eq(scaleTicket.id, ticketId)))
+    .limit(1)
+  if (found === undefined) throw new Error(`${kind} names scale ticket ${ticketId}, which is not in company ${companyId}`)
+  const scope = { companyId, projectId: found.projectId }
+  const lines = await windowLinesOf(tx, companyId, ticketId)
+  const live = await liveScaleTicketEventsOf(tx, companyId, lines.map((line) => line.lineId))
+  const serviceDate = found.weighedOutAt === null ? null : dayInTimezone(found.weighedOutAt, await projectTimezone(tx, companyId, found.projectId))
+  const facts = found.agreementId === null ? undefined : await agreementFacts(tx, scope, found.agreementId)
+  const completed = found.status === "completed"
+  // A void, a walk-in's ticket, or one charged already is judged without its prices; the lists are read where a price could come of them.
+  const priced = kind === "scale-ticket-completed" && completed && facts !== undefined && facts.status !== "draft" && serviceDate !== null && live.length === 0
+  const list = priced ? await listInForce(tx, scope, facts.priceListId, serviceDate) : undefined
+  const asLines: ScaleTicketLineFacts[] = []
+  for (const line of lines) {
+    const rows = list !== undefined && line.product !== null && soldAtTheWindow(line.product.unit) ? await rowsOn(tx, companyId, list.id, line.product.id, serviceDate!) : null
+    asLines.push({ lineId: line.lineId, wasteFractionId: line.wasteFractionId, netKg: line.netKg, volumeLitres: line.volumeLitres, product: line.product, priceList: list === undefined || rows === null ? null : { id: list.id, currency: list.currency, rows } })
+  }
+  return {
+    facts: {
+      kind,
+      ticketId,
+      serviceDate,
+      completed,
+      agreement: facts === undefined ? null : { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
+      lines: asLines,
+      liveEvents: live.flatMap((row) => liveFacts(row) ?? []),
+    },
+    live,
+  }
 }

@@ -610,6 +610,13 @@
       "when": 1793796876777,
       "tag": "0100_scale_house",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793797506182,
+      "tag": "0101_window_prices",
+      "breakpoints": true
     }
   ]
 }
