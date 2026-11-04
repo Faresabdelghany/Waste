@@ -129,6 +129,7 @@ export const AUDITED_TABLES = [
   "sensor_pairing",
   "notification_preference",
   "notification_rule",
+  "notification_rule_area",
   "tank_installation",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]

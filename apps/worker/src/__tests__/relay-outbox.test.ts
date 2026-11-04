@@ -190,7 +190,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
         { queue: "outbox.pickup-failed.resolution", id: a1 },
         { queue: "outbox.pickup-failed.finance", id: a1 },
         { queue: "outbox.pickup-failed.customer-notices", id: a1 },
-        { queue: "outbox.route-cancelled", id: a2 },
+        { queue: "outbox.route-cancelled.customer-notices", id: a2 },
         { queue: "outbox.command-rejected.resolution", id: a3 },
         { queue: "outbox.pickup-completed.finance", id: b1 },
         { queue: "outbox.pickup-completed.customer-notices", id: b1 },
@@ -320,7 +320,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     await owner.sql.begin(async (holding) => {
       await holding`select id from wms.outbox_event where id = ${a6} for update`
       assert.deepEqual(await relayOnce(context), { swept: 3, published: 2 }, "the held row is left, the other two go")
-      assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, a5, b5], "a5 to Resolution, Finance and the customer notices")
+      assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, a5, b5, b5], "a5 to Resolution, Finance and the customer notices, b5 to Finance and the customer notices")
     })
     const rows = new Map((await outbox()).map((row) => [row.id, row]))
     assert.equal(rows.get(a6)!.publishedAt, null)
