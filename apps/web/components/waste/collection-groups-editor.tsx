@@ -177,7 +177,7 @@ export function SchemeRuleEditor({
           the rule.
         </p>
       ) : (
-        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
           No planning area selected — go back to the Scheme &amp; scope step and
           pick one. The rule matches containers inside the scheme&apos;s area.
         </p>
@@ -243,11 +243,11 @@ export function SchemeRuleEditor({
             selection.
           </p>
         ) : result.matched.length === 0 ? (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-4 text-center">
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+          <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-4 text-center">
+            <p className="text-sm font-medium text-warning-foreground">
               No containers currently match this rule
             </p>
-            <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-400/80">
+            <p className="mt-1 text-xs text-warning-foreground/80">
               {areaId
                 ? `${result.scopeTotal} container${result.scopeTotal === 1 ? "" : "s"} in the planning area — none matches the fractions${rule.vehicleType ? ` and ${rule.vehicleType.toLowerCase()} compatibility` : ""}. The scheme cannot validate until the rule matches.`
                 : "Pick a planning area first."}
@@ -618,7 +618,7 @@ export function CollectionGroupsEditor({
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
               entry.groupIds.length === 0
-                ? "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400"
+                ? "border-destructive/50 bg-destructive/10 text-destructive-foreground"
                 : "border-border bg-muted/40 text-foreground",
             )}
             title={
@@ -670,7 +670,7 @@ export function CollectionGroupsEditor({
                       "rounded-full border px-2 py-0.5 text-[11px] font-medium",
                       group.stopSource === "rule"
                         ? "border-primary/40 text-primary"
-                        : "border-amber-500/50 text-amber-700 dark:text-amber-400",
+                        : "border-warning/50 text-warning-foreground",
                     )}
                   >
                     {group.stopSource === "rule" ? "Matched by rule" : "Picked manually"}
@@ -688,7 +688,7 @@ export function CollectionGroupsEditor({
                     .join(" · ")}
                 </p>
                 {groupIssues.length > 0 && (
-                  <ul className="mt-1 space-y-0.5 text-xs text-red-600 dark:text-red-400">
+                  <ul className="mt-1 space-y-0.5 text-xs text-destructive-foreground">
                     {groupIssues.map((issue) => (
                       <li key={issue}>{issue}</li>
                     ))}
@@ -1059,11 +1059,11 @@ function CollectionGroupsEditorDialogBody({
         issues={preview?.issues ?? []}
       />
       {preview && preview.issues.length > 0 && (
-        <div className="space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
-          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+        <div className="space-y-1.5 rounded-2xl border border-warning/40 bg-warning/10 p-4">
+          <p className="text-sm font-semibold text-warning-foreground">
             Saving keeps the scheme as Draft until these are resolved
           </p>
-          <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
+          <ul className="list-disc space-y-1 pl-5 text-xs text-warning-foreground">
             {preview.issues.map((issue) => (
               <li key={issue}>{issue}</li>
             ))}
@@ -1071,11 +1071,11 @@ function CollectionGroupsEditorDialogBody({
         </div>
       )}
       {preview && preview.warnings.length > 0 && (
-        <div className="space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
-          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+        <div className="space-y-1.5 rounded-2xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm font-semibold text-warning-foreground">
             Warnings — the scheme can still be saved
           </p>
-          <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
+          <ul className="list-disc space-y-1 pl-5 text-xs text-warning-foreground">
             {preview.warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}

@@ -116,7 +116,7 @@ const ORGANISATION_FIXTURES = getModuleDefinition(ORGANISATION_MODULE)?.records 
 const CALENDAR_FIXTURES = getModuleDefinition(COLLECTION_CALENDARS_MODULE)?.records ?? NO_RECORDS
 
 const AMBER =
-  "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+  "border-warning/30 bg-warning/10 text-warning-foreground"
 
 type CreateState = {
   projectId: string

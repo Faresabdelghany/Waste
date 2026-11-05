@@ -96,7 +96,7 @@ export function TaskBoardCard({ task, variant = "default", onToggle, onOpen, onC
             // Prevent Enter/Space on checkbox from triggering card keyboard handler
             e.stopPropagation()
           }}
-          className="rounded-full border-border bg-background data-[state=checked]:border-teal-600 data-[state=checked]:bg-teal-600 hover:cursor-pointer mt-0.5"
+          className="rounded-full border-border bg-background data-[state=checked]:border-success data-[state=checked]:bg-success hover:cursor-pointer mt-0.5"
           aria-label={`Mark ${task.name} as ${isDone ? "todo" : "done"}`}
         />
         <div className="flex-1 min-w-0">

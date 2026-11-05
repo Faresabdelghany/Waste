@@ -41,11 +41,11 @@ function ClientStatusBadge({ status }: { status: ClientStatus }) {
   let dotClasses = "bg-foreground"
 
   if (status === "active") {
-    badgeClasses = "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
-    dotClasses = "bg-teal-600 dark:bg-teal-300"
+    badgeClasses = "bg-success/10 text-success-foreground border-transparent"
+    dotClasses = "bg-success"
   } else if (status === "on_hold") {
-    badgeClasses = "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100"
-    dotClasses = "bg-amber-600 dark:bg-amber-300"
+    badgeClasses = "bg-warning/10 text-warning-foreground border-transparent"
+    dotClasses = "bg-warning"
   } else if (status === "archived") {
     badgeClasses = "border-transparent bg-muted text-muted-foreground"
     dotClasses = "bg-muted-foreground"
@@ -76,14 +76,14 @@ function ClientProjectsBadge({
       key: "active",
       count: active,
       label: "active routes",
-      iconClass: "text-teal-600",
+      iconClass: "text-success",
       wrapperClass: "text-muted-foreground",
     },
     {
       key: "planned",
       count: planned,
       label: "planned routes",
-      iconClass: "text-amber-600",
+      iconClass: "text-warning-foreground",
       wrapperClass: "text-muted-foreground",
     },
     {

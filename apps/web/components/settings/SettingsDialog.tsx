@@ -2149,11 +2149,11 @@ function StatusIndicator({
     tone === "healthy" ? CheckCircle : tone === "danger" ? Warning : tone === "warning" ? Warning : Gear
   const className =
     tone === "healthy"
-      ? "text-emerald-600"
+      ? "text-success"
       : tone === "danger"
-        ? "text-rose-600"
+        ? "text-destructive-foreground"
         : tone === "warning"
-          ? "text-amber-600"
+          ? "text-warning-foreground"
           : "text-muted-foreground"
 
   return (

@@ -74,7 +74,7 @@ function TaskRow({ task, dates, cellWidth }: TaskRowProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "done":
-        return "text-emerald-600"
+        return "text-success"
       case "in-progress":
         return "text-primary"
       default:
@@ -89,7 +89,7 @@ function TaskRow({ task, dates, cellWidth }: TaskRowProps) {
         <Checkbox
           checked={checked}
           onCheckedChange={(c) => setChecked(c as boolean)}
-          className={cn("h-4 w-4 rounded-sm", checked && "bg-teal-500 border-teal-500")}
+          className={cn("h-4 w-4 rounded-sm", checked && "bg-success border-success")}
         />
         <div className="flex flex-col flex-1 min-w-0">
           <span className={cn("text-sm truncate", checked && "line-through text-muted-foreground")}>{task.name}</span>

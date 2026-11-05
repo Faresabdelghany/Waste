@@ -30,10 +30,10 @@ const USERS = [
 ];
 
 const STATUSES = [
-  { id: "backlog", label: "Backlog", dotClass: "bg-orange-600" },
+  { id: "backlog", label: "Backlog", dotClass: "bg-warning-foreground" },
   { id: "todo", label: "Todo", dotClass: "bg-muted-foreground/50" },
-  { id: "in-progress", label: "In Progress", dotClass: "bg-yellow-400" },
-  { id: "done", label: "Done", dotClass: "bg-green-600" },
+  { id: "in-progress", label: "In Progress", dotClass: "bg-warning" },
+  { id: "done", label: "Done", dotClass: "bg-success" },
   { id: "canceled", label: "Canceled", dotClass: "bg-muted-foreground" },
 ];
 

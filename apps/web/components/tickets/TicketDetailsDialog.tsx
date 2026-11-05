@@ -157,18 +157,18 @@ const fallbackAssignees = [
 ]
 
 const statusOptions: TicketInformationOption[] = [
-  { value: "Open", label: "Open", dotClassName: "bg-blue-500" },
-  { value: "In progress", label: "In progress", dotClassName: "bg-amber-500" },
+  { value: "Open", label: "Open", dotClassName: "bg-info" },
+  { value: "In progress", label: "In progress", dotClassName: "bg-warning" },
   { value: "Waiting on customer", label: "Waiting on customer", dotClassName: "bg-violet-500" },
-  { value: "Resolved", label: "Resolved", dotClassName: "bg-emerald-500" },
+  { value: "Resolved", label: "Resolved", dotClassName: "bg-success" },
   { value: "Closed", label: "Closed", dotClassName: "bg-muted-foreground" },
 ]
 
 const priorityOptions: TicketInformationOption[] = [
-  { value: "Urgent", label: "Urgent", dotClassName: "bg-rose-600" },
-  { value: "High", label: "High", dotClassName: "bg-rose-500" },
-  { value: "Medium", label: "Medium", dotClassName: "bg-amber-500" },
-  { value: "Low", label: "Low", dotClassName: "bg-blue-500" },
+  { value: "Urgent", label: "Urgent", dotClassName: "bg-destructive" },
+  { value: "High", label: "High", dotClassName: "bg-destructive/80" },
+  { value: "Medium", label: "Medium", dotClassName: "bg-warning" },
+  { value: "Low", label: "Low", dotClassName: "bg-info" },
   { value: "No priority", label: "No priority", dotClassName: "bg-muted-foreground/50" },
 ]
 
@@ -598,7 +598,7 @@ function FixtureTicketDetailsDialog({
                 <div className="pl-12">
                   <div className="rounded-xl border border-border/60 bg-muted/25 px-4 py-4">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-600" weight="fill" />
+                      <CheckCircle className="h-4 w-4 text-success" weight="fill" />
                       <h3 className="text-sm font-semibold">Resolution context</h3>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -636,8 +636,8 @@ function FixtureTicketDetailsDialog({
                             className={cn(
                               "rounded-full px-2 py-0 text-[10px] font-medium",
                               comment.kind === "internal"
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
-                                : "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200",
+                                ? "border-warning/30 bg-warning/10 text-warning-foreground"
+                                : "border-info/30 bg-info/10 text-info-foreground",
                             )}
                           >
                             {composerModeConfig[comment.kind].label}
@@ -648,9 +648,9 @@ function FixtureTicketDetailsDialog({
                         className={cn(
                           "mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground",
                           comment.kind === "internal" &&
-                            "rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2",
+                            "rounded-lg border border-warning/20 bg-warning/5 px-3 py-2",
                           comment.kind === "sms" &&
-                            "rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2",
+                            "rounded-lg border border-info/20 bg-info/5 px-3 py-2",
                         )}
                       >
                         {comment.body}
@@ -668,15 +668,15 @@ function FixtureTicketDetailsDialog({
                     className={cn(
                       "flex items-center justify-between gap-3 border-b px-3 py-2",
                       composerMode === "internal"
-                        ? "border-amber-500/20 bg-amber-500/5"
-                        : "border-blue-500/20 bg-blue-500/5",
+                        ? "border-warning/20 bg-warning/5"
+                        : "border-info/20 bg-info/5",
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       {composerMode === "internal" ? (
-                        <LockKey className="h-4 w-4 shrink-0 text-amber-600" />
+                        <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" />
                       ) : (
-                        <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />
+                        <ChatCircleText className="h-4 w-4 shrink-0 text-info" />
                       )}
                       <div className="min-w-0">
                         <p className="text-xs font-semibold">{activeComposer.label}</p>
@@ -776,7 +776,7 @@ function FixtureTicketDetailsDialog({
                             focusComposerAt(message.length)
                           }}
                         >
-                          <LockKey className="h-4 w-4 shrink-0 text-amber-600" />
+                          <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" />
                           <span>
                             <span className="block">Internal note</span>
                             <span className="block text-xs font-normal text-muted-foreground">
@@ -794,7 +794,7 @@ function FixtureTicketDetailsDialog({
                             focusComposerAt(message.length)
                           }}
                         >
-                          <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />
+                          <ChatCircleText className="h-4 w-4 shrink-0 text-info" />
                           <span>
                             <span className="block">SMS</span>
                             <span className="block text-xs font-normal text-muted-foreground">
@@ -1097,7 +1097,7 @@ function FixtureTicketDetailsDialog({
                         className={cn(
                           "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background",
                           activity.tone === "success" &&
-                            "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+                            "border-success/30 bg-success/10 text-success",
                         )}
                       >
                         {activity.tone === "success" ? (

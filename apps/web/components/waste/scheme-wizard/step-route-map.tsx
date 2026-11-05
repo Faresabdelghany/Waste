@@ -56,10 +56,10 @@ const RouteMap = dynamic(() => import("./route-map").then((module) => module.Rou
 })
 
 const STATUS_BADGE_CLASS: Record<RouteEstimateStatus, string> = {
-  within: "border-transparent bg-emerald-50 text-emerald-700",
-  tight: "border-transparent bg-amber-50 text-amber-800",
-  "over-shift": "border-transparent bg-amber-50 text-amber-800",
-  "over-capacity": "border-transparent bg-red-50 text-red-700",
+  within: "border-transparent bg-success/10 text-success-foreground",
+  tight: "border-transparent bg-warning/10 text-warning-foreground",
+  "over-shift": "border-transparent bg-warning/10 text-warning-foreground",
+  "over-capacity": "border-transparent bg-destructive/10 text-destructive-foreground",
 }
 
 /** What the footer says the day's numbers are: one basis when every route agrees, both otherwise. */

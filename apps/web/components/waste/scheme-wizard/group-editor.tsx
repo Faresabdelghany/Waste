@@ -352,7 +352,7 @@ export function GroupEditor({
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   Est. load per route
                   {load.fallbackWeight && (
-                    <Badge variant="secondary" className="h-5 bg-amber-50 px-1.5 text-[11px] text-amber-800">
+                    <Badge variant="secondary" className="h-5 bg-warning/10 px-1.5 text-[11px] text-warning-foreground">
                       Fallback weight
                     </Badge>
                   )}

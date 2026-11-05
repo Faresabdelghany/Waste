@@ -174,7 +174,7 @@ export function StepRecurrence({
             className={cn(
               "flex h-10 items-center gap-2 rounded-xl border border-input bg-muted/50 px-3 text-sm",
               !model.calendar.list &&
-                "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+                "border-warning/30 bg-warning/10 text-warning-foreground",
             )}
           >
             <CalendarDays

@@ -491,9 +491,9 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const COUNT_TONES: Readonly<Record<RouteBucket, { dot: string; value: string }>> = {
-  awaiting: { dot: "bg-amber-500", value: "text-amber-600 dark:text-amber-400" },
-  "in-progress": { dot: "bg-blue-500", value: "text-blue-600 dark:text-blue-400" },
-  completed: { dot: "bg-emerald-500", value: "text-emerald-600 dark:text-emerald-400" },
+  awaiting: { dot: "bg-warning", value: "text-warning-foreground" },
+  "in-progress": { dot: "bg-info", value: "text-info" },
+  completed: { dot: "bg-success", value: "text-success" },
 }
 
 /** A label/value row with the status colour on the dot and the number. */

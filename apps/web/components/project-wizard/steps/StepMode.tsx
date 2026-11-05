@@ -89,13 +89,13 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
               
               {/* Checkbox State */}
               {selected === 'quick' ? (
-                 <div className="absolute bg-green-600 right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
+                 <div className="absolute bg-success right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
                    <div className="overflow-clip relative rounded-[inherit] size-full">
                      <div className="absolute left-1/2 size-4 top-1/2 translate-x-[-50%] translate-y-[-50%]" data-name="Icon / Check">
                        <Check className="size-4 text-primary-foreground" />
                      </div>
                    </div>
-                   <div aria-hidden="true" className="absolute border border-green-600 border-solid inset-0 pointer-events-none rounded-3xl" />
+                   <div aria-hidden="true" className="absolute border border-success border-solid inset-0 pointer-events-none rounded-3xl" />
                  </div>
               ) : (
                 <div className="absolute bg-background right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
@@ -120,13 +120,13 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
 
                {/* Checkbox State */}
                {selected === 'guided' ? (
-                 <div className="absolute bg-green-600 right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
+                 <div className="absolute bg-success right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
                    <div className="overflow-clip relative rounded-[inherit] size-full">
                      <div className="absolute left-1/2 size-4 top-1/2 translate-x-[-50%] translate-y-[-50%]" data-name="Icon / Check">
                        <Check className="size-4 text-primary-foreground" />
                      </div>
                    </div>
-                   <div aria-hidden="true" className="absolute border border-green-600 border-solid inset-0 pointer-events-none rounded-3xl" />
+                   <div aria-hidden="true" className="absolute border border-success border-solid inset-0 pointer-events-none rounded-3xl" />
                  </div>
               ) : (
                 <div className="absolute bg-background right-6 rounded-3xl size-6 top-6" data-name="Checkbox">

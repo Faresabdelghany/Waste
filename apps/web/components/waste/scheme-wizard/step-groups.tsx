@@ -92,7 +92,7 @@ export function StepGroups({
             <Badge
               key={day}
               variant="secondary"
-              className={cn("h-7 gap-1.5 px-3", count === 0 && "bg-amber-50 text-amber-800")}
+              className={cn("h-7 gap-1.5 px-3", count === 0 && "bg-warning/10 text-warning-foreground")}
             >
               {count > 0 ? <Check className="size-3" /> : null}
               {SERVICE_DAY_SHORT_LABELS[day]} · {count}
@@ -109,8 +109,8 @@ export function StepGroups({
       )}
 
       {issues.length > 0 && (
-        <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-800">
-          <AlertDescription className="text-amber-800">
+        <Alert className="rounded-2xl border-warning/30 bg-warning/10 text-warning-foreground">
+          <AlertDescription className="text-warning-foreground">
             <ul className="list-disc space-y-1 pl-5">
               {issues.map((issue) => (
                 <li key={issue.text}>{issue.text}</li>
@@ -176,7 +176,7 @@ export function StepGroups({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className={cn(clash && "text-amber-800")}>
+                      <div className={cn(clash && "text-warning-foreground")}>
                         {vehicle?.callsign ?? group.vehicleId ?? "—"}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -188,7 +188,7 @@ export function StepGroups({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {driver ? driver.name : <span className="text-amber-800">Unassigned</span>}
+                      {driver ? driver.name : <span className="text-warning-foreground">Unassigned</span>}
                     </TableCell>
                     <TableCell>
                       <div className="tabular-nums">{summary.stops.toLocaleString("en-GB")}</div>
@@ -204,7 +204,7 @@ export function StepGroups({
                     <TableCell>
                       <LoadMeter estimate={estimate} />
                       {fallbackWeight && (
-                        <Badge variant="secondary" className="mt-1.5 bg-amber-50 text-amber-800">
+                        <Badge variant="secondary" className="mt-1.5 bg-warning/10 text-warning-foreground">
                           Fallback weight
                         </Badge>
                       )}

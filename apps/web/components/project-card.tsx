@@ -23,8 +23,8 @@ function statusConfig(status: Project["status"]) {
     case "active":
       return {
         label: "Active",
-        dot: "bg-teal-600 dark:bg-teal-400",
-        pill: "text-teal-700 border-teal-200 bg-teal-50 dark:text-teal-100 dark:border-teal-500/40 dark:bg-teal-500/10",
+        dot: "bg-success",
+        pill: "text-success-foreground border-success/30 bg-success/10",
       }
     case "planned":
       return {
@@ -35,20 +35,20 @@ function statusConfig(status: Project["status"]) {
     case "backlog":
       return {
         label: "Backlog",
-        dot: "bg-orange-600 dark:bg-orange-400",
-        pill: "text-orange-700 border-orange-200 bg-orange-50 dark:text-orange-100 dark:border-orange-500/40 dark:bg-orange-500/10",
+        dot: "bg-warning",
+        pill: "text-warning-foreground border-warning/30 bg-warning/10",
       }
     case "completed":
       return {
         label: "Completed",
-        dot: "bg-blue-600 dark:bg-blue-400",
-        pill: "text-blue-700 border-blue-200 bg-blue-50 dark:text-blue-100 dark:border-blue-500/40 dark:bg-blue-500/10",
+        dot: "bg-info",
+        pill: "text-info-foreground border-info/30 bg-info/10",
       }
     case "cancelled":
       return {
         label: "Cancelled",
-        dot: "bg-rose-600 dark:bg-rose-400",
-        pill: "text-rose-700 border-rose-200 bg-rose-50 dark:text-rose-100 dark:border-rose-500/40 dark:bg-rose-500/10",
+        dot: "bg-destructive",
+        pill: "text-destructive-foreground border-destructive/30 bg-destructive/10",
       }
     default:
       return {

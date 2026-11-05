@@ -353,8 +353,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 
             <footer className="border-t border-border/60 bg-background px-4 py-3 sm:px-7 sm:py-4">
               <div className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border bg-background shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/15">
-                <div className={cn("flex items-center gap-2 border-b px-3 py-2", visibility === "internal" ? "border-amber-500/20 bg-amber-500/5" : "border-blue-500/20 bg-blue-500/5")}>
-                  {visibility === "internal" ? <LockKey className="h-4 w-4 shrink-0 text-amber-600" /> : <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />}
+                <div className={cn("flex items-center gap-2 border-b px-3 py-2", visibility === "internal" ? "border-warning/20 bg-warning/5" : "border-info/20 bg-info/5")}>
+                  {visibility === "internal" ? <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" /> : <ChatCircleText className="h-4 w-4 shrink-0 text-info" />}
                   <div className="flex gap-1" role="radiogroup" aria-label="Who reads it">
                     {threads.map((mode) => (
                       <Button key={mode} type="button" role="radio" aria-checked={visibility === mode} size="sm" variant={visibility === mode ? "secondary" : "ghost"} className="h-7 text-xs" onClick={() => setVisibility(mode)}>
@@ -556,8 +556,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                         </ul>
                       )}
                       {objects.problem !== null && <p className="text-xs text-muted-foreground">The photos are not shown: {objects.problem}</p>}
-                      <figure className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
-                        <figcaption className="text-[11px] font-medium text-blue-700 dark:text-blue-200">The reply quoting the record</figcaption>
+                      <figure className="rounded-lg border border-info/20 bg-info/5 px-3 py-2">
+                        <figcaption className="text-[11px] font-medium text-info-foreground">The reply quoting the record</figcaption>
                         <blockquote className="mt-1 text-sm leading-6" data-testid="ticket-evidence-reply">
                           {evidence.reply}
                         </blockquote>
@@ -640,8 +640,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 /** One row of the history: what it is, who and when, and what it said. A comment shows who may read it. */
 /** How the history shows a comment of each thread: the office's internal note, the customer's, and the one the office and the route's provider share (#291 C24). */
 const COMMENT_THREADS = {
-  internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-amber-600", badgeClass: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200" },
-  customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-blue-600", badgeClass: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" },
+  internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-warning-foreground", badgeClass: "border-warning/30 bg-warning/10 text-warning-foreground" },
+  customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-info", badgeClass: "border-info/30 bg-info/10 text-info-foreground" },
   "service-provider": { title: "Service provider thread", badge: "Service provider", Icon: Truck, iconClass: "text-violet-600", badgeClass: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200" },
 } as const
 
@@ -663,7 +663,7 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
   const thread = COMMENT_THREADS[threadOf(event.visibility)]
   return (
     <li className="relative flex gap-3 pb-4" data-kind={event.kind}>
-      <span className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background", event.kind === "status-changed" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-600")}>
+      <span className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background", event.kind === "status-changed" && "border-success/30 bg-success/10 text-success")}>
         {isComment ? (
           <thread.Icon className={cn("h-4 w-4", thread.iconClass)} />
         ) : event.kind === "status-changed" ? (

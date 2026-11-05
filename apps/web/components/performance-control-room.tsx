@@ -112,14 +112,14 @@ function routeHealthTone(status: RouteHealthStatus): StatusTone {
 }
 
 function getStatusColor(status: RouteHealthStatus) {
-  if (status === "At risk") return "var(--color-rose-500)"
-  if (status === "Monitor") return "var(--color-amber-500)"
-  return "var(--color-emerald-500)"
+  if (status === "At risk") return "var(--color-destructive-foreground)"
+  if (status === "Monitor") return "var(--color-warning)"
+  return "var(--color-success)"
 }
 
 function getImpactColor(impact: TicketImpact) {
-  if (impact === "High") return "var(--color-rose-500)"
-  if (impact === "Medium") return "var(--color-amber-500)"
+  if (impact === "High") return "var(--color-destructive-foreground)"
+  if (impact === "Medium") return "var(--color-warning)"
   return "var(--muted-foreground)"
 }
 
@@ -142,10 +142,10 @@ function KpiItem({
 }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-500"
+      ? "text-success"
       : tone === "negative"
-        ? "text-rose-500"
-        : "text-amber-500"
+        ? "text-destructive-foreground"
+        : "text-warning"
 
   return (
     <div className="relative min-w-0 px-4 py-4 xl:px-5">
@@ -602,7 +602,7 @@ export function PerformanceControlRoom({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
               <span>Fresh 2 min ago</span>
               <span aria-hidden>·</span>
               <span>{format(rangeStart, "MMM d")} – {format(PERFORMANCE_REFERENCE_DATE, "MMM d, yyyy")}</span>
@@ -760,9 +760,9 @@ export function PerformanceControlRoom({
                     className={cn(
                       "h-5 w-fit rounded px-1.5 text-[10px] font-medium",
                       ticket.impact === "High"
-                        ? "border-rose-500/20 bg-rose-500/10 text-rose-500"
+                        ? "border-destructive/20 bg-destructive/10 text-destructive-foreground"
                         : ticket.impact === "Medium"
-                          ? "border-amber-500/20 bg-amber-500/10 text-amber-500"
+                          ? "border-warning/20 bg-warning/10 text-warning"
                           : "border-border bg-muted text-muted-foreground",
                     )}
                   >
@@ -852,7 +852,7 @@ export function PerformanceControlRoom({
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.area}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.serviceType}</td>
-                          <td className={cn("px-3 py-2 font-medium", row.onTimePercent < 70 ? "text-rose-500" : row.onTimePercent < 85 ? "text-amber-500" : "text-emerald-500")}>
+                          <td className={cn("px-3 py-2 font-medium", row.onTimePercent < 70 ? "text-destructive-foreground" : row.onTimePercent < 85 ? "text-warning" : "text-success")}>
                             {row.onTimePercent}%
                           </td>
                           <td className="px-3 py-2">
@@ -861,12 +861,12 @@ export function PerformanceControlRoom({
                             <span className="ml-1 text-[10px] text-muted-foreground">({completion}%)</span>
                           </td>
                           {showProof && (
-                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-rose-500" : proof < 92 ? "text-amber-500" : "text-emerald-500")}>
+                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-destructive-foreground" : proof < 92 ? "text-warning" : "text-success")}>
                               {proof}%
                             </td>
                           )}
                           {showExceptions && <td className="px-3 py-2 text-foreground">{row.exceptions}</td>}
-                          <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-rose-500" : row.slaPercent < 85 ? "text-amber-500" : "text-emerald-500")}>
+                          <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-destructive-foreground" : row.slaPercent < 85 ? "text-warning" : "text-success")}>
                             {row.slaPercent}%
                           </td>
                           <td className="px-3 py-2">

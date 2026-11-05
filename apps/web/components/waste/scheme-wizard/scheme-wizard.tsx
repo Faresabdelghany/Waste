@@ -138,7 +138,7 @@ export function SchemeWizard({
                       className={cn(
                         "mt-px inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs",
                         state === "active" && "bg-primary text-primary-foreground",
-                        state === "done" && "bg-emerald-50 text-emerald-600",
+                        state === "done" && "bg-success/10 text-success",
                         state === "visited" && "border border-foreground/40 text-foreground",
                         state === "todo" && "border border-border text-muted-foreground/60",
                       )}

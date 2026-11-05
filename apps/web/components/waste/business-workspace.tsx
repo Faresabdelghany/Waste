@@ -5667,7 +5667,7 @@ export function BusinessWorkspace({
                                         className={cn(
                                           "h-4 w-4",
                                           isRouteStarred(record.id)
-                                            ? "text-amber-500"
+                                            ? "text-warning"
                                             : "text-muted-foreground/60 hover:text-foreground",
                                         )}
                                       />
@@ -5993,7 +5993,7 @@ function SchemeAttentionBadge({ warnings }: { warnings?: string[] }) {
     <Badge
       variant="outline"
       title={warnings.join("\n")}
-      className="rounded-full border-transparent bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-100"
+      className="rounded-full border-transparent bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning-foreground"
     >
       Attention
     </Badge>

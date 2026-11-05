@@ -231,23 +231,23 @@ function profileFor(record: BusinessRecord): ContainerProfile {
 function statusClass(status: string) {
   const normalized = status.toLowerCase()
   if (normalized === "available") {
-    return "border-transparent bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-100"
+    return "border-transparent bg-success/10 text-success-foreground"
   }
   if (normalized === "defect" || normalized === "ended") {
-    return "border-transparent bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-100"
+    return "border-transparent bg-destructive/10 text-destructive-foreground"
   }
   if (normalized === "future" || normalized === "on hold" || normalized === "in transit") {
-    return "border-transparent bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-100"
+    return "border-transparent bg-warning/10 text-warning-foreground"
   }
   return "border-transparent bg-muted text-muted-foreground"
 }
 
 function fillClass(value: string) {
   const percentage = Number(value.match(/\d+/)?.[0] ?? 100)
-  if (percentage <= 15) return "bg-teal-500"
-  if (percentage > 95) return "bg-rose-500"
-  if (percentage >= 80) return "bg-amber-500"
-  return "bg-sky-500"
+  if (percentage <= 15) return "bg-success"
+  if (percentage > 95) return "bg-destructive"
+  if (percentage >= 80) return "bg-warning"
+  return "bg-info"
 }
 
 function toOptions(records: BusinessRecord[], key: keyof ContainerProfile) {
@@ -966,7 +966,7 @@ export function ContainerDetailsSheet({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-amber-700 dark:text-amber-200">No sensor is paired. Fill percentage defaults to 100% in backend calculations.</p>
+                      <p className="text-xs text-warning-foreground">No sensor is paired. Fill percentage defaults to 100% in backend calculations.</p>
                     )}
                   </DetailSection>
                   <DetailSection title="Others">

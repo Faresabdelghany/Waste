@@ -26,8 +26,8 @@ import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { formatServiceDate } from "@waste/domain/route-schemes/recurrence"
 
 const STANDING_CLASSES: Record<BoundaryVersionRow["standing"], string> = {
-  "in force": "border-transparent bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-100",
-  upcoming: "border-transparent bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-100",
+  "in force": "border-transparent bg-success/10 text-success-foreground",
+  upcoming: "border-transparent bg-info/10 text-info-foreground",
   ended: "text-muted-foreground",
 }
 

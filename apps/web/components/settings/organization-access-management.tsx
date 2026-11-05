@@ -164,17 +164,17 @@ function UserRowActions({
 function statusClassName(status: string) {
   const normalized = status.toLowerCase()
   if (normalized === "active") {
-    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "border-success/20 bg-success/10 text-success-foreground"
   }
   if (normalized === "invited") {
-    return "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+    return "border-info/20 bg-info/10 text-info-foreground"
   }
   if (
     normalized.includes("review") ||
     normalized.includes("issue") ||
     normalized.includes("restricted")
   ) {
-    return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "border-warning/20 bg-warning/10 text-warning-foreground"
   }
   return "border-border bg-muted text-muted-foreground"
 }

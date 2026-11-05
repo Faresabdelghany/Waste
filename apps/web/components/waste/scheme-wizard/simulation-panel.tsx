@@ -77,9 +77,9 @@ const CHANGE_LABELS: Record<OccurrenceChange, string> = {
 
 const CHANGE_BADGE_CLASS: Record<OccurrenceChange, string> = {
   unchanged: "",
-  added: "border-transparent bg-emerald-50 text-emerald-700",
-  removed: "border-transparent bg-red-50 text-red-700",
-  moved: "border-transparent bg-amber-50 text-amber-800",
+  added: "border-transparent bg-success/10 text-success-foreground",
+  removed: "border-transparent bg-destructive/10 text-destructive-foreground",
+  moved: "border-transparent bg-warning/10 text-warning-foreground",
 }
 
 /** The recurrence fields a candidate may change, lifted off the draft. */
@@ -301,7 +301,7 @@ export function SimulationPanel({
             <ArrowRight className="size-3.5 text-muted-foreground" />
             <span className="font-medium">{count(simulation.after, "collection")}</span>
             {net !== 0 && (
-              <span className={cn("text-xs", net > 0 ? "text-emerald-700" : "text-red-700")}>
+              <span className={cn("text-xs", net > 0 ? "text-success-foreground" : "text-destructive-foreground")}>
                 ({net > 0 ? "+" : ""}
                 {net})
               </span>
@@ -393,7 +393,7 @@ export function SimulationPanel({
             <span
               role="status"
               data-testid="simulation-issue"
-              className="text-xs text-red-700"
+              className="text-xs text-destructive-foreground"
             >
               {issue.text}
             </span>

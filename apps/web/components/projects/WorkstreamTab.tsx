@@ -378,8 +378,8 @@ function TaskRow({ task, onToggle, activeTaskId, overTaskId }: TaskRowProps) {
               <span
                 className={cn(
                   "text-muted-foreground",
-                  task.dueTone === "danger" && "text-red-500",
-                  task.dueTone === "warning" && "text-amber-500",
+                  task.dueTone === "danger" && "text-destructive-foreground",
+                  task.dueTone === "warning" && "text-warning",
                 )}
               >
                 {task.dueLabel}

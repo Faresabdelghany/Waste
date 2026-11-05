@@ -215,9 +215,9 @@ function computeTaskFilterCounts(tasks: ProjectTask[]): FilterCounts {
 function getStatusColor(status: ProjectTask["status"]): string {
   switch (status) {
     case "done":
-      return "text-emerald-500"
+      return "text-success"
     case "in-progress":
-      return "text-amber-500"
+      return "text-warning"
     default:
       return "text-muted-foreground"
   }

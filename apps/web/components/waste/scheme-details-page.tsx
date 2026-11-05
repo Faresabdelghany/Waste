@@ -160,7 +160,7 @@ function SchemeAttentionBadge({ warnings }: { warnings: readonly string[] }) {
     <Badge
       variant="outline"
       title={warnings.join("\n")}
-      className="rounded-full border-transparent bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-100"
+      className="rounded-full border-transparent bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning-foreground"
     >
       Attention
     </Badge>
@@ -633,21 +633,21 @@ function SchemeDetailsTab({
   return (
     <div className="space-y-4 p-4">
       {blockingIssues.length > 0 && (
-        <section className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+        <section className="rounded-xl border border-destructive/40 bg-destructive/10 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2.5">
-              <Warning className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <Warning className="mt-0.5 h-4 w-4 shrink-0 text-destructive-foreground" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                <p className="text-sm font-semibold text-destructive-foreground">
                   Route generation is blocked by scheme validation
                 </p>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-red-700/90 dark:text-red-300/90">
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-destructive-foreground/90">
                   {blockingIssues.map((issue) => (
                     <li key={issue}>{issue}</li>
                   ))}
                 </ul>
                 {futurePlanningStopped && (
-                  <p className="mt-2 text-xs text-red-700/90 dark:text-red-300/90">
+                  <p className="mt-2 text-xs text-destructive-foreground/90">
                     {futurePlanningStoppedNote}
                   </p>
                 )}
@@ -664,21 +664,21 @@ function SchemeDetailsTab({
       )}
 
       {draftPendingResave && (
-        <section className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+        <section className="rounded-xl border border-warning/40 bg-warning/10 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2.5">
-              <Warning className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+              <Warning className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                <p className="text-sm font-semibold text-warning-foreground">
                   Draft — configuration now passes validation
                 </p>
-                <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+                <p className="mt-1 text-xs text-warning-foreground/90">
                   Save the scheme via Edit to validate it — a valid save
                   reconciles its future routes automatically; generation stays
                   off until then.
                 </p>
                 {futurePlanningStopped && (
-                  <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+                  <p className="mt-1 text-xs text-warning-foreground/90">
                     {futurePlanningStoppedNote}
                   </p>
                 )}
@@ -977,20 +977,20 @@ function SchemeRoutesTab({
   return (
     <div className="space-y-4 p-4">
       {containerDrift.length > 0 && (
-        <section className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+        <section className="rounded-xl border border-warning/40 bg-warning/10 p-4">
           <div className="flex min-w-0 items-start gap-2.5">
-            <Warning className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+            <Warning className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              <p className="text-sm font-semibold text-warning-foreground">
                 Matched containers shifted between generation runs
               </p>
-              <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+              <p className="mt-1 text-xs text-warning-foreground/90">
                 The stop rule resolved a different container set than before,
                 so the routes below changed shape. Review them, or adjust the
                 rule via Edit collection groups; the notice stays until the
                 matched set moves again.
               </p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800/90 dark:text-amber-300/90">
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-warning-foreground/90">
                 {containerDrift.map((drift) => (
                   <li key={drift.groupId}>
                     {drift.groupName ? `${drift.groupName}: ` : ""}
@@ -1101,7 +1101,7 @@ function SchemeRoutesTab({
                                 {operatingDate ? formatServiceDate(operatingDate) : "—"}
                               </p>
                               {deviationNote && (
-                                <p className="max-w-[340px] truncate text-xs text-amber-700 dark:text-amber-400">
+                                <p className="max-w-[340px] truncate text-xs text-warning-foreground">
                                   {deviationNote}
                                 </p>
                               )}
@@ -1352,7 +1352,7 @@ function SchemeHolidaysTab({
       <div className="flex h-full min-h-64 items-center justify-center p-8">
         <div className="max-w-sm text-center">
           <CalendarBlank className="mx-auto h-6 w-6 text-muted-foreground" />
-          <p className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+          <p className="mt-2 text-sm font-medium text-warning-foreground">
             {NO_HOLIDAY_LIST_LABEL}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">

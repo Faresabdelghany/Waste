@@ -138,8 +138,8 @@ export function PlaybackBar({
             <span
               className={cn(
                 "ml-auto shrink-0 tabular-nums text-muted-foreground",
-                delay !== null && delay > 0 && "text-amber-600 dark:text-amber-400",
-                delay !== null && delay < 0 && "text-emerald-600 dark:text-emerald-400",
+                delay !== null && delay > 0 && "text-warning-foreground",
+                delay !== null && delay < 0 && "text-success",
               )}
               data-testid="playback-times"
             >

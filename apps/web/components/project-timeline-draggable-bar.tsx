@@ -111,9 +111,9 @@ export function DraggableBar({
 
     const taskColors =
         item.status === "done"
-            ? "bg-teal-500/15 border-teal-500/40 text-teal-600"
+            ? "bg-success/15 border-success/40 text-success"
             : item.status === "in-progress"
-                ? "bg-primary/10 border-primary/30 text-blue-800"
+                ? "bg-primary/10 border-primary/30 text-info-foreground"
                 : "bg-primary/10 border-primary/30 text-primary"
 
     return (

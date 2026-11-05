@@ -170,7 +170,7 @@ export function StepOutcome({ data, updateData }: StepOutcomeProps) {
                 <span
                   className={cn(
                     "ml-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-background",
-                    isActive && "border-teal-600 bg-teal-600 text-primary-foreground",
+                    isActive && "border-success bg-success text-primary-foreground",
                   )}
                 >
                   {isActive && <Check className="h-3 w-3" weight="regular" />}
