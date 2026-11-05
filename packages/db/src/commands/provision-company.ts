@@ -7,6 +7,9 @@
 //   the eight Decommission Reasons every company starts with
 //   (@waste/domain/resources/decommission-reasons), which the office then
 //   renames and retires;
+//   a default Ticket Type per kind (#545 of #544,
+//   @waste/domain/resolution/ticket-types), which the office then renames and
+//   adds its own types beside;
 //   its first Project; and
 //   its primary Company Administrator, an Invitation in every project — an
 //   account no Login is bound to yet, which the access token hook binds on
@@ -35,9 +38,11 @@ import { and, eq, isNull } from "drizzle-orm"
 import type { Db } from "../client"
 import { role, roleGrant, userAccount } from "../schema/access"
 import { company, project } from "../schema/organisation"
+import { ticketType } from "../schema/resolution"
 import { decommissionReason } from "../schema/stock"
 import { withCompany } from "../tenant"
 import { Refused } from "./shared"
+import { defaultTicketTypeRows } from "./ticket-types"
 
 /** The twelve system roles of a company, each under the id `idOf` gives its key. */
 export function systemRoleRows(companyId: string, idOf: (key: SystemRoleKey) => string): (typeof role.$inferInsert)[] {
@@ -122,6 +127,7 @@ export async function provisionCompany(db: Db, provision: CompanyProvision, newI
     await tx.insert(role).values(systemRoleRows(companyId, idOf))
     await tx.insert(roleGrant).values(systemGrantRows(companyId, idOf))
     await tx.insert(decommissionReason).values(defaultDecommissionReasonRows(companyId, newId))
+    await tx.insert(ticketType).values(defaultTicketTypeRows(companyId, newId))
     await tx.insert(project).values({ id: projectId, companyId, ...provision.project, status: "onboarding" })
     await tx.insert(userAccount).values({ id: administratorId, companyId, email, fullName: provision.administrator.fullName, roleId: idOf("company-administrator"), allProjects: true, primaryAdministrator: true })
   })

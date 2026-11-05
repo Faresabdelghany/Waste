@@ -391,8 +391,12 @@ _Avoid_: Unload (what a route tips), haul-out (the activity), shipment
 ## Resolution and finance
 
 **Ticket**:
-A case that owns the resolution of a request, deviation, complaint, task, or operational issue. It is opened by the office, the portal or from an execution event; a re-collection is a Route the ticket names, never one it makes.
+A case that owns the resolution of a request, deviation, complaint, task, or operational issue. It is opened by the office, the portal or from an execution event; a re-collection is a Route the ticket names, never one it makes. It is of one Ticket Type, and so of that type's kind.
 _Avoid_: Alert, message
+
+**Ticket Type**:
+The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
+_Avoid_: Ticket kind (the built-in category a type belongs to), category, form
 
 **Message Template**:
 A project's text for one kind of message the office sends — an e-mail with a subject, or a text message — for service (sent only to a Customer who allows service messages) or for billing (sent whatever they chose), its values named as `{{placeholders}}`. Retired by its status, never deleted.
@@ -420,7 +424,7 @@ _Avoid_: Group, queue, department
 
 **SLA Target**:
 The hours a project gives a Ticket of a priority, of every kind or of one kind, from when its issue or request happened to its due date; one kind's target wins over every kind's. Opening a ticket without a due date sets one from it, and an open ticket past its due date is overdue.
-_Avoid_: Deadline, response time, ticket type
+_Avoid_: Deadline, response time
 
 **Billable Event**:
 A validated occurrence that is eligible to become an invoice line.

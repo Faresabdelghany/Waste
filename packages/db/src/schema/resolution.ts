@@ -51,6 +51,11 @@
 // to the seed cannot sweep; a stop missed is replaced by the next booking,
 // the comments keeping its story and `ticket_booking` every booking (#422),
 // and the booking outlives the ticket's close.
+// Since #545 of #544 a ticket names its Ticket Type, the company's own name
+// for its kind of case, through a key carrying the kind on both sides
+// (`ticket_ticket_type_id_kind_fk`), so the two never disagree; and holds its
+// type's custom fields' values by key in `field_values`, an object
+// (`ticket_field_values_shape`), which the API checks against the type.
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -103,15 +108,34 @@
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
-import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES, TEAM_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
+import {
+  ALERT_KINDS,
+  ALERT_RULES,
+  ALERT_SEVERITIES,
+  ALERT_SOURCES,
+  ALERT_STATUSES,
+  BILLABLE_RESOLUTIONS,
+  TICKET_EVENT_KINDS,
+  TICKET_FIELD_INPUTS,
+  TICKET_FIELD_REQUIREMENTS,
+  TICKET_KINDS,
+  TICKET_PRIORITIES,
+  TICKET_RESOLUTIONS,
+  TICKET_SOURCES,
+  TICKET_STATUSES,
+  TICKET_TYPE_STATUSES,
+  TICKET_VISIBILITIES,
+  TEAM_STATUSES,
+} from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
-import { check, index, integer, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
+import { boolean, check, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
-import { userAccount } from "./access"
+import { role, userAccount } from "./access"
 import { agreement } from "./agreements"
 import { product } from "./catalogue"
-import { literal, oneOf } from "./checks"
+import { literal, lowercase, oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container } from "./containers"
 import { customer, property, sharedCollectionPoint } from "./customers"
@@ -165,6 +189,110 @@ export const teamMember = wms.table(
   ],
 )
 
+// The Ticket Type (#545 of #544): the company's own name for a kind of case —
+// "Bulky waste collection", "Container size change" — inside one kind, which
+// keeps the kind's behaviour (@waste/domain/resolution/ticket-types). The
+// company's and no project's, like the Team; configuration the office edits
+// under `configure.templates`, audited; retired by its status, never deleted,
+// since the tickets it held still name it. `ticket_type_kind_key`, `unique
+// (company_id, id, kind)`, is what a ticket's type points at, so a ticket's
+// kind is always its type's. Each kind has one default type, the type of a
+// ticket opened by kind alone — the worker's, a driver's report, a work order
+// — `ticket_type_default_kind_key` holding one per kind, and a default type
+// is offered (`ticket_type_default_shape`), since every opener reaches it.
+export const ticketType = wms.table(
+  "ticket_type",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    name: text().notNull(),
+    /** The kind it is a type of; never changed once made. */
+    kind: text().notNull(),
+    description: text(),
+    status: text().notNull().default("active"),
+    /** Whether it is its kind's default: the type of a ticket opened by kind alone. */
+    isDefault: boolean().notNull().default(false),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantUnique(t, t.name),
+    tenantKey(t),
+    // What a ticket's type points at: its id and its kind, so the ticket's kind is the type's.
+    unique(tableObjectName(t.id.table, "kind_key", "ticketType")).on(t.companyId, t.id, t.kind),
+    oneOf(t.kind, TICKET_KINDS),
+    oneOf(t.status, TICKET_TYPE_STATUSES),
+    // One default type per kind.
+    uniqueIndex(tableObjectName(t.id.table, "default_kind_key", "ticketType")).on(t.companyId, t.kind).where(sql`${t.isDefault}`),
+    // Every opener of a kind reaches its default type, so a default is offered.
+    check(tableObjectName(t.id.table, "default_shape", "ticketType"), sql`not ${t.isDefault} or ${t.status} = 'active'`),
+  ],
+)
+
+// A Ticket Type's custom fields (#545 of #544), in order: the key a ticket's
+// values are held by, fixed once made; the label and help text a person
+// reads; the input it takes; the choices a choice field offers, and only a
+// choice field (`ticket_type_field_choices_shape`); and when it must be
+// filled in. The set is replaced whole (`PUT /ticket-types/:id/fields`), each
+// replacement minting new ids, so the unique position is safe, as a pre-trip
+// checklist's is. Nothing references a field: a ticket holds its values by key.
+export const ticketTypeField = wms.table(
+  "ticket_type_field",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    ticketTypeId: uuid().notNull(),
+    /** Its place in the type's list, 1..n. */
+    position: integer().notNull(),
+    /** What a ticket's values hold it by: `requested-date`. */
+    key: text().notNull(),
+    label: text().notNull(),
+    /** Shown under the input. */
+    helpText: text(),
+    input: text().notNull(),
+    choices: text().array().notNull().default(sql`'{}'::text[]`),
+    requirement: text().notNull().default("optional"),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantUnique(t, t.ticketTypeId, t.key),
+    tenantUnique(t, t.ticketTypeId, t.position),
+    positive(t.position),
+    lowercase(t.key),
+    oneOf(t.input, TICKET_FIELD_INPUTS),
+    oneOf(t.requirement, TICKET_FIELD_REQUIREMENTS),
+    // A choice field offers choices, and no other does.
+    check(tableObjectName(t.id.table, "choices_shape", "ticketTypeField"), sql`(${t.input} = 'choice') = (cardinality(${t.choices}) > 0)`),
+  ],
+)
+
+// Who may give a ticket of a type each status command (#545 of #544): one row
+// per role a type names for a command, and a command naming none is anyone's
+// who works tickets. The set is replaced whole (`PUT
+// /ticket-types/:id/permissions`).
+export const ticketTypePermission = wms.table(
+  "ticket_type_permission",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    ticketTypeId: uuid().notNull(),
+    command: text().notNull(),
+    roleId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantReference(t, [t.roleId], role),
+    // One row per role a command names, led by the type whose set it is.
+    unique(tableObjectName(t.id.table, "grant_key", "ticketTypePermission")).on(t.companyId, t.ticketTypeId, t.command, t.roleId),
+    oneOf(t.command, TICKET_COMMANDS),
+    tenantIndex(t, t.roleId),
+  ],
+)
+
 export const ticket = wms.table(
   "ticket",
   {
@@ -174,6 +302,10 @@ export const ticket = wms.table(
     /** The display number, `T-8831` on the wire; from the company's counter, never renumbered. */
     number: integer().notNull(),
     kind: text().notNull(),
+    /** Its Ticket Type (#545 of #544), a type of its kind: the opener's, or the kind's default. */
+    ticketTypeId: uuid().notNull(),
+    /** The type's custom fields' values, by key (#545 of #544): an object, empty where none is filled in. */
+    fieldValues: jsonb().notNull().default(sql`'{}'::jsonb`),
     status: text().notNull().default("open"),
     priority: text().notNull().default("none"),
     /** Provenance; never patched. */
@@ -225,6 +357,8 @@ export const ticket = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.assigneeUserAccountId], userAccount),
     tenantReference(t, [t.teamId], team),
+    // The type is one of its kind: the key carries the kind on both sides.
+    tenantReference(t, [t.ticketTypeId, t.kind], ticketType, [ticketType.id, ticketType.kind]),
     tenantReference(t, [t.createdBy], userAccount),
     projectReference(t, [t.routeId], route),
     // The pickup of the route the ticket names: the key carries the route on both sides.
@@ -268,6 +402,8 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "booked_shape", "ticket"), sql`(${t.bookedRouteId} is null) = (${t.bookedPickupId} is null)`),
     // A stop answers one ticket.
     uniqueIndex(tableObjectName(t.id.table, "booked_pickup_id_key", "ticket")).on(t.companyId, t.bookedPickupId).where(sql`${t.bookedPickupId} is not null`),
+    // The values are held by key, so they are an object.
+    check(tableObjectName(t.id.table, "field_values_shape", "ticket"), sql`jsonb_typeof(${t.fieldValues}) = 'object'`),
     // A closed ticket has the instant it closed, and an open one none.
     check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
     // The consumer's idempotency key: one ticket per outbox event, the rows with one in the index and only those.
@@ -277,6 +413,7 @@ export const ticket = wms.table(
     tenantIndex(t, t.assigneeUserAccountId, t.status),
     // A team's queue: its tickets by status, the reference's index too.
     tenantIndex(t, t.teamId, t.status),
+    tenantIndex(t, t.ticketTypeId, t.kind),
     tenantIndex(t, t.createdBy),
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.pickupId),

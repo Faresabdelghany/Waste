@@ -52,6 +52,7 @@ const configuration = [
   count(counts.contaminantCodes, "contaminant code"),
   count(counts.decommissionReasons, "decommission reason"),
   count(counts.fuelEmissionFactors, "emission factor"),
+  count(counts.ticketTypes, "ticket type"),
 ].join(", ")
 console.log(
   `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +

@@ -27,6 +27,7 @@
 // EUR list prices residual collection at 16.00 EUR and nothing else.
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import type { Database, Tx } from "@waste/db/client"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { customer } from "@waste/db/schema/customers"
@@ -317,6 +318,7 @@ export async function ticketEvent(pool: Database, tenant: Tenant, fixtures: Bill
       projectId,
       number,
       kind: "missed-collection",
+      ticketTypeId: await defaultTicketTypeOf(tx, tenant.companyId, "missed-collection", newId),
       source: "phone",
       subject: "Bin not emptied",
       description: "The bin at Parkvej 18 was not emptied on Monday.",

@@ -31,6 +31,13 @@
 // note). A comment is appended, never a change: `TicketComment` carries the
 // body, who may read it (`internal` unless said) and an attachment's key.
 //
+// Since #545 of #544 a ticket names its Ticket Type (`ticketTypeId`), a type
+// of its kind, and holds the type's custom fields' values by key
+// (`fieldValues`). A create names its type, its kind, or both when they
+// agree: a kind alone opens its kind's default type, and a type alone gives
+// the ticket the type's kind. A patch may move it to another type, its kind
+// following, and merges the values it names into the stored ones.
+//
 // `TicketEvent` is a history row — `recorded`, never `updatedAt` — a snapshot
 // of the status and the assignee after the event, and it runs the domain's
 // `ticketEventShape` as a refine at `kind`
@@ -50,6 +57,7 @@ import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./
 import { ticketLabel, TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
 import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
+import { TicketFieldValues, TicketFieldValuesPatch } from "./ticket-types"
 
 /** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
 export const TicketLinks = z.object({
@@ -82,6 +90,13 @@ export const ticketFields = {
   number: PositiveInt,
   label: z.string().min(1),
   kind: TicketKind,
+  /**
+   * Its Ticket Type (#545 of #544), a type of its kind. On every answer;
+   * absent on an event the outbox took before the types, read as null.
+   */
+  ticketTypeId: Id.nullable().default(null),
+  /** Its type's custom fields' values, by key; absent on an event the outbox took before the types, read as none. */
+  fieldValues: TicketFieldValues.default({}),
   status: TicketStatus,
   priority: TicketPriority,
   /** Provenance; never patched. */
@@ -200,13 +215,21 @@ export const TicketLinksSet = z.strictObject({
 })
 export type TicketLinksSet = z.infer<typeof TicketLinksSet>
 
+/** What a create naming neither a type nor a kind is told. */
+export const TYPE_OR_KIND = "Name the ticket's type, or its kind for the kind's default type"
+
 /** `POST /tickets`: the office opens a case. The number, the status, the stamps and the provenance are the server's; the source is one of the office's doors. */
 export const TicketCreate = z
   .strictObject({
     projectId: Id,
     subject: Label,
     description: Paragraph,
-    kind: TicketKind,
+    /** The kind; with a type, the type's kind. Absent, the type's kind. */
+    kind: TicketKind.optional(),
+    /** A type of the company that is offered (#545 of #544); absent, the kind's default type. */
+    ticketTypeId: Id.optional(),
+    /** The type's custom fields' values, by key, each one the field takes; the fields the type requires to open included. */
+    fieldValues: TicketFieldValues.default({}).describe("None when absent."),
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
     /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b). */
     source: TicketSource.exclude(["driver-app", "dispatch", "service-provider"])
@@ -233,6 +256,7 @@ export const TicketCreate = z
   })
   // zod 4 runs a check on a body whose fields failed, so the links are read with care.
   .refine((body) => pickupWithItsRoute(body.links), pickupWithItsRouteAt)
+  .refine((body) => body.kind !== undefined || body.ticketTypeId !== undefined, { message: TYPE_OR_KIND, path: ["ticketTypeId"] })
 export type TicketCreate = z.infer<typeof TicketCreate>
 
 /** The pickup rule on a patch, where only both halves in the body are judged: a body moving `pickupId` alone names the stored route, and the route holds it. */
@@ -243,7 +267,12 @@ export const TicketPatch = z
   .strictObject({
     subject: Label.optional(),
     description: Paragraph.optional(),
+    /** Another kind, alone: the kind's default type. With a type, the type's kind. */
     kind: TicketKind.optional(),
+    /** Another type of the company that is offered (#545 of #544); the kind follows it. */
+    ticketTypeId: Id.optional(),
+    /** Merged into the stored values: a value replaces one, null clears it, a key not named stays. */
+    fieldValues: TicketFieldValuesPatch.optional(),
     priority: TicketPriority.optional(),
     dueAt: IsoDateTime.nullable().optional(),
     /** Hands the case to another team, or to none with null; the assignee stays as it is. */
@@ -354,6 +383,8 @@ export const TicketListQuery = ProjectScopedListQuery.extend({
   /** Likewise: `true` is an open ticket past its due date (O4 of #290), `false` every other. */
   overdue: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
   kind: TicketKind.optional(),
+  /** One type's tickets (#545 of #544). */
+  ticketTypeId: Id.optional(),
   priority: TicketPriority.optional(),
   source: TicketSource.optional(),
   assigneeUserAccountId: Id.optional(),

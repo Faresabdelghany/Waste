@@ -11,6 +11,8 @@ import { after, before, describe, test } from "node:test"
 
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
+import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
+import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 import { eq, sql } from "drizzle-orm"
 
@@ -21,6 +23,7 @@ import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
 import { role, roleGrant, userAccount } from "../schema/access"
 import { company, project } from "../schema/organisation"
+import { ticketType } from "../schema/resolution"
 import { decommissionReason } from "../schema/stock"
 import { DEMO_IDS, seedDemo } from "../seed/demo"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
@@ -92,6 +95,8 @@ describe("provisioning a company", { skip: database.skip }, () => {
     assert.equal(grants.length, systemGrantRows(made.companyId, (key) => made.roleIds[key]).length)
     const reasons = await owner.db.select().from(decommissionReason).where(eq(decommissionReason.companyId, made.companyId))
     assert.deepEqual(reasons.map((each) => each.code).sort(), DEFAULT_DECOMMISSION_REASONS.map((each) => each.code).sort())
+    const types = await owner.db.select().from(ticketType).where(eq(ticketType.companyId, made.companyId))
+    assert.deepEqual(types.map((each) => [each.kind, each.name, each.isDefault]).sort(), TICKET_KINDS.map((kind) => [kind, DEFAULT_TICKET_TYPE_NAMES[kind], true]).sort(), "a default ticket type per kind (#545 of #544)")
     const [first] = await owner.db.select().from(project).where(eq(project.companyId, made.companyId))
     assert.deepEqual([first?.id, first?.name, first?.status, first?.timezone], [made.projectId, "Fjordby Kommune", "onboarding", "Europe/Copenhagen"])
     const [admin] = await owner.db.select().from(userAccount).where(eq(userAccount.id, made.administratorId))

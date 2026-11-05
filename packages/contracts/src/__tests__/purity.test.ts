@@ -96,6 +96,10 @@
 // tare's lists and bounds a ticket's lines by the domain's cap.
 // M17 of #293 added @waste/domain/execution/haul-out: haul-out.ts
 // tells a load sent back to the station it left the domain's sentence.
+// #545 of #544 added @waste/domain/resolution/ticket-types and
+// @waste/domain/resolution/transitions: ticket-types.ts holds a field's key,
+// its value and a type's set of fields to the domain's rules in the domain's
+// sentences, and names the status commands a type's permissions are for.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -141,6 +145,8 @@ definePurityTests({
     "@waste/domain/registry/waste-code",
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/sla",
+    "@waste/domain/resolution/ticket-types",
+    "@waste/domain/resolution/transitions",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",

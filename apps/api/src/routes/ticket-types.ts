@@ -1,0 +1,346 @@
+// Ticket Types (#545 of #544): the company's own types of case, each inside
+// one kind. `GET /ticket-types` lists them, `POST /ticket-types` adds one,
+// `GET`/`PATCH /ticket-types/:id` read and change one, `PUT
+// /ticket-types/:id/fields` replaces its custom fields and `PUT
+// /ticket-types/:id/permissions` the roles that may give each status
+// command. No delete: a type the tickets it holds still name is retired by
+// its status, which offers it to no new ticket and keeps the ones it holds.
+//
+// A type is the company's and no project's, like the Team, so every
+// statement carries `company_id = the caller's` beside the fence (ADR-0001).
+// Its kind never changes, since its tickets carry it. Each kind has one
+// default type, the type of a ticket opened by kind alone: a create or a
+// patch making a type its kind's default unmakes the one that was, the two
+// writes to one kind's default taking turns under a transaction-scoped
+// advisory lock, and the default is never retired (409) nor unmade but by
+// making another (the contracts refuse `isDefault: false`).
+//
+// The fields and the permissions are sets that travel with the type: replaced
+// whole, the type's own row stamped first, each replacement minting new ids,
+// as a pre-trip checklist's items are. A field left out is gone from the type
+// and its values stay on the tickets that hold them; each role a permission
+// names is one of the company's (400 at `permissions.N.roleIds.M`).
+//
+// The grant is `configure.templates`, the prototype's Tickets &
+// communication, where the teams and the SLA are. A type is read under
+// `operate.tickets` too, since the people working tickets pick a type and
+// fill in its fields.
+import { Page } from "@waste/contracts/pagination"
+import { DEFAULT_TYPE_OFFERED, TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
+import type { Tx } from "@waste/db/client"
+import { role } from "@waste/db/schema/access"
+import { ticketType, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
+import type { TicketFieldInput, TicketFieldRequirement, TicketKind, TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm"
+import { Hono, type MiddlewareHandler } from "hono"
+import { describeRoute } from "hono-openapi"
+
+import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { allows, requireGrant, requireGrantOf } from "../auth/require"
+import { newId } from "../ids"
+import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stamp, stampsOf, strengthFor } from "./shared"
+
+const MODULE = "configure.templates"
+const TICKETS = "operate.tickets"
+
+/** A read's module: the tickets' for the people working them, the templates' for the office that keeps the types. */
+const readModuleOf = (principal: Principal) => (allows(principal.grants, TICKETS, "view") ? TICKETS : MODULE)
+
+const TicketTypePage = Page(TicketType)
+
+const columns = { id: ticketType.id, name: ticketType.name, kind: ticketType.kind, description: ticketType.description, status: ticketType.status, isDefault: ticketType.isDefault, createdAt: ticketType.createdAt, updatedAt: ticketType.updatedAt }
+type Row = Pick<typeof ticketType.$inferSelect, keyof typeof columns>
+
+/** `unique (company_id, name)`: a name is one type's inside a company. */
+const NAME_TAKEN = "ticket_type_name_key"
+const nameTaken = (name: string) => `This company already has a ticket type called ${JSON.stringify(name)}`
+
+/** What a permission naming a role of another company, or none, is told. */
+export const NOT_A_ROLE = "Not a role of this company"
+
+const noSuchType = (id: string) => problem(404, { detail: `No ticket type ${id} in this company` })
+
+const scope = (principal: Principal) => eq(ticketType.companyId, principal.companyId)
+
+async function findType(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(ticketType)
+    .where(and(scope(principal), eq(ticketType.id, id)))
+    .limit(1)
+  return row
+}
+
+/** The types on the wire, each with its fields in order and its permissions in the commands' order: two reads for the whole page. */
+async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<TicketType[]> {
+  if (rows.length === 0) return []
+  const ids = rows.map((row) => row.id)
+  const fields = await tx
+    .select({ ticketTypeId: ticketTypeField.ticketTypeId, key: ticketTypeField.key, label: ticketTypeField.label, helpText: ticketTypeField.helpText, input: ticketTypeField.input, choices: ticketTypeField.choices, requirement: ticketTypeField.requirement })
+    .from(ticketTypeField)
+    .where(and(eq(ticketTypeField.companyId, companyId), inArray(ticketTypeField.ticketTypeId, ids)))
+    .orderBy(asc(ticketTypeField.ticketTypeId), asc(ticketTypeField.position))
+  const grants = await tx
+    .select({ ticketTypeId: ticketTypePermission.ticketTypeId, command: ticketTypePermission.command, roleId: ticketTypePermission.roleId })
+    .from(ticketTypePermission)
+    .where(and(eq(ticketTypePermission.companyId, companyId), inArray(ticketTypePermission.ticketTypeId, ids)))
+    .orderBy(asc(ticketTypePermission.id))
+  return rows.map((row) => {
+    const own: TicketTypeField[] = fields
+      .filter((field) => field.ticketTypeId === row.id)
+      .map(({ ticketTypeId: _type, ...field }) => ({ ...field, input: field.input as TicketFieldInput, requirement: field.requirement as TicketFieldRequirement }))
+    const permissions: TicketTypePermission[] = TICKET_COMMANDS.flatMap((command) => {
+      const roleIds = grants.filter((grant) => grant.ticketTypeId === row.id && grant.command === command).map((grant) => grant.roleId)
+      return roleIds.length === 0 ? [] : [{ command, roleIds }]
+    })
+    return { id: row.id, name: row.name, kind: row.kind as TicketKind, description: row.description, status: row.status as TicketTypeStatus, isDefault: row.isDefault, fields: own, permissions, ...stampsOf(row) }
+  })
+}
+
+const typeOf = async (tx: Tx, companyId: string, row: Row): Promise<TicketType> => (await typesOf(tx, companyId, [row]))[0]
+
+/** Makes the kind's default this type alone: the default that was is unmade first, under the kind's lock, so the index holding one default per kind never meets two. */
+async function unmakeDefaults(tx: Tx, companyId: string, kind: string, except?: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-type-default:${companyId}:${kind}`}, 0))`)
+  await tx
+    .update(ticketType)
+    .set({ isDefault: false })
+    .where(and(eq(ticketType.companyId, companyId), eq(ticketType.kind, kind), eq(ticketType.isDefault, true), except === undefined ? undefined : ne(ticketType.id, except)))
+}
+
+const commonProblems = (action: "view" | "edit" | "create") => ({
+  401: describeProblem("No usable token (see WWW-Authenticate)."),
+  403: describeProblem(
+    action === "view" ? `No active account here, or the caller's role allows \`view\` on neither \`${TICKETS}\` nor \`${MODULE}\`.` : `No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`,
+  ),
+})
+
+export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
+  return new Hono<AuthEnv>()
+    .get(
+      "/ticket-types",
+      describeRoute({
+        operationId: "listTicketTypes",
+        summary: "The company's ticket types",
+        description:
+          "One page of the company's ticket types, oldest first (ids are time-ordered), each with its custom fields in order and the roles it names per status command. `status` narrows the page to the active or the retired, `kind` to one kind's types. Every company starts with a default type per kind, the type of a ticket opened by kind alone. Hand `nextCursor` back as `cursor` for the next page.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("One page of ticket types.", TicketTypePage),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or a filter is not one of its list."),
+          ...commonProblems("view"),
+        },
+      }),
+      guard,
+      requireGrantOf(readModuleOf, "view"),
+      validate("query", TicketTypeListQuery),
+      async (c) => {
+        const { limit, cursor, status, kind } = c.req.valid("query")
+        const after = afterCursor(cursor)
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const rows = await tx
+          .select(columns)
+          .from(ticketType)
+          .where(and(scope(principal), status === undefined ? undefined : eq(ticketType.status, status), kind === undefined ? undefined : eq(ticketType.kind, kind), after === undefined ? undefined : gt(ticketType.id, after)))
+          .orderBy(asc(ticketType.id))
+          .limit(fetchLimit(limit))
+        const { items, nextCursor } = pageOf(rows, limit)
+        return c.json({ items: await typesOf(tx, principal.companyId, items), nextCursor })
+      },
+    )
+    .post(
+      "/ticket-types",
+      describeRoute({
+        operationId: "createTicketType",
+        summary: "Add a ticket type",
+        description:
+          "Adds a type of case of one kind to the company. `name` is unique inside the company; `status` is `active` unless said; `isDefault: true` makes it its kind's default in place of the one that was, which stays a type of the kind, and a default is active (400 at `status`). Its fields and permissions start empty, each set through its own route. The server mints the id.",
+        security: BEARER_SECURITY,
+        responses: {
+          201: describeCreated("The type as it was written.", TicketType),
+          400: describeProblem("The body is missing a field, names a member the server owns, names a kind the vocabulary does not hold, or makes a retired type the default."),
+          ...commonProblems("create"),
+          409: describeProblem("The company already has a type with that name."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "create"),
+      validate("json", TicketTypeCreate),
+      async (c) => {
+        const values = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        if (values.isDefault) await unmakeDefaults(tx, principal.companyId, values.kind)
+        const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
+          tx
+            .insert(ticketType)
+            .values({ ...values, id: newId(), companyId: principal.companyId })
+            .returning(columns),
+        )
+        return created(c, "/ticket-types", await typeOf(tx, principal.companyId, row))
+      },
+    )
+    .get(
+      "/ticket-types/:id",
+      describeRoute({
+        operationId: "getTicketType",
+        summary: "One ticket type",
+        description: "One type of the caller's company, with its fields and permissions. Another company's type is a type that does not exist here.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The type, with its fields and permissions.", TicketType),
+          400: describeProblem("The path does not hold an id."),
+          ...commonProblems("view"),
+          404: describeProblem("No ticket type with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrantOf(readModuleOf, "view"),
+      validate("param", IdParam),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const row = await findType(tx, principal, id)
+        if (row === undefined) throw noSuchType(id)
+        return c.json(await typeOf(tx, principal.companyId, row))
+      },
+    )
+    .patch(
+      "/ticket-types/:id",
+      describeRoute({
+        operationId: "patchTicketType",
+        summary: "Rename, describe, retire or make a ticket type its kind's default",
+        description:
+          "Changes the name, the description or the status, or makes the type its kind's default with `isDefault: true`, unmaking the one that was. `inactive` retires the type, so no new ticket and no patch moving a ticket names it, while every ticket it holds keeps it; a kind's default is never retired (409, `" +
+          DEFAULT_TYPE_OFFERED +
+          "`), so another type is made the default first. The kind never changes, since the type's tickets carry it; the fields and the permissions are sets with their own routes. Under the type's row lock.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The type as it now stands.", TicketType),
+          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own — the kind, the fields and the permissions included — unmakes the default, or makes it the default while retiring it."),
+          ...commonProblems("edit"),
+          404: describeProblem("No ticket type with that id in this company."),
+          409: describeProblem("The company already has another type with that name, or the patch retires the kind's default, or makes a retired type the default."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", TicketTypePatch),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const patch = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        await lockRow(tx, ticketType, { companyId: principal.companyId, id }, strengthFor(ticketType, patch))
+        const current = await findType(tx, principal, id)
+        if (current === undefined) throw noSuchType(id)
+        const status = patch.status ?? current.status
+        const isDefault = patch.isDefault ?? current.isDefault
+        // A default is offered: the database's `ticket_type_default_shape`, as the sentence a person reads.
+        if (isDefault && status !== "active") throw problem(409, { detail: DEFAULT_TYPE_OFFERED })
+        if (patch.isDefault === true && !current.isDefault) await unmakeDefaults(tx, principal.companyId, current.kind, current.id)
+        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
+        const [row] = await refuseDuplicate(sentences, () =>
+          tx
+            .update(ticketType)
+            .set(patch)
+            .where(and(scope(principal), eq(ticketType.id, id)))
+            .returning(columns),
+        )
+        if (row === undefined) throw noSuchType(id)
+        return c.json(await typeOf(tx, principal.companyId, row))
+      },
+    )
+    .put(
+      "/ticket-types/:id/fields",
+      describeRoute({
+        operationId: "putTicketTypeFields",
+        summary: "Replace a ticket type's custom fields",
+        description:
+          "Replaces the type's whole list of custom fields, in order, with the one in the body. A field is a key — lowercase words joined by hyphens, which a ticket's values are held by — a label, an optional help text, an input (`text`, `paragraph`, `number`, `date`, `yes-no` or `choice`), the choices a `choice` field offers and no other does, and when it must be filled in: `optional`, `to-open` or `to-complete`. Each key is named once (400 at `fields.N.key`). A field left out is gone from the type: the tickets that hold a value of it keep the value, which is read and no longer judged. The type's `updatedAt` moves, since the list is part of the type on the wire.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The type with the fields it now has.", TicketType),
+          400: describeProblem("The path does not hold an id, or the body is missing `fields`, names a member it does not own, names a key twice or of the wrong shape, or gives choices to a field that is not a choice or none to one that is — at the field at fault."),
+          ...commonProblems("edit"),
+          404: describeProblem("No ticket type with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", TicketTypeFieldsSet),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { fields } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const [row] = await tx
+          .update(ticketType)
+          .set(stamp())
+          .where(and(scope(principal), eq(ticketType.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchType(id)
+        await tx.delete(ticketTypeField).where(and(eq(ticketTypeField.companyId, principal.companyId), eq(ticketTypeField.ticketTypeId, id)))
+        if (fields.length > 0) {
+          await tx.insert(ticketTypeField).values(fields.map((field, index) => ({ ...field, id: newId(), companyId: principal.companyId, ticketTypeId: id, position: index + 1 })))
+        }
+        return c.json(await typeOf(tx, principal.companyId, row))
+      },
+    )
+    .put(
+      "/ticket-types/:id/permissions",
+      describeRoute({
+        operationId: "putTicketTypePermissions",
+        summary: "Replace who may give a ticket type's status commands",
+        description:
+          "Replaces the whole set with the one in the body: per status command — `start`, `wait`, `hold`, `complete`, `reject`, `reopen` — the roles that may give it on a ticket of the type. A command left out, or naming no role, is anyone's who works tickets, as every command is without one; a command naming roles is theirs alone, and another role's caller is refused (403, naming them). Each command is named once (400 on `permissions`), each role once in it (400 at `permissions.N.roleIds`), and each a role of this company (400 at `permissions.N.roleIds.M`). The rule binds a person's command in the office; a stop that services its ticket, and the system's own work, are not held to it. The type's `updatedAt` moves.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The type with the permissions it now has.", TicketType),
+          400: describeProblem("The path does not hold an id, or the body is missing `permissions`, names a member it does not own, names a command twice or one the type has no status for, names a role twice in a command, or names one that is not this company's."),
+          ...commonProblems("edit"),
+          404: describeProblem("No ticket type with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", TicketTypePermissionsSet),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { permissions } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const [row] = await tx
+          .update(ticketType)
+          .set(stamp())
+          .where(and(scope(principal), eq(ticketType.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchType(id)
+        const named = [...new Set(permissions.flatMap((entry) => entry.roleIds))]
+        const held = new Set(
+          named.length === 0
+            ? []
+            : (
+                await tx
+                  .select({ id: role.id })
+                  .from(role)
+                  .where(and(eq(role.companyId, principal.companyId), inArray(role.id, named)))
+              ).map((found) => found.id),
+        )
+        const issues = permissions.flatMap((entry, index) => entry.roleIds.flatMap((roleId, at) => (held.has(roleId) ? [] : [{ path: `permissions.${index}.roleIds.${at}`, message: NOT_A_ROLE }])))
+        if (issues.length > 0) throw invalidRequest("body", issues)
+        await tx.delete(ticketTypePermission).where(and(eq(ticketTypePermission.companyId, principal.companyId), eq(ticketTypePermission.ticketTypeId, id)))
+        const rows = permissions.flatMap((entry) => entry.roleIds.map((roleId) => ({ id: newId(), companyId: principal.companyId, ticketTypeId: id, command: entry.command as TicketCommand, roleId })))
+        if (rows.length > 0) await tx.insert(ticketTypePermission).values(rows)
+        return c.json(await typeOf(tx, principal.companyId, row))
+      },
+    )
+}

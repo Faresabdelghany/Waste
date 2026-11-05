@@ -24,6 +24,8 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
+import { newId } from "@waste/db/ids"
 import { role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
@@ -42,7 +44,7 @@ import { company, project } from "@waste/db/schema/organisation"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent, ticketType } from "@waste/db/schema/resolution"
 import { scaleTicket, scaleTicketLine } from "@waste/db/schema/scale-house"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
@@ -392,6 +394,7 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       projectId: tenant.projects.copenhagen.id,
       number: (numbered?.next ?? 1) - 1,
       kind: seed.kind ?? "missed-collection",
+      ticketTypeId: await defaultTicketTypeOf(tx, companyId, seed.kind ?? "missed-collection", newId),
       status: seed.resolution === null ? "open" : "completed",
       source: "phone",
       subject: "Bin not emptied",
@@ -469,6 +472,8 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
     await tx.delete(workOrderProduct).where(eq(workOrderProduct.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
+    // The default ticket types the tickets were given (#545 of #544), after the tickets that name them.
+    await tx.delete(ticketType).where(eq(ticketType.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
     await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))

@@ -91,6 +91,8 @@ const missed: Ticket = {
   number: 1001,
   label: "T-1001",
   kind: "missed-collection",
+  ticketTypeId: null,
+  fieldValues: {},
   status: "open",
   priority: "high",
   source: "driver-app",

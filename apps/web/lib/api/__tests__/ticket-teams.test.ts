@@ -114,6 +114,8 @@ describe("a ticket's team", () => {
     number: 1001,
     label: "T-1001",
     kind: "complaint",
+    ticketTypeId: null,
+    fieldValues: {},
     status: "open",
     priority: "none",
     source: "office",
