@@ -38,6 +38,19 @@
   --sidebar-border: oklch(0.93 0 0);
   --sidebar-ring: oklch(0.43 0.215 254.5);
   --shadow-workstream: 0 0 4px 3px oklch(1 0 0 / 0.69) inset, 0 88px 58.5px 0 oklch(0 0 0 / 0.03);
+  /*
+   * Status tones. Like --destructive, each is a pair: the tone itself
+   * (dots, icons, fills, borders, tints such as bg-success/10) and its
+   * -foreground, the tone's text on the canvas or on its own tint. The
+   * themes never override them: every theme sets .dark from its background,
+   * so a dark theme reads the .dark pair and a tint mixes with its canvas.
+   */
+  --success: oklch(0.627 0.194 149.214);
+  --success-foreground: oklch(0.527 0.154 150.069);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+  --info: oklch(0.546 0.245 262.881);
+  --info-foreground: oklch(0.488 0.243 264.376);
 }
 
 .dark {
@@ -74,6 +87,12 @@
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
   --shadow-workstream: 0 0 4px 3px oklch(1 0 0 / 0.1) inset, 0 88px 58.5px 0 oklch(0 0 0 / 0.03);
+  --success: oklch(0.723 0.219 149.579);
+  --success-foreground: oklch(0.792 0.209 151.711);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.828 0.189 84.429);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.707 0.165 254.624);
 }
 
 :root[data-app-theme="ash"] {
@@ -188,6 +207,12 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
