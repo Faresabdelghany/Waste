@@ -32,6 +32,7 @@
 // it is open for a route, a station and a fraction.
 import { routeLabel } from "@waste/contracts/execution"
 import type { Tx } from "@waste/db/client"
+import type { Send } from "@waste/db/jobs"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { unload } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
@@ -133,6 +134,8 @@ export type NotTakenUnload = {
   occurredAt: string
   takes: StationTakes
   now: () => Date
+  /** What the task's automation queues a message with. */
+  send: Send
 }
 
 /** Opens the office's internal task for the unload, in the station's sentence and on the project's clock, due by the project's SLA — once while it is open: a route's next unload of the fraction at the station is the same news. */
@@ -182,6 +185,7 @@ export async function tellOfficeNotTaken(tx: Tx, input: NotTakenUnload): Promise
       alertId: null,
     },
     createdBy: input.recordedBy,
+    automation: { send: input.send, by: input.recordedBy },
     sourceEventId: null,
     newId,
     now: input.now,

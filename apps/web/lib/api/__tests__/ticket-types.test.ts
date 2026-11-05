@@ -62,6 +62,7 @@ const bulky: TicketType = {
     { key: "gate-open", label: "Gate open", helpText: null, input: "yes-no", choices: [], requirement: "optional" },
   ],
   permissions: [{ command: "complete", roleIds: [handlerId] }],
+  actions: [],
 }
 const bulkyRecord = ticketTypeAdapter.toRecord(bulky, context)
 const typesState = loaded({ records: [bulkyRecord], serverIds: new Map([[bulkyRecord.id, bulkyId]]) }, 1)

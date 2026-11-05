@@ -78,7 +78,7 @@ describe("pre-trip inspection", { skip: database.skip || owner.skip }, () => {
     const guard = authenticate({ pool, verifier: keys.verifier })
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", driverDoorRoutes(guard, { now: () => NOW, log: () => {} }))
+    app.route("/", driverDoorRoutes(guard, { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
     app.route("/", routeRoutes(guard, { now: () => NOW, routing: new FakeProvider(), jobs: createJobSender(pool) }))
     app.route("/", vehicleTypeRoutes(guard))
     app.route("/", vehicleRoutes(guard, { now: () => NOW }))

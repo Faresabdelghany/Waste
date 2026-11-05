@@ -121,7 +121,7 @@ export function driverDoor({ now, logged }: { now: () => Date; logged: unknown[]
     const guard = authenticate({ pool, verifier: keys.verifier })
     const mounted = new Hono()
     mounted.onError(errorHandler())
-    mounted.route("/", driverDoorRoutes(guard, { now, log: (entry) => logged.push(entry) }))
+    mounted.route("/", driverDoorRoutes(guard, { now, log: (entry) => logged.push(entry), jobs: createJobSender(pool) }))
     mounted.route("/", routeRoutes(guard, { now, routing: new FakeProvider(), jobs: createJobSender(pool) }))
     const app = mounted as unknown as ReturnType<typeof createApp>
     held.current = {

@@ -52,7 +52,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
   let tenant: ConsumerTenant
   const lines: string[] = []
   const NOW = at("13:30")
-  const context = () => ({ api: pool, now: () => NOW, log: (line: string) => void lines.push(line) })
+  const context = () => ({ api: pool, now: () => NOW, log: (line: string) => void lines.push(line), send: async () => null })
 
   before(async () => {
     pool = createDb(api.url, { max: 4 })
@@ -183,6 +183,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
         sourceEventId: null,
         newId,
         now: () => NOW,
+        automation: { send: async () => null, by: null },
       })
       await book(tx, { id: row.id, projectId: row.projectId }, missed.id, stopId)
       // The office books the next stop before the worker has heard of the first one's miss: the ticket's columns now name only the next.
@@ -221,6 +222,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
         sourceEventId: null,
         newId,
         now: () => NOW,
+        automation: { send: async () => null, by: null },
       })
       await book(tx, { id: row.id, projectId: row.projectId }, seeded.id, stopId)
       return row.id
@@ -581,7 +583,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
           ? await withCompany(pool.db, tenant.companyId, async (tx) => {
               const links = { routeId: seeded.id, pickupId: stop, containerId: tenant.containers.bin2.id, propertyId: tenant.properties.havnegade.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
               const draft = { projectId: tenant.projectId, kind: "reported-problem" as const, priority: "medium" as const, source: "phone" as const, subject: "Caller: bin blocked", description: "The customer called: the bin is blocked.", occurredAt: NOW, dueAt: null, assigneeUserAccountId: null, links, alertId: null }
-              return (await openTicket(tx, { companyId: tenant.companyId, draft, createdBy: tenant.officeUserId, sourceEventId: null, newId, now: () => NOW })).row.id
+              return (await openTicket(tx, { companyId: tenant.companyId, draft, createdBy: tenant.officeUserId, sourceEventId: null, newId, now: () => NOW, automation: { send: async () => null, by: null } })).row.id
             })
           : ((await openTicketFor(problemOn(seeded, stop, "bin2", "Blocked by scaffolding"), context())) as { ticketId: string }).ticketId
       await withCompany(pool.db, tenant.companyId, async (tx) => {
@@ -703,6 +705,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
           sourceEventId: event.id,
           newId,
           now: () => NOW,
+          automation: { send: async () => null, by: null },
         }),
       ),
       (error: unknown) => (error as { cause?: { constraint_name?: string } }).cause?.constraint_name === "ticket_source_event_id_idx",

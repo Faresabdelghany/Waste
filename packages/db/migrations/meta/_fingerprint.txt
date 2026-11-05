@@ -4570,6 +4570,55 @@ index wms.ticket_type ticket_type_tenant_key CREATE UNIQUE INDEX ticket_type_ten
 trigger wms.ticket_type ticket_type_audit_trail enabled=O CREATE TRIGGER ticket_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.ticket_type ticket_type_touch_updated_at enabled=O CREATE TRIGGER ticket_type_touch_updated_at BEFORE UPDATE ON wms.ticket_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_type ticket_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_type_action kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_type_action 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_type_action 2 company_id uuid not-null
+column wms.ticket_type_action 3 created_at timestamp with time zone not-null default=now()
+column wms.ticket_type_action 4 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_type_action 5 ticket_type_id uuid not-null
+column wms.ticket_type_action 6 trigger text not-null
+column wms.ticket_type_action 7 position integer not-null
+column wms.ticket_type_action 8 kind text not-null
+column wms.ticket_type_action 9 team_id uuid
+column wms.ticket_type_action 10 user_account_id uuid
+column wms.ticket_type_action 11 priority text
+column wms.ticket_type_action 12 command text
+column wms.ticket_type_action 13 resolution text
+column wms.ticket_type_action 14 message_template_name text
+column wms.ticket_type_action 15 recipient text
+column wms.ticket_type_action 16 follow_up_type_id uuid
+constraint wms.ticket_type_action ticket_type_action_command_one_of CHECK ((command = ANY (ARRAY['start'::text, 'wait'::text, 'hold'::text, 'complete'::text, 'reject'::text])))
+constraint wms.ticket_type_action ticket_type_action_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_type_action ticket_type_action_follow_up_type_id_fk FOREIGN KEY (company_id, follow_up_type_id) REFERENCES wms.ticket_type(company_id, id)
+constraint wms.ticket_type_action ticket_type_action_kind_one_of CHECK ((kind = ANY (ARRAY['assign-team'::text, 'assign-person'::text, 'set-priority'::text, 'set-status'::text, 'send-message'::text, 'open-follow-up'::text])))
+constraint wms.ticket_type_action ticket_type_action_kind_shape CHECK (
+CASE kind
+    WHEN 'assign-team'::text THEN ((team_id IS NOT NULL) AND (user_account_id IS NULL) AND (priority IS NULL) AND (command IS NULL) AND (message_template_name IS NULL) AND (recipient IS NULL) AND (follow_up_type_id IS NULL) AND (resolution IS NULL))
+    WHEN 'assign-person'::text THEN ((team_id IS NULL) AND (user_account_id IS NOT NULL) AND (priority IS NULL) AND (command IS NULL) AND (message_template_name IS NULL) AND (recipient IS NULL) AND (follow_up_type_id IS NULL) AND (resolution IS NULL))
+    WHEN 'set-priority'::text THEN ((team_id IS NULL) AND (user_account_id IS NULL) AND (priority IS NOT NULL) AND (command IS NULL) AND (message_template_name IS NULL) AND (recipient IS NULL) AND (follow_up_type_id IS NULL) AND (resolution IS NULL))
+    WHEN 'set-status'::text THEN ((team_id IS NULL) AND (user_account_id IS NULL) AND (priority IS NULL) AND (command IS NOT NULL) AND (message_template_name IS NULL) AND (recipient IS NULL) AND (follow_up_type_id IS NULL) AND ((command = 'complete'::text) = (resolution IS NOT NULL)))
+    WHEN 'send-message'::text THEN ((team_id IS NULL) AND (user_account_id IS NULL) AND (priority IS NULL) AND (command IS NULL) AND (message_template_name IS NOT NULL) AND (recipient IS NOT NULL) AND (follow_up_type_id IS NULL) AND (resolution IS NULL))
+    WHEN 'open-follow-up'::text THEN ((team_id IS NULL) AND (user_account_id IS NULL) AND (priority IS NULL) AND (command IS NULL) AND (message_template_name IS NULL) AND (recipient IS NULL) AND (follow_up_type_id IS NOT NULL) AND (resolution IS NULL))
+    ELSE false
+END)
+constraint wms.ticket_type_action ticket_type_action_pkey PRIMARY KEY (id)
+constraint wms.ticket_type_action ticket_type_action_position_positive CHECK (("position" > 0))
+constraint wms.ticket_type_action ticket_type_action_priority_one_of CHECK ((priority = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text, 'none'::text])))
+constraint wms.ticket_type_action ticket_type_action_recipient_one_of CHECK ((recipient = ANY (ARRAY['ticket-customer'::text, 'owner'::text, 'payer'::text, 'tenant'::text, 'administrator'::text, 'service-contact'::text])))
+constraint wms.ticket_type_action ticket_type_action_resolution_one_of CHECK ((resolution = ANY (ARRAY['recollected'::text, 'serviced'::text, 'answered'::text, 'no-action'::text, 'duplicate'::text])))
+constraint wms.ticket_type_action ticket_type_action_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+constraint wms.ticket_type_action ticket_type_action_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
+constraint wms.ticket_type_action ticket_type_action_ticket_type_id_trigger_position_key UNIQUE (company_id, ticket_type_id, trigger, "position")
+constraint wms.ticket_type_action ticket_type_action_trigger_one_of CHECK ((trigger = ANY (ARRAY['opened'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
+constraint wms.ticket_type_action ticket_type_action_user_account_id_fk FOREIGN KEY (company_id, user_account_id) REFERENCES wms.user_account(company_id, id)
+index wms.ticket_type_action ticket_type_action_follow_up_type_id_idx CREATE INDEX ticket_type_action_follow_up_type_id_idx ON wms.ticket_type_action USING btree (company_id, follow_up_type_id)
+index wms.ticket_type_action ticket_type_action_pkey CREATE UNIQUE INDEX ticket_type_action_pkey ON wms.ticket_type_action USING btree (id)
+index wms.ticket_type_action ticket_type_action_team_id_idx CREATE INDEX ticket_type_action_team_id_idx ON wms.ticket_type_action USING btree (company_id, team_id)
+index wms.ticket_type_action ticket_type_action_ticket_type_id_trigger_position_key CREATE UNIQUE INDEX ticket_type_action_ticket_type_id_trigger_position_key ON wms.ticket_type_action USING btree (company_id, ticket_type_id, trigger, "position")
+index wms.ticket_type_action ticket_type_action_user_account_id_idx CREATE INDEX ticket_type_action_user_account_id_idx ON wms.ticket_type_action USING btree (company_id, user_account_id)
+trigger wms.ticket_type_action ticket_type_action_audit_trail enabled=O CREATE TRIGGER ticket_type_action_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type_action FOR EACH ROW EXECUTE FUNCTION wms.audit_row('ticket_type', 'ticket_type_id')
+trigger wms.ticket_type_action ticket_type_action_touch_updated_at enabled=O CREATE TRIGGER ticket_type_action_touch_updated_at BEFORE UPDATE ON wms.ticket_type_action FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_type_action ticket_type_action_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket_type_field kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket_type_field 1 id uuid not-null default=wms.uuidv7()
 column wms.ticket_type_field 2 company_id uuid not-null
@@ -5471,4 +5520,5 @@ journal 1793867212088 2007cb8587e6cfd3460449eb5b158cc56ec1652c21ea98668a4d7ae3e3
 journal 1793897654220 e01891e8825899c0eccf4e4dd1e4f1a2e357955da604bb62681a0e6307d31683
 journal 1793902123253 7603b62eed847016da2a36566ed930e136dc3237619f7a99b0ca92aedf43f538
 journal 1793906444180 9fc68765a1a042144f7892a750d6798b5d65972be82a56f14a53a71e4b74ee5b
+journal 1793908602189 7f831ac83578d6d12eef2c9b80015979de8c0b721b8981a9295755e7cb578fef
 pgboss-version 42

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
+import { TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
+
+import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
 import { Ticket, TicketCreate, TicketListQuery, TicketPatch, TYPE_OR_KIND } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -10,7 +12,7 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMP = "2026-11-05T09:00:00.000Z"
 
 describe("TicketType", () => {
-  test("is the company's, by a name, of one kind, active or retired, its kind's default or not, with its fields and permissions", () => {
+  test("is the company's, by a name, of one kind, active or retired, its kind's default or not, with its fields, permissions and actions", () => {
     const type = {
       id: ID,
       name: "Bulky waste collection",
@@ -20,6 +22,7 @@ describe("TicketType", () => {
       isDefault: false,
       fields: [{ key: "requested-date", label: "Requested date", helpText: null, input: "date", choices: [], requirement: "to-open" }],
       permissions: [{ command: "complete", roleIds: [OTHER] }],
+      actions: [{ trigger: "opened", kind: "assign-team", teamId: OTHER, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null }],
       createdAt: STAMP,
       updatedAt: STAMP,
     }
@@ -61,6 +64,31 @@ describe("TicketTypePermissionsSet", () => {
     assert.deepEqual(TicketTypePermissionsSet.parse({ permissions: [{ command: "complete", roleIds: [ID] }, { command: "reject", roleIds: [] }] }).permissions.length, 2)
     assert.deepEqual(refusal(TicketTypePermissionsSet.safeParse({ permissions: [{ command: "complete", roleIds: [] }, { command: "complete", roleIds: [ID] }] })), [{ path: "permissions", message: EACH_COMMAND_ONCE }])
     assert.deepEqual(refusal(TicketTypePermissionsSet.safeParse({ permissions: [{ command: "complete", roleIds: [ID, ID] }] })), [{ path: "permissions.0.roleIds", message: EACH_ROLE_ONCE }])
+  })
+})
+
+describe("TicketTypeActionsSet (#546 of #544)", () => {
+  test("an action leaves out what its kind does not take", () => {
+    assert.deepEqual(TicketTypeActionsSet.parse({ actions: [{ trigger: "completed", kind: "send-message", messageTemplateName: "Container delivered", recipient: "owner" }] }), {
+      actions: [{ trigger: "completed", kind: "send-message", teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: "Container delivered", recipient: "owner", followUpTypeId: null }],
+    })
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [] }).success, true, "a type with no automation")
+  })
+
+  test("each action names what its kind needs and nothing else, and moves to no status its trigger is, at the member at fault", () => {
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "open-follow-up" }] })), [{ path: "actions.0.followUpTypeId", message: "An action to open a follow-up names a ticket type" }])
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "set-status", command: "complete" }] })), [{ path: "actions.0.resolution", message: "An action to move the status names a resolution" }])
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "pending", kind: "set-status", command: "wait" }] })), [{ path: "actions.0.command", message: "A ticket reaching pending is pending already; move it to another status" }])
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "rejected", kind: "assign-team", teamId: ID }] })), [{ path: "actions.0.teamId", message: "A ticket reaching rejected is closed and keeps its team" }])
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "set-status", command: "reopen" }] }).success, false, "reopen is no action's: open is no trigger")
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "open", kind: "set-priority", priority: "high" }] }).success, false)
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "send-message", messageTemplateName: "Hello", recipient: "neighbour" }] }).success, false)
+  })
+
+  test("holds a type's actions to the domain's cap", () => {
+    const action = { trigger: "opened", kind: "set-priority", priority: "high" }
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: Array.from({ length: TICKET_TYPE_ACTIONS_MAX }, () => action) }).success, true)
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: Array.from({ length: TICKET_TYPE_ACTIONS_MAX + 1 }, () => action) }).success, false)
   })
 })
 

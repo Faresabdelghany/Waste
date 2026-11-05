@@ -3,7 +3,9 @@
 // what each would — the counter's next number, the row as inserted, the
 // alert as it stands — so the suite can say that the counter comes before the
 // row, the row before the `created` event, the alert's link (under its lock)
-// after the event, and the outbox event last; the `sets.test.ts` precedent.
+// after the event, the outbox event, then the type's opening actions read
+// (#546 of #544) and the row read back as they leave it; the `sets.test.ts`
+// precedent.
 // The statements themselves run against Postgres in tickets.test.ts.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
@@ -25,9 +27,10 @@ const OPENED = new Date("2026-10-05T12:00:01Z")
 
 type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown>; locked?: string }
 
-/** A `tx` that records each statement by kind and table, answering the counter, the inserted rows, the alert `alertRow` describes and, once linked, that alert as the update leaves it. */
+/** A `tx` that records each statement by kind and table, answering the counter, the inserted rows, the ticket as inserted, no actions of its type, the alert `alertRow` describes and, once linked, that alert as the update leaves it. */
 const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
   const statements: Statement[] = []
+  let inserted: Record<string, unknown> | undefined
   const tx = {
     update: (table: Table) => ({
       set: (values: Record<string, unknown>) => ({
@@ -44,6 +47,7 @@ const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
         const name = getTableName(table)
         statements.push({ kind: "insert", table: name, values })
         const row = name === "ticket" ? { ...values, createdAt: STAMP, updatedAt: STAMP } : name === "ticket_event" ? { ...values, recordedAt: STAMP } : values
+        if (name === "ticket") inserted = row
         return Object.assign(Promise.resolve(undefined), { returning: () => Promise.resolve([row]) })
       },
     }),
@@ -57,14 +61,14 @@ const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
             const statement: Statement = { kind: "select", table: name }
             statements.push(statement)
             // The kind's default type is the company's already (#545 of #544), so none is made.
-            const rows = name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow }] : name === "ticket" ? [{ number: 8831 }] : name === "ticket_type" ? [{ id: TYPE }] : []
+            const rows = name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow }] : name === "ticket" ? [inserted ?? { number: 8831 }] : name === "ticket_type" ? [{ id: TYPE }] : []
             const limited = Object.assign(Promise.resolve(rows), {
               for: (strength: string) => {
                 statement.locked = strength
                 return Promise.resolve(rows)
               },
             })
-            return Object.assign(Promise.resolve(rows), { limit: () => limited })
+            return Object.assign(Promise.resolve(rows), { limit: () => limited, orderBy: () => Promise.resolve(rows) })
           },
         }
         return query
@@ -97,10 +101,10 @@ describe("openTicket", () => {
   test("takes the number from the counter, writes the row, appends the created event and emits ticket-opened, in that order, and names no alert it was not given", async () => {
     const { tx, statements } = scripted()
     const newId = minter()
-    const { row, answered } = await openTicket(tx, { companyId: COMPANY, draft: draft(), createdBy: OLIVIA, sourceEventId: null, newId, now: () => OPENED })
-    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "insert outbox_event"])
+    const { row, answered } = await openTicket(tx, { companyId: COMPANY, draft: draft(), createdBy: OLIVIA, sourceEventId: null, newId, now: () => OPENED, automation: { send: async () => null, by: null } })
+    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
 
-    const [, , counter, ticketRow, created, outbox] = statements
+    const [, , counter, ticketRow, created, outbox, assigned] = statements
     assert.deepEqual([ticketRow.values?.ticketTypeId, ticketRow.values?.fieldValues], [TYPE, {}], "a draft naming no type is of its kind's default, with no values (#545 of #544)")
     assert.ok(counter.values?.nextTicketNumber !== undefined && typeof counter.values.nextTicketNumber !== "number", "the counter steps in the database, as an expression over its own column, never a number read and written back")
     assert.deepEqual([row.number, answered.number, answered.label], [8831, 8831, "T-8831"], "the number taken is the one the counter had, not the one it has now")
@@ -122,14 +126,15 @@ describe("openTicket", () => {
 
     assert.deepEqual([outbox.values?.companyId, outbox.values?.projectId, outbox.values?.kind, outbox.values?.aggregateKind, outbox.values?.aggregateId, outbox.values?.occurredAt], [COMPANY, PROJECT, "ticket-opened", "ticket", row.id, OPENED])
     assert.deepEqual(outbox.values?.payload, answered, "the payload is the ticket as answered")
+    assert.deepEqual([assigned.values?.kind, assigned.values?.payload], ["ticket-assigned", answered], "the draft's assignee hears of it as it opened, before its type's actions")
     assert.deepEqual([answered.status, answered.createdBy, answered.sourceEventId, answered.links.routeId, answered.occurredAt, answered.closedAt], ["open", OLIVIA, null, ROUTE, STAMP.toISOString(), null])
   })
 
   test("links the alert after the event and before the outbox, under the alert's lock, and a consumer's ticket carries the event's id and no person", async () => {
     const { tx, statements } = scripted({ status: "new", ticketId: null })
     const SOURCE = "01a0d3a5-e5e0-7000-8000-000000000009"
-    const { row } = await openTicket(tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: null, sourceEventId: SOURCE, newId: minter(), now: () => OPENED })
-    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event"])
+    const { row } = await openTicket(tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: null, sourceEventId: SOURCE, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } })
+    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
     const linked = statements[7]
     assert.deepEqual(linked.values, { ticketId: row.id }, "the alert now names the ticket")
     assert.deepEqual([statements[3].values?.createdBy, statements[3].values?.sourceEventId], [null, SOURCE], "an event's ticket: no person, the event's id")
@@ -138,7 +143,7 @@ describe("openTicket", () => {
 
   test("is refused by a resolved alert, and by one linked to another ticket, before the outbox is written", async () => {
     const resolved = scripted({ status: "resolved", ticketId: null })
-    await assert.rejects(openTicket(resolved.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED }), (error: unknown) => {
+    await assert.rejects(openTicket(resolved.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } }), (error: unknown) => {
       assert.equal((error as { status?: number }).status, 409)
       assert.match((error as { message: string }).message, /This alert is resolved and does not change/)
       return true
@@ -146,7 +151,7 @@ describe("openTicket", () => {
     assert.deepEqual(shape(resolved.statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
 
     const taken = scripted({ status: "acknowledged", ticketId: "01a0d3a5-e5e0-7000-8000-00000000000a" })
-    await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED }), (error: unknown) => {
+    await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } }), (error: unknown) => {
       assert.equal((error as { status?: number }).status, 409)
       assert.match((error as { message: string }).message, /This alert is linked to ticket T-8831; an alert links to one ticket/)
       return true

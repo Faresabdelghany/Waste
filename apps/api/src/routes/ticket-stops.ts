@@ -18,6 +18,7 @@
 import type { Tx } from "@waste/db/client"
 import { bookedStopUncompleted, bookingTicket, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
 import { appendTicketEvent } from "@waste/db/commands/open-ticket"
+import type { Send } from "@waste/db/jobs"
 import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketBooking } from "@waste/db/schema/resolution"
@@ -127,7 +128,7 @@ async function bookedStop(tx: Tx, companyId: string, pickupId: string): Promise<
  * (#422): a stop it was booked away from that services it names the stop
  * booked since, while that one is still planned.
  */
-export async function ticketHearsOfStop(tx: Tx, actor: Principal, pickupId: string, outcome: { from: string; to: string; note?: string }, at: Date): Promise<void> {
+export async function ticketHearsOfStop(tx: Tx, actor: Principal, send: Send, pickupId: string, outcome: { from: string; to: string; note?: string }, at: Date): Promise<void> {
   const completes = outcome.to === "completed" && outcome.from !== "completed"
   const uncompletes = outcome.from === "completed" && (outcome.to === "skipped" || outcome.to === "failed")
   if (!completes && !uncompletes) return
@@ -137,7 +138,7 @@ export async function ticketHearsOfStop(tx: Tx, actor: Principal, pickupId: stri
   const stop = await bookedStop(tx, actor.companyId, pickupId)
   if (completes) {
     const since = booking.bookedPickupId === null || booking.bookedPickupId === pickupId ? undefined : await bookedStop(tx, actor.companyId, booking.bookedPickupId)
-    await serveBookedTicket(tx, who, booking, stop, at, since?.status === "planned" ? { position: since.position, route: since.routeLabel } : undefined)
+    await serveBookedTicket(tx, who, booking, stop, at, { send, by: actor.user.id }, since?.status === "planned" ? { position: since.position, route: since.routeLabel } : undefined)
     return
   }
   await bookedStopUncompleted(tx, who, booking, { ...stop, outcome: outcome.to as "skipped" | "failed", note: outcome.note ?? "" })

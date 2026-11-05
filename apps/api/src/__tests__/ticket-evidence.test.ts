@@ -145,6 +145,25 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(byHand.detail, "Only Viewer may complete a ticket of type Missed collection, claimed", "the office's own completion is held to the type")
     })
 
+    test("a missed collection its type's opening actions closed is not answered closed again: the record's reply is recorded on it all the same (#546 of #544)", async () => {
+      const made = await olivia("/ticket-types", { method: "POST", body: { name: "Missed collection, refused at once", kind: "missed-collection" } })
+      assert.equal(made.status, 201, JSON.stringify(await made.clone().json()))
+      const type = TicketType.parse(await made.json())
+      const set = await olivia(`/ticket-types/${type.id}/actions`, { method: "PUT", body: { actions: [{ trigger: "opened", kind: "set-status", command: "reject" }] } })
+      assert.equal(set.status, 200, JSON.stringify(await set.clone().json()))
+      const rejected = await opened({ ticketTypeId: type.id, links: stop(1) })
+      assert.deepEqual([rejected.status, rejected.resolution], ["rejected", null])
+      assert.deepEqual(
+        (await read(rejected.id)).events.map((event) => [event.kind, event.status, event.visibility]),
+        [
+          ["created", "open", "internal"],
+          ["status-changed", "rejected", "internal"],
+          ["comment", "rejected", "customer"],
+        ],
+      )
+      assert.deepEqual((await eventsAbout(rejected.id)).map((event) => event.kind), ["ticket-opened", "ticket-rejected", "ticket-replied"])
+    })
+
     test("replies with the record and the office's note in one step, completing the case only when asked, and answers 201 with the history and no Location", async () => {
       const fresh = await opened({ links: stop(0) })
       await nextMillisecond()
