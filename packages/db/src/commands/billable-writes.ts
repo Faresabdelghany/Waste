@@ -134,6 +134,7 @@ export async function rowsOn(tx: Tx, companyId: string, listId: string, productI
       customerId: priceListRow.customerId,
       validFrom: priceListRow.validFrom,
       validTo: priceListRow.validTo,
+      fromQuantity: priceListRow.fromQuantity,
     })
     .from(priceListRow)
     .where(and(eq(priceListRow.companyId, companyId), eq(priceListRow.priceListId, listId), eq(priceListRow.productId, productId), validOn(priceListRow, day)))
@@ -153,6 +154,8 @@ export type PricingInput = {
   containerTypeId?: string | null
   /** The pickup's fraction on the day. */
   wasteFractionId?: string | null
+  /** The quantity a row's tier is judged against (M16b of #293): a window line's measure in its product's unit; absent where the occurrence names none. */
+  tierQuantity?: number | null
 }
 
 const blocked = (blockReason: BlockReason): PricingOutcome => ({ blockReason, price: null, resolution: null })
@@ -189,6 +192,7 @@ export async function priceDraft(tx: Tx, scope: Scope, input: PricingInput, labe
         containerTypeId: input.containerTypeId ?? null,
         wasteFractionId: input.wasteFractionId ?? null,
         customerId: facts.customerId,
+        quantity: input.tierQuantity ?? null,
       },
     },
     labels,
@@ -216,6 +220,7 @@ export type ComposedEvent = {
   visitId: string | null
   unloadId: string | null
   weightKg: number | null
+  scaleTicketLineId: string | null
   subscriptionId: string | null
   sourceEventId: string | null
   createdBy: string | null
@@ -246,7 +251,8 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
   if (row.pickupId !== null && row.routeId === null) return "a pickup is named with its route (billable_event_pickup_shape)"
   if (row.evidenceProofId !== null && row.kind !== "pickup-exception") return "only a Pickup Exception's charge names its evidence (billable_event_evidence_shape)"
   if (row.visitId !== null && row.kind !== "visit") return "only a recycling-centre visit's charge names its visit (billable_event_visit_shape)"
-  if ((row.kind === "weight") !== (row.unloadId !== null) || (row.unloadId === null) !== (row.weightKg === null)) return "only a weight charge names its Unload, and it carries its share's kilograms (billable_event_weight_shape)"
+  if ((row.kind === "weight") !== (row.unloadId !== null) || (row.kind === "weight" || row.kind === "scale-ticket") !== (row.weightKg !== null)) return "only a weight charge names its Unload, and it and a window line's charge carry their kilograms (billable_event_weight_shape)"
+  if ((row.kind === "scale-ticket") !== (row.scaleTicketLineId !== null)) return "only a window line's charge names its line, and it always does (billable_event_scale_ticket_shape)"
   switch (row.kind) {
     case "pickup":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a pickup event names its pickup and no ticket and no reversal (billable_event_kind_shape)"
@@ -265,6 +271,9 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       break
     case "weight":
       if (row.unloadId === null || row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a weight charge names its Unload and its stop, and no ticket and no reversal (billable_event_kind_shape)"
+      break
+    case "scale-ticket":
+      if (row.scaleTicketLineId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a window line's charge names its line and no pickup, no ticket and no reversal (billable_event_kind_shape)"
       break
     case "visit":
       if (row.visitId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recycling-centre visit's charge names its visit and no pickup, no ticket and no reversal (billable_event_kind_shape)"

@@ -89,3 +89,57 @@ test("a walk-in weighed in and out at the window, the load split into lines by f
     [null, 400],
   ])
 })
+
+test("a walk-in's load sold by the tonne at the window: weighed out with its product, and what it comes to read in its details (M16b of #293)", async ({ page, api }) => {
+  test.setTimeout(120_000)
+  const project = (await listAll<Named>(api, "/projects")).find((candidate) => candidate.name === "Copenhagen Central") ?? fail("the seed has no Copenhagen Central")
+  const residual = (await listAll<Named & { key: string }>(api, "/waste-fractions")).find((fraction) => fraction.key === "residual") ?? fail("the seed has no residual fraction")
+  const suffix = Date.now().toString(36).toUpperCase()
+  const siteName = uniqueName("E2E window prices")
+  const opened = await api.post("/unloading-stations", {
+    data: { code: `E2E-WP-${suffix}`, name: siteName, address: "Sundkrogsgade 32\n2100 København Ø", location: { type: "Point", coordinates: [12.59, 55.71] }, ownership: "company", weighbridge: true, wasteFractionIds: [residual.id] },
+  })
+  expect(opened.status(), await opened.text()).toBe(201)
+  const productName = uniqueName("E2E residual by the tonne")
+  const made = await api.post("/products", { data: { projectId: project.id, name: productName, kind: "additional-service", status: "active", unit: "tonne", vatPercent: 25 } })
+  expect(made.status(), await made.text()).toBe(201)
+  const productId = ((await made.json()) as { id: string }).id
+  const today = new Date().toISOString().slice(0, 10)
+  const [list] = (await listAll<{ id: string; isDefault: boolean; validFrom: string }>(api, "/price-lists", { projectId: project.id })).filter((candidate) => candidate.isDefault && candidate.validFrom <= today)
+  if (list === undefined) throw new Error(`${project.name} has no default price list in force today`)
+  const base = await api.post(`/price-lists/${list.id}/rows`, { data: { productId, unitPriceMinor: 60_000, validFrom: list.validFrom } })
+  expect(base.status(), await base.text()).toBe(201)
+  const tier = await api.post(`/price-lists/${list.id}/rows`, { data: { productId, unitPriceMinor: 50_000, fromQuantity: 2, validFrom: list.validFrom } })
+  expect(tier.status(), await tier.text()).toBe(201)
+
+  const loaded = answerOf(page, "GET", /^\/scale-tickets$/)
+  await page.goto("/operate?module=scale-house")
+  expect((await loaded).status()).toBe(200)
+  await page.getByRole("button", { name: "Weigh in" }).click()
+  const weighIn = dialogTitled(page, "Weigh in")
+  await pick(weighIn, page, /^Project/, /^Copenhagen Central/)
+  await pick(weighIn, page, /^Site/, new RegExp(`^${siteName}`))
+  await weighIn.getByLabel(/^Plate/).fill(`E2E ${suffix}`)
+  await weighIn.getByLabel(/^Gross \(kg\)/).fill("4500")
+  const [created] = await Promise.all([answerOf(page, "POST", /^\/scale-tickets$/), weighIn.getByRole("button", { name: "Weigh in" }).click()])
+  expect(created.status(), await created.text()).toBe(201)
+  const ticket = (await created.json()) as { id: string }
+
+  const details = page.getByRole("dialog").filter({ has: page.getByTestId("scale-house-commands") })
+  await details.getByTestId("scale-house-commands").getByRole("button", { name: "Weigh out" }).click()
+  const weighOut = dialogTitled(page, "Weigh out")
+  await weighOut.getByLabel(/^Tare \(kg\)/).fill("2000")
+  await pick(weighOut, page, /^Fraction 1/, new RegExp(`^${residual.name}$`))
+  await weighOut.getByLabel(/^Net 1 \(kg\)/).fill("2500")
+  await pick(weighOut, page, /^Sold as 1/, new RegExp(`^${productName}`))
+  const [completed] = await Promise.all([answerOf(page, "POST", new RegExp(`^/scale-tickets/${ticket.id}/complete$`)), weighOut.getByRole("button", { name: "Weigh out" }).click()])
+  expect(completed.status(), await completed.text()).toBe(200)
+  expect((completed.request().postDataJSON() as { lines: unknown[] }).lines).toEqual([{ wasteFractionId: residual.id, netKg: 2500, productId }])
+
+  // 2.5 tonnes meet the tier from 2: 500.00 a tonne, 1,250.00 net and 1,562.50 with VAT.
+  const amount = details.getByTestId("scale-ticket-amount-due")
+  const [due] = await Promise.all([answerOf(page, "GET", new RegExp(`^/scale-tickets/${ticket.id}/amount-due$`)), amount.getByRole("button", { name: "Amount due" }).click()])
+  expect(due.status(), await due.text()).toBe(200)
+  expect(((await due.json()) as { totalMinor: number; complete: boolean })).toMatchObject({ totalMinor: 156_250, complete: true })
+  await expect(amount).toContainText("Total")
+})

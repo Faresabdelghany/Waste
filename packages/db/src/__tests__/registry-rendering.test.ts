@@ -68,9 +68,13 @@
 // onto 0054's, and item-product-unit-rendering.test.ts pins the statements.
 //
 // The weight charges' migration (O28 of #290) gave it `tonne`, a collection
-// charged by its reviewed weight: `CHANGED_FOR_WEIGHT_CHARGES`, now first of
-// the product's chain, maps today's product onto the item unit's, and
+// charged by its reviewed weight: `CHANGED_FOR_WEIGHT_CHARGES` maps the
+// product as it wrote it onto the item unit's, and
 // weight-charges-rendering.test.ts pins the statements.
+//
+// The window prices' migration (M16b of #293) gave it `m3`, a scale-house
+// line sold by the cubic metre: `CHANGED_FOR_WINDOW_PRICES`, now first of the
+// product's chain, maps today's product onto the weight charges'.
 //
 // Migration 0056 (O14 of #290) gave `property` and `agreement` their service
 // window and its check: `CHANGED_IN_0056`, first of both chains, maps today's
@@ -191,10 +195,10 @@ const ADDED_BY_PUBLIC_PLACEMENTS = [
 /** What 0004 created and 0007 dropped: the index on the placement's project, which its key now leads with. */
 const DROPPED_IN_0007 = [index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id")]
 
-/** product as drizzle-kit wrote it as of 0004, as of 0010 with the invoice name, code and VAT rate (Issue #112), as of 0044 (M14 of #293) with the `day` unit and a hire's free days, as of 0054 (#393) with the `visit` unit, as of the item unit's migration (#449) with the `item` unit, and as it writes it since the weight charges' (O28 of #290), with the `tonne` unit. */
-const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit" | "weight-charges"): string => {
+/** product as drizzle-kit wrote it as of 0004, as of 0010 with the invoice name, code and VAT rate (Issue #112), as of 0044 (M14 of #293) with the `day` unit and a hire's free days, as of 0054 (#393) with the `visit` unit, as of the item unit's migration (#449) with the `item` unit, as of the weight charges' (O28 of #290) with the `tonne` unit, and as it writes it since the window prices' (M16b of #293), with the `m3` unit. */
+const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit" | "weight-charges" | "window-prices"): string => {
   const finance = asOf !== "0004"
-  const hire = asOf === "0044" || asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges"
+  const hire = asOf === "0044" || asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges" || asOf === "window-prices"
   return createTable("product", "project", [
     '"name" text NOT NULL',
     '"kind" text NOT NULL',
@@ -209,7 +213,7 @@ const productTable = (asOf: "0004" | "0010" | "0044" | "0054" | "item-unit" | "w
     uniqueKey("product_project_key", "company_id", "project_id", "id"),
     oneOfCheck("product", "kind", "container-collection", "recurring-service", "additional-service"),
     oneOfCheck("product", "status", "draft", "active", "inactive"),
-    oneOfCheck("product", "unit", "pickup", "month", "job", ...(hire ? ["day"] : []), ...(asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges" ? ["visit"] : []), ...(asOf === "item-unit" || asOf === "weight-charges" ? ["item"] : []), ...(asOf === "weight-charges" ? ["tonne"] : [])),
+    oneOfCheck("product", "unit", "pickup", "month", "job", ...(hire ? ["day"] : []), ...(asOf === "0054" || asOf === "item-unit" || asOf === "weight-charges" || asOf === "window-prices" ? ["visit"] : []), ...(asOf === "item-unit" || asOf === "weight-charges" || asOf === "window-prices" ? ["item"] : []), ...(asOf === "weight-charges" || asOf === "window-prices" ? ["tonne"] : []), ...(asOf === "window-prices" ? ["m3"] : [])),
     ...(finance ? [`CONSTRAINT "product_vat_percent_range" CHECK (${ref("product", "vat_percent")} between 0 and 100)`] : []),
     ...(hire ? [`CONSTRAINT "product_free_days_shape" CHECK (${ref("product", "free_days")} is null or (${ref("product", "unit")} = 'day' and ${ref("product", "free_days")} between 0 and 366))`] : []),
   ])
@@ -234,7 +238,10 @@ const agreementTable = (asOf: "0004" | "0010" | "0056"): string =>
     oneOfCheck("agreement", "billing_cadence", "monthly", "quarterly", "annual", "manual"),
   ])
 
-/** What the weight charges' migration changed (O28 of #290): the product's CREATE TABLE as drizzle-kit generates it now onto what it generated as of the item unit's. Applied first. */
+/** What the window prices' migration changed (M16b of #293): the product's CREATE TABLE as drizzle-kit generates it now onto what it generated as of the weight charges'. Applied first. */
+const CHANGED_FOR_WINDOW_PRICES = new Map([[productTable("window-prices"), productTable("weight-charges")]])
+
+/** What the weight charges' migration changed (O28 of #290): the product's CREATE TABLE as drizzle-kit generated it then onto what it generated as of the item unit's. Applied after the window prices'. */
 const CHANGED_FOR_WEIGHT_CHARGES = new Map([[productTable("weight-charges"), productTable("item-unit")]])
 
 /** What the item unit's migration changed (#449): the product's CREATE TABLE as drizzle-kit generated it then onto what it generated as of 0054. Applied after the weight charges'. */
@@ -432,7 +439,7 @@ const expected = [
     positiveCheck("service_frequency", "days_between"),
     `CONSTRAINT "service_frequency_shape" CHECK ((${ref("service_frequency", "collections_per_week")} is not null or (${ref("service_frequency", "weeks_between")} is null and ${ref("service_frequency", "days_between")} is null)) and (${ref("service_frequency", "weeks_between")} is null or ${ref("service_frequency", "days_between")} is null))`,
   ]),
-  productTable("weight-charges"),
+  productTable("window-prices"),
   customerTable(true),
   propertyTable("0062"),
   partyTable(true),
@@ -586,6 +593,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
       .filter((statement) => !ADDED_IN_0010.includes(statement) && !ADDED_BY_DATED_PARTIES.includes(statement) && !ADDED_BY_PUBLIC_PLACEMENTS.includes(statement))
       .map((statement) => CHANGED_BY_PUBLIC_PLACEMENTS.get(statement) ?? statement)
       .map((statement) => CHANGED_BY_DATED_PARTIES.get(statement) ?? statement)
+      .map((statement) => CHANGED_FOR_WINDOW_PRICES.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_WEIGHT_CHARGES.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_ITEM_UNIT.get(statement) ?? statement)
       .map((statement) => CHANGED_FOR_HAZARDOUS.get(statement) ?? CHANGED_IN_0062.get(statement) ?? statement)
@@ -605,7 +613,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     const today = await statementsFor(tables)
     for (const statement of [...CHANGED_BY_PUBLIC_PLACEMENTS.keys(), ...ADDED_BY_PUBLIC_PLACEMENTS]) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0007.keys()) assert.ok([...CHANGED_BY_PUBLIC_PLACEMENTS.values()].includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_FOR_WEIGHT_CHARGES.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_WINDOW_PRICES.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_WEIGHT_CHARGES.keys()) assert.ok([...CHANGED_FOR_WINDOW_PRICES.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_FOR_ITEM_UNIT.keys()) assert.ok([...CHANGED_FOR_WEIGHT_CHARGES.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_FOR_ITEM_UNIT.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0062.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])

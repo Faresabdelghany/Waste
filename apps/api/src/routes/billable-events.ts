@@ -73,6 +73,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
 import { eventColumns, eventOf, eventScope, eventsFrom, findEvent, noSuchEvent, statusIs, statusOf, UNNAMED, type EventReading } from "./billing-shapes"
 import { requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
@@ -145,7 +146,7 @@ async function hireOf(tx: Tx, scope: Scope, row: EventReading, agreementId: stri
 }
 
 /** A manual event links to nothing. */
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
 
 /** The conditions a pickup event carries into the resolver; none on a manual or a ticket event. */
 type Conditions = { planningAreaId: string | null; containerTypeId: string | null; wasteFractionId: string | null }
@@ -390,6 +391,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
               ? await priceRecurringCharge(tx, scope, chargeOf(current, current.agreementId, productId))
               : current.kind === "hire" && current.placementId !== null
                 ? await priceHire(tx, scope, await hireOf(tx, scope, current, current.agreementId, productId, current.placementId))
+                : current.kind === "scale-ticket" && current.scaleTicketLineId !== null
+                  ? await repriceWindowLine(tx, scope, current.agreementId, current.serviceDate, current.scaleTicketLineId, productId)
                 : current.kind === "weight" && current.weightKg !== null
                   ? await priceWeightCharge(tx, scope, { agreementId: current.agreementId, productId, serviceDate: current.serviceDate, weightKg: current.weightKg, ...(await conditionsOf(tx, principal.companyId, current)) })
                   : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
@@ -415,7 +418,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "cancelBillableEvent",
         summary: "Cancel a ready, held or blocked event",
         description:
-          "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected`, `visit-voided` and `weight-revised` are the consumer's and are refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+          "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected`, `visit-voided`, `weight-revised` and `scale-ticket-voided` are the consumer's and are refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event, cancelled.", BillableEvent),
@@ -521,4 +524,12 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         return c.json(eventOf({ ...row, ...UNNAMED }))
       },
     )
+}
+
+/** A window line's charge priced again (M16b of #293): the line as it stands, at the product the event names, under the event's agreement on its day. */
+async function repriceWindowLine(tx: Tx, scope: Scope, agreementId: string, serviceDate: string, lineId: string, productId: string) {
+  const [line] = await windowLinesOf(tx, scope.companyId, null, lineId)
+  if (line === undefined) throw new Error(`scale ticket line ${lineId} vanished under its event`)
+  const sold = line.product?.id === productId ? line.product : null
+  return await priceWindowLine(tx, scope, { serviceDate, agreementId, line: { ...line, product: sold } })
 }

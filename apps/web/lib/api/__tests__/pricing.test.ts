@@ -65,7 +65,7 @@ const xmas: Product = { ...bulky, id: "01a0d2a4-a280-700a-8000-000000000007", na
 const plCph: PriceList = { id: "01a0d2a4-a280-7028-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "PL-Copenhagen-2026", name: "PL-Copenhagen-2026", currency: "DKK", isDefault: true, notes: "Annual tariff for Copenhagen municipal collection.", validFrom: "2026-01-01", validTo: null }
 const plNext: PriceList = { ...plCph, id: "01a0d2a4-a280-7028-8000-000000000003", code: "pl-cph-2027", name: "Copenhagen 2027", isDefault: false, notes: null, validFrom: "2027-01-01", validTo: "2028-01-01" }
 
-const rowDefault: PriceListRow = { id: "01a0d2a4-a280-7029-8000-000000000001", ...STAMPS, projectId: copenhagen.id, priceListId: plCph.id, productId: res240.id, unitPriceMinor: 1850, planningAreaId: null, customerKind: null, containerTypeId: null, wasteFractionId: null, customerId: null, note: null, indexedFromId: null, indexLabel: null, indexBasisPoints: null, validFrom: "2026-01-01", validTo: null }
+const rowDefault: PriceListRow = { id: "01a0d2a4-a280-7029-8000-000000000001", ...STAMPS, projectId: copenhagen.id, priceListId: plCph.id, productId: res240.id, unitPriceMinor: 1850, planningAreaId: null, customerKind: null, containerTypeId: null, wasteFractionId: null, customerId: null, note: null, indexedFromId: null, indexLabel: null, indexBasisPoints: null, fromQuantity: null, validFrom: "2026-01-01", validTo: null }
 const rowOrganisation: PriceListRow = { ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000002", unitPriceMinor: 2450, customerKind: "organisation" }
 const rowOsterbro: PriceListRow = { ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000003", unitPriceMinor: 1650, customerId: osterbro.id, note: "Negotiated deal", validTo: "2027-02-03" }
 const rowArea: PriceListRow = { ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000004", priceListId: plNext.id, unitPriceMinor: 1999, planningAreaId: AREA, containerTypeId: bin240.id, wasteFractionId: residual.id, validFrom: "2027-01-01" }
@@ -402,6 +402,10 @@ describe("the price rows module: the lists and their rows", () => {
     assert.deepEqual(refusalOf({ productId: "product-bulky" }), { path: "productId", message: "Pick a product the API holds" })
     assert.deepEqual(refusalOf({ amount: "45.005" }), { path: "amount", message: "An amount in DKK, such as 18.50" })
     assert.deepEqual(refusalOf({ customerKind: "municipal" }), { path: "customerKind", message: "Pick a person or an organisation" })
+    // A quantity tier (M16b of #293): a whole number of the product's unit, part of the row's key.
+    const tiered = priceRowAdapter.toCreateBody!({ ...record, submittedValues: { ...record.submittedValues, fromQuantity: "2" } }, context(rowFixtures, pricedState)) as { body: { fromQuantity?: number } }
+    assert.equal(tiered.body.fromQuantity, 2)
+    assert.deepEqual(refusalOf({ fromQuantity: "1.5" }), { path: "fromQuantity", message: "A quantity tier is a whole number, 1 or more" })
   })
 
   test("patches a row's price, note and end only, and refuses a condition or its start moved: end it and add another", () => {

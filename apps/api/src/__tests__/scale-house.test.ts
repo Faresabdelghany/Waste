@@ -8,16 +8,20 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Page } from "@waste/contracts/pagination"
-import { ScaleTicket, VehicleTare } from "@waste/contracts/scale-house"
+import { ScaleTicket, ScaleTicketAmountDue, VehicleTare } from "@waste/contracts/scale-house"
 import { Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
+import { product } from "@waste/db/schema/catalogue"
+import { outboxEvent } from "@waste/db/schema/execution"
 import { customer } from "@waste/db/schema/customers"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { withCompany } from "@waste/db/tenant"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { NOT_A_SITE, NOT_THE_CUSTOMERS_AGREEMENT, OWN_LOAD_IS_ONE_FRACTION, TARE_TAKEN, linesOffNet, noRegisteredTare, tareNotUnder, writtenAsUnload } from "../routes/scale-house"
+import { NOT_A_SITE, NOT_SOLD_AT_THE_WINDOW, NOT_THE_CUSTOMERS_AGREEMENT, OWN_LOAD_IS_ONE_FRACTION, TARE_TAKEN, VOLUME_ONLY_BY_THE_CUBIC_METRE, VOLUME_REQUIRED, linesOffNet, noRegisteredTare, tareNotUnder, writtenAsUnload } from "../routes/scale-house"
+import { seedPriceList } from "./finance-fixtures"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, seedExecution, type ExecutionFixtures } from "./execution-fixtures"
@@ -233,5 +237,69 @@ describe("the scale house", { skip: database.skip || owner.skip }, () => {
     assert.equal((await viewer("/scale-tickets", { method: "POST", body: { projectId: project, unloadingStationId: site, vehiclePlate: "EF 2", party: "cash", grossKg: 900 } })).status, 403, "and weighs nothing in")
     assert.equal((await viewer(`/scale-tickets/${ticket.id}/void`, { method: "POST", body: { reason: "duplicate" } })).status, 403)
     assert.equal((await viewer("/vehicle-tares", { method: "POST", body: { projectId: project, plate: "EF2", tareKg: 1, weighedOn: "2026-10-01" } })).status, 403)
+  })
+
+  // The window's prices (M16b of #293): products sold by the tonne and by the cubic metre, the project's default list with a tier.
+  const byTheTonne = testId()
+  const byTheCubicMetre = testId()
+  const byThePickup = testId()
+  before(async () => {
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.insert(product).values([
+        { id: byTheTonne, companyId: a.companyId, projectId: project, name: `Residual at the window ${byTheTonne.slice(-4)}`, kind: "additional-service", status: "active", unit: "tonne", vatPercent: 25 },
+        { id: byTheCubicMetre, companyId: a.companyId, projectId: project, name: `Bulky at the window ${byTheCubicMetre.slice(-4)}`, kind: "additional-service", status: "active", unit: "m3", vatPercent: 25 },
+        { id: byThePickup, companyId: a.companyId, projectId: project, name: `A pickup ${byThePickup.slice(-4)}`, kind: "container-collection", status: "active", unit: "pickup", vatPercent: 25 },
+      ])
+    })
+    await seedPriceList(pool, a, {
+      code: `WINDOW-${byTheTonne.slice(-6)}`,
+      isDefault: true,
+      rows: [
+        { productId: byTheTonne, unitPriceMinor: 60_000 },
+        { productId: byTheTonne, unitPriceMinor: 50_000, fromQuantity: 2 },
+        { productId: byTheCubicMetre, unitPriceMinor: 20_000 },
+      ],
+    })
+  })
+
+  const amountDue = async (id: string): Promise<ScaleTicketAmountDue> => {
+    const response = await olivia(`/scale-tickets/${id}/amount-due`)
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    return ScaleTicketAmountDue.parse(await response.json())
+  }
+  const newsOf = (id: string) =>
+    ownerPool.db.select({ kind: outboxEvent.kind }).from(outboxEvent).where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, id)))
+
+  test("an account's line sold by the tonne is news for Finance, and comes to the tier its weight meets at the window (M16b of #293)", async () => {
+    const ticket = await weighIn({ vehiclePlate: "GH 1", party: "account", customerId: anna, agreementId: annasAgreement, grossKg: 4_500, weighedInAt: IN() })
+    assert.equal((await olivia(`/scale-tickets/${ticket.id}/amount-due`)).status, 409, "an open ticket comes to nothing yet")
+    const done = await completed(ticket.id, { tare: { source: "weighed", tareKg: 2_000 }, lines: [{ wasteFractionId: ex.fractions.residual.id, netKg: 2_500, productId: byTheTonne }] })
+    assert.deepEqual(done.lines.map((line) => [line.productId, line.volumeLitres]), [[byTheTonne, null]])
+    assert.deepEqual((await newsOf(ticket.id)).map((row) => row.kind), ["scale-ticket-completed"])
+    const due = await amountDue(ticket.id)
+    assert.deepEqual([due.currency, due.lines[0]?.quantity, due.lines[0]?.unitPriceMinor, due.netMinor, due.vatMinor, due.totalMinor, due.complete], ["DKK", 2.5, 125_000, 125_000, 31_250, 156_250, true], "2.5 tonnes meet the tier from 2 at 500.00 a tonne")
+
+    await olivia(`/scale-tickets/${ticket.id}/void`, { method: "POST", body: { reason: "entered-in-error" } })
+    assert.deepEqual((await newsOf(ticket.id)).map((row) => row.kind).sort(), ["scale-ticket-completed", "scale-ticket-voided"])
+  })
+
+  test("a walk-in's load sold by the cubic metre declares its volume, and comes to the rate times it under the project's default list", async () => {
+    const ticket = await weighIn({ vehiclePlate: "GH 2", party: "cash", grossKg: 1_400, weighedInAt: IN() })
+    const line = { wasteFractionId: ex.fractions.residual.id, netKg: 400 }
+    const tare = { source: "weighed", tareKg: 1_000 }
+    assert.deepEqual(await fieldErrors(await complete(ticket.id, { tare, lines: [{ ...line, productId: byTheCubicMetre }] })), [["lines.0.volumeLitres", VOLUME_REQUIRED]])
+    assert.deepEqual(await fieldErrors(await complete(ticket.id, { tare, lines: [{ ...line, productId: byTheTonne, volumeLitres: 1_500 }] })), [["lines.0.volumeLitres", VOLUME_ONLY_BY_THE_CUBIC_METRE]])
+    assert.deepEqual(await fieldErrors(await complete(ticket.id, { tare, lines: [{ ...line, volumeLitres: 1_500 }] })), [["lines.0.volumeLitres", VOLUME_ONLY_BY_THE_CUBIC_METRE]])
+    assert.deepEqual(await fieldErrors(await complete(ticket.id, { tare, lines: [{ ...line, productId: byThePickup }] })), [["lines.0.productId", NOT_SOLD_AT_THE_WINDOW]])
+    await completed(ticket.id, { tare, lines: [{ ...line, productId: byTheCubicMetre, volumeLitres: 1_500 }] })
+    const due = await amountDue(ticket.id)
+    assert.deepEqual([due.lines[0]?.quantity, due.netMinor, due.totalMinor, due.complete], [1.5, 30_000, 37_500, true])
+  })
+
+  test("a line that names no product comes to nothing it can say, and says why", async () => {
+    const ticket = await weighIn({ vehiclePlate: "GH 3", party: "cash", grossKg: 1_400, weighedInAt: IN() })
+    await completed(ticket.id, { tare: { source: "weighed", tareKg: 1_000 }, lines: [{ wasteFractionId: ex.fractions.residual.id, netKg: 400 }] })
+    const due = await amountDue(ticket.id)
+    assert.deepEqual([due.lines[0]?.blockReason, due.totalMinor, due.complete], ["no-product", 0, false])
   })
 })

@@ -245,7 +245,14 @@ export const PRICE_ROW_FORM: BusinessFormSchema = {
       id: "conditions",
       title: "Conditions",
       description: "Each condition narrows who pays this amount; they and the start are the row's key, so an edit moves the amount, the note and the end alone.",
-      fields: [planningArea, customerKind, containerType, wasteFraction, customer("Negotiated customer", "A deal for this customer alone, which always wins for them.")],
+      fields: [
+        planningArea,
+        customerKind,
+        containerType,
+        wasteFraction,
+        customer("Negotiated customer", "A deal for this customer alone, which always wins for them."),
+        { id: "fromQuantity", label: "From quantity", type: "number", min: 1, description: "A quantity tier: the amount applies from this many of the product's unit, 2 tonnes say. Blank for any quantity." },
+      ],
     },
     {
       id: "period",
@@ -278,7 +285,18 @@ export const EXPLAIN_PRICE_FORM: BusinessFormSchema = {
   submitLabel: "Explain",
   sections: [
     { id: "question", title: "The question", fields: [priceList, product(), { id: "on", label: "On", type: "date", required: true, description: "The service date, or the day you ask about." }] },
-    { id: "conditions", title: "Conditions", fields: [planningArea, customerKind, containerType, wasteFraction, customer("Customer", "A negotiated row is eligible for its customer alone.")] },
+    {
+      id: "conditions",
+      title: "Conditions",
+      fields: [
+        planningArea,
+        customerKind,
+        containerType,
+        wasteFraction,
+        customer("Customer", "A negotiated row is eligible for its customer alone."),
+        { id: "quantity", label: "Quantity", type: "number", min: 0, description: "How many of the product's unit, which a quantity tier is judged against: 2.34 tonnes. Blank meets no tier." },
+      ],
+    },
   ],
   execution: { kind: "preview", completionMessage: "The rows were judged." },
 }

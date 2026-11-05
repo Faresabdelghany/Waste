@@ -11,7 +11,9 @@
 // schema, less what a later migration added: M5b's `pickup-exception` kind
 // (#293, 0046), its value and its clause of the kind's shape, and the
 // recycling-centre visit's `visit` kind and unit (#393, 0054), its clause of
-// the kind's shape and the product's value. Then the migration, which has to be exactly those statements and
+// the kind's shape and the product's value, and what the weight charges' and
+// the window prices' migrations added after them (O28 of #290, M16b of #293;
+// window-prices-as-of.ts). Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger, a set of its project read under `commercial.products`. The file is
 // found by its name, not its number, which it takes at its turn. No database.
@@ -23,7 +25,6 @@ import { describe, test } from "node:test"
 import { WORK_ORDER_SERVICES } from "@waste/domain/execution/vocabulary"
 import { FREE_DAYS_MAX } from "@waste/domain/finance/hire"
 import { BILLABLE_EVENT_KINDS } from "@waste/domain/finance/vocabulary"
-import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { product } from "../schema/catalogue"
@@ -31,6 +32,7 @@ import { billableEvent, workOrderProduct } from "../schema/finance"
 import { auditTrail, CONTAINER_HIRE_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, companyFk, createTable, foreignKey, index, oneOfCheck, partialUniqueIndex, projectFk, projectFkTo, ref, uniqueKey } from "./rendering"
+import { kindShapeAsOfWeightCharges, PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES } from "./window-prices-as-of"
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 const respelt = (table: string, checks: Map<string, string>, name: string): string => alter(table, `ADD CONSTRAINT "${name}" CHECK (${checks.get(name)})`)
@@ -44,8 +46,8 @@ const EVENT_SHAPES = ["billable_event_kind_shape", "billable_event_origin_shape"
 /** The event's kinds as 0044 wrote them: today's through `hire`, before M5b's `pickup-exception` (#293). */
 const KINDS_AS_OF_0044 = BILLABLE_EVENT_KINDS.slice(0, BILLABLE_EVENT_KINDS.indexOf("hire") + 1)
 
-/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393), the bulky item's (#449) and the weight charge's tonne (O28 of #290). */
-const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "item" && unit !== "tonne")
+/** The product's units as 0044 wrote them: the weight charges' before the recycling-centre visit's (#393), the bulky item's (#449) and the weight charge's tonne (O28 of #290). */
+const UNITS_AS_OF_0044 = PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES.filter((unit) => unit !== "visit" && unit !== "item" && unit !== "tonne")
 
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
@@ -56,13 +58,13 @@ const VISIT_CLAUSE = ` when 'visit' then ${ref("billable_event", "visit_id")} is
 /** The clause the weight charges' migration added to the kind's shape (O28 of #290), which 0044's spelling lacks too. */
 const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause, 0054's and the weight charges'. */
+/** The event's checks as 0044 spelled them: today's, the kind's shape as of the weight charges' (M16b of #293 added the window line's after them) less M5b's clause, 0054's and the weight charges'. */
 const checksAsOf0044 = (): Map<string, string> => {
   const checks = new Map(checksOf(billableEvent))
-  const kindShape = checks.get("billable_event_kind_shape") ?? ""
-  assert.ok(kindShape.includes(EXCEPTION_CLAUSE), "today's kind shape carries M5b's clause")
-  assert.ok(kindShape.includes(VISIT_CLAUSE), "today's kind shape carries the visit's clause")
-  assert.ok(kindShape.includes(WEIGHT_CLAUSE), "today's kind shape carries the weight charge's clause")
+  const kindShape = kindShapeAsOfWeightCharges()
+  assert.ok(kindShape.includes(EXCEPTION_CLAUSE), "the weight charges' kind shape carries M5b's clause")
+  assert.ok(kindShape.includes(VISIT_CLAUSE), "the weight charges' kind shape carries the visit's clause")
+  assert.ok(kindShape.includes(WEIGHT_CLAUSE), "the weight charges' kind shape carries the weight charge's clause")
   checks.set("billable_event_kind_shape", kindShape.replace(EXCEPTION_CLAUSE, "").replace(VISIT_CLAUSE, "").replace(WEIGHT_CLAUSE, ""))
   return checks
 }
