@@ -309,6 +309,7 @@ import {
   type ProjectScope,
 } from "@/lib/data/project-scope"
 import { RouteDetailsPage } from "@/components/waste/route-details-page"
+import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
 import {
@@ -1460,14 +1461,20 @@ export function BusinessWorkspace({
         : activeRecords,
     [activeRecords, getRecords, relatedCreateModule],
   )
-  // On the Pilot a route opens the generic details with its command surface
-  // (#179, as #181's containers skip their sheet): the route page is fixture
-  // mode's.
+  // Fixture mode's route page; on the Pilot a route opens RouteDetailsOnApi,
+  // below, over its command surface (#179).
   const isRouteDetails =
     workspace.id === "route-studio" &&
     activeModule.id === "routes" &&
     Boolean(selectedRecord) &&
     RowSurface === undefined
+  // On the Pilot a route opens its own page over the same command surface
+  // (RouteDetailsOnApi): its stops first, its facts and History beside them.
+  const isRoutePageOnApi =
+    workspace.id === "route-studio" &&
+    activeModule.id === "routes" &&
+    Boolean(selectedRecord) &&
+    RowSurface !== undefined
   // Scheme detail is a dedicated full page (issue #29, D8) — same routing
   // contract as the record sheet (?module=schemes&record=), rendered instead
   // of it. Re-resolved from activeRecords so the page always shows the live
@@ -5043,6 +5050,24 @@ export function BusinessWorkspace({
               : undefined
           }
           readOnly={!canRunRecordActions}
+        />
+      ) : isRoutePageOnApi && detailsRecord ? (
+        <RouteDetailsOnApi
+          module={activeModule}
+          record={detailsRecord}
+          onBack={closeRecord}
+          history={
+            activeModuleOnApi !== null ? (
+              <RecordHistory key={detailsRecord.id} workspaceId={workspace.id} moduleId={activeModule.id} record={detailsRecord} />
+            ) : undefined
+          }
+          menu={
+            <RecordActionsMenu
+              record={detailsRecord}
+              entityLabel={activeModule.entityLabel}
+              onDelete={canDeleteRecords ? requestRecordDelete : undefined}
+            />
+          }
         />
       ) : isServiceProviderDetails && selectedRecord ? (
         <ServiceProviderDetailsPage

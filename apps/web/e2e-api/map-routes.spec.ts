@@ -5,7 +5,7 @@ import { formatDistance, formatDuration } from "../lib/map-planning/format"
 import { addDays, dayIn } from "./dispatched-route"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
-import { routeRead, routeWithCrewFree, schemeWithRoutes, type ApiRoute } from "./routes-support"
+import { routePage, routeRead, routeWithCrewFree, schemeWithRoutes, type ApiRoute } from "./routes-support"
 import { listAll } from "./tester"
 
 // Map Planning's routes on the Pilot (Issue #179, slice 6 of #81): the
@@ -170,7 +170,7 @@ test("a click on an API route's line opens its card with the route's own facts, 
   const open = card.getByRole("link", { name: "Open route" })
   await expect(open).toHaveAttribute("href", `/route-studio?module=routes&record=route-${route.id}`)
   await open.click()
-  const details = page.getByRole("dialog", { name: route.label })
+  const details = routePage(page, route)
   await expect(details.getByTestId("route-commands")).toBeVisible()
 })
 
