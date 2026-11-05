@@ -1150,14 +1150,14 @@ export function SchemeWizardPrototype() {
       {variant === "A" && <VariantAStepper {...props} />}
       {variant === "B" && <VariantBFlatForm {...props} />}
       {variant === "C" && <VariantCCalendarFirst {...props} />}
-      <div className="fixed bottom-4 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-100 shadow-xl">
-        <button type="button" onClick={() => cycle(-1)} className="rounded-full p-1.5 hover:bg-zinc-700" aria-label="Previous variant">
+      <div className="fixed bottom-4 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-1 rounded-full border border-foreground/80 bg-foreground px-2 py-1.5 text-background shadow-xl">
+        <button type="button" onClick={() => cycle(-1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Previous variant">
           <ArrowLeft className="size-4" />
         </button>
         <span className="min-w-44 px-2 text-center font-mono text-xs">
           PROTOTYPE · {variant} — {VARIANTS[idx].name}
         </span>
-        <button type="button" onClick={() => cycle(1)} className="rounded-full p-1.5 hover:bg-zinc-700" aria-label="Next variant">
+        <button type="button" onClick={() => cycle(1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Next variant">
           <ArrowRight className="size-4" />
         </button>
       </div>

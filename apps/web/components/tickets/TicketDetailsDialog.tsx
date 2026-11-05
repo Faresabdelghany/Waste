@@ -159,7 +159,7 @@ const fallbackAssignees = [
 const statusOptions: TicketInformationOption[] = [
   { value: "Open", label: "Open", dotClassName: "bg-info" },
   { value: "In progress", label: "In progress", dotClassName: "bg-warning" },
-  { value: "Waiting on customer", label: "Waiting on customer", dotClassName: "bg-violet-500" },
+  { value: "Waiting on customer", label: "Waiting on customer", dotClassName: "bg-highlight" },
   { value: "Resolved", label: "Resolved", dotClassName: "bg-success" },
   { value: "Closed", label: "Closed", dotClassName: "bg-muted-foreground" },
 ]

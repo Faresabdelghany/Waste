@@ -642,7 +642,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 const COMMENT_THREADS = {
   internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-warning-foreground", badgeClass: "border-warning/30 bg-warning/10 text-warning-foreground" },
   customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-info", badgeClass: "border-info/30 bg-info/10 text-info-foreground" },
-  "service-provider": { title: "Service provider thread", badge: "Service provider", Icon: Truck, iconClass: "text-violet-600", badgeClass: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200" },
+  "service-provider": { title: "Service provider thread", badge: "Service provider", Icon: Truck, iconClass: "text-highlight", badgeClass: "border-highlight/30 bg-highlight/10 text-highlight-foreground" },
 } as const
 
 /** A comment's thread by its visibility; one the history does not know reads as the office's own, as it did before the provider's. */

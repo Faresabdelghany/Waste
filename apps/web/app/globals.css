@@ -51,6 +51,10 @@
   --warning-foreground: oklch(0.555 0.163 48.998);
   --info: oklch(0.546 0.245 262.881);
   --info-foreground: oklch(0.488 0.243 264.376);
+  /* A tone that sets something apart without judging it: another party's
+     thread, a wait on someone outside, a temporary place. */
+  --highlight: oklch(0.541 0.281 293.009);
+  --highlight-foreground: oklch(0.491 0.27 292.581);
 }
 
 .dark {
@@ -93,6 +97,8 @@
   --warning-foreground: oklch(0.828 0.189 84.429);
   --info: oklch(0.623 0.214 259.815);
   --info-foreground: oklch(0.707 0.165 254.624);
+  --highlight: oklch(0.606 0.25 292.717);
+  --highlight-foreground: oklch(0.811 0.111 293.571);
 }
 
 :root[data-app-theme="ash"] {
@@ -213,6 +219,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

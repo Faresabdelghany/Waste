@@ -918,7 +918,7 @@ export function ContainerDetailsSheet({
                 <Badge variant="outline" className="rounded-full font-normal">{profile.project}</Badge>
                 {fact(record, "Warranty end") !== "—" ? <Badge variant="outline" className="rounded-full font-normal">Warranty to {fact(record, "Warranty end")}</Badge> : null}
                 {temporaryLocation !== "None" && temporaryLocation !== "—" ? (
-                  <Badge className="rounded-full bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-500/20 dark:text-violet-100">
+                  <Badge className="rounded-full bg-highlight/10 text-highlight-foreground hover:bg-highlight/10">
                     Temporary location · {temporaryLocation}
                   </Badge>
                 ) : null}
