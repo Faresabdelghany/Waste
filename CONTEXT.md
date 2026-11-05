@@ -376,6 +376,10 @@ _Avoid_: Weigh slip, scale reading, gate ticket
 A vehicle's weight empty, kept so the window can complete a Scale Ticket without a second pass: by its plate and, where it is weighed with them, its trailer's plate and the container it carries. One is active per combination; a re-weighing changes it and a retired one stays for the tickets completed on it.
 _Avoid_: Tare weight, empty weight, unladen weight
 
+**Quantity Tier**:
+A Price List row's `from` quantity: the row applies only from that many of its product's unit — two tonnes, say — and among rows of the same conditions the highest tier the occurrence reaches wins. A row with no tier applies to any quantity, as every row did before tiers. The scale house's window prices a load sold by the tonne or the cubic metre this way.
+_Avoid_: Volume discount, price break, bracket
+
 **Transfer Note**:
 The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
 _Avoid_: Consignment note, waybill, disposal receipt

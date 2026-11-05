@@ -23,8 +23,15 @@
 // …/void` voids a ticket with its reason, never deleting it; one written as
 // an Unload stands, since weight control settles that Unload.
 //
-// Nothing here prices a ticket or takes payment: the window's prices are
-// M16b's, and payment waits for the owner's decision (M15).
+// The window's prices (M16b of #293): a line may name the window's product it
+// is sold by — one of the project's, per tonne or per cubic metre, the latter
+// with its declared volume — and the completion and the void are news for
+// Finance (`scale-ticket-completed`, `scale-ticket-voided`), whose consumer
+// charges an account's lines under its agreement and cancels them on the void.
+// `GET …/amount-due` reads what a ticket comes to at the window, a walk-in's
+// under the project's default list, priced as Finance would; it stores
+// nothing. No payment is taken here: that waits for the owner's decision
+// (M15).
 import { routeLabel } from "@waste/contracts/execution"
 import { Page } from "@waste/contracts/pagination"
 import {
@@ -38,6 +45,8 @@ import {
   VehicleTareCreate,
   VehicleTareListQuery,
   VehicleTarePatch,
+  ScaleTicketAmountDue,
+  type AmountDueLine,
   type ScaleTicketParty,
   type ScaleTicketStatus,
   type ScaleTicketVoidReason,
@@ -46,7 +55,11 @@ import {
 } from "@waste/contracts/scale-house"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
+import { dayInTimezone } from "@waste/db/commands/days"
+import { projectTimezone } from "@waste/db/commands/project-clock"
 import { nextNumber } from "@waste/db/commands/shared"
+import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
+import { product } from "@waste/db/schema/catalogue"
 import { agreement } from "@waste/db/schema/agreements"
 import { route } from "@waste/db/schema/execution"
 import { vehicle } from "@waste/db/schema/fleet"
@@ -55,6 +68,8 @@ import { unloadingStation } from "@waste/db/schema/places"
 import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scale-house"
 import type { WeighbridgeUnmatchedReason } from "@waste/domain/execution/vocabulary"
 import { matchTicket, plateKey } from "@waste/domain/execution/weighbridge"
+import { CUBIC_METRE_UNIT, soldAtTheWindow } from "@waste/domain/finance/window"
+import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import { linesIssue, netOf, registeredTare, tareKeyOf } from "@waste/domain/scale-house/rules"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -66,7 +81,9 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { NOT_AN_UNLOADING_STATION, requireAgreement, requireCustomer, requireWasteFraction } from "./references"
+import { emit } from "../outbox"
+import { NOT_AN_UNLOADING_STATION, requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
+import { refuseUnofferedProduct } from "./statuses"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireNotAhead, stampsOf } from "./shared"
 import { notTaken, stationTakes } from "./unload-writes"
@@ -190,6 +207,8 @@ const lineColumns = {
   wasteFractionId: scaleTicketLine.wasteFractionId,
   originMunicipality: scaleTicketLine.originMunicipality,
   netKg: scaleTicketLine.netKg,
+  productId: scaleTicketLine.productId,
+  volumeLitres: scaleTicketLine.volumeLitres,
 }
 
 type LineRow = Pick<typeof scaleTicketLine.$inferSelect, keyof typeof lineColumns>
@@ -216,7 +235,7 @@ const ticketOf = (row: TicketRow, lines: readonly LineRow[]): ScaleTicket => ({
   weighedOutAt: row.weighedOutAt?.toISOString() ?? null,
   netKg: row.netKg,
   status: row.status as ScaleTicketStatus,
-  lines: lines.map((line) => ({ id: line.id, position: line.position, wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality, netKg: line.netKg })),
+  lines: lines.map((line) => ({ id: line.id, position: line.position, wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality, netKg: line.netKg, productId: line.productId, volumeLitres: line.volumeLitres })),
   routeId: row.routeId,
   unloadId: row.unloadId,
   unmatchedReason: row.unmatchedReason as WeighbridgeUnmatchedReason | null,
@@ -287,6 +306,15 @@ export const linesOffNet = (sum: number, netKg: number) => `The lines come to ${
 
 /** What one of our own vehicles' ticket split into several lines is told. */
 export const OWN_LOAD_IS_ONE_FRACTION = "One of our own vehicles' load is one fraction: it is written as its route's Unload"
+
+/** What a line's product the window does not sell by is told. */
+export const NOT_SOLD_AT_THE_WINDOW = "Not a product the window sells by the tonne or the cubic metre"
+
+/** What a cubic-metre line without its volume is told. */
+export const VOLUME_REQUIRED = "A load sold by the cubic metre declares its volume"
+
+/** What a volume on a line sold otherwise is told. */
+export const VOLUME_ONLY_BY_THE_CUBIC_METRE = "Only a load sold by the cubic metre declares a volume"
 
 /** What a second pass before the first is told. */
 export const OUT_BEFORE_IN = "The second pass comes after the first"
@@ -693,6 +721,24 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             const takes = await stationTakes(tx, principal.companyId, ticket.unloadingStationId, line.wasteFractionId)
             if (!takes.takes) throw invalidRequest("body", [{ path, message: notTaken(takes) }])
           }
+          // Each line's product, where it names one: the project's, sold by the tonne or the cubic metre, the volume exactly where the unit needs it (M16b of #293).
+          const offered: (ProductStatus | undefined)[] = []
+          for (const [index, line] of body.lines.entries()) {
+            const at = (field: string) => `lines.${index}.${field}`
+            if (line.productId == null) {
+              if (line.volumeLitres != null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_ONLY_BY_THE_CUBIC_METRE }])
+              continue
+            }
+            offered.push(await requireProduct(tx, { companyId: principal.companyId, projectId: ticket.projectId }, line.productId, at("productId")))
+            const [sold] = await tx
+              .select({ unit: product.unit })
+              .from(product)
+              .where(and(eq(product.companyId, principal.companyId), eq(product.id, line.productId)))
+            const unit = sold!.unit as ProductUnit
+            if (!soldAtTheWindow(unit)) throw invalidRequest("body", [{ path: at("productId"), message: NOT_SOLD_AT_THE_WINDOW }])
+            if (unit === CUBIC_METRE_UNIT && line.volumeLitres == null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_REQUIRED }])
+            if (unit !== CUBIC_METRE_UNIT && line.volumeLitres != null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_ONLY_BY_THE_CUBIC_METRE }])
+          }
 
           // The tare the body asks for, then the net it makes.
           let tareKg: number
@@ -711,12 +757,14 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             vehicleTareId = found.id
           }
           const netKg = netOf(ticket.grossKg, tareKg)!
-          const lines = body.lines.map((line) => ({ wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality ?? null, netKg: line.netKg }))
+          const lines = body.lines.map((line) => ({ wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality ?? null, netKg: line.netKg, productId: line.productId ?? null, volumeLitres: line.volumeLitres ?? null }))
           const issue = linesIssue(lines, netKg)
           if (issue !== null) {
             if (issue.kind === "sum") throw invalidRequest("body", [{ path: "lines", message: linesOffNet(issue.sum, issue.netKg) }])
             throw new Error(`the contract let through lines the rule refuses: ${issue.kind}`)
           }
+          // Every 400 above, every 409 below (routes/statuses.ts): a product no longer offered is a new reference refused.
+          for (const status of offered) refuseUnofferedProduct(status)
 
           // One of our own vehicles' load: matched to its route and written as its Unload, or kept with why not.
           let match: { routeId: string | null; unloadId: string | null; unmatchedReason: WeighbridgeUnmatchedReason | null } = { routeId: null, unloadId: null, unmatchedReason: null }
@@ -754,7 +802,10 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .insert(scaleTicketLine)
             .values(lines.map((line, index) => ({ id: newId(), companyId: principal.companyId, projectId: ticket.projectId, ticketId: id, position: index + 1, ...line })))
             .returning(lineColumns)
-          return c.json(ticketOf(row!, written))
+          const answered = ticketOf(row!, written)
+          // Finance's news, after the rows it describes: an account's lines are charged by its consumer.
+          await emit(tx, principal, { aggregate: "scale-ticket", aggregateId: id, kind: "scale-ticket-completed", payload: answered, projectId: ticket.projectId, occurredAt: weighedOutAt })
+          return c.json(answered)
         },
       )
       .post(
@@ -799,7 +850,58 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .where(and(eq(scaleTicket.companyId, principal.companyId), eq(scaleTicket.id, id)))
             .returning(ticketColumns)
           const [answer] = await ticketsOf(tx, principal.companyId, [row!])
+          // A completed ticket's charges are Finance's to undo; an open one was never charged.
+          if (ticket.status === "completed") await emit(tx, principal, { aggregate: "scale-ticket", aggregateId: id, kind: "scale-ticket-voided", payload: answer!, projectId: ticket.projectId, occurredAt: now() })
           return c.json(answer!)
+        },
+      )
+      .get(
+        "/scale-tickets/:id/amount-due",
+        describeRoute({
+          operationId: "getScaleTicketAmountDue",
+          summary: "What a ticket comes to at the window",
+          description:
+            "Each line of a completed ticket priced as Finance would price it on its weighed-out day: an account's under its agreement, a walk-in's under the project's default list with no customer — the line's product per tonne or per cubic metre, the quantity tier its measure meets, the rate times its kilograms or litres — or the reason it has none (`no-product`, `no-price-list`, `no-price-row`, `no-vat-rate`, `agreement-draft`, `amount-too-large`); with the net, the VAT and the total of the priced lines, and whether every line was. It stores nothing and takes no payment. An open or voided ticket comes to nothing yet (409).",
+          security: BEARER_SECURITY,
+          responses: {
+            200: describeJson("What the ticket comes to.", ScaleTicketAmountDue),
+            400: describeProblem("The path does not hold an id."),
+            ...commonProblems("view"),
+            404: describeProblem("No scale ticket with that id in the projects the caller works in."),
+            409: describeProblem("The ticket is open or voided."),
+          },
+        }),
+        guard,
+        requireGrant(MODULE, "view"),
+        validate("param", IdParam),
+        async (c) => {
+          const { id } = c.req.valid("param")
+          const principal = c.get("principal")
+          const tx = c.get("tx")
+          const ticket = await findTicket(tx, principal, id)
+          if (ticket === undefined) throw noSuchTicket(id)
+          if (ticket.status !== "completed" || ticket.weighedOutAt === null) throw problem(409, { detail: `Ticket ${scaleTicketLabel(ticket.number)} is ${ticket.status}; only a completed ticket comes to an amount` })
+          const scope = { companyId: principal.companyId, projectId: ticket.projectId }
+          const serviceDate = dayInTimezone(ticket.weighedOutAt, await projectTimezone(tx, principal.companyId, ticket.projectId))
+          const lines: AmountDueLine[] = []
+          let currency: string | null = null
+          for (const line of await windowLinesOf(tx, principal.companyId, id)) {
+            const outcome = await priceWindowLine(tx, scope, { serviceDate, agreementId: ticket.agreementId, line })
+            currency = outcome.price?.currency ?? currency
+            lines.push({
+              lineId: line.lineId,
+              productId: line.product?.id ?? null,
+              quantity: outcome.quantity,
+              unitPriceMinor: outcome.price?.unitPriceMinor ?? null,
+              netMinor: outcome.price?.netMinor ?? null,
+              vatMinor: outcome.price?.vatMinor ?? null,
+              blockReason: outcome.blockReason,
+            })
+          }
+          const netMinor = lines.reduce((sum, line) => sum + (line.netMinor ?? 0), 0)
+          const vatMinor = lines.reduce((sum, line) => sum + (line.vatMinor ?? 0), 0)
+          const answer: ScaleTicketAmountDue = { ticketId: id, currency, lines, netMinor, vatMinor, totalMinor: netMinor + vatMinor, complete: lines.every((line) => line.blockReason === null) }
+          return c.json(answer)
         },
       )
   )

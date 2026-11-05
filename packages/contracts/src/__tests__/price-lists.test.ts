@@ -53,6 +53,7 @@ const row = {
   indexedFromId: null,
   indexLabel: null,
   indexBasisPoints: null,
+  fromQuantity: null,
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,
@@ -163,6 +164,8 @@ describe("the resolve read", () => {
     for (const on of ["2026-08-20T00:00:00Z", "20/08/2026", "today", "2026-8-20"]) assert.deepEqual(refusal(PriceResolveQuery.safeParse({ productId: OTHER, on })).map((issue) => issue.path), ["on"], on)
     assert.deepEqual(refusal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", customerKind: "Household" })).map((issue) => issue.path), ["customerKind"])
     assert.equal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", limit: "10" }).success, true, "an unknown parameter is dropped, not refused: a query string is not a body")
+    assert.equal(PriceResolveQuery.parse({ productId: OTHER, on: "2026-08-20", quantity: "2.34" }).quantity, 2.34, "a tier's quantity is a decimal of the product's unit (M16b of #293)")
+    assert.deepEqual(refusal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", quantity: "0" })).map((issue) => issue.path), ["quantity"])
   })
 
   test("PriceResolution answers every verdict, the winner, its price, the rate and the currency", () => {

@@ -136,7 +136,7 @@ describe("the Price Engine's Pilot forms", () => {
   })
 
   test("Add price filled in is the row the contract accepts under its list, and a row's edit offers its price, note and end alone", () => {
-    const values: BusinessFormValues = { priceListId: listRecord.id, productId: productRecord.id, amount: "16.50", note: "Negotiated", planningAreaId: areaRecord.id, customerKind: "organisation", containerType: master[1].id, wasteFraction: master[0].id, customerId: customerRecord.id, validFrom: "2026-10-01", validTo: "" }
+    const values: BusinessFormValues = { priceListId: listRecord.id, productId: productRecord.id, amount: "16.50", note: "Negotiated", planningAreaId: areaRecord.id, customerKind: "organisation", containerType: master[1].id, wasteFraction: master[0].id, customerId: customerRecord.id, fromQuantity: "2", validFrom: "2026-10-01", validTo: "" }
     offersExactly(PRICE_ROW_FORM, Object.keys(values))
     const write = body(priceRowAdapter.toCreateBody!(createPriceRowRecord(values, 1), context))
     assert.equal(write.priceListId, list.id)
@@ -147,12 +147,12 @@ describe("the Price Engine's Pilot forms", () => {
   })
 
   test("Explain price's question is the resolve read's query", () => {
-    const values: BusinessFormValues = { priceListId: listRecord.id, productId: productRecord.id, on: "2026-10-01", planningAreaId: NO_ONE, customerKind: "organisation", containerType: "", wasteFraction: "", customerId: customerRecord.id }
+    const values: BusinessFormValues = { priceListId: listRecord.id, productId: productRecord.id, on: "2026-10-01", planningAreaId: NO_ONE, customerKind: "organisation", containerType: "", wasteFraction: "", customerId: customerRecord.id, quantity: "2.34" }
     offersExactly(EXPLAIN_PRICE_FORM, Object.keys(values))
     const asked = explainQuery(blankNone(values), resolverOver(state))
     if (isLocalRefusal(asked)) throw new Error(asked.message)
     assert.ok(PriceResolveQuery.safeParse(asked.query).success)
-    assert.deepEqual(asked.query, { productId: product.id, on: "2026-10-01", customerKind: "organisation", customerId: osterbro.id })
+    assert.deepEqual(asked.query, { productId: product.id, on: "2026-10-01", customerKind: "organisation", customerId: osterbro.id, quantity: 2.34 })
   })
 
   test("the manual event filled in is the create the contract accepts, and each command's dialog its body", () => {

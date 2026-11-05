@@ -15,6 +15,7 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { product } from "../schema/catalogue"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, list, ref } from "./rendering"
+import { PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES } from "./window-prices-as-of"
 
 async function migrationName(): Promise<string> {
   const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_item_product_unit\.sql$/.test(name))
@@ -25,8 +26,8 @@ async function migrationName(): Promise<string> {
 type Snapshot = Parameters<typeof generateMigration>[0]
 const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
 
-/** The units the item's migration wrote: today's less the weight charges' `tonne`, which a later migration added (O28 of #290). */
-const UNITS_AS_OF_ITEM = PRODUCT_UNITS.filter((unit) => unit !== "tonne")
+/** The units the item's migration wrote: the weight charges' (window-prices-as-of.ts) less their `tonne`, which a later migration added (O28 of #290). */
+const UNITS_AS_OF_ITEM = PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES.filter((unit) => unit !== "tonne")
 
 const UNIT_ONE_OF = `ALTER TABLE "wms"."product" ADD CONSTRAINT "product_unit_one_of" CHECK (${ref("product", "unit")} in (${list(...UNITS_AS_OF_ITEM)}));`
 
