@@ -129,4 +129,6 @@ export const ticketTeamsModule: ServerModule = {
   workspaceId: TICKET_TEAMS_MODULE.workspaceId,
   moduleId: TICKET_TEAMS_MODULE.moduleId,
   resources: [ticketTeamAdapter, ticketTypeAdapter],
+  // The people working tickets pick a team and a type, and fill in a type's fields: the API reads both under the tickets' grant too.
+  alsoViewedUnder: ["operate.tickets"],
 }

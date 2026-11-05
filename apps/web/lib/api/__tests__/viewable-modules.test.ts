@@ -47,6 +47,16 @@ describe("the switched modules a person's grants let the store read", () => {
     assert.deepEqual(keysOf(viewableModules(grants, SERVER_MODULES)), ["customers.contacts", "configure.areas"])
   })
 
+  test("take the ticket teams and types under the tickets' grant too, as the API reads them (#545 of #544): a Dispatcher picks a type and fills in its fields", () => {
+    assert.deepEqual(keysOf(viewableModules([{ moduleKey: "operate.tickets", actions: ["view", "edit"] }], SERVER_MODULES)), ["configure.templates", "operate.tickets"])
+    const dispatcher = keysOf(viewableModules(systemRole("dispatcher").grants, SERVER_MODULES))
+    assert.ok(dispatcher.includes("configure.templates"), "the seeded Dispatcher, who works tickets and keeps no type")
+    assert.deepEqual(
+      SERVER_MODULES.filter((module) => module.alsoViewedUnder !== undefined).map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module.alsoViewedUnder]),
+      [["configure.templates", ["operate.tickets"]]],
+    )
+  })
+
   test("are none for an empty grants list, or a grant that allows nothing", () => {
     assert.deepEqual(viewableModules([], SERVER_MODULES), [])
     assert.deepEqual(viewableModules([{ moduleKey: "configure.master", actions: [] }], SERVER_MODULES), [])

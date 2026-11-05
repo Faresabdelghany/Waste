@@ -62,7 +62,7 @@ export function TicketTypesSettings() {
   const configured = useApiConfigured()
   const { me } = useApiSession()
   const access = ticketTypesAccessOf(me?.role.grants)
-  const { upsertRecord } = useBusinessRecordStore()
+  const { upsertRecord, refreshModule } = useBusinessRecordStore()
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, NO_RECORDS)
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
   const roles = users.records.filter((record) => roleAdapter.owns(record) && !isSoftDeleted(record))
@@ -72,7 +72,7 @@ export function TicketTypesSettings() {
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const write = (record: BusinessRecord, done: () => void, said: string) => {
+  const write = (record: BusinessRecord, done: () => void, said: string, madeDefault: boolean) => {
     if (saving) return
     setSaving(true)
     whenSaved(
@@ -80,11 +80,17 @@ export function TicketTypesSettings() {
       () => {
         done()
         toast.success(said, { description: record.name })
+        // The API unmade the kind's other default too, a row the write did not answer: the module is read again.
+        if (madeDefault) void refreshModule(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId)
       },
       () => setSaving(false),
     )
   }
-  const handleCreate = (values: BusinessFormValues) => write(createTicketTypeRecord(values, { now: Date.now() }), () => setCreating(false), "Ticket type added")
+  const madeDefault = (before: BusinessRecord | null, after: BusinessRecord) => after.submittedValues?.isDefault === true && before?.submittedValues?.isDefault !== true
+  const handleCreate = (values: BusinessFormValues) => {
+    const made = createTicketTypeRecord(values, { now: Date.now() })
+    write(made, () => setCreating(false), "Ticket type added", madeDefault(null, made))
+  }
 
   const emptyMessage = !configured
     ? "The ticket types are kept on the API: sign in on the Pilot to read and write them."
@@ -151,7 +157,7 @@ export function TicketTypesSettings() {
 
       {/* The form names no row of another module: every option is its own. */}
       <BusinessRecordFormDialog schema={TICKET_TYPE_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={(field) => field.options ?? []} />
-      {editing && <TicketTypeEditor record={editing} roles={roles} saving={saving} onClose={() => setEditing(null)} onSave={(record) => write(record, () => setEditing(null), "Ticket type saved")} />}
+      {editing && <TicketTypeEditor record={editing} roles={roles} saving={saving} onClose={() => setEditing(null)} onSave={(record) => write(record, () => setEditing(null), "Ticket type saved", madeDefault(editing, record))} />}
     </AssetPanelShell>
   )
 }
@@ -182,7 +188,9 @@ function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: 
   const toggleRole = (command: TicketCommand, roleId: string, on: boolean) =>
     setPermissions((current) => {
       const others = current.filter((entry) => entry.command !== command)
-      const roleIds = on ? [...rolesOf(command), roleId] : rolesOf(command).filter((id) => id !== roleId)
+      // Read from the state the update is applied to, so two ticks before a render both land.
+      const held = current.find((entry) => entry.command === command)?.roleIds ?? []
+      const roleIds = on ? [...held.filter((id) => id !== roleId), roleId] : held.filter((id) => id !== roleId)
       return [...others, { command, roleIds }].sort((a, b) => COMMAND_HEADINGS.findIndex((heading) => heading.command === a.command) - COMMAND_HEADINGS.findIndex((heading) => heading.command === b.command))
     })
 

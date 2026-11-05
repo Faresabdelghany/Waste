@@ -175,11 +175,13 @@ export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module)
  * — so nobody meets a refusal for a pane they cannot open, a driver on the
  * Driver App least of all (Issue #145). A module read for a Service
  * Provider's account alone (`providersOnly`) is read only where `provider`
- * says the account is one (#291 C24).
+ * says the account is one (#291 C24). A module the API reads under another
+ * module's grant too (`alsoViewedUnder`: the ticket teams and types under the
+ * tickets', #545 of #544) is read under either.
  */
 export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[], { provider = false }: { provider?: boolean } = {}): ServerModule[] {
   const viewed = new Set<string>(grants.filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
-  return modules.filter((module) => viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)) && (provider || module.providersOnly !== true))
+  return modules.filter((module) => (viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)) || (module.alsoViewedUnder ?? []).some((key) => viewed.has(key))) && (provider || module.providersOnly !== true))
 }
 
 /** The modules tried where `/me` could not be read: every one an office account may be refused nothing by (#291 C24: a provider's own are its alone). */
