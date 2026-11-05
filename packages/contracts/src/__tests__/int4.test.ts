@@ -96,7 +96,6 @@ import * as notificationsModule from "../notifications"
 import * as routeMessagesModule from "../route-messages"
 import * as weightControlModule from "../weight-control"
 import * as weighbridgeModule from "../weighbridge"
-import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
 import { ServiceProviderPriceIndex } from "../service-provider-prices"
 
@@ -189,7 +188,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "visit-rules": visitRulesModule,
   "weight-control": weightControlModule,
   "weighbridge": weighbridgeModule,
-  "work-order-charges": workOrderChargesModule,
 }
 
 describe("the shared whole numbers", () => {

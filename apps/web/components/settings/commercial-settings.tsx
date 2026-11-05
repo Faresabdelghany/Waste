@@ -19,10 +19,8 @@
 //
 // - Ticket charges (#291 C3) are the API's alone: the product each ticket
 //   kind's work is charged at, read and set through the client
-//   (ticket-charges-settings.tsx), and so are the work order charges (M14 of
-//   #293): the product each of the office's work orders is charged at
-//   (work-order-charges-settings.tsx), and so are the recycling-centre
-//   charges (#393): a project's Visit Rules (visit-rules-settings.tsx).
+//   (ticket-charges-settings.tsx), and so are the recycling-centre charges
+//   (#393): a project's Visit Rules (visit-rules-settings.tsx).
 //
 // `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
 // SettingsDialog renders; keep their exported shape stable.
@@ -70,7 +68,6 @@ import {
 } from "@/components/settings/asset-management-settings"
 import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
 import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
-import { WorkOrderChargesSettings } from "@/components/settings/work-order-charges-settings"
 import { VisitRulesSettings } from "@/components/settings/visit-rules-settings"
 import { AccountingSettingsPane } from "@/components/settings/accounting-settings"
 import {
@@ -265,7 +262,6 @@ export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-products") return <ProductsByModePane />
   if (paneId === "commercial-price-lists") return <PriceListsPane />
   if (paneId === "commercial-ticket-charges") return <TicketChargesSettings />
-  if (paneId === "commercial-work-order-charges") return <WorkOrderChargesSettings />
   if (paneId === VISIT_RULES_SETTINGS_PANE_ID) return <VisitRulesSettings />
   if (paneId === "commercial-accounting") return <AccountingSettingsPane />
   return null

@@ -93,7 +93,6 @@ export const AUDITED_TABLES = [
   "pickup_exception_rule",
   "pickup_exception_rule_step",
   "application",
-  "work_order_product",
   "accounting_account",
   "accounting_settings",
   "accounting_vat_code",

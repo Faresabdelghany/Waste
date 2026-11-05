@@ -34,7 +34,7 @@ import { customer, property, sharedCollectionPoint } from "@waste/db/schema/cust
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { outboxEvent, pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, weightReview, workOrderProduct } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, weightReview } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
@@ -470,7 +470,6 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, companyId))
     await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, companyId))
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
-    await tx.delete(workOrderProduct).where(eq(workOrderProduct.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     // The default ticket types the tickets were given (#545 of #544), after the tickets that name them.
     await tx.delete(ticketType).where(eq(ticketType.companyId, companyId))

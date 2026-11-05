@@ -94,7 +94,6 @@ import { ACCOUNT_NUMBER_PATTERN, VAT_CODE_PATTERN } from "@waste/domain/finance/
 import { PAYMENT_REFERENCE_PATTERN } from "@waste/domain/finance/payment"
 import { ACCOUNTING_SOURCE_KINDS, BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, PAYMENT_SOURCES, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
-import { WORK_ORDER_SERVICES } from "@waste/domain/execution/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { bigint, boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -461,7 +460,7 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), a recycling-centre visit's its visit (#393), and a weight charge its Unload and its stop (O28 of #290).
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), a recycling-centre visit's its visit (#393), and a weight charge its Unload and its stop (O28 of #290).
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
       sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'visit' then ${t.visitId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'weight' then ${t.unloadId} is not null and ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'scale-ticket' then ${t.scaleTicketLineId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
@@ -833,32 +832,6 @@ export const weightReview = wms.table(
     tenantIndex(t, t.correctionUnloadId),
     tenantIndex(t, t.reviewedBy),
     tenantIndex(t, t.projectId),
-  ],
-)
-
-/**
- * The product each of a project's work orders bills (M14 of #293): a delivery,
- * a removal, a swap, a repair, a wash, each at one `job` product, a set the
- * project replaces whole as its ticket charges (#291 C3) are. A service it
- * names none for bills nothing.
- */
-export const workOrderProduct = wms.table(
-  "work_order_product",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    service: text().notNull(),
-    productId: uuid().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.productId], product),
-    oneOf(t.service, WORK_ORDER_SERVICES),
-    // A service is billed at one product in a project.
-    tenantUnique(t, t.projectId, t.service),
-    tenantIndex(t, t.productId),
   ],
 )
 

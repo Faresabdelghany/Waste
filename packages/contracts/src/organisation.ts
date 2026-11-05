@@ -179,7 +179,7 @@ export const Project = z.object({
   paymentReferenceScheme: PaymentReferenceScheme,
   /** How far a weighbridge's net may differ from what the stops weighed on board, in whole percent, before an unload reads as above tolerance (O9 of #290); absent from a payload before it, read as the default. */
   weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
-  /** Whether the project's hires and work-order jobs are held for the office's review as they are charged (M14 of #293): a run passes over a held event until it is released. */
+  /** Whether the project's hires and jobs are held for the office's review as they are charged (M14 of #293): a run passes over a held event until it is released. */
   holdForReview: z.boolean(),
   /** Its branding on its public pages (M22 of #293), written whole through `PUT /projects/:id/branding` under `configure.portals`; absent from a payload before it, read as none. */
   branding: ProjectBranding.default({ brandColor: null, logoUrl: null, accessibilityStatementUrl: null }),

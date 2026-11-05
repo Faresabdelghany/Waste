@@ -159,14 +159,13 @@ export const OFFICE_STOP_SERVICES = ["empty", "deliver", "remove", "swap", "repa
 export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
 
 /**
- * The work orders a project prices (M14 of #293): every office service but an
- * emptying, which is a collection and priced as a pickup is. A project names
- * the `job` product each one bills (`work_order_product`); a value beside the
- * lists, like the office's services it is drawn from.
+ * The office's work orders (O3 of #290): every office service but an
+ * emptying, which is a collection, and a bulky collection, which is a
+ * booking's. A value beside the lists, like the office's services it is drawn
+ * from.
  */
 export const WORK_ORDER_SERVICES = ["deliver", "remove", "swap", "repair", "wash"] as const satisfies readonly OfficeStopService[]
 export type WorkOrderService = (typeof WORK_ORDER_SERVICES)[number]
-export const isWorkOrderService = (service: PickupService): service is WorkOrderService => (WORK_ORDER_SERVICES as readonly PickupService[]).includes(service)
 
 /**
  * The codes the office may give a cancel (O5 of #290): every one but

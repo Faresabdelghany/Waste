@@ -4,8 +4,8 @@
 // company's invoice identity — the VAT number, the bank account and the FIK
 // creditor number an invoice document prints, and its postal address (#291
 // C5), the seller's address a Danish invoice must print — and each project's payment
-// terms and reference scheme, and whether its hires and work-order jobs are held
-// for review before a run invoices them (M14 of #293). Both are rows of `configure.organization`
+// terms and reference scheme, and whether its hires and jobs are held for
+// review before a run invoices them (M14 of #293). Both are rows of `configure.organization`
 // (lib/api/records/organisation.ts), written through the store; what is typed
 // is judged by the domain's shapes (lib/data/finance-settings.ts) before the
 // API is asked. A customer's own terms are its form's, under Customers.
@@ -243,7 +243,7 @@ function ProjectTermsDialog({ project, hasCreditor, onClose }: { project: Busine
             <div className="grid gap-1">
               <Label htmlFor="finance-project-hold">Hold hires and jobs for review</Label>
               <p className="text-xs text-muted-foreground">
-                A container&apos;s hire and a work order&apos;s job are held as they are charged, and a run passes over them until someone releases them under Billable events.
+                A container&apos;s hire and a bulky collection&apos;s job are held as they are charged, and a run passes over them until someone releases them under Billable events.
               </p>
             </div>
             <Switch id="finance-project-hold" checked={held} onCheckedChange={setHeld} />

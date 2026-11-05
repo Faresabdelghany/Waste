@@ -757,6 +757,13 @@
       "when": 1793952137785,
       "tag": "0107_drop_emissions",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1793952146294,
+      "tag": "0108_remove_work_order_charges",
+      "breakpoints": true
     }
   ]
 }

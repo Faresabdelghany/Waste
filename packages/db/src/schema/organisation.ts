@@ -197,7 +197,7 @@ export const project = wms.table(
      * above tolerance (O9 of #290).
      */
     weightTolerancePercent: integer().notNull().default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
-    /** Whether its hires and work-order jobs (M14 of #293) are held for the office's review as they are charged, so a run passes over them until released. */
+    /** Whether its hires and jobs (M14 of #293) are held for the office's review as they are charged, so a run passes over them until released. */
     holdForReview: boolean().notNull().default(false),
     /**
      * Its branding on its public pages (M22 of #293): one colour behind white

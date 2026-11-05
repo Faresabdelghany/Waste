@@ -48,7 +48,7 @@
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
 
-/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
+/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a job (a completed bulky collection, O11 of #290, and the work orders charged before their charges were removed) and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
 export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit", "weight", "scale-ticket"] as const
 /** Why an event cannot be invoiced, each actionable; cleared by `reprice`. */
 export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"] as const

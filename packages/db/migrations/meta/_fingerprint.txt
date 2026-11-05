@@ -5182,26 +5182,6 @@ index wms.weight_review weight_review_project_id_idx CREATE INDEX weight_review_
 index wms.weight_review weight_review_reviewed_by_idx CREATE INDEX weight_review_reviewed_by_idx ON wms.weight_review USING btree (company_id, reviewed_by)
 index wms.weight_review weight_review_unload_id_idx CREATE INDEX weight_review_unload_id_idx ON wms.weight_review USING btree (company_id, unload_id, id)
 policy wms.weight_review weight_review_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.work_order_product kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.work_order_product 1 id uuid not-null default=wms.uuidv7()
-column wms.work_order_product 2 company_id uuid not-null
-column wms.work_order_product 3 project_id uuid not-null
-column wms.work_order_product 4 created_at timestamp with time zone not-null default=now()
-column wms.work_order_product 5 updated_at timestamp with time zone not-null default=now()
-column wms.work_order_product 6 service text not-null
-column wms.work_order_product 7 product_id uuid not-null
-constraint wms.work_order_product work_order_product_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.work_order_product work_order_product_pkey PRIMARY KEY (id)
-constraint wms.work_order_product work_order_product_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
-constraint wms.work_order_product work_order_product_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.work_order_product work_order_product_project_id_service_key UNIQUE (company_id, project_id, service)
-constraint wms.work_order_product work_order_product_service_one_of CHECK ((service = ANY (ARRAY['deliver'::text, 'remove'::text, 'swap'::text, 'repair'::text, 'wash'::text])))
-index wms.work_order_product work_order_product_pkey CREATE UNIQUE INDEX work_order_product_pkey ON wms.work_order_product USING btree (id)
-index wms.work_order_product work_order_product_product_id_idx CREATE INDEX work_order_product_product_id_idx ON wms.work_order_product USING btree (company_id, product_id)
-index wms.work_order_product work_order_product_project_id_service_key CREATE UNIQUE INDEX work_order_product_project_id_service_key ON wms.work_order_product USING btree (company_id, project_id, service)
-trigger wms.work_order_product work_order_product_audit_trail enabled=O CREATE TRIGGER work_order_product_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.work_order_product FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
-trigger wms.work_order_product work_order_product_touch_updated_at enabled=O CREATE TRIGGER work_order_product_touch_updated_at BEFORE UPDATE ON wms.work_order_product FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.work_order_product work_order_product_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 function pgboss.create_queue(queue_name text, options jsonb) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:414394c97224574f14b2e4b1a2765a836c24faaba627ad33504e5fb8f6da8df4
 function pgboss.delete_queue(queue_name text) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:39df331dbfb3c58c14251e93e087fa26c1dbb1417ce940d35757b374f521e377
 function pgboss.job_now() returns=timestamp with time zone kind=f language=sql volatility=s security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:3f827e651af737cc16b9094387f67010edb3eb7d4d7daf1b2a043d91e222d434
@@ -5344,4 +5324,5 @@ journal 1793952044162 5587d766cdf82edab9c6b47ceea0c32c804b946f5c8d1e52324481d954
 journal 1793952115029 1808664578c7521dad88cc4f0b4b419ce0f403f2a7cb9d42119c52d6d41ce82f
 journal 1793952129739 6eb121585a7a7e828ec2053f9ef25e4fff6a8832084876f40b57282d8149c55a
 journal 1793952137785 117c4f4b466e7cfa44613d86140cc89b92a390cfbae4e01dcbc093477e121dcb
+journal 1793952146294 6e4653033ff4f3f7b9e3200818c56d138bc8d38fb4c806dd93f058898d8c72a3
 pgboss-version 42

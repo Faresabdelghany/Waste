@@ -65,7 +65,6 @@ import {
   settlementLine,
   ticketKindProduct,
   weightReview,
-  workOrderProduct,
 } from "../schema/finance"
 import { driver, vehicle } from "../schema/fleet"
 import { vehicleType } from "../schema/fleet-types"
@@ -783,7 +782,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(charge({ id: a.third }))), refusedWith("23505", /billable_event_subscription_charge_idx/), "a period charged twice")
     }))
 
-  test("container hire (M14 of #293): free days a day product's alone and a year at most; a work order's service at one product of its project; a job names its stop; a hire names its subscription and its placement through its container, is the run's, and is one per placement and month (23514, 23505, 23503)", () =>
+  test("container hire (M14 of #293): free days a day product's alone and a year at most; a job names its stop; a hire names its subscription and its placement through its container, is the run's, and is one per placement and month (23514, 23505, 23503)", () =>
     seeded(async (tx) => {
       await seedHarbor(tx)
       const productMoved = (values: Partial<typeof product.$inferInsert>) => tx.transaction((savepoint) => savepoint.update(product).set(values).where(eq(product.id, a.product)))
@@ -792,15 +791,6 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await assert.rejects(productMoved({ unit: "day", freeDays: -1 }), refusedWith("23514", /product_free_days_shape/), "fewer than none")
       await tx.update(product).set({ unit: "day", freeDays: 0 }).where(eq(product.id, a.product))
       await tx.update(product).set({ freeDays: 366 }).where(eq(product.id, a.product))
-
-      const priced = (values: Partial<typeof workOrderProduct.$inferInsert>): typeof workOrderProduct.$inferInsert => ({ id: a.spare, companyId: a.company, projectId: a.project, service: "deliver", productId: a.product, ...values })
-      const refusedPrice = (values: Partial<typeof workOrderProduct.$inferInsert>, code: string, constraint: RegExp, why: string) =>
-        assert.rejects(tx.transaction((savepoint) => savepoint.insert(workOrderProduct).values(priced({ id: a.other, ...values }))), refusedWith(code, constraint), why)
-      await tx.insert(workOrderProduct).values(priced({}))
-      await refusedPrice({}, "23505", /work_order_product_project_id_service_key/, "a service priced twice in a project")
-      await refusedPrice({ service: "empty" }, "23514", /work_order_product_service_one_of/, "an emptying is a pickup's charge, never a work order's")
-      await refusedPrice({ service: "wash", productId: a.harborProduct }, "23503", /work_order_product_product_id_fk/, "another project's product")
-      await tx.insert(workOrderProduct).values(priced({ id: a.other, projectId: a.harbor, productId: a.harborProduct }))
 
       const refuse = (row: typeof billableEvent.$inferInsert, code: string, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(row)), refusedWith(code, constraint), why)
       const job = (values: Partial<typeof billableEvent.$inferInsert> = {}) => manual({ kind: "job", createdBy: null, sourceEventId: a.spare, routeId: a.route, pickupId: a.pickup, ...values })

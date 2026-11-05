@@ -30,7 +30,6 @@ import {
   UserCircle,
   UsersThree,
   Warning,
-  Wrench,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
@@ -212,8 +211,6 @@ const settingsSections: Array<{
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
-      // A project's products for the office's work orders on the API (M14 of #293), as Ticket charges are.
-      { id: "commercial-work-order-charges", label: "Work order charges", icon: Wrench },
       // A project's Visit Rules for its recycling centres on the API (#393): offered with the adapter configured.
       { id: VISIT_RULES_SETTINGS_PANE_ID, label: "Recycling-centre charges", icon: Recycle },
       // A project's mapping onto the office's chart, which its accounting exports book to (#291 C7).
@@ -1380,11 +1377,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-ticket-charges": {
     title: "Ticket charges",
     description: "The product each ticket kind's re-collection or service is charged at when its completion names none (#291 C3).",
-    groups: [],
-  },
-  "commercial-work-order-charges": {
-    title: "Work order charges",
-    description: "The product each of the office's work orders — a delivery, a removal, a swap, a repair, a wash — is charged at when it is completed (M14 of #293).",
     groups: [],
   },
   [VISIT_RULES_SETTINGS_PANE_ID]: {
