@@ -58,6 +58,7 @@ import {
 } from "@waste/domain/route-schemes/lifecycle"
 import { schemeGroupPlans } from "@waste/domain/route-schemes/groups"
 import { schemeHolidayPolicy, schemeProjectId } from "@waste/domain/route-schemes/holidays"
+import { holidayListCountry } from "@waste/domain/route-schemes/holiday-list-records"
 import {
   NO_HOLIDAY_LIST_LABEL,
   resolveProjectCalendar,
@@ -1381,7 +1382,7 @@ function SchemeHolidaysTab({
           {settingsLink}
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <StatRow label="Lists" value={source.records.map((record) => record.name).join(", ")} />
+          <StatRow label="Country" value={(source.listRecord && holidayListCountry(source.listRecord)) || "—"} />
           <StatRow label="Dates" value={String(source.dates.size)} />
           <StatRow label="Policy" value={HOLIDAY_POLICY_LABELS[policy]} />
         </div>

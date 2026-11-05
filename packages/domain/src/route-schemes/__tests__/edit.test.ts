@@ -302,10 +302,10 @@ const PROJECT_CALENDARS = {
     stub("project-holiday", "Holiday", { submittedValues: { holidayList: "Test days" } }),
   ],
   calendarRecords: [
-    stub("cal-holiday", "Holiday 2026", {
-      context: "Collection calendar",
-      projectIds: ["project-holiday"],
-      submittedValues: { holidayDates: "2026-09-28" },
+    // The company's list the project names (2026-11-05): a calendar carries no holidays.
+    stub("holiday-list-test", "Test days", {
+      recordKind: "Holiday List",
+      submittedValues: { listName: "Test days", country: "DK", holidayDates: "2026-09-28" },
     }),
   ],
 }

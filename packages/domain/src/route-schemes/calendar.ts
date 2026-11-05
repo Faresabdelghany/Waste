@@ -1,11 +1,11 @@
 // Collection Calendar model. Pure data logic — no UI or store dependencies.
-// A calendar record carries holiday dates and a validity period; since the
-// 2026-09-16 holiday model only its holiday DATES feed the scheme engine
-// (@waste/domain/route-schemes/holidays builds the holiday list from them). The
-// working week is a PROJECT attribute (project-calendar.ts, round 3) — the
-// calendar-level working days were retired so the weekend is defined once.
-// Validity is display data for the Collection Calendars list. Timezone is
-// display-only (Q9): all date math is day-granular ISO.
+// A calendar record carries a validity period and no holidays: since
+// 2026-11-05 a project's holidays are the days of the company's Holiday List
+// it names (holiday-list-records.ts, project-calendar.ts), whose dates are
+// spelled as `parseHolidayDates` reads them. The working week is a PROJECT
+// attribute (project-calendar.ts, round 3). Validity is display data for the
+// Collection Calendars list. Timezone is display-only (Q9): all date math is
+// day-granular ISO.
 
 import type { BusinessRecord } from "../prototype-record"
 import { isIsoDate } from "./recurrence"
@@ -16,8 +16,6 @@ export type CollectionCalendar = {
   name: string
   /** Record lifecycle status (Draft, Active, Superseded, Archived). */
   status: string
-  /** ISO dates that are non-working holidays. */
-  holidayDates: string[]
   /** ISO; empty = open-ended. */
   validFrom: string
   validTo: string
@@ -62,21 +60,17 @@ export function calendarFromRecord(
 ): CollectionCalendar | null {
   if (!record) return null
   const values = record.submittedValues ?? {}
-  const holidayDates = parseHolidayDates(
-    typeof values.holidayDates === "string" ? values.holidayDates : undefined,
-  )
   const validFromRaw = stringValue(values, "validFrom") ?? ""
   const validToRaw = stringValue(values, "validTo") ?? ""
   const validFrom = isIsoDate(validFromRaw) ? validFromRaw : ""
   const validTo = isIsoDate(validToRaw) ? validToRaw : ""
-  if (holidayDates.length === 0 && !validFrom && !validTo) {
+  if (!validFrom && !validTo) {
     return null
   }
   return {
     id: record.id,
     name: record.name,
     status: record.status,
-    holidayDates,
     validFrom,
     validTo,
     ...(stringValue(values, "timezone")

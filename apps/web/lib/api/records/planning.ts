@@ -52,16 +52,9 @@
 // already ended before it is left as it stands, the next one added after the
 // gap.
 //
-// A calendar travels with its holidays, replaced whole through their own
-// route; the record spells them as the readers do — `holidayDates` as the
-// dates and `holidayNames` as the names, the shape the Holiday lists pane
-// writes — and a write names each day from the record's carried names,
-// then from the project's holiday list, then not at all. An edit that moves
-// the period and the holidays together is two requests, and the API holds
-// each to the other (a holiday outside the period is a 400, a period
-// shortened under its holidays a 409), so the order follows the change:
-// holidays first when the new set fits the period as stored, the period
-// first when a new holiday lies outside it.
+// A calendar carries no holidays (2026-11-05): a project's are the days of the
+// company's Holiday List it names (holiday-lists.ts), so the record carries
+// the calendar's name and period alone and an edit is one request.
 //
 // Ids. A seeded area keeps its fixture's id (`area-indreby`), matched by the
 // reference it quotes — the fixture's Code fact, set once — and by name only
@@ -71,22 +64,18 @@
 // the start: nothing names a calendar by id — a project's calendars are
 // found by project — so the fixture-id mapping retires here, as the plan on
 // #81 has it.
-import type { CollectionCalendar, CollectionCalendarHoliday } from "@waste/contracts/collection-calendars"
+import type { CollectionCalendar } from "@waste/contracts/collection-calendars"
 import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
 import { PLANNING_AREA_GEOMETRY_KEY } from "@waste/domain/map-planning/areas"
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
-import { parseHolidayDates } from "@waste/domain/route-schemes/calendar"
-import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
-import { HOLIDAY_NAMES_KEY, parseHolidayNames, serializeHolidayNames } from "@waste/domain/route-schemes/holidays"
-import { projectHolidayListName } from "@waste/domain/route-schemes/project-calendar"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/planning-areas"
 
-import { create, get, listAll, patch, put } from "../client"
+import { create, get, listAll, patch } from "../client"
 import { holidayListAdapter } from "./holiday-lists"
 import {
   fixtureNamed,
@@ -473,20 +462,6 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
 // Collection calendars
 // ---------------------------------------------------------------------------
 
-/** A calendar's holidays as the record's typed values spell them, named from the record first and the project's list second. */
-function holidaysOf(record: BusinessRecord, project: BusinessRecord | undefined): CollectionCalendarHoliday[] {
-  const carried = parseHolidayNames(record.submittedValues?.[HOLIDAY_NAMES_KEY])
-  const listed = holidayNamesFor(projectHolidayListName(project) ?? undefined)
-  return parseHolidayDates(typed(record, "holidayDates")).map((day) => ({ day, name: carried.get(day) ?? listed(day) ?? null }))
-}
-
-/** What a calendar's update carries, and in which order when it carries both: `holidaysFirst` when the new set fits the period as stored. */
-type CollectionCalendarWrite = {
-  calendar?: { name?: string; validFrom?: string; validTo?: string | null }
-  holidays?: CollectionCalendarHoliday[]
-  holidaysFirst?: boolean
-}
-
 export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
   prefix: "calendar",
   auditTable: "collection_calendar",
@@ -498,8 +473,6 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
     const project = context.resolve.byServerId(calendar.projectId)
     const projectWebId = project?.id ?? webIdOf("project", calendar.projectId)
     const lastDay = calendar.validTo === null ? undefined : lastDayIn(calendar.validTo)
-    const days = calendar.holidays.map((holiday) => holiday.day)
-    const names = new Map(calendar.holidays.flatMap((holiday) => (holiday.name === null ? [] : [[holiday.day, holiday.name] as const])))
     const validity = `${calendar.validFrom} – ${lastDay ?? "open"}`
     const projectName = project?.name ?? "Project"
     return {
@@ -510,7 +483,7 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
       ...inheritedPresentation(undefined),
       ...stampFacts(calendar, context.now),
       value: "—",
-      facts: { Project: projectName, Holidays: String(days.length), Validity: validity },
+      facts: { Project: projectName, Validity: validity },
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Collection Calendar",
@@ -519,8 +492,6 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
         projectId: projectWebId,
         validFrom: calendar.validFrom,
         ...(lastDay === undefined ? {} : { validTo: lastDay }),
-        holidayDates: days.join(", "),
-        ...(names.size === 0 ? {} : { [HOLIDAY_NAMES_KEY]: serializeHolidayNames(names) }),
       },
     }
   },
@@ -537,56 +508,17 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
       name,
       validFrom,
       ...(lastDay === undefined ? {} : { validTo: firstDayOut(lastDay) }),
-      holidays: holidaysOf(record, context.resolve.byServerId(projectId)),
     }
   },
-  toPatchBody: (before, after, context) => {
+  toPatchBody: (before, after) => {
     if (changedTyped(before, after, "projectId")) return refusal("projectId", "A calendar stays in its project")
-    const calendar = patchOf(before, after, (record) => {
+    return patchOf(before, after, (record) => {
       const lastDay = typed(record, "validTo")
       return { name: typed(record, "calendarName") ?? record.name, validFrom: typed(record, "validFrom"), validTo: lastDay === undefined ? null : firstDayOut(lastDay) }
     })
-    const projectWebId = typed(after, "projectId") ?? after.projectIds?.[0]
-    const projectId = projectWebId === undefined ? undefined : context.resolve.serverIdOf(projectWebId)
-    const project = projectId === undefined ? undefined : context.resolve.byServerId(projectId)
-    const was = holidaysOf(before, project)
-    const is = holidaysOf(after, project)
-    const holidays = JSON.stringify(was) === JSON.stringify(is) ? undefined : is
-    if (calendar === null && holidays === undefined) return null
-    if (calendar === null) return { holidays }
-    if (holidays === undefined) return { calendar }
-    // Both move: the holidays go first when every one fits the period as
-    // stored (the period may then shrink under the set that remains), the
-    // period first when a holiday lies outside it (the set is put once the
-    // period has room). A holiday dropped at one end and one added past the
-    // other in the same edit fits neither order; the API refuses the second
-    // request in its own sentence, and the edit is made in two.
-    const storedFrom = typed(before, "validFrom") ?? ""
-    const storedTo = typed(before, "validTo")
-    const fitsStored = (day: string) => day >= storedFrom && (storedTo === undefined || day <= storedTo)
-    const write: CollectionCalendarWrite = { calendar, holidays, holidaysFirst: is.every((holiday) => fitsStored(holiday.day)) }
-    return write
   },
   create: (client, body) => create<CollectionCalendar>(client, "/collection-calendars", body).then((created) => created.body),
-  // The two requests in the order the body says; the answer is the calendar as it now stands.
-  update: async (client, serverId, body) => {
-    const write = body as CollectionCalendarWrite
-    let calendar: CollectionCalendar | undefined
-    const patchCalendar = async () => {
-      if (write.calendar !== undefined) calendar = await patch<CollectionCalendar>(client, `/collection-calendars/${serverId}`, write.calendar)
-    }
-    const putHolidays = async () => {
-      if (write.holidays !== undefined) calendar = await put<CollectionCalendar>(client, `/collection-calendars/${serverId}/holidays`, { holidays: write.holidays })
-    }
-    if (write.holidaysFirst) {
-      await putHolidays()
-      await patchCalendar()
-    } else {
-      await patchCalendar()
-      await putHolidays()
-    }
-    return calendar ?? (await get<CollectionCalendar>(client, `/collection-calendars/${serverId}`))
-  },
+  update: (client, serverId, body) => patch<CollectionCalendar>(client, `/collection-calendars/${serverId}`, body),
 }
 
 // ---------------------------------------------------------------------------

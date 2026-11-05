@@ -1,21 +1,18 @@
-// The holiday DATES a project's calendar records carry (2026-09-16 holiday
-// model): ONE list per project, maintained per year as Collection Calendar
-// records scoped to the project (configure.calendars, managed in Settings),
-// union of their holiday dates. Which list a project has — and whether it has
-// one at all — is the project's explicit `holidayList` attribute, resolved in
-// project-calendar.ts
-// together with the weekend; this module only reads the dated records and
-// names their dates. Pure data logic (type-only import of BusinessRecord).
+// A holiday list's dates and names as a record spells them, and the
+// scheme's holiday policy. Which list a project has — and whether it has one
+// at all — is the project's explicit `holidayList` attribute, resolved in
+// project-calendar.ts together with the weekend; since 2026-11-05 the list is
+// the company's own record (holiday-list-records.ts), never the project's
+// Collection Calendars, which carry no holidays. Pure data logic (type-only
+// import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
-import { calendarFromRecord } from "./calendar"
 import { holidayLabel, type HolidayNameLookup } from "./holiday-names"
 import { isHolidayPolicy, type HolidayList, type HolidayPolicy } from "./occurrences"
 import { isIsoDate } from "./recurrence"
 import { stringValue } from "./validation"
 
 type StoredValues = Record<string, string | boolean | undefined>
-type RecordLike = Pick<BusinessRecord, "facts" | "submittedValues" | "projectIds">
 
 /** Valid ISO dates → a sorted holiday list named through the list's lookup. */
 export function holidayListFromDates(
@@ -35,39 +32,11 @@ export function schemeHolidayPolicy(values: StoredValues | undefined): HolidayPo
   return isHolidayPolicy(policy) ? policy : "skip"
 }
 
-const recordProjectIds = (record: RecordLike): string[] =>
-  [...(record.projectIds ?? []), stringValue(record.submittedValues ?? {}, "projectId") ?? ""].filter(
-    Boolean,
-  )
-
-/** Every calendar record scoped to the project, earliest validity first — with or without holiday dates. */
-export function projectCalendarRecords(
-  projectId: string | undefined,
-  calendarRecords: readonly BusinessRecord[] | undefined,
-): BusinessRecord[] {
-  if (!projectId || !calendarRecords) return []
-  const validFromOf = (record: BusinessRecord) => calendarFromRecord(record)?.validFrom ?? ""
-  return calendarRecords
-    .filter((record) => recordProjectIds(record).includes(projectId))
-    .sort((a, b) => validFromOf(a).localeCompare(validFromOf(b)) || a.name.localeCompare(b.name))
-}
-
-/** The project's calendar records that carry holiday dates — one per year, earliest validity first. */
-export function projectHolidayCalendars(
-  projectId: string | undefined,
-  calendarRecords: readonly BusinessRecord[] | undefined,
-): BusinessRecord[] {
-  return projectCalendarRecords(projectId, calendarRecords).filter(
-    (record) => (calendarFromRecord(record)?.holidayDates.length ?? 0) > 0,
-  )
-}
-
 /**
- * The calendar record's `submittedValues` key for the names of its holidays:
- * a JSON object of ISO date to name, written by the Holiday lists pane
- * (holiday-lists.ts) beside `holidayDates`. A record that carries none is
- * named through the list's lookup (holiday-names.ts), as every record was
- * before 2026-09-24.
+ * A holiday list record's `submittedValues` key for the names of its
+ * holidays: a JSON object of ISO date to name, written by the Holiday lists
+ * pane beside `holidayDates`. A list that carries none is named through its
+ * lookup (holiday-names.ts).
  */
 export const HOLIDAY_NAMES_KEY = "holidayNames"
 
@@ -94,34 +63,6 @@ export function parseHolidayNames(raw: string | boolean | undefined): Map<string
 export function serializeHolidayNames(names: ReadonlyMap<string, string>): string {
   if (names.size === 0) return ""
   return JSON.stringify(Object.fromEntries([...names.entries()].sort(([a], [b]) => a.localeCompare(b))))
-}
-
-/** Every holiday name the project's per-year records carry, by date. */
-export function projectHolidayNames(
-  projectId: string | undefined,
-  calendarRecords: readonly BusinessRecord[] | undefined,
-): Map<string, string> {
-  const names = new Map<string, string>()
-  for (const record of projectHolidayCalendars(projectId, calendarRecords)) {
-    for (const [date, name] of parseHolidayNames(record.submittedValues?.[HOLIDAY_NAMES_KEY])) {
-      names.set(date, name)
-    }
-  }
-  return names
-}
-
-/** Every holiday date the project's per-year records carry, deduplicated and sorted. */
-export function projectHolidayDates(
-  projectId: string | undefined,
-  calendarRecords: readonly BusinessRecord[] | undefined,
-): string[] {
-  return [
-    ...new Set(
-      projectHolidayCalendars(projectId, calendarRecords).flatMap(
-        (record) => calendarFromRecord(record)?.holidayDates ?? [],
-      ),
-    ),
-  ].sort()
 }
 
 /** The project a stored scheme plans for: its typed projectId, else its record scope. */
