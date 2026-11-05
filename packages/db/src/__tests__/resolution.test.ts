@@ -665,7 +665,8 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
     seeded(async (tx) => {
       // As before the types: the column nullable, the tickets of neither company typed, and company b without a type.
       await tx.execute(sql`alter table "wms"."ticket" alter column "ticket_type_id" drop not null`)
-      await tx.update(ticket).set({ ticketTypeId: null })
+      // Through SQL, since the schema declares the column NOT NULL and the typed `set` refuses the null.
+      await tx.execute(sql`update "wms"."ticket" set "ticket_type_id" = null`)
       await tx.delete(ticketType).where(eq(ticketType.companyId, b.company))
       await tx.execute(sql.raw(ticketTypesSeed()))
       const types = await tx.select({ id: ticketType.id, companyId: ticketType.companyId, kind: ticketType.kind, isDefault: ticketType.isDefault }).from(ticketType)
