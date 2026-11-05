@@ -9,9 +9,9 @@
 //                on, or absent = no list. Since 2026-11-05 the list is a
 //                record of its own (holiday-list-records.ts), riding among
 //                the calendar records, and its dates are the list's; a name
-//                no list record carries falls back to the project's per-year
-//                Collection Calendar records (holidays.ts), as before. The
-//                Settings screen edits both; the wizard only reads them.
+//                no list record carries is a list with no days (a calendar
+//                carries no holidays). The Settings screen edits both; the
+//                wizard only reads them.
 // Pure data logic (type-only import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
@@ -19,13 +19,7 @@ import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
 import { holidayNamesFor, withCarriedNames } from "./holiday-names"
-import {
-  holidayListFromDates,
-  projectHolidayCalendars,
-  projectHolidayDates,
-  projectHolidayNames,
-  schemeProjectId,
-} from "./holidays"
+import { holidayListFromDates, schemeProjectId } from "./holidays"
 import { NO_HOLIDAYS, type HolidayList, type SchemeCalendar } from "./occurrences"
 import { parseServiceDays, type ServiceDay } from "./recurrence"
 
@@ -39,10 +33,8 @@ export type ProjectHolidayList = {
   /** "Danish public holidays". */
   name: string
   dates: HolidayList
-  /** The company's Holiday List record the dates are read from, where one carries the name. */
+  /** The company's Holiday List record the dates are read from; absent where no record carries the name. */
   listRecord?: BusinessRecord
-  /** The per-year Collection Calendar records the dates are read from where no list record does. */
-  records: BusinessRecord[]
 }
 
 export type ProjectCalendar = {
@@ -76,35 +68,18 @@ export function resolveProjectCalendar(
     ? records.projects.find((record) => record.id === projectId)
     : undefined
   const name = projectHolidayListName(project)
+  if (!name) return { list: null, weekend: projectWeekend(project) }
   const listRecord = holidayListNamed(name, records.calendars)
-  if (name && listRecord) {
-    const entries = holidayListEntries(listRecord)
-    return {
-      list: {
-        name,
-        dates: holidayListFromDates(
-          entries.map((entry) => entry.date),
-          withCarriedNames(new Map(entries.flatMap((entry) => (entry.name ? [[entry.date, entry.name] as const] : []))), holidayNamesFor(name)),
-        ),
-        listRecord,
-        records: [],
-      },
-      weekend: projectWeekend(project),
-    }
-  }
+  const entries = listRecord ? holidayListEntries(listRecord) : []
   return {
-    list: name
-      ? {
-          name,
-          // A name a per-year record carries wins; the list's lookup names
-          // the dates of a record that carries none.
-          dates: holidayListFromDates(
-            projectHolidayDates(projectId, records.calendars),
-            withCarriedNames(projectHolidayNames(projectId, records.calendars), holidayNamesFor(name)),
-          ),
-          records: projectHolidayCalendars(projectId, records.calendars),
-        }
-      : null,
+    list: {
+      name,
+      dates: holidayListFromDates(
+        entries.map((entry) => entry.date),
+        withCarriedNames(new Map(entries.flatMap((entry) => (entry.name ? [[entry.date, entry.name] as const] : []))), holidayNamesFor(name)),
+      ),
+      ...(listRecord ? { listRecord } : {}),
+    },
     weekend: projectWeekend(project),
   }
 }

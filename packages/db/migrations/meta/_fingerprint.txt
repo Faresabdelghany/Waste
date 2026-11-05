@@ -949,29 +949,6 @@ index wms.collection_calendar collection_calendar_project_key CREATE UNIQUE INDE
 trigger wms.collection_calendar collection_calendar_audit_trail enabled=O CREATE TRIGGER collection_calendar_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_calendar FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.collection_calendar collection_calendar_touch_updated_at enabled=O CREATE TRIGGER collection_calendar_touch_updated_at BEFORE UPDATE ON wms.collection_calendar FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_calendar collection_calendar_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.collection_calendar_holiday kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.collection_calendar_holiday 1 id uuid not-null default=wms.uuidv7()
-column wms.collection_calendar_holiday 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.collection_calendar_holiday 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.collection_calendar_holiday 4 created_at timestamp with time zone not-null default=now()
-column wms.collection_calendar_holiday 5 updated_at timestamp with time zone not-null default=now()
-column wms.collection_calendar_holiday 6 collection_calendar_id uuid not-null
-column wms.collection_calendar_holiday 7 day date not-null acl=[wms_public=SELECT/<owner>]
-column wms.collection_calendar_holiday 8 name text acl=[wms_public=SELECT/<owner>]
-constraint wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_day_key UNIQUE (company_id, collection_calendar_id, day)
-constraint wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_fk FOREIGN KEY (company_id, project_id, collection_calendar_id) REFERENCES wms.collection_calendar(company_id, project_id, id)
-constraint wms.collection_calendar_holiday collection_calendar_holiday_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.collection_calendar_holiday collection_calendar_holiday_pkey PRIMARY KEY (id)
-constraint wms.collection_calendar_holiday collection_calendar_holiday_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-index wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_day_key CREATE UNIQUE INDEX collection_calendar_holiday_collection_calendar_id_day_key ON wms.collection_calendar_holiday USING btree (company_id, collection_calendar_id, day)
-index wms.collection_calendar_holiday collection_calendar_holiday_pkey CREATE UNIQUE INDEX collection_calendar_holiday_pkey ON wms.collection_calendar_holiday USING btree (id)
-index wms.collection_calendar_holiday collection_calendar_holiday_project_id_idx CREATE INDEX collection_calendar_holiday_project_id_idx ON wms.collection_calendar_holiday USING btree (company_id, project_id)
-trigger wms.collection_calendar_holiday collection_calendar_holiday_audit_trail enabled=O CREATE TRIGGER collection_calendar_holiday_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_calendar_holiday FOR EACH ROW EXECUTE FUNCTION wms.audit_row('collection_calendar', 'collection_calendar_id')
-trigger wms.collection_calendar_holiday collection_calendar_holiday_touch_updated_at enabled=O CREATE TRIGGER collection_calendar_holiday_touch_updated_at BEFORE UPDATE ON wms.collection_calendar_holiday FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.collection_calendar_holiday collection_calendar_holiday_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
-   FROM wms.project published
-  WHERE ((published.company_id = collection_calendar_holiday.company_id) AND (published.id = collection_calendar_holiday.project_id) AND (published.public_slug IS NOT NULL))))) check=none
-policy wms.collection_calendar_holiday collection_calendar_holiday_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.collection_group 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.collection_group 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -5493,4 +5470,5 @@ journal 1793819438754 69211a9db7ef26f17b5eb0ca05c26144c7c7b5b1c49bcfe216140eb16e
 journal 1793867212088 2007cb8587e6cfd3460449eb5b158cc56ec1652c21ea98668a4d7ae3e34befe0
 journal 1793897654220 e01891e8825899c0eccf4e4dd1e4f1a2e357955da604bb62681a0e6307d31683
 journal 1793902123253 7603b62eed847016da2a36566ed930e136dc3237619f7a99b0ca92aedf43f538
+journal 1793906444180 9fc68765a1a042144f7892a750d6798b5d65972be82a56f14a53a71e4b74ee5b
 pgboss-version 42

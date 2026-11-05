@@ -1,18 +1,15 @@
-// The editable side of a project's holiday list (issue #36, 2026-09-24): the
-// per-year Collection Calendar record read as dated, named entries, the two
-// values the editor writes back, the year a record covers, and the proposals
-// — next year's list carried from this year's, or a first year from what the
-// list's lookup knows. The dates stay where every reader finds them
-// (`holidayDates`, holidays.ts); the names go beside them under
-// `holidayNames`, so a record that has been edited here names its own
-// holidays and the lookup in holiday-names.ts is the fallback for one that
-// never was. Pure data logic (type-only import of BusinessRecord).
+// The editable side of a company's Holiday List (issue #36, 2026-09-24; the
+// list a record of its own since 2026-11-05, holiday-list-records.ts): its
+// dated, named entries, the two values the editor writes back, what the
+// list's lookup knows of a year, and a year's holidays carried to the next.
+// The dates are spelled as every reader parses them (`holidayDates`); the
+// names go beside them under `holidayNames`, so a list that has been edited
+// names its own holidays and the lookup in holiday-names.ts is the fallback
+// for one that never was. Pure data logic.
 
-import type { BusinessRecord } from "../prototype-record"
-import { calendarFromRecord } from "./calendar"
 import { formatValidity } from "./calendar-list"
 import type { HolidayNameLookup } from "./holiday-names"
-import { HOLIDAY_NAMES_KEY, parseHolidayNames, serializeHolidayNames } from "./holidays"
+import { serializeHolidayNames } from "./holidays"
 import { addDays, isIsoDate } from "./recurrence"
 
 /** One holiday on a list: its ISO date and its name, "" while it has none. */
@@ -22,24 +19,6 @@ export type HolidayEntry = {
 }
 
 const byDate = (a: HolidayEntry, b: HolidayEntry) => a.date.localeCompare(b.date)
-
-/**
- * The record's holidays as entries, in date order: a name the record carries
- * first, else what the list's lookup says, else unnamed. No structured
- * values, no entries.
- */
-export function calendarHolidayEntries(
-  record: BusinessRecord | undefined | null,
-  names: HolidayNameLookup,
-): HolidayEntry[] {
-  const calendar = calendarFromRecord(record)
-  if (!calendar) return []
-  const carried = parseHolidayNames(record?.submittedValues?.[HOLIDAY_NAMES_KEY])
-  return calendar.holidayDates.map((date) => ({
-    date,
-    name: carried.get(date) ?? names(date) ?? "",
-  }))
-}
 
 /**
  * The values the editor writes: the dates in the spelling every reader
@@ -103,71 +82,6 @@ function onlyDateNamed(known: readonly HolidayEntry[], name: string): string | u
   if (!name) return undefined
   const dates = known.filter((entry) => entry.name === name)
   return dates.length === 1 ? dates[0].date : undefined
-}
-
-/** The year a record covers: its validity start's, else its first holiday's. */
-export function calendarYear(record: BusinessRecord | undefined | null): number | undefined {
-  const calendar = calendarFromRecord(record)
-  const iso = calendar?.validFrom || calendar?.holidayDates[0]
-  return iso ? Number(iso.slice(0, 4)) : undefined
-}
-
-/** The record covering the latest year — the one "Create next year" continues from. */
-export function latestHolidayCalendar(
-  records: readonly BusinessRecord[],
-): BusinessRecord | undefined {
-  return [...records]
-    .filter((record) => calendarYear(record) !== undefined)
-    .sort(
-      (a, b) =>
-        (calendarYear(b) ?? 0) - (calendarYear(a) ?? 0) ||
-        (calendarFromRecord(b)?.validFrom ?? "").localeCompare(calendarFromRecord(a)?.validFrom ?? ""),
-    )[0]
-}
-
-export type YearProposal = {
-  year: number
-  /** The record's name — the previous one with its year moved on, or the project's with the year. */
-  calendarName: string
-  /** The whole year, whatever the previous record covered. */
-  validFrom: string
-  validTo: string
-  entries: HolidayEntry[]
-}
-
-const proposal = (calendarName: string, year: number, entries: HolidayEntry[]): YearProposal => ({
-  year,
-  calendarName,
-  validFrom: `${year}-01-01`,
-  validTo: `${year}-12-31`,
-  entries,
-})
-
-/** Next year's record from this year's, or null for a record with no year. */
-export function nextYearProposal(
-  record: BusinessRecord,
-  names: HolidayNameLookup,
-): YearProposal | null {
-  const previous = calendarYear(record)
-  if (previous === undefined) return null
-  const year = previous + 1
-  const calendarName = record.name.includes(String(previous))
-    ? record.name.replace(String(previous), String(year))
-    : `${record.name} ${year}`
-  return proposal(
-    calendarName,
-    year,
-    carryHolidaysToYear(calendarHolidayEntries(record, names), year, names),
-  )
-}
-
-/** A project's first record: named after the project, seeded with what the list knows. */
-export function firstYearProposal(
-  projectName: string,
-  year: number,
-  names: HolidayNameLookup,
-): YearProposal {
-  return proposal(`${projectName} ${year}`, year, knownHolidaysOfYear(year, names))
 }
 
 export type ValidityPeriod = {

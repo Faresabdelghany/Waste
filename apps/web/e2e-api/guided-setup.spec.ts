@@ -122,7 +122,7 @@ test("step 2 reads the project's holiday list from the API, and the next dates a
   for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) await root.getByRole("button", { name: day, exact: true }).click()
   await pick(page, root, "On a public holiday", "Shift to the next working day")
   const rows = root.getByRole("row").filter({ has: page.locator("td") })
-  // Fri 25 Dec, the seeded calendar's Christmas Day: Sat 26 is a holiday and a weekend, Sun 27 a weekend — Mon 28 Dec.
+  // Fri 25 Dec, the seeded holiday list's Christmas Day: Sat 26 is a holiday and a weekend, Sun 27 a weekend — Mon 28 Dec.
   const shifted = rows.filter({ hasText: "Shifted from Fri 25 Dec · Christmas Day" })
   await expect(shifted).toHaveCount(1)
   await expect(shifted).toContainText("28 Dec 2026")

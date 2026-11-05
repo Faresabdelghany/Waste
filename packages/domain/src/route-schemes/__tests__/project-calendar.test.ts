@@ -80,25 +80,27 @@ const copenhagen = stub("project-copenhagen", "Copenhagen Central", {
 const cairo = stub("project-cairo", "Cairo Operations", {
   submittedValues: { weekend: "friday, saturday", holidayList: "Egyptian public holidays" },
 })
-// No holiday list on the project — its dated calendar is not a list.
+// No holiday list on the project.
 const harbor = stub("project-harbor", "Harbor Commercial")
-// A list named on the project whose per-year records are not there yet.
+// A list named on the project that no list record carries.
 const aarhus = stub("project-aarhus", "Aarhus", {
-  submittedValues: { holidayList: "Danish public holidays" },
+  submittedValues: { holidayList: "Aarhus holidays" },
 })
 const projects = [copenhagen, cairo, harbor, aarhus]
+/** A company's Holiday List record (2026-11-05), riding among the calendars. */
+const listRecord = (id: string, name: string, country: string, values: Record<string, string> = {}) =>
+  stub(id, name, { recordKind: "Holiday List", projectIds: [], submittedValues: { listName: name, country, ...values } })
 const calendars = [
-  stub("cal-cairo", "Cairo Operations 2027", {
-    projectIds: ["project-cairo"],
-    submittedValues: { holidayDates: EGYPT_HOLIDAY_DATES.join(", ") },
-  }),
-  stub("cal-cph", "Copenhagen Central 2026", {
-    projectIds: ["project-copenhagen"],
-    submittedValues: { holidayDates: "2026-12-25, 2026-12-24" },
-  }),
+  listRecord("holiday-list-egyptian", "Egyptian public holidays", "EG", { holidayDates: EGYPT_HOLIDAY_DATES.join(", ") }),
+  listRecord("holiday-list-danish", "Danish public holidays", "DK", { holidayDates: "2026-12-25, 2026-12-24" }),
+  // A per-year calendar carries no holidays: dates left on one are read by nothing.
   stub("cal-harbor", "Harbor 2026", {
     projectIds: ["project-harbor"],
-    submittedValues: { holidayDates: "2026-12-25" },
+    submittedValues: { validFrom: "2026-01-01", holidayDates: "2026-12-25" },
+  }),
+  stub("cal-aarhus", "Aarhus 2026", {
+    projectIds: ["project-aarhus"],
+    submittedValues: { validFrom: "2026-01-01", holidayDates: "2026-12-25" },
   }),
 ]
 
@@ -140,7 +142,7 @@ describe("resolveProjectCalendar", () => {
     assert.equal(weekendLabel(["friday", "saturday"]), "Fri–Sat")
   })
 
-  test("the list is the project's explicit holidayList attribute, named by it, dated by its calendars", () => {
+  test("the list is the project's explicit holidayList attribute, named by it, dated by the company's list of that name", () => {
     const cph = resolveProjectCalendar("project-copenhagen", { projects, calendars })
     assert.equal(cph.list?.name, "Danish public holidays")
     assert.deepEqual(
@@ -150,22 +152,19 @@ describe("resolveProjectCalendar", () => {
         ["2026-12-25", "Christmas Day"],
       ],
     )
-    assert.deepEqual(cph.list?.records.map((record) => record.id), ["cal-cph"])
+    assert.equal(cph.list?.listRecord?.id, "holiday-list-danish")
     const egyptian = resolveProjectCalendar("project-cairo", { projects, calendars })
     assert.equal(egyptian.list?.name, "Egyptian public holidays")
     assert.equal(egyptian.list?.dates.get("2027-01-07"), "Coptic Christmas")
     assert.equal(egyptian.list?.dates.get("2027-03-08"), "Holiday")
   })
 
-  test("a name a per-year record carries wins over the list's lookup; the lookup names the rest", () => {
+  test("a name the list record carries wins over the list's lookup; the lookup names the rest", () => {
     const named = [
-      ...calendars,
-      stub("cal-cairo-named", "Cairo Operations 2028", {
-        projectIds: ["project-cairo"],
-        submittedValues: {
-          holidayDates: "2028-02-26, 2028-01-07",
-          holidayNames: JSON.stringify({ "2028-02-26": "Eid al-Fitr", "2028-01-07": "Coptic Christmas Day" }),
-        },
+      ...calendars.filter((record) => record.id !== "holiday-list-egyptian"),
+      listRecord("holiday-list-egyptian", "Egyptian public holidays", "EG", {
+        holidayDates: [...EGYPT_HOLIDAY_DATES, "2028-02-26", "2028-01-07"].join(", "),
+        holidayNames: JSON.stringify({ "2028-02-26": "Eid al-Fitr", "2028-01-07": "Coptic Christmas Day" }),
       }),
     ]
     const list = resolveProjectCalendar("project-cairo", { projects, calendars: named }).list
@@ -175,7 +174,7 @@ describe("resolveProjectCalendar", () => {
     assert.equal(list?.dates.get("2027-03-08"), "Holiday")
   })
 
-  test("no holidayList on the project means no list — dated calendars alone do not make one", () => {
+  test("no holidayList on the project means no list — a calendar's dates do not make one", () => {
     assert.equal(resolveProjectCalendar("project-harbor", { projects, calendars }).list, null)
     assert.equal(
       schemeGenerationCalendar(stub("s", "Harbor scheme", { projectIds: ["project-harbor"] }), {
@@ -186,11 +185,11 @@ describe("resolveProjectCalendar", () => {
     )
   })
 
-  test("a named list without per-year records is a list with no dates yet", () => {
-    const list = resolveProjectCalendar("project-aarhus", { projects, calendars }).list
-    assert.equal(list?.name, "Danish public holidays")
-    assert.equal(list?.dates.size, 0)
-    assert.deepEqual(list?.records, [])
+  test("a name no list record carries is a list with no dates, whatever the project's calendars say", () => {
+    const named = resolveProjectCalendar("project-aarhus", { projects, calendars }).list
+    assert.equal(named?.name, "Aarhus holidays")
+    assert.equal(named?.dates.size, 0)
+    assert.equal(named?.listRecord, undefined)
   })
 
   test("projectCalendarLabel — the step 2 field and the review row", () => {

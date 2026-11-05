@@ -27,7 +27,7 @@ import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
 import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
-import { collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendarHoliday, DROPPED_TABLES } from "../schema/dropped"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
@@ -90,8 +90,11 @@ const inPublishedProject = (table: string) =>
  * schemes' recurrence and the routes standing, the project's working week
  * and holidays. No customer, party, contact, agreement, price or ticket
  * column: what a resident is told is dates, fractions and a holiday's name.
+ * Frozen as migration 0021 wrote it: its rendering test reads this list. The
+ * calendars' holidays have since been dropped, their grant and policy with
+ * them, and the project's holidays come through `HOLIDAY_LISTS_DOOR`.
  */
-export const COLLECTION_DAYS_DOOR: readonly PublicDoorTable[] = [
+export const COLLECTION_DAYS_DOOR_AT_0021: readonly PublicDoorTable[] = [
   { table: project, columns: [project.weekend, project.holidayList], rows: null },
   { table: property, columns: [property.id, property.companyId, property.projectId, property.address], rows: inPublishedProject("property") },
   {
@@ -267,6 +270,9 @@ export const HOLIDAY_LISTS_DOOR: readonly PublicDoorTable[] = [
   },
 ]
 
+/** 0021's tables less those a later file dropped: what the door opens of the collection days today. */
+export const COLLECTION_DAYS_DOOR: readonly PublicDoorTable[] = COLLECTION_DAYS_DOOR_AT_0021.filter(({ table }) => !(DROPPED_TABLES as readonly PgTable[]).includes(table))
+
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
   for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR, ...HOLIDAY_LISTS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
@@ -321,7 +327,7 @@ export const publicPolicyStatements = (tables: readonly PublicDoorTable[]): stri
 export const publicDoorStatements = (): string[] => [...publicRoleStatements(), ...publicGrantStatements(SORTING_GUIDE_DOOR), ...publicPolicyStatements(SORTING_GUIDE_DOOR)]
 
 /** Everything the collection days' migration carries (#293 M2): the grants, then the policies of the tables it opens. */
-export const collectionDaysDoorStatements = (): string[] => [...publicGrantStatements(COLLECTION_DAYS_DOOR), ...publicPolicyStatements(COLLECTION_DAYS_DOOR)]
+export const collectionDaysDoorStatements = (): string[] => [...publicGrantStatements(COLLECTION_DAYS_DOOR_AT_0021), ...publicPolicyStatements(COLLECTION_DAYS_DOOR_AT_0021)]
 
 /** What the subscription pause's migration carries for the door (#291 slice 10b), below the table's own statements: its grant, then its policy. */
 export const subscriptionPauseDoorStatements = (): string[] => [...publicGrantStatements(SUBSCRIPTION_PAUSE_DOOR), ...publicPolicyStatements(SUBSCRIPTION_PAUSE_DOOR)]

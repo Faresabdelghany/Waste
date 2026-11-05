@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { CollectionCalendar, ONE_HOLIDAY_PER_DAY, OUTSIDE_CALENDAR_PERIOD } from "@waste/contracts/collection-calendars"
+import { CollectionCalendar } from "@waste/contracts/collection-calendars"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
@@ -21,8 +21,6 @@ const CollectionCalendarPage = Page(CollectionCalendar)
 const MODULE = "configure.calendars"
 
 const CALENDAR_RUNNING = "This project already has a calendar in force over that period; a project has one calendar at a time"
-/** The contracts' sentence: the create schema says it where it sees the period, the PUT route where only the stored row does. */
-const OUTSIDE = OUTSIDE_CALENDAR_PERIOD
 
 /**
  * A project has one calendar in force at a time, so every calendar of
@@ -68,7 +66,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
     theirCalendar = await create(other, {
       projectId: b.projects.copenhagen.id,
       name: "Their 2026",
-      holidays: [{ day: "2026-12-25", name: "Christmas Day" }],
       ...year(2026),
     })
   })
@@ -99,11 +96,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return CollectionCalendar.parse(await response.json())
   }
-  const put = async (call: Call, id: string, holidays: unknown): Promise<CollectionCalendar> => {
-    const response = await call(`/collection-calendars/${id}/holidays`, { method: "PUT", body: { holidays } })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return CollectionCalendar.parse(await response.json())
-  }
   const page = async (call: Call, query = "") => {
     const response = await call(`/collection-calendars${query}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
@@ -115,65 +107,22 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   }
 
   describe("POST /collection-calendars", () => {
-    test("mints the id, keeps the period, and answers the holidays it started with by day", async () => {
-      const created = await calendar(2026, {
-        holidays: [
-          { day: "2026-12-25", name: "Christmas Day" },
-          { day: "2026-06-05", name: "Grundlovsdag" },
-          { day: "2026-05-01", name: null },
-        ],
-      })
+    test("mints the id and keeps the period; a calendar carries no holidays", async () => {
+      const created = await calendar(2026)
       assert.equal(Id.parse(created.id), created.id, "a version 7 id the server minted")
       assert.equal(created.projectId, a.projects.copenhagen.id)
       assert.deepEqual([created.validFrom, created.validTo], ["2026-01-01", "2027-01-01"])
-      assert.deepEqual(
-        created.holidays,
-        [
-          { day: "2026-05-01", name: null },
-          { day: "2026-06-05", name: "Grundlovsdag" },
-          { day: "2026-12-25", name: "Christmas Day" },
-        ],
-        "by day, whatever order the body spelled them in; a name nobody gave is null",
-      )
+      assert.equal("holidays" in created, false, "a project's holidays are its holiday list's")
       assert.deepEqual(await one(olivia, created.id), created)
-
-      const bare = await calendar(2027)
-      assert.deepEqual(bare.holidays, [], "no holidays when the body names none")
       // In Cairo, whose timeline no other test of this file uses: an open calendar would overlap every later year of Copenhagen's.
       const running = await calendar(2040, { projectId: a.projects.cairo.id, name: "Cairo 2040 onwards", validTo: undefined })
       assert.equal(running.validTo, null, "a calendar with no end is one that is still running")
     })
 
-    test("refuses a holiday outside the calendar's period by entry — the schema's own check, since a create body carries the period — and writes nothing", async () => {
-      const problem = await refused(
-        await olivia("/collection-calendars", {
-          method: "POST",
-          body: body(2028, {
-            holidays: [
-              { day: "2028-06-05", name: "Grundlovsdag" },
-              { day: "2029-01-01", name: "New Year's Day" },
-              { day: "2027-12-31", name: "The day before" },
-            ],
-          }),
-        }),
-        400,
-      )
-      assert.deepEqual(problem.errors, [
-        { path: "holidays.1.day", message: OUTSIDE },
-        { path: "holidays.2.day", message: OUTSIDE },
-      ])
+    test("refuses holidays by name: the body carries none, and nothing is written", async () => {
+      const problem = await refused(await olivia("/collection-calendars", { method: "POST", body: body(2028, { holidays: [{ day: "2028-06-05", name: "Grundlovsdag" }] }) }), 400)
+      assert.ok(problem.errors?.some((error) => /holidays/.test(error.message)), JSON.stringify(problem.errors))
       assert.equal((await page(olivia, "?limit=200")).items.some((row) => row.name === "Copenhagen Central 2028"), false)
-    })
-
-    test("refuses two holidays on one day, at the schema, naming the list", async () => {
-      const problem = await refused(
-        await olivia("/collection-calendars", {
-          method: "POST",
-          body: body(2028, { holidays: [{ day: "2028-12-25", name: "Christmas Day" }, { day: "2028-12-25", name: "Also Christmas" }] }),
-        }),
-        400,
-      )
-      assert.deepEqual(problem.errors, [{ path: "holidays", message: ONE_HOLIDAY_PER_DAY }])
     })
 
     test("refuses a period overlapping the project's other calendar with its sentence, and takes the next year back to back", async () => {
@@ -215,13 +164,13 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   })
 
   describe("GET /collection-calendars", () => {
-    test("answers the company's calendars in id order with their holidays, and holds nothing of another company's", async () => {
-      const mine = await calendar(2035, { holidays: [{ day: "2035-06-05", name: "Grundlovsdag" }] })
+    test("answers the company's calendars in id order, and holds nothing of another company's", async () => {
+      const mine = await calendar(2035)
       const { items } = await page(olivia, "?limit=200")
       const ids = items.map((row) => row.id)
       assert.ok(ids.includes(mine.id))
       assert.deepEqual(ids, [...ids].sort(), "ascending by id")
-      assert.deepEqual(items.find((row) => row.id === mine.id), mine, "a row in the list carries its holidays, like the row on its own")
+      assert.deepEqual(items.find((row) => row.id === mine.id), mine, "a row in the list is the row on its own")
       assert.ok(!ids.includes(theirCalendar.id))
       assert.deepEqual((await page(other, "?limit=200")).items, [theirCalendar])
     })
@@ -279,13 +228,12 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   })
 
   describe("PATCH /collection-calendars/:id", () => {
-    test("changes what the body names, leaves the holidays, and moves the stamp", async () => {
-      const created = await calendar(2042, { holidays: [{ day: "2042-06-05", name: "Grundlovsdag" }] })
+    test("changes what the body names and moves the stamp", async () => {
+      const created = await calendar(2042)
       await nextMillisecond()
       const changed = await patch(olivia, created.id, { name: "Copenhagen Central 2042 (revised)", validTo: "2042-12-01" })
       assert.equal(changed.name, "Copenhagen Central 2042 (revised)")
       assert.deepEqual([changed.validFrom, changed.validTo], ["2042-01-01", "2042-12-01"])
-      assert.deepEqual(changed.holidays, created.holidays, "a patch is not how a set changes")
       assert.ok(changed.updatedAt > created.updatedAt)
       assert.deepEqual(await one(olivia, created.id), changed)
       const reopened = await patch(olivia, created.id, { validTo: null })
@@ -299,39 +247,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
       assert.deepEqual(problem.errors?.map((error) => error.path), ["validTo"])
       assert.match(problem.errors?.[0].message ?? "", /comes after validFrom/)
       assert.equal((await one(olivia, created.id)).validTo, "2045-01-01")
-    })
-
-    test("refuses a shortening that would leave a holiday outside, counting it, and writes nothing", async () => {
-      const created = await calendar(2046, { holidays: [{ day: "2046-12-25", name: "Christmas Day" }] })
-      const shortened = await refused(await olivia(`/collection-calendars/${created.id}`, { method: "PATCH", body: { validTo: "2046-12-01" } }), 409)
-      assert.equal(shortened.detail, "1 holiday falls outside the new period; remove it first")
-      const moved = await refused(await olivia(`/collection-calendars/${created.id}`, { method: "PATCH", body: { validFrom: "2046-12-26" } }), 409)
-      assert.equal(moved.detail, "1 holiday falls outside the new period; remove it first")
-      const stored = await one(olivia, created.id)
-      assert.deepEqual([stored.validFrom, stored.validTo], ["2046-01-01", "2047-01-01"])
-      assert.equal(stored.updatedAt, created.updatedAt, "a refused patch does not move the stamp")
-
-      await put(olivia, created.id, [])
-      const ended = await patch(olivia, created.id, { validTo: "2046-12-01" })
-      assert.equal(ended.validTo, "2046-12-01", "an end the holidays now fit inside is taken")
-      const onTheLastDay = await patch(olivia, created.id, { validTo: "2047-01-01" })
-      const boundary = await put(olivia, created.id, [{ day: "2046-12-31", name: "New Year's Eve" }])
-      assert.equal(boundary.holidays.length, 1, "the last day of the period is inside it")
-      assert.equal(onTheLastDay.validTo, "2047-01-01")
-    })
-
-    test("counts the holidays in the way, and the sentence reads as a plural once there is more than one", async () => {
-      const created = await calendar(2048, {
-        holidays: [
-          { day: "2048-06-05", name: "Grundlovsdag" },
-          { day: "2048-12-24", name: "Christmas Eve" },
-          { day: "2048-12-25", name: "Christmas Day" },
-        ],
-      })
-      const problem = await refused(await olivia(`/collection-calendars/${created.id}`, { method: "PATCH", body: { validTo: "2048-12-25" } }), 409)
-      assert.equal(problem.detail, "1 holiday falls outside the new period; remove it first")
-      const two = await refused(await olivia(`/collection-calendars/${created.id}`, { method: "PATCH", body: { validTo: "2048-12-01" } }), 409)
-      assert.equal(two.detail, "2 holidays fall outside the new period; remove them first")
     })
 
     test("refuses a period that overlaps the project's other calendar, and a rename onto a name the project uses", async () => {
@@ -351,70 +266,15 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
       await refused(await viewer(`/collection-calendars/${elsewhere.id}`, { method: "PATCH", body: { name: "Mine now" } }), 404)
       assert.deepEqual((await refused(await olivia(`/collection-calendars/${elsewhere.id}`, { method: "PATCH", body: {} }), 400)).errors?.map((error) => error.path), [""])
       const owned = await refused(await olivia(`/collection-calendars/${elsewhere.id}`, { method: "PATCH", body: { holidays: [] } }), 400)
-      assert.ok(owned.errors?.some((error) => /holidays/.test(error.message)), "the holidays are a set, and a set is not a field of the patch")
+      assert.ok(owned.errors?.some((error) => /holidays/.test(error.message)), "a calendar carries no holidays")
       assert.match((await refused(await lars(`/collection-calendars/${elsewhere.id}`, { method: "PATCH", body: { name: "x" } }), 403)).detail ?? "", /edit on configure\.calendars/)
     })
   })
 
   describe("PUT /collection-calendars/:id/holidays", () => {
-    test("replaces the whole list, answers it by day, and moves the calendar's stamp", async () => {
-      const created = await calendar(2054, { holidays: [{ day: "2054-06-05", name: "Grundlovsdag" }] })
-      await nextMillisecond()
-      const replaced = await put(olivia, created.id, [
-        { day: "2054-12-25", name: "Christmas Day" },
-        { day: "2054-01-01", name: "New Year's Day" },
-        { day: "2054-04-06", name: null },
-      ])
-      assert.deepEqual(replaced.holidays, [
-        { day: "2054-01-01", name: "New Year's Day" },
-        { day: "2054-04-06", name: null },
-        { day: "2054-12-25", name: "Christmas Day" },
-      ])
-      assert.ok(replaced.updatedAt > created.updatedAt, "the set is part of the calendar on the wire")
-      assert.deepEqual(await one(olivia, created.id), replaced)
-      await nextMillisecond()
-      const emptied = await put(olivia, created.id, [])
-      assert.deepEqual(emptied.holidays, [], "an empty list is a year without holidays")
-      assert.ok(emptied.updatedAt > replaced.updatedAt, "emptying the set is a change to the calendar too")
-      assert.deepEqual(await one(olivia, created.id), emptied, "what the write answered is what the next read says, though it read nothing back")
-    })
-
-    test("refuses a day outside the calendar's period by entry, and leaves the calendar as it was, stamp included", async () => {
-      const created = await calendar(2056, { holidays: [{ day: "2056-06-05", name: "Grundlovsdag" }] })
-      const problem = await refused(
-        await olivia(`/collection-calendars/${created.id}/holidays`, {
-          method: "PUT",
-          body: { holidays: [{ day: "2056-12-25", name: "Christmas Day" }, { day: "2057-01-01", name: "New Year's Day" }, { day: "2055-12-31", name: null }] },
-        }),
-        400,
-      )
-      assert.deepEqual(problem.errors, [
-        { path: "holidays.1.day", message: OUTSIDE },
-        { path: "holidays.2.day", message: OUTSIDE },
-      ])
-      assert.deepEqual(await one(olivia, created.id), created, "a body with one bad entry leaves the record exactly as it was")
-    })
-
-    test("refuses the same day twice, a missing list and a member the body does not own, at the schema", async () => {
-      const created = await calendar(2058)
-      const twice = await refused(
-        await olivia(`/collection-calendars/${created.id}/holidays`, { method: "PUT", body: { holidays: [{ day: "2058-12-25", name: "a" }, { day: "2058-12-25", name: "b" }] } }),
-        400,
-      )
-      assert.deepEqual(twice.errors, [{ path: "holidays", message: ONE_HOLIDAY_PER_DAY }])
-      assert.deepEqual((await refused(await olivia(`/collection-calendars/${created.id}/holidays`, { method: "PUT", body: {} }), 400)).errors?.map((error) => error.path), ["holidays"])
-      const owned = await refused(await olivia(`/collection-calendars/${created.id}/holidays`, { method: "PUT", body: { holidays: [], name: "x" } }), 400)
-      assert.ok(owned.errors?.some((error) => /name/.test(error.message)), JSON.stringify(owned.errors))
-      assert.deepEqual((await one(olivia, created.id)).holidays, [])
-    })
-
-    test("answers 404 for another company's calendar and for one out of the caller's projects, and 403 for a role that may view but not edit", async () => {
-      await refused(await olivia(`/collection-calendars/${theirCalendar.id}/holidays`, { method: "PUT", body: { holidays: [] } }), 404)
-      assert.deepEqual((await one(other, theirCalendar.id)).holidays, theirCalendar.holidays, "and it still has its holidays")
-      const elsewhere = await calendar(2060, { projectId: a.projects.harbor.id, name: "Harbor 2060" })
-      await refused(await viewer(`/collection-calendars/${elsewhere.id}/holidays`, { method: "PUT", body: { holidays: [] } }), 404)
-      await refused(await olivia(`/collection-calendars/${testId()}/holidays`, { method: "PUT", body: { holidays: [] } }), 404)
-      assert.match((await refused(await lars(`/collection-calendars/${elsewhere.id}/holidays`, { method: "PUT", body: { holidays: [] } }), 403)).detail ?? "", /edit on configure\.calendars/)
+    test("is gone: a project's holidays are its holiday list's", async () => {
+      const created = await calendar(2054)
+      assert.equal((await olivia(`/collection-calendars/${created.id}/holidays`, { method: "PUT", body: { holidays: [] } })).status, 404)
     })
   })
 })

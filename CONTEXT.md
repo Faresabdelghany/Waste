@@ -237,7 +237,7 @@ _Avoid_: Contractor, customer, project
 ## Planning and execution
 
 **Collection Calendar**:
-The validity period that determines which planned service dates are valid, maintained per year for one Project; a Route Scheme reads its Project's calendars, never picks one. The holidays are its Project's Holiday list's (since 2026-11-05), no longer the calendar's. The working week (the Project's weekend) is a Project attribute, not a calendar field. Customer- or service-scoped calendars are a flagged future capability, not part of the current model (D22).
+The validity period that determines which planned service dates are valid, maintained per year for one Project; a Route Scheme reads its Project's calendars, never picks one. A calendar carries no holidays: they are the days of the Holiday list its Project names (since 2026-11-05; the calendar's own holidays were dropped then). The working week (the Project's weekend) is a Project attribute, not a calendar field. Customer- or service-scoped calendars are a flagged future capability, not part of the current model (D22).
 _Avoid_: Route scheme, route, deviation list, collection deviation (removed 2026-09-03 — holiday and non-working dates are skipped, never moved)
 
 **Holiday list**:

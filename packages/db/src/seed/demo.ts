@@ -24,7 +24,7 @@
 //   rows locally, and a test may name a row without looking it up. A test
 //   holds their shape. A role grant and a Project Access are the two kinds of
 //   row with no fixed id; each is what it joins (applyDemo). A member of a set
-//   the API replaces whole — a calendar's holidays, a group's picks — has one
+//   the API replaces whole — a holiday list's days, a group's picks — has one
 //   until the first edit through the product rewrites the set under ids the
 //   API mints; from then on it is its content (upsert.ts's `replaceSets`).
 //

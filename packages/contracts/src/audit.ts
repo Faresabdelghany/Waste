@@ -66,7 +66,6 @@ export const AUDITED_TABLES = [
   "planning_area",
   "planning_area_boundary",
   "collection_calendar",
-  "collection_calendar_holiday",
   "route_scheme",
   "collection_group",
   "collection_group_fraction",

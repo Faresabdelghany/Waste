@@ -52,8 +52,9 @@ import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations
 import { driverAbsence, vehicleUnavailability } from "../schema/availability"
 import { auditEvent } from "../schema/audit"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
+import { collectionCalendarHoliday, DROPPED_TABLES } from "../schema/dropped"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, customerContact, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "../schema/execution"
@@ -346,7 +347,10 @@ export const TICKET_TYPES_AUDITED: readonly Audited[] = [
   { table: ticketTypePermission, module: "configure.templates", parent: setOf(ticketType, ticketTypePermission.ticketTypeId) },
 ]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED]
+/** 0019's list less the tables a later file dropped, whose triggers went with them. */
+const AUDITED_FROM_0019: readonly Audited[] = AUDITED_AT_0019.filter((entry) => !(DROPPED_TABLES as readonly PgTable[]).includes(entry.table))
+
+export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

@@ -82,17 +82,17 @@ describe("shownColumns", () => {
     assert.deepEqual(cells(shown, user), ["Lars Mikkelsen", "lars@nordren.example", "—", "Manager", "Planned", "2 min ago"])
   })
 
-  test("the calendars: the project scope as the context, and the derived holidays and validity in place of the value", () => {
+  test("the calendars: the project scope as the context, and the derived validity in place of the value", () => {
     const calendar = record({ name: "Copenhagen 2026", projectIds: ["project-copenhagen"] })
     const shown = table({
       view: "calendars",
       rich: false,
       contextLabel: "Scope",
       projectScopeOf: () => "Copenhagen Central",
-      calendarRowOf: () => ({ holidays: "11 holidays", validity: "1 Jan 2026 – open" }),
+      calendarRowOf: () => ({ validity: "1 Jan 2026 – open" }),
     })
-    assert.deepEqual(headers(shown), ["Route", "Description", "Scope", "Status", "Holidays", "Validity", "Progress", "Updated"])
-    assert.deepEqual(cells(shown, calendar).slice(2, 7), ["Copenhagen Central", "Planned", "11 holidays", "1 Jan 2026 – open", "0/12 stops"])
+    assert.deepEqual(headers(shown), ["Route", "Description", "Scope", "Status", "Validity", "Updated"])
+    assert.deepEqual(cells(shown, calendar).slice(2, 5), ["Copenhagen Central", "Planned", "1 Jan 2026 – open"])
     assert.equal(cells(shown, { ...calendar, projectIds: [] })[2], "—", "a calendar of no project reads the dash")
   })
 

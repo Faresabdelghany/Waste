@@ -4,7 +4,7 @@
 // (`Project.holidayList`). A list is the company's, not a project's, so two
 // projects in one country share one list.
 //
-// The days travel with the list and are replaced whole, as a calendar's were:
+// The days travel with the list and are replaced whole:
 // read with the list, sorted by day, and changed through `PUT …/holidays`
 // with the whole set, since "add one, remove one" over a list the client
 // already holds is two requests that can disagree. A body refuses the same
@@ -13,7 +13,7 @@
 // per company; so is the name.
 import * as z from "zod"
 
-import { CollectionCalendarHoliday, HOLIDAYS_MAX } from "./collection-calendars"
+import { IsoDate } from "./dates"
 import { PageRequest } from "./pagination"
 import { eachOnce } from "./planning"
 import { changesSomething, somethingToChange, stamped } from "./resource"
@@ -22,8 +22,15 @@ import { Label } from "./text"
 /** ISO 3166-1 alpha-2, as the company's own country is spelled. */
 const Country = z.string().regex(/^[A-Z]{2}$/, "a two-letter uppercase ISO 3166-1 alpha-2 country code, such as DK")
 
+/** The most days a body may carry: several years of holidays, not an import. */
+export const HOLIDAYS_MAX = 400
+
 /** One day of a list: the day, and what it is called where somebody said. */
-export const HolidayListHoliday = CollectionCalendarHoliday
+export const HolidayListHoliday = z.strictObject({
+  day: IsoDate,
+  /** `Grundlovsdag`; null where nobody named it. */
+  name: Label.nullable(),
+})
 export type HolidayListHoliday = z.infer<typeof HolidayListHoliday>
 
 const Holidays = z.array(HolidayListHoliday)

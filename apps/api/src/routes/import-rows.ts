@@ -48,7 +48,7 @@ import {
   SubscriptionPatch,
 } from "@waste/contracts/agreements"
 import { ContainerTypeCreate, ContainerTypePatch, WasteFractionCreate, WasteFractionPatch } from "@waste/contracts/catalogue"
-import { CollectionCalendarCreate, CollectionCalendarHolidaysSet, CollectionCalendarPatch } from "@waste/contracts/collection-calendars"
+import { CollectionCalendarCreate, CollectionCalendarPatch } from "@waste/contracts/collection-calendars"
 import { ContainerCreate, ContainerPatch } from "@waste/contracts/containers"
 import { CustomerCreate, CustomerPatch, PropertyCreate, PropertyPartyRole, PropertyPatch, type PropertyParty } from "@waste/contracts/customers"
 import { IsoDate } from "@waste/contracts/dates"
@@ -74,7 +74,7 @@ import { requireAllowed } from "../auth/require"
 import { ProblemError, refusedProblem } from "../problem"
 import { agreementStarting, createAgreement, createSubscription, patchAgreement, patchSubscription, subscriptionStarting } from "./agreements"
 import { containerTypeByName, createContainerType, createWasteFraction, patchContainerType, patchWasteFraction, wasteFractionByKey } from "./catalogue"
-import { calendarByName, createCalendar, patchCalendar, replaceCalendarHolidays } from "./collection-calendars"
+import { calendarByName, createCalendar, patchCalendar } from "./collection-calendars"
 import { containerByLabel, containerOf, createContainer, findContainer, patchContainer } from "./container-writes"
 import { createCustomer, customersByKey, patchCustomer } from "./customer-writes"
 import { createDriver, driverByWorkforceReference, patchDriver } from "./drivers"
@@ -182,7 +182,7 @@ const DRIVER_COLUMNS: Columns = {
   status: "status",
   notes: "notes",
 }
-const CALENDAR_COLUMNS: Columns = { name: "calendar", validFrom: "valid from", validTo: "valid to", holidays: "day" }
+const CALENDAR_COLUMNS: Columns = { name: "calendar", validFrom: "valid from", validTo: "valid to" }
 const AREA_COLUMNS: Columns = { code: "code", name: "name", purpose: "purpose", boundary: "boundary" }
 const BOUNDARY_COLUMNS: Columns = { boundary: "boundary", validFrom: "valid from", validTo: "valid to" }
 const SUBSCRIPTION_COLUMNS: Columns = {
@@ -870,18 +870,14 @@ async function importDriver(context: ImportContext, cells: Cells): Promise<Writt
 // Collection calendars and planning areas (O30 of #290, row 1.18) -----------
 //
 // A project's. A calendar is matched on its name in the project, and a row is
-// the calendar with at most one of its holidays: the period the row gives
-// moves the calendar's, and the holiday is added, or renamed where the
-// calendar has its day already — never removed, since a file of holidays
-// names the ones it has and not the ones it lacks. A planning area is matched
+// the calendar: the period the row gives moves the calendar's. A calendar
+// carries no holidays (2026-11-05): a project's are the days of the company's
+// Holiday List it names. A planning area is matched
 // on its code, the reference the rest of the system quotes and set once, and
 // a row is the area with at most one version of its boundary, the polygon
 // from a day: the version starting that day is redrawn where there is one,
 // and otherwise a new version starts, ending the one open before it so the
 // two meet, as a person drawing a new outline would.
-
-/** One holiday as a calendar holds it. */
-type HolidayCells = { day: string; name: string | null }
 
 async function importCalendar(context: ImportContext, cells: Cells): Promise<Written> {
   const { tx, principal } = context
@@ -889,28 +885,18 @@ async function importCalendar(context: ImportContext, cells: Cells): Promise<Wri
   const name = required(cells, "calendar")
   const validFrom = day(cells, "valid from") ?? required(cells, "valid from")
   const validTo = day(cells, "valid to")
-  const holidayDay = day(cells, "day")
-  if (holidayDay === undefined && cells.holiday !== undefined) throw refuse("day", "give the holiday's day")
-  const holiday: HolidayCells | undefined = holidayDay === undefined ? undefined : { day: holidayDay, name: cells.holiday ?? null }
   const current = await calendarByName(tx, principal, projectId, name)
   if (current === undefined) {
-    const body = parsed(CollectionCalendarCreate, { projectId, name, validFrom, validTo, holidays: holiday === undefined ? [] : [holiday] }, CALENDAR_COLUMNS)
+    const body = parsed(CollectionCalendarCreate, { projectId, name, validFrom, validTo }, CALENDAR_COLUMNS)
     requireAllowed(principal.grants, IMPORT_MODULES["collection-calendars"], "create")
     return { outcome: "created", resourceId: (await step(CALENDAR_COLUMNS, () => createCalendar(tx, principal, body))).id }
   }
   const given = givenFields(cells, CALENDAR_COLUMNS)
   given.delete("name")
-  given.delete("holidays")
   const patch = changes(current, { validFrom, validTo }, given)
-  const stored = current.holidays.find((candidate) => candidate.day === holiday?.day)
-  const holidayMoved = holiday !== undefined && (stored === undefined || (cells.holiday !== undefined && stored.name !== holiday.name))
-  if (isEmpty(patch) && !holidayMoved) return { outcome: "unchanged", resourceId: current.id }
+  if (isEmpty(patch)) return { outcome: "unchanged", resourceId: current.id }
   requireAllowed(principal.grants, IMPORT_MODULES["collection-calendars"], "edit")
-  if (!isEmpty(patch)) await step(CALENDAR_COLUMNS, () => patchCalendar(tx, principal, current.id, parsed(CollectionCalendarPatch, patch, CALENDAR_COLUMNS)))
-  if (holidayMoved) {
-    const holidays = [...current.holidays.filter((candidate) => candidate.day !== holiday.day), holiday]
-    await step(CALENDAR_COLUMNS, () => replaceCalendarHolidays(tx, principal, current.id, parsed(CollectionCalendarHolidaysSet, { holidays }, CALENDAR_COLUMNS).holidays))
-  }
+  await step(CALENDAR_COLUMNS, () => patchCalendar(tx, principal, current.id, parsed(CollectionCalendarPatch, patch, CALENDAR_COLUMNS)))
   return { outcome: "updated", resourceId: current.id }
 }
 
@@ -1014,7 +1000,7 @@ export function keyOf(kind: ImportKind, cells: Cells): string | null {
     case "drivers":
       return cells["workforce reference"] === undefined ? null : `workforce reference ${cells["workforce reference"]}`
     case "collection-calendars":
-      return cells.calendar === undefined ? null : `calendar ${cells.calendar}${cells.day === undefined ? "" : `, ${cells.day}`}`
+      return cells.calendar === undefined ? null : `calendar ${cells.calendar}`
     case "planning-areas":
       return cells.code === undefined ? null : `code ${cells.code}${cells["valid from"] === undefined || cells.boundary === undefined ? "" : `, boundary from ${cells["valid from"]}`}`
   }

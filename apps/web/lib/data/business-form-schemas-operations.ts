@@ -1384,7 +1384,7 @@ export const operationsBusinessFormSchemas = [
     recordKind: "Collection Calendar",
     title: "Create collection calendar",
     description:
-      "Define the holidays and validity period that decide which planned service dates are valid.",
+      "Define a project's calendar for a period. A project's holidays are the days of the company's holiday list it names (Settings › Holiday lists).",
     submitLabel: "Create calendar",
     nameField: "calendarName",
     contextFieldIds: ["projectId", "validFrom", "validTo"],
@@ -1438,22 +1438,6 @@ export const operationsBusinessFormSchemas = [
             type: "text",
             defaultValue: "Europe/Copenhagen",
             description: "Display information — generation is day-granular.",
-          },
-        ],
-      },
-      {
-        id: "holidays",
-        title: "Holidays",
-        description:
-          "Each scheme's holiday policy decides whether a collection on a listed date shifts, skips, or goes ahead; the working week is set on the Project.",
-        fields: [
-          {
-            id: "holidayDates",
-            label: "Holiday dates",
-            type: "textarea",
-            placeholder: "2027-01-01, 2027-04-15",
-            description:
-              "Non-working holiday dates as yyyy-mm-dd, separated by commas or new lines.",
           },
         ],
       },

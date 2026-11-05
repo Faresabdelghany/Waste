@@ -708,6 +708,13 @@
       "when": 1793902123253,
       "tag": "0100_holiday_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793906444180,
+      "tag": "0101_calendar_holidays_dropped",
+      "breakpoints": true
     }
   ]
 }

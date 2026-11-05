@@ -1,7 +1,7 @@
 // Planning configuration on the adapter (#175, slice 1 of #81): a planning
 // area with the boundary version in force becomes the record the Areas &
-// Zones pane and the map read, a calendar with its holidays the record the
-// Collection calendars pane, the wizard and generation read; the records the
+// Zones pane and the map read, a calendar (which carries no holidays since
+// 2026-11-05) the record the Collection calendars pane reads; the records the
 // two panes write become the bodies the API's contracts accept, held here
 // against the contracts' own zod schemas; and the two writes go out through
 // the store's seam over a scripted `fetch`, the API's refusals coming back as
@@ -9,11 +9,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CollectionCalendarCreate, CollectionCalendarHolidaysSet, CollectionCalendarPatch, type CollectionCalendar } from "@waste/contracts/collection-calendars"
+import { CollectionCalendarCreate, CollectionCalendarPatch, type CollectionCalendar } from "@waste/contracts/collection-calendars"
 import type { Company, Project } from "@waste/contracts/organisation"
 import { PlanningAreaBoundaryCreate, PlanningAreaBoundaryPatch, PlanningAreaCreate, PlanningAreaPatch, type PlanningArea, type PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import { calendarFromRecord } from "@waste/domain/route-schemes/calendar"
-import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -84,14 +83,8 @@ const central2026: CollectionCalendar = {
   name: "Copenhagen Central 2026",
   validFrom: "2026-01-01",
   validTo: "2027-01-01",
-  holidays: [
-    { day: "2026-01-01", name: "Nytårsdag" },
-    { day: "2026-04-02", name: "Skærtorsdag" },
-    { day: "2026-06-05", name: "Grundlovsdag" },
-    { day: "2026-12-25", name: null },
-  ],
 }
-const harborCalendar: CollectionCalendar = { ...central2026, id: "01a0d2a4-a280-7018-8000-000000000003", projectId: harbor.id, name: "Harbor Offices service calendar", validFrom: "2026-09-01", validTo: "2027-09-01", holidays: [] }
+const harborCalendar: CollectionCalendar = { ...central2026, id: "01a0d2a4-a280-7018-8000-000000000003", projectId: harbor.id, name: "Harbor Offices service calendar", validFrom: "2026-09-01", validTo: "2027-09-01" }
 
 // The organisation module as the store has it when the planning modules load.
 const companyRecord = companyAdapter.toRecord(company, context(organisationFixtures))
@@ -455,40 +448,33 @@ describe("a collection calendar read", () => {
     assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
     assert.equal(record.recordKind, "Collection Calendar")
     assert.equal(record.facts.Project, "Copenhagen Central")
-    assert.equal(record.facts.Holidays, "4")
+    assert.equal("Holidays" in record.facts, false)
     assert.equal(record.facts.Validity, "2026-01-01 – 2026-12-31")
     assert.equal(record.submittedValues?.projectId, FIXTURE_PROJECT_IDS.copenhagen)
     assert.equal(record.submittedValues?.validFrom, "2026-01-01")
     assert.equal(record.submittedValues?.validTo, "2026-12-31", "the last day in force, as the form and the readers spell it")
-    assert.equal(record.submittedValues?.holidayDates, "2026-01-01, 2026-04-02, 2026-06-05, 2026-12-25")
-    assert.deepEqual(JSON.parse(String(record.submittedValues?.holidayNames)), { "2026-01-01": "Nytårsdag", "2026-04-02": "Skærtorsdag", "2026-06-05": "Grundlovsdag" })
+    assert.equal(record.submittedValues?.holidayDates, undefined, "a calendar carries no holidays")
     assert.equal(collectionCalendarAdapter.statuses, undefined)
   })
 
-  test("the domain reads it as it reads a fixture calendar: the dates, the period, and the names carried with the project's list naming the rest", () => {
+  test("the domain reads its period as it reads a fixture calendar's, and the project's holidays are its list's, not the calendar's", () => {
     const record = collectionCalendarAdapter.toRecord(central2026, calendarContext())
     const calendar = calendarFromRecord(record)
-    assert.deepEqual(calendar?.holidayDates, ["2026-01-01", "2026-04-02", "2026-06-05", "2026-12-25"])
     assert.equal(calendar?.validFrom, "2026-01-01")
     assert.equal(calendar?.validTo, "2026-12-31")
     const resolved = resolveProjectCalendar(FIXTURE_PROJECT_IDS.copenhagen, { projects: [copenhagenRecord], calendars: [record] })
     assert.equal(resolved.list?.name, "Danish public holidays")
-    assert.equal(resolved.list?.dates.size, 4)
-    assert.ok(resolved.list?.dates.has("2026-06-05"))
-    assert.ok(resolved.list?.dates.has("2026-12-25"), "a day nobody named is still a holiday")
+    assert.equal(resolved.list?.dates.size, 0, "no list record of that name among the calendars, so no days")
     const open = collectionCalendarAdapter.toRecord({ ...harborCalendar, validTo: null }, calendarContext())
     assert.equal(open.submittedValues?.validTo, undefined, "an open period has no last day")
     assert.equal(open.facts.Validity, "2026-09-01 – open")
-    assert.equal(open.submittedValues?.holidayNames, undefined)
   })
 })
 
 describe("the record the Collection calendars pane writes", () => {
-  const values = { calendarName: "Copenhagen Central 2028", projectId: FIXTURE_PROJECT_IDS.copenhagen, weekStart: "monday", validFrom: "2028-01-01", validTo: "2028-12-31", timezone: "Europe/Copenhagen", holidayDates: "2028-12-25, 2028-01-01" }
+  const values = { calendarName: "Copenhagen Central 2028", projectId: FIXTURE_PROJECT_IDS.copenhagen, weekStart: "monday", validFrom: "2028-01-01", validTo: "2028-12-31", timezone: "Europe/Copenhagen" }
   const made = (overrides: Record<string, string> = {}) => createCollectionCalendarRecord({ ...values, ...overrides }, { now: 1_700_000_000_000, actorName: "Olivia Larsen", lookups })
-  const danish = holidayNamesFor("Danish public holidays")
-
-  test("becomes a CollectionCalendarCreate the contracts accept: the project by its server id, the period with its end as the first day out of force, and the holidays by day, named by the project's list where nobody named them", () => {
+  test("becomes a CollectionCalendarCreate the contracts accept: the project by its server id, the period with its end as the first day out of force, and no holidays", () => {
     const record = made()
     assert.ok(collectionCalendarAdapter.owns(record))
     const body = collectionCalendarAdapter.toCreateBody?.(record, calendarContext())
@@ -497,22 +483,14 @@ describe("the record the Collection calendars pane writes", () => {
       name: "Copenhagen Central 2028",
       validFrom: "2028-01-01",
       validTo: "2029-01-01",
-      holidays: [
-        { day: "2028-01-01", name: danish("2028-01-01") ?? null },
-        { day: "2028-12-25", name: danish("2028-12-25") ?? null },
-      ],
     })
-    assert.ok(typeof danish("2028-01-01") === "string", "the list names New Year's Day")
     const parsed = CollectionCalendarCreate.safeParse(body)
     assert.ok(parsed.success, JSON.stringify(parsed.error))
   })
 
-  test("a name the Holiday lists pane carried wins over the list's, an open end is no end, and a project without a list leaves the days unnamed", () => {
-    const carried = collectionCalendarAdapter.toCreateBody?.(made({ holidayNames: JSON.stringify({ "2028-12-25": "Christmas Day" }), validTo: "" }), calendarContext()) as { validTo?: string; holidays: { day: string; name: string | null }[] }
-    assert.equal(carried.validTo, undefined)
-    assert.deepEqual(carried.holidays.find((holiday) => holiday.day === "2028-12-25"), { day: "2028-12-25", name: "Christmas Day" })
-    const harborBody = collectionCalendarAdapter.toCreateBody?.(made({ projectId: FIXTURE_PROJECT_IDS.harbor, holidayDates: "2028-05-01" }), calendarContext()) as { holidays: { day: string; name: string | null }[] }
-    assert.deepEqual(harborBody.holidays, [{ day: "2028-05-01", name: null }])
+  test("an open end is no end", () => {
+    const open = collectionCalendarAdapter.toCreateBody?.(made({ validTo: "" }), calendarContext()) as { validTo?: string }
+    assert.equal(open.validTo, undefined)
   })
 
   test("is refused here, naming the field, without a project the store loaded or a first day in force", () => {
@@ -520,8 +498,8 @@ describe("the record the Collection calendars pane writes", () => {
     assert.deepEqual(collectionCalendarAdapter.toCreateBody?.(made({ validFrom: "" }), calendarContext()), { path: "validFrom", message: "A calendar needs the first day it is in force" })
   })
 
-  test("goes out as POST /collection-calendars through the store's write; a name the project has and a holiday outside the period come back as the API's sentences", async () => {
-    const written: CollectionCalendar = { ...central2026, id: "019995e0-0000-7000-8000-0000000000f1", name: "Copenhagen Central 2028", validFrom: "2028-01-01", validTo: "2029-01-01", holidays: [{ day: "2028-01-01", name: "Nytårsdag" }, { day: "2028-12-25", name: "Juledag" }] }
+  test("goes out as POST /collection-calendars through the store's write; a name the project has comes back as the API's sentence", async () => {
+    const written: CollectionCalendar = { ...central2026, id: "019995e0-0000-7000-8000-0000000000f1", name: "Copenhagen Central 2028", validFrom: "2028-01-01", validTo: "2029-01-01" }
     const current = loaded({ records: [], serverIds: new Map() }, 1)
     const { fetch, calls } = scripted([() => json(written, 201, { location: `/collection-calendars/${written.id}` })])
     const outcome = await writeRecord(clientOver(fetch), collectionCalendarsModule, current, made(), { fixtures: calendarFixtures, state, now: NOW })
@@ -530,18 +508,13 @@ describe("the record the Collection calendars pane writes", () => {
     assert.equal(outcome.kind, "created")
     if (outcome.kind === "created") {
       assert.equal(outcome.record.id, `calendar-${written.id}`)
-      assert.equal(outcome.record.submittedValues?.holidayDates, "2028-01-01, 2028-12-25")
+      assert.equal(outcome.record.submittedValues?.validTo, "2028-12-31")
     }
 
     const taken = scripted([() => problem(409, 'This project already has a collection calendar called "Copenhagen Central 2028"')])
     const refused = await writeRecord(clientOver(taken.fetch), collectionCalendarsModule, current, made(), { fixtures: calendarFixtures, state, now: NOW })
     assert.equal(refused.kind, "refused")
     if (refused.kind === "refused") assert.equal(problemSentence(refused.problem), 'This project already has a collection calendar called "Copenhagen Central 2028"')
-
-    const outside = scripted([() => problem(400, "The request body is invalid", [{ path: "holidays.1.day", message: "Outside the calendar's period" }])])
-    const stranded = await writeRecord(clientOver(outside.fetch), collectionCalendarsModule, current, made({ holidayDates: "2028-01-01, 2029-01-01" }), { fixtures: calendarFixtures, state, now: NOW })
-    assert.equal(stranded.kind, "refused")
-    if (stranded.kind === "refused") assert.equal(problemSentence(stranded.problem), "The request body is invalid — holidays.1.day: Outside the calendar's period")
   })
 })
 
@@ -551,52 +524,24 @@ describe("an edited collection calendar", () => {
 
   test("a new name or period is a CollectionCalendarPatch, the end as the first day out of force and a cleared end null; the project does not move", () => {
     const body = collectionCalendarAdapter.toPatchBody(before, edited({ calendarName: "Copenhagen Central 2026 (revised)", validTo: "2026-06-30" }), calendarContext())
-    assert.deepEqual(body, { calendar: { name: "Copenhagen Central 2026 (revised)", validTo: "2026-07-01" } })
-    assert.ok(CollectionCalendarPatch.safeParse((body as { calendar: unknown }).calendar).success)
-    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "" }), calendarContext()), { calendar: { validTo: null } })
+    assert.deepEqual(body, { name: "Copenhagen Central 2026 (revised)", validTo: "2026-07-01" })
+    assert.ok(CollectionCalendarPatch.safeParse(body).success)
+    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "" }), calendarContext()), { validTo: null })
     assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ projectId: FIXTURE_PROJECT_IDS.harbor }), calendarContext()), { path: "projectId", message: "A calendar stays in its project" })
     assert.equal(collectionCalendarAdapter.toPatchBody(before, before, calendarContext()), null)
   })
 
-  test("changed holidays are the whole set, replaced, the names carried from the record and the list", () => {
-    const body = collectionCalendarAdapter.toPatchBody(before, edited({ holidayDates: "2026-01-01, 2026-06-05, 2026-12-24" }), calendarContext()) as { holidays: unknown }
-    assert.deepEqual(body, {
-      holidays: [
-        { day: "2026-01-01", name: "Nytårsdag" },
-        { day: "2026-06-05", name: "Grundlovsdag" },
-        { day: "2026-12-24", name: holidayNamesFor("Danish public holidays")("2026-12-24") ?? null },
-      ],
-    })
-    assert.ok(CollectionCalendarHolidaysSet.safeParse(body).success)
-    const renamed = collectionCalendarAdapter.toPatchBody(before, edited({ holidayNames: JSON.stringify({ "2026-12-25": "Juledag" }) }), calendarContext()) as { holidays: { day: string; name: string | null }[] }
-    assert.deepEqual(renamed.holidays.find((holiday) => holiday.day === "2026-12-25"), { day: "2026-12-25", name: "Juledag" })
+  test("holidays left on a record are no change: a calendar carries none", () => {
+    assert.equal(collectionCalendarAdapter.toPatchBody(before, edited({ holidayDates: "2026-12-24" }), calendarContext()), null)
   })
 
-  test("the order follows the change: a period that grows goes first so new holidays fit it, and holidays that shrink go first so the period may follow — the API's own two-step", () => {
-    const shrunk = collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "2026-06-30", holidayDates: "2026-01-01, 2026-04-02, 2026-06-05" }), calendarContext()) as { calendar: unknown; holidays: unknown; holidaysFirst: boolean }
-    assert.deepEqual(shrunk.calendar, { validTo: "2026-07-01" })
-    assert.equal(shrunk.holidaysFirst, true, "December's holidays must go before the period can end in June")
-    const grown = collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "2027-06-30", holidayDates: "2026-01-01, 2026-04-02, 2026-06-05, 2026-12-25, 2027-03-01" }), calendarContext()) as { calendar: unknown; holidays: unknown; holidaysFirst: boolean }
-    assert.deepEqual(grown.calendar, { validTo: "2027-07-01" })
-    assert.equal(grown.holidaysFirst, false, "March 2027 lies outside the period as stored")
-    const renamedOnly = collectionCalendarAdapter.toPatchBody(before, edited({ calendarName: "Renamed" }), calendarContext()) as { holidaysFirst?: boolean }
-    assert.equal(renamedOnly.holidaysFirst, undefined, "nothing to order with one request")
-  })
-
-  test("the update sends the two requests in the order the body says, and answers the calendar as it now stands", async () => {
+  test("the update is the one PATCH, and answers the calendar as it now stands", async () => {
     const renamed = { ...central2026, name: "Copenhagen Central 2026 (revised)" }
-    const { fetch, calls } = scripted([() => json(renamed), () => json({ ...renamed, holidays: [{ day: "2026-01-01", name: "Nytårsdag" }] })])
-    const answer = await collectionCalendarAdapter.update(clientOver(fetch), central2026.id, { calendar: { name: "Copenhagen Central 2026 (revised)" }, holidays: [{ day: "2026-01-01", name: "Nytårsdag" }], holidaysFirst: false })
-    assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/collection-calendars/${central2026.id}`, `PUT http://api.test/collection-calendars/${central2026.id}/holidays`])
-    assert.deepEqual(bodyOf(calls[1]), { holidays: [{ day: "2026-01-01", name: "Nytårsdag" }] })
+    const { fetch, calls } = scripted([() => json(renamed)])
+    const answer = await collectionCalendarAdapter.update(clientOver(fetch), central2026.id, { name: "Copenhagen Central 2026 (revised)" })
+    assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/collection-calendars/${central2026.id}`])
+    assert.deepEqual(bodyOf(calls[0]), { name: "Copenhagen Central 2026 (revised)" })
     assert.equal(answer.name, "Copenhagen Central 2026 (revised)")
-    assert.equal(answer.holidays.length, 1)
-
-    const shortened = { ...central2026, validTo: "2026-07-01", holidays: [{ day: "2026-01-01", name: "Nytårsdag" }] }
-    const second = scripted([() => json({ ...central2026, holidays: shortened.holidays }), () => json(shortened)])
-    const answer2 = await collectionCalendarAdapter.update(clientOver(second.fetch), central2026.id, { calendar: { validTo: "2026-07-01" }, holidays: shortened.holidays, holidaysFirst: true })
-    assert.deepEqual(second.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/collection-calendars/${central2026.id}/holidays`, `PATCH http://api.test/collection-calendars/${central2026.id}`])
-    assert.equal(answer2.validTo, "2026-07-01")
   })
 })
 

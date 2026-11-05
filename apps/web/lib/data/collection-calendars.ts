@@ -1,11 +1,12 @@
 /**
- * Collection Calendars — the Settings-managed holiday-calendar module (moved
- * from the Plan workspace 2026-09-16, when Plan became Map Planning).
+ * Collection Calendars — the Settings-managed calendar module (moved from the
+ * Plan workspace 2026-09-16, when Plan became Map Planning).
  *
  * Calendar records stay business records in the shared record store under
- * `configure.calendars` so route generation, the Guided Setup wizard, and
- * Plan Ahead keep reading the project's dated holidays; only the management
- * surface moved to Settings. This module is the one place that knows where
+ * `configure.calendars`, beside the company's Holiday List records, which
+ * route generation, the Guided Setup wizard and Plan Ahead read a project's
+ * holidays from; a calendar carries none since 2026-11-05. Only the
+ * management surface moved to Settings. This module is the one place that knows where
  * the records live, how a stored record seeds the edit form, and the record
  * shape the Settings pane writes on create and edit.
  */
@@ -69,7 +70,7 @@ function schemaFields(schema: BusinessFormSchema): BusinessFormField[] {
  * Seeds the edit form from a stored record: every typed submitted value the
  * form knows wins, then the record's own scope fills the gaps — the name and
  * a single project scope. Fixture calendars carry their structured values
- * (holiday dates, validity, week start, time zone) as submittedValues already,
+ * (validity, week start, time zone) as submittedValues already,
  * so nothing is re-derived from display facts.
  */
 export function collectionCalendarFormValues(record: BusinessRecord): BusinessFormValues {
@@ -117,7 +118,6 @@ const FIXTURE_FACT_ALIASES: Readonly<Record<string, string>> = {
   WeekStart: "weekStart",
   Timezone: "timezone",
   Validity: "validFrom",
-  Holidays: "holidayDates",
 }
 
 type FormDerivation = {
@@ -160,9 +160,9 @@ function deriveFromForm(
  * A new collection calendar from the create form — the business-record shape
  * the Plan workspace's generic create path produced before the move (id from
  * module and record kind, label-keyed facts, typed relations, first lifecycle
- * state, company scope), sourced from Settings. The list's Holidays / Next
- * holiday cells derive from the typed values at render time (issue #27), so
- * `value` starts empty.
+ * state, company scope), sourced from Settings. The list's Validity cell
+ * derives from the typed values at render time (issue #27), so `value` starts
+ * empty.
  */
 export function createCollectionCalendarRecord(
   values: BusinessFormValues,
