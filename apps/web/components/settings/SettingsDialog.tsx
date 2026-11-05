@@ -1820,9 +1820,9 @@ export function SettingsWorkspace({
       <aside className="flex max-h-[44dvh] w-full shrink-0 flex-col px-3 py-3 sm:max-h-none sm:min-h-0 sm:w-64 sm:px-4 sm:py-4">
         <Button
           type="button"
-          variant="ghost"
+          variant="unstyled"
           onClick={() => router.push(returnTo)}
-          className="mb-4 flex h-8 w-fit cursor-pointer items-center gap-1.5 rounded-full bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent has-[>svg]:px-3"
+          className="mb-4 flex h-8 w-fit cursor-pointer items-center gap-1.5 rounded-full bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:text-sidebar-foreground"
         >
           <CaretLeft className="size-3.5" />
           Back to app
@@ -1856,11 +1856,11 @@ export function SettingsWorkspace({
                     <Button
                       key={item.id}
                       type="button"
-                      variant="ghost"
+                      variant="unstyled"
                       onClick={() => selectPane(item.id)}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "flex h-7 cursor-pointer items-center justify-start gap-2 rounded-md px-2.5 text-left text-xs font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent has-[>svg]:px-2.5",
+                        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-xs font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
                         isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
                       )}
                     >

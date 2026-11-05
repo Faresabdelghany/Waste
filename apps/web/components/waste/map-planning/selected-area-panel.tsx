@@ -382,12 +382,12 @@ export function SelectedAreaPanel({
                     return (
                       <li key={point.id}>
                         <Button
-                          variant="ghost"
+                          variant="unstyled"
                           type="button"
                           data-container-row={point.id}
                           data-highlighted={highlighted ? "true" : undefined}
-                          className={cn("justify-start whitespace-normal text-[length:inherit] font-normal shrink h-auto transition-none cursor-default hover:text-inherit",
-                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-accent/60",
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             highlighted && "bg-accent",
                           )}
                           onMouseEnter={() => onHoverContainers(point.containerIds)}

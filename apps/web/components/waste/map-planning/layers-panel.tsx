@@ -304,9 +304,9 @@ export function LayersPanel({
             <p className="text-xs font-medium text-muted-foreground">Planning areas</p>
             <div className="flex items-center gap-1 text-xs">
               <Button
-                variant="link"
+                variant="unstyled"
                 type="button"
-                className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
                 onClick={onShowAllAreas}
                 disabled={drawable.length === 0 || enabled === drawable.length}
               >
@@ -314,9 +314,9 @@ export function LayersPanel({
               </Button>
               <span className="text-muted-foreground">·</span>
               <Button
-                variant="link"
+                variant="unstyled"
                 type="button"
-                className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
                 onClick={onHideAllAreas}
                 disabled={enabled === 0}
               >
@@ -395,7 +395,7 @@ function BaseMapSwatch({
 }) {
   const { land, water, road, text } = option.swatch
   return (
-    <button
+    <Button variant="unstyled"
       type="button"
       role="radio"
       aria-checked={selected}
@@ -433,6 +433,6 @@ function BaseMapSwatch({
       >
         {option.label}
       </span>
-    </button>
+    </Button>
   )
 }

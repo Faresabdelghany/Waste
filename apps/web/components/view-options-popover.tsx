@@ -88,13 +88,13 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
           <div className="flex rounded-xl p-1 bg-muted">
             {viewTypes.map((type) => (
               <Button
-                variant="ghost"
+                variant="unstyled"
                 key={type.id}
                 onClick={() => onChange({ ...options, viewType: type.id as Options['viewType'] })}
-                className={cn("justify-start whitespace-normal shrink h-auto px-0 has-[>svg]:px-0 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                className={cn(
                   "flex flex-1 flex-col items-center gap-1 rounded-lg py-2.5 text-xs font-medium transition-colors shadow-none",
                   options.viewType === type.id
-                    ? "bg-background shadow-sm hover:bg-background dark:hover:bg-background"
+                    ? "bg-background shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -123,14 +123,14 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
                 <PopoverContent className="w-40 rounded-xl p-1" align="end">
                   {taskOptions.map((option) => (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={option.id}
                       onClick={() => {
                         onChange({ ...options, tasks: option.id as Options['tasks'] })
                         setTasksOpen(false)
                       }}
-                      className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:text-inherit",
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent",
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent",
                         options.tasks === option.id && "bg-accent",
                       )}
                     >
@@ -160,14 +160,14 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
                 <PopoverContent className="w-36 rounded-xl p-1" align="end">
                   {orderingOptions.map((option) => (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={option.id}
                       onClick={() => {
                         onChange({ ...options, ordering: option.id as Options['ordering'] })
                         setOrderingOpen(false)
                       }}
-                      className={cn("justify-start whitespace-normal font-normal shrink h-auto cursor-default hover:text-inherit",
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent",
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent",
                         options.ordering === option.id && "bg-accent",
                       )}
                     >
@@ -213,14 +213,14 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
                 <PopoverContent className="w-44 rounded-xl p-1" align="end">
                   {groupByOptions.map((option) => (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={option.id}
                       onClick={() => {
                         onChange({ ...options, groupBy: option.id as Options['groupBy'] })
                         setGroupByOpen(false)
                       }}
-                      className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:text-inherit",
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent",
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent",
                         options.groupBy === option.id && "bg-accent",
                       )}
                     >
@@ -239,7 +239,7 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
               <div className="mt-2 flex flex-wrap gap-2">
                 {propertyOptions.map((prop) => (
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     key={prop.id}
                     onClick={() => {
                       const newProps = options.properties.includes(prop.id)
@@ -247,18 +247,18 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
                         : [...options.properties, prop.id]
                       onChange({ ...options, properties: newProps })
                     }}
-                    className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                    className={cn(
                       "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors",
                       options.properties.includes(prop.id)
-                        ? "border-border bg-background hover:bg-background dark:hover:bg-background"
-                        : "border-border hover:bg-accent dark:hover:bg-accent",
+                        ? "border-border bg-background"
+                        : "border-border hover:bg-accent",
                     )}
                   >
                     <prop.icon className="size-3.5" />
                     {prop.label}
                   </Button>
                 ))}
-                <Button variant="ghost" className="gap-0 whitespace-normal font-normal shrink h-auto transition-none cursor-default flex items-center justify-center rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-muted-foreground dark:hover:bg-accent">
+                <Button variant="unstyled" className="flex items-center justify-center rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent">
                   +
                 </Button>
               </div>
@@ -267,13 +267,13 @@ export function ViewOptionsPopover({ options, onChange, allowedViewTypes }: View
 
           <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
             <div className="flex items-center gap-1">
-              <Button variant="link" className="justify-start whitespace-normal rounded-none font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default underline-offset-auto flex items-center gap-1.5 text-sm text-primary hover:underline">
+              <Button variant="unstyled" className="flex items-center gap-1.5 text-sm text-primary hover:underline">
                 <Globe className="size-4" />
                 Set default
               </Button>
               <span className="text-sm text-muted-foreground">for everyone</span>
             </div>
-            <Button variant="link" className="inline-block whitespace-normal rounded-none font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-sm text-primary hover:underline">Reset</Button>
+            <Button variant="unstyled" className="text-sm text-primary hover:underline">Reset</Button>
           </div>
         </div>
       </PopoverContent>

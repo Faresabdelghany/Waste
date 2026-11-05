@@ -2,7 +2,7 @@ import type { APIRequestContext, Page } from "@playwright/test"
 
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, routePage, schemeWithRoutes, type ApiRoute } from "./routes-support"
+import { answerOf, routeMenu, routePage, schemeWithRoutes, type ApiRoute } from "./routes-support"
 import { listAll, projectNamed } from "./tester"
 
 // The service-provider workspace on the Pilot (#291 C24): Lars Mikkelsen,
@@ -86,8 +86,11 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
     const details = routePage(page, route)
     const commands = details.getByTestId("route-commands")
     await expect(commands.getByRole("button", { name: "Dispatch" })).toBeEnabled({ timeout: 30_000 })
-    await expect(commands.getByRole("button", { name: "Assign" })).toBeVisible()
-    for (const office of ["Reschedule", "Reorder stops", "Optimise", "Cancel route", "Add stop"]) await expect(commands.getByRole("button", { name: office })).toHaveCount(0)
+    // Dispatch and Assign alone: the Actions menu offers the provider none of the office's commands.
+    await routeMenu(details).click()
+    await expect(page.getByRole("menuitem", { name: "Assign" })).toBeVisible()
+    for (const office of ["Reschedule", "Reorder stops", "Optimise", "Cancel route", "Add stop"]) await expect(page.getByRole("menuitem", { name: office })).toHaveCount(0)
+    await page.keyboard.press("Escape")
     await page.keyboard.press("Escape")
 
     // The fleet is NordRen's own, read from the API; its forms name master data a provider does not read, so it offers no create.

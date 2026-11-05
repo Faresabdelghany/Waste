@@ -478,11 +478,13 @@ function configuredCommercialFormSchema(
 
 function WorkspaceQuerySync({
   workspace,
+  landingModuleId,
   onModuleChange,
   onRecordOpen,
   resolveRecord,
 }: {
   workspace: WorkspaceDefinition
+  landingModuleId: string
   onModuleChange: (moduleId: string) => void
   onRecordOpen: (record: BusinessRecord | null) => void
   resolveRecord: (moduleId: string, recordId: string) => BusinessRecord | null
@@ -508,16 +510,21 @@ function WorkspaceQuerySync({
         : undefined
 
     if (requestedModule) onModuleChange(requestedModule.id)
+    // A bare address — the sidebar's link — is the workspace's landing. The
+    // page stays mounted across client navigations, so without this a record
+    // opened before leaving would still be shown on coming back.
+    else if (!requestedModuleId && !requestedRecordId) onModuleChange(landingModuleId)
 
     if (requestedRecordId) {
       const requestedRecord = requestedModule
         ? resolveRecord(requestedModule.id, requestedRecordId)
         : null
       onRecordOpen(requestedRecord ?? null)
-    } else if (requestedModuleId) {
+    } else {
       onRecordOpen(null)
     }
   }, [
+    landingModuleId,
     onModuleChange,
     onRecordOpen,
     resolveRecord,
@@ -1184,11 +1191,11 @@ export function BusinessWorkspace({
       (roleAccess[`${workspace.id}.${module.id}`] ?? []).includes("view"),
     )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
-  const [activeModuleId, setActiveModuleId] = useState(
-    workspace.modules.some((module) => module.id === initialModuleId)
-      ? initialModuleId!
-      : workspace.modules[0].id,
-  )
+  // The module a bare address opens on: the page's own, else the workspace's first.
+  const landingModuleId = workspace.modules.some((module) => module.id === initialModuleId)
+    ? initialModuleId!
+    : workspace.modules[0].id
+  const [activeModuleId, setActiveModuleId] = useState(landingModuleId)
   const [query, setQuery] = useState("")
   // A module opens on its list's filters on the Pilot (the registry's `list`), applied when it becomes active and only then.
   const [businessFilters, setBusinessFilters] = useState<BusinessFilters>(() =>
@@ -5285,9 +5292,9 @@ export function BusinessWorkspace({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
-                    className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label={`About ${activeModule.title}`}
                   >
                     <Info className="size-4" />
@@ -5651,7 +5658,7 @@ export function BusinessWorkspace({
                                     onKeyDown={(event) => event.stopPropagation()}
                                   >
                                     <Button
-                                      variant="ghost"
+                                      variant="unstyled"
                                       type="button"
                                       aria-pressed={isRouteStarred(record.id)}
                                       aria-label={
@@ -5659,7 +5666,7 @@ export function BusinessWorkspace({
                                           ? `Remove ${record.name} from Active Routes`
                                           : `Add ${record.name} to Active Routes`
                                       }
-                                      className="gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 transition-none hover:text-inherit flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted dark:hover:bg-muted"
+                                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
                                       onClick={() => toggleRouteStarred(record.id)}
                                     >
                                       <Star
@@ -5968,6 +5975,7 @@ export function BusinessWorkspace({
       <Suspense fallback={null}>
         <WorkspaceQuerySync
           workspace={workspace}
+          landingModuleId={landingModuleId}
           onModuleChange={syncModuleFromQuery}
           onRecordOpen={setSelectedRecord}
           resolveRecord={resolveWorkspaceRecord}

@@ -3,7 +3,7 @@ import type { APIRequestContext } from "@playwright/test"
 import { dayIn, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { accessTokenOf, apiAs, chainLanded, expect, freshContext, problemOf, signIn, test } from "./fixtures"
-import { answerOf, openRoute, pick, toasts } from "./routes-support"
+import { answerOf, openRoute, pick, routeCommand, toasts } from "./routes-support"
 import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 
 // Bulky-waste booking on the API (O11 of #290). Each test draws a planning
@@ -192,7 +192,9 @@ test("Settings › Bulky schedules adds an area's schedule; the office books a b
 
   // Routed through the route's Add stop, as a bulky booking of the route's day; the booking reads routed, and its stop carries the note.
   const details_ = await openRoute(page, route)
-  await details_.getByTestId("route-commands").getByRole("button", { name: "Add stop" }).click()
+  const addStop = await routeCommand(page, details_, "Add stop")
+  await expect(addStop).toBeEnabled({ timeout: 30_000 })
+  await addStop.click()
   const adding = page.getByRole("dialog", { name: "Add stop" })
   await pick(adding, page, "Collect", "A bulky booking")
   await adding.getByRole("combobox", { name: /^Bulky booking/ }).click()

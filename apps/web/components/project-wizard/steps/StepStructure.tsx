@@ -2,28 +2,8 @@ import { ProjectData, WorkStructure } from "../types";
 import { cn } from "@/lib/utils";
 
 import { Label } from "../../ui/label";
+import { Switch } from "../../ui/switch";
 import { ArrowRight, Flag, GitMerge } from "@phosphor-icons/react/dist/ssr";
-
-// I'll create a simple Switch-like toggle here since I didn't scaffold Switch yet.
-function SimpleToggle({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (c: boolean) => void }) {
-    return (
-        <button
-            onClick={() => onCheckedChange(!checked)}
-            className={cn(
-                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
-                checked ? "bg-primary" : "bg-input"
-            )}
-        >
-            <span
-                className={cn(
-                    "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform",
-                    checked ? "translate-x-5" : "translate-x-0"
-                )}
-            />
-        </button>
-    )
-}
-
 
 interface StepStructureProps {
   data: ProjectData;
@@ -124,9 +104,9 @@ export function StepStructure({ data, updateData }: StepStructureProps) {
                 Automatically add default stops based on your route type.
             </p>
         </div>
-        <SimpleToggle 
-            checked={data.addStarterTasks} 
-            onCheckedChange={(c) => updateData({ addStarterTasks: c })} 
+        <Switch
+            checked={data.addStarterTasks}
+            onCheckedChange={(c) => updateData({ addStarterTasks: c })}
         />
       </div>
     </div>

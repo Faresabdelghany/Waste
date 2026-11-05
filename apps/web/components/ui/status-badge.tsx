@@ -14,6 +14,7 @@ export type StatusTone =
   | "warning"
   | "destructive"
   | "info"
+  | "highlight"
   | "primary"
 
 /** The tint and text of each tone, for a surface that is not a badge. */
@@ -23,6 +24,7 @@ export const statusToneClasses: Record<StatusTone, string> = {
   warning: "bg-warning/10 text-warning-foreground",
   destructive: "bg-destructive/10 text-destructive-foreground",
   info: "bg-info/10 text-info-foreground",
+  highlight: "bg-highlight/10 text-highlight-foreground",
   primary: "bg-primary/10 text-primary",
 }
 
@@ -33,6 +35,7 @@ export const statusToneBorderClasses: Record<StatusTone, string> = {
   warning: "border-warning/25",
   destructive: "border-destructive/25",
   info: "border-info/25",
+  highlight: "border-highlight/25",
   primary: "border-primary/25",
 }
 
@@ -43,6 +46,7 @@ export const statusToneDotClasses: Record<StatusTone, string> = {
   warning: "bg-warning",
   destructive: "bg-destructive-foreground",
   info: "bg-info",
+  highlight: "bg-highlight",
   primary: "bg-primary",
 }
 

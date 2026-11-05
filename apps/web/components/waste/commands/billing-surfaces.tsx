@@ -356,7 +356,7 @@ export function BillingRunSurface({ record }: RowSurfaceProps) {
           empty="None issued."
           testId="run-invoices"
           line={(invoice) => (
-            <Button type="button" variant="link" className="h-auto justify-start whitespace-normal p-0 text-left font-normal text-inherit underline-offset-2 hover:underline" onClick={() => openInvoice(webIdOf(INVOICE_PREFIX, invoice.id))}>
+            <Button type="button" variant="unstyled" className="text-left underline-offset-2 hover:underline" onClick={() => openInvoice(webIdOf(INVOICE_PREFIX, invoice.id))}>
               {invoice.label} · {customerName(invoice.customerId)} · {formatMinor(invoice.grossMinor, invoice.currency)}
             </Button>
           )}
@@ -506,7 +506,7 @@ export function InvoiceSurface({ record }: RowSurfaceProps) {
             empty="No payment yet."
             testId="invoice-payments"
             line={(payment) => (
-              <Button type="button" variant="link" className="h-auto justify-start whitespace-normal p-0 text-left font-normal text-inherit underline-offset-2 hover:underline" onClick={() => openPayment(webIdOf(PAYMENT_PREFIX, payment.id))}>
+              <Button type="button" variant="unstyled" className="text-left underline-offset-2 hover:underline" onClick={() => openPayment(webIdOf(PAYMENT_PREFIX, payment.id))}>
                 {payment.paidOn} · {formatMinor(payment.amountMinor, payment.currency)} · {PAYMENT_SOURCE_LABELS[payment.source]}
               </Button>
             )}

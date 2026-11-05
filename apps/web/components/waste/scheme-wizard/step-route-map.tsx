@@ -168,7 +168,7 @@ export function StepRouteMap({
               const roadState = roadStates.get(route.routeId)
               return (
                 <li key={group.id}>
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     onClick={() => setSelected(active ? null : group.id)}
                     aria-pressed={active}
@@ -199,7 +199,7 @@ export function StepRouteMap({
                         {previewBasisLabel(roadState, { roadBasis: route.estimate.basis === "road", stops: route.preview.stops.length, now })}
                       </span>
                     </div>
-                  </button>
+                  </Button>
                 </li>
               )
             })}

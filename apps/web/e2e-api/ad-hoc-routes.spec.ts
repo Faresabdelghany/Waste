@@ -3,7 +3,7 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test"
 import { addDays, dayIn, dispatchedRouteFor, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { chainLanded, expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, openRoute, pick, routePage, routeRead, schemeWithRoutes, stopRows, toasts, type ApiRoute } from "./routes-support"
+import { answerOf, openRoute, pick, routeCommand, routeMenu, routePage, routeRead, schemeWithRoutes, stopRows, toasts, type ApiRoute } from "./routes-support"
 import { listAll, projectNamed, type Project } from "./tester"
 
 // The office's own routes and stops on the API (Issue #111, its web half).
@@ -92,7 +92,8 @@ test("New route makes the office's own route on a project's day with no scheme; 
   const stops = stopRows(details)
 
   const commands = details.getByTestId("route-commands")
-  const addStop = commands.getByRole("button", { name: "Add stop" })
+  await expect(routeMenu(details)).toBeVisible({ timeout: 30_000 })
+  const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()
   const dialog = page.getByRole("dialog", { name: "Add stop" })
@@ -154,8 +155,7 @@ test("a stop the office adds at a container to a generated route stands through 
   if (placement === undefined || container === undefined) throw new Error(`the seed places no container of another fraction in Copenhagen Central on ${route.serviceDate}`)
 
   const details = await openRoute(page, route)
-  const commands = details.getByTestId("route-commands")
-  const addStop = commands.getByRole("button", { name: "Add stop" })
+  const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()
   const dialog = page.getByRole("dialog", { name: "Add stop" })
@@ -246,7 +246,7 @@ test("a stop says what it is for: the office books a wash of a container its dis
 
   // The office books the wash through Add stop: the service, then the container the route empties already.
   const details = await openRoute(page, route)
-  const addStop = details.getByTestId("route-commands").getByRole("button", { name: "Add stop" })
+  const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()
   const dialog = page.getByRole("dialog", { name: "Add stop" })
@@ -326,7 +326,7 @@ test("a swap is booked through Add stop with its replacement from stock and its 
 
   // The office books the swap: the service, the container taken, its replacement, the warehouse it goes back to.
   const details = await openRoute(page, route)
-  const addStop = details.getByTestId("route-commands").getByRole("button", { name: "Add stop" })
+  const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()
   const dialog = page.getByRole("dialog", { name: "Add stop" })

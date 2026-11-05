@@ -17,6 +17,7 @@
 // and re-exported there.
 import type { Alert } from "@waste/contracts/alerts"
 import { ticketLabel } from "@waste/contracts/resolution"
+import type { TicketFieldValues } from "@waste/contracts/ticket-types"
 import type { Ticket, TicketEvent, TicketLinks } from "@waste/contracts/tickets"
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource, AlertStatus, TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
 
@@ -35,6 +36,8 @@ export const ticketColumns = {
   projectId: ticket.projectId,
   number: ticket.number,
   kind: ticket.kind,
+  ticketTypeId: ticket.ticketTypeId,
+  fieldValues: ticket.fieldValues,
   status: ticket.status,
   priority: ticket.priority,
   source: ticket.source,
@@ -92,6 +95,8 @@ export function ticketOf(row: TicketRow): Ticket {
     number: row.number,
     label: labelOf(row),
     kind: row.kind as TicketKind,
+    ticketTypeId: row.ticketTypeId,
+    fieldValues: row.fieldValues as TicketFieldValues,
     status: row.status as TicketStatus,
     priority: row.priority as TicketPriority,
     source: row.source as TicketSource,

@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url"
 import { and, eq, getTableName, sql } from "drizzle-orm"
 
 import { createDb, type Database, type Tx } from "../client"
+import { defaultTicketTypeOf } from "../commands/ticket-types"
+import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
 import { KEPT_TABLES, resetToSeed, SWEPT_TABLES, sweepOrder } from "../reset-to-seed"
 import { projectAccess, role, roleGrant, userAccount } from "../schema/access"
@@ -163,7 +165,7 @@ async function operate(tx: Tx, ground: Ground): Promise<void> {
   // Resolution: a ticket and its history, a ledger.
   const [opened] = await tx
     .insert(ticket)
-    .values({ ...scoped, number: 1000, kind: "missed-collection", source: "phone", subject: "Bin not emptied", description: "The bin was missed on Monday", occurredAt: at, createdBy: by })
+    .values({ ...scoped, number: 1000, kind: "missed-collection", ticketTypeId: await defaultTicketTypeOf(tx, companyId, "missed-collection", newId), source: "phone", subject: "Bin not emptied", description: "The bin was missed on Monday", occurredAt: at, createdBy: by })
     .returning({ id: ticket.id })
   await tx.insert(ticketEvent).values({ ...scoped, ticketId: opened.id, kind: "created", status: "open", recordedBy: by })
   // Finance: a tariff, a completed run and its invoice, a ledger.

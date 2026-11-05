@@ -224,7 +224,7 @@ function generatedRouteStops(
   return stops
 }
 
-function routeStatusTone(status: string): StatusTone {
+export function routeStatusTone(status: string): StatusTone {
   if (/active|completed|ready/i.test(status)) {
     return "success"
   }
@@ -1033,8 +1033,8 @@ function OverviewTab({
             >
               <Button
                 type="button"
-                variant="ghost"
-                className="flex h-auto items-center justify-start gap-2 rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-0"
+                variant="unstyled"
+                className="flex items-center gap-2 text-left"
                 onClick={() => setRightPanel("map")}
                 aria-expanded={rightPanel === "map"}
               >
@@ -1076,9 +1076,9 @@ function OverviewTab({
 
             <Button
               type="button"
-              variant="ghost"
+              variant="unstyled"
               className={cn(
-                "flex h-auto min-h-14 w-full items-center justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-4",
+                "flex min-h-14 w-full items-center gap-2 border-b border-border px-4 py-3 text-left",
                 rightPanel !== "information" && "border-t",
               )}
               onClick={() => setRightPanel("information")}
@@ -1125,7 +1125,8 @@ function OverviewTab({
   )
 }
 
-function TicketsTab({
+/** The tickets about a route, as its page's Tickets tab lists them: fixture mode's and the Pilot's alike. */
+export function TicketsTab({
   tickets,
 }: {
   tickets: readonly BusinessRecord[]

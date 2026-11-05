@@ -438,8 +438,8 @@ function PanelShell({
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="h-auto gap-0 rounded-none p-0 font-normal text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground dark:hover:bg-transparent has-[>svg]:px-0"
+                    variant="unstyled"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label={`About ${title}`}
                   >
                     <Info className="h-4 w-4" />

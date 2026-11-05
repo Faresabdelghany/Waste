@@ -1,4 +1,5 @@
 import { Check } from "@phosphor-icons/react/dist/ssr";
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils";
 
 interface StepperProps {
@@ -17,7 +18,7 @@ export function Stepper({ currentStep, steps, onStepClick, maxStepReached }: Ste
         const isClickable = index <= maxStepReached;
 
         return (
-          <button
+          <Button variant="unstyled"
             key={index}
             onClick={() => isClickable && onStepClick(index)}
             disabled={!isClickable}
@@ -50,7 +51,7 @@ export function Stepper({ currentStep, steps, onStepClick, maxStepReached }: Ste
                 {label}
               </span>
             </div>
-          </button>
+          </Button>
         );
       })}
     </div>

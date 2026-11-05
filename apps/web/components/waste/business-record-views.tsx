@@ -290,14 +290,14 @@ export function BusinessRecordCardsView({
         />
       ))}
       {onCreateRecord && (
-        <button
+        <Button variant="unstyled"
           type="button"
           className="flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background p-6 text-center text-sm text-muted-foreground transition-colors hover:border-solid hover:border-border/80 hover:text-foreground"
           onClick={onCreateRecord}
         >
           <Plus className="mb-2 h-5 w-5" />
           Create new {entityLabel.toLowerCase()}
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -543,10 +543,10 @@ export function BusinessRecordDayTimeline({
             <div className="h-8" />
             {scheduled.map(({ record }) => (
               <Button
-                variant="ghost"
+                variant="unstyled"
                 key={record.id}
                 type="button"
-                className="justify-start gap-0 whitespace-normal text-[length:inherit] font-normal shrink py-0 transition-none cursor-default hover:text-inherit flex h-10 w-full items-center rounded-md px-1 text-left hover:bg-muted/60 dark:hover:bg-muted/60"
+                className="flex h-10 w-full items-center rounded-md px-1 text-left hover:bg-muted/60"
                 onClick={() => onOpenRecord(record)}
               >
                 <span className="truncate text-sm text-foreground">{record.name}</span>
@@ -577,7 +577,7 @@ export function BusinessRecordDayTimeline({
               )
               return (
                 <div key={record.id} className="relative h-10">
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     aria-label={`Open ${record.name}`}
                     className={cn(
@@ -589,7 +589,7 @@ export function BusinessRecordDayTimeline({
                     onClick={() => onOpenRecord(record)}
                   >
                     {window.label}
-                  </button>
+                  </Button>
                 </div>
               )
             })}
@@ -607,10 +607,10 @@ export function BusinessRecordDayTimeline({
           <div className="mt-2 space-y-1">
             {unscheduled.map((record) => (
               <Button
-                variant="ghost"
+                variant="unstyled"
                 key={record.id}
                 type="button"
-                className="whitespace-normal text-[length:inherit] font-normal shrink h-auto has-[>svg]:px-2 transition-none cursor-default hover:text-inherit flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/60 dark:hover:bg-muted/60"
+                className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/60"
                 onClick={() => onOpenRecord(record)}
               >
                 <span className="flex min-w-0 items-center gap-2">

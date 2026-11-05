@@ -38,6 +38,8 @@ import {
 } from "@waste/contracts/reports"
 import { Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
+import { newId } from "@waste/db/ids"
 import { route } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { ticket } from "@waste/db/schema/resolution"
@@ -337,6 +339,7 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
           projectId: seed.projectId ?? copenhagen,
           number,
           kind: seed.kind,
+          ticketTypeId: await defaultTicketTypeOf(tx, a.companyId, seed.kind, newId),
           status: seed.status,
           source: "phone",
           subject: `A ${seed.kind} ticket`,

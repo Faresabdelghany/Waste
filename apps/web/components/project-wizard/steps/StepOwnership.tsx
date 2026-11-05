@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react";
 import { ProjectData, OwnershipEntry } from "../types";
 import { Label } from "../../ui/label";
@@ -271,17 +270,17 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
               <PopoverContent className="w-44 p-1">
                 <div className="flex flex-col">
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
-                    className={cn("justify-start gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center rounded-md px-2 py-1.5 text-sm hover:bg-accent dark:hover:bg-accent")}
+                    className="flex items-center rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                     onClick={() => handleAdd("contributors")}
                   >
                     <span className="flex-1 text-left">Contributors</span>
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
-                    className={cn("justify-start gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "mt-1 flex items-center rounded-md px-2 py-1.5 text-sm hover:bg-accent dark:hover:bg-accent")}
+                    className="mt-1 flex items-center rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                     onClick={() => handleAdd("stakeholders")}
                   >
                     <span className="flex-1 text-left">Stakeholders</span>

@@ -402,15 +402,15 @@ export function BusinessFilterPopover({
                 const selectionCount = draft[category.id].length
                 return (
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     key={category.id}
                     type="button"
                     onClick={() => {
                       setActiveCategory(category.id)
                       setOptionSearch("")
                     }}
-                    className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 transition-none cursor-default hover:text-inherit",
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-accent dark:hover:bg-accent",
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-accent",
                       resolvedActiveCategory === category.id && "bg-accent",
                     )}
                   >
@@ -473,10 +473,10 @@ export function BusinessFilterPopover({
 
             <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
               <Button
-                variant="link"
+                variant="unstyled"
                 type="button"
                 onClick={clear}
-                className="inline-block whitespace-normal rounded-none shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-xs font-medium text-primary hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
                 Clear all
               </Button>

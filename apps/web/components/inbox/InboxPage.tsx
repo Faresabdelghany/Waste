@@ -133,7 +133,7 @@ export function InboxPage() {
                             const isSelected = item.id === selectedId
 
                             return (
-                                <button
+                                <Button variant="unstyled"
                                     key={item.id}
                                     type="button"
                                     onClick={() => {
@@ -181,7 +181,7 @@ export function InboxPage() {
                                             )}
                                         </div>
                                     </div>
-                                </button>
+                                </Button>
                             )
                         })}
                     </div>

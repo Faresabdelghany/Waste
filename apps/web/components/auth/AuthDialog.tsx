@@ -182,8 +182,8 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                             />
                                             <Button
                                                 type="button"
-                                                variant="ghost"
-                                                className="absolute right-3 top-1/2 h-auto -translate-y-1/2 gap-0 rounded-none p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent has-[>svg]:px-0"
+                                                variant="unstyled"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                                                 onClick={() => setShowPassword((prev) => !prev)}
                                                 aria-label={showPassword ? "Hide password" : "Show password"}
                                             >
@@ -255,8 +255,8 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                         />
                                         <Button
                                             type="button"
-                                            variant="ghost"
-                                            className="absolute right-3 top-1/2 h-auto -translate-y-1/2 gap-0 rounded-none p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent has-[>svg]:px-0"
+                                            variant="unstyled"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                                             onClick={() => setShowPassword((prev) => !prev)}
                                             aria-label={showPassword ? "Hide password" : "Show password"}
                                         >
@@ -273,11 +273,11 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                     />
                                     <Label htmlFor="auth-terms" className="leading-5">
                                         I agree to the{" "}
-                                        <Button type="button" variant="link" className="h-auto p-0 align-baseline text-inherit underline underline-offset-auto">
+                                        <Button type="button" variant="unstyled" className="underline">
                                             Terms of Service
                                         </Button>{" "}
                                         and{" "}
-                                        <Button type="button" variant="link" className="h-auto p-0 align-baseline text-inherit underline underline-offset-auto">
+                                        <Button type="button" variant="unstyled" className="underline">
                                             Privacy Policy
                                         </Button>
                                         .
@@ -304,8 +304,8 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                             Don&apos;t have an account?{" "}
                             <Button
                                 type="button"
-                                variant="link"
-                                className="h-auto p-0 align-baseline font-semibold text-foreground underline-offset-auto hover:underline"
+                                variant="unstyled"
+                                className="font-semibold text-foreground hover:underline"
                                 onClick={() => onModeChange("sign-up")}
                             >
                                 Sign up
@@ -316,8 +316,8 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                             Already have an account?{" "}
                             <Button
                                 type="button"
-                                variant="link"
-                                className="h-auto p-0 align-baseline font-semibold text-foreground underline-offset-auto hover:underline"
+                                variant="unstyled"
+                                className="font-semibold text-foreground hover:underline"
                                 onClick={() => onModeChange("sign-in")}
                             >
                                 Sign in

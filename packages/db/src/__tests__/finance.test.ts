@@ -77,6 +77,8 @@ import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { triggersOf } from "../sql/audit-trail"
 import { INVOICE_PARTIES_OBJECT } from "../sql/invoice-parties"
 import { partiesAt } from "../commands/invoice-writes"
+import { defaultTicketTypeOf } from "../commands/ticket-types"
+import { newId } from "../ids"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -230,7 +232,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
     { id: own.secondPickup, ...scoped, routeId: own.secondRoute, containerId: own.container, position: 1, propertyId: own.property, wasteFractionId: own.wasteFraction },
   ])
   await tx.insert(unload).values({ id: own.unload, ...scoped, routeId: own.route, unloadingStationId: own.station, wasteFractionId: own.wasteFraction, source: "dispatch", occurredAt: at(11), recordedBy: own.account, netKg: 4_200 })
-  await tx.insert(ticket).values({ id: own.ticket, ...scoped, number: n === "a" ? 8831 : 8832, kind: "missed-collection", source: "phone", subject: "Missed collection at Parkvej 18", description: "The bin was not emptied", occurredAt: at(8), createdBy: own.account, agreementId: own.agreement, status: "completed", resolution: "recollected", closedAt: at(15) })
+  await tx.insert(ticket).values({ id: own.ticket, ...scoped, number: n === "a" ? 8831 : 8832, kind: "missed-collection", ticketTypeId: await defaultTicketTypeOf(tx, own.company, "missed-collection", newId), source: "phone", subject: "Missed collection at Parkvej 18", description: "The bin was not emptied", occurredAt: at(8), createdBy: own.account, agreementId: own.agreement, status: "completed", resolution: "recollected", closedAt: at(15) })
   await tx.insert(serviceArea).values({ id: own.serviceArea, ...scoped, validFrom: OPENED, code: "CA-Ø-2", name: "Østerbro", boundaryText: "Østerbro as the 2026 contract draws it" })
   await tx.insert(serviceAreaPlanningArea).values({ id: own.areaPlanningArea, ...scoped, serviceAreaId: own.serviceArea, planningAreaId: own.planningArea })
   await tx.insert(serviceAreaWasteFraction).values({ id: own.areaFraction, ...scoped, serviceAreaId: own.serviceArea, wasteFractionId: own.wasteFraction })
@@ -262,7 +264,7 @@ async function seedHarbor(tx: Tx): Promise<void> {
   await tx.insert(property).values({ id: a.harborProperty, ...scoped, name: "Havnegade 2", address: "Havnegade 2", kind: "commercial", status: "active" })
   await tx.insert(container).values({ id: a.harborContainer, ...scoped, label: "BIN-90001", containerTypeId: a.containerType, ownership: "company" })
   await tx.insert(pickup).values({ id: a.harborPickup, ...scoped, routeId: a.harborRoute, containerId: a.harborContainer, position: 1, propertyId: a.harborProperty, wasteFractionId: a.wasteFraction })
-  await tx.insert(ticket).values({ id: a.harborTicket, ...scoped, number: 9000, kind: "internal-task", source: "office", subject: "Check the harbor gate", description: "The gate code changed", occurredAt: at(9), createdBy: a.account })
+  await tx.insert(ticket).values({ id: a.harborTicket, ...scoped, number: 9000, kind: "internal-task", ticketTypeId: await defaultTicketTypeOf(tx, a.company, "internal-task", newId), source: "office", subject: "Check the harbor gate", description: "The gate code changed", occurredAt: at(9), createdBy: a.account })
   await tx.insert(serviceArea).values({ id: a.harborServiceArea, ...scoped, validFrom: OPENED, code: "CA-H-1", name: "Havnen", boundaryText: "The harbour" })
   await tx.insert(serviceAreaAssignment).values({ id: a.harborAssignment, ...scoped, validFrom: OPENED, serviceAreaId: a.harborServiceArea, serviceProviderId: a.serviceProvider })
   await tx.insert(billingRun).values({ id: a.harborRun, ...scoped, periodFrom: "2026-10-01", periodTo: "2026-10-31", status: "completed", completedAt: at(16) })

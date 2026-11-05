@@ -3,7 +3,7 @@ import type { APIRequestContext } from "@playwright/test"
 import { addDays, dayIn, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
 import { uniqueName } from "./env"
 import { chainLanded, expect, test } from "./fixtures"
-import { answerOf, createScheme, openRoute, pick, routeRead, schemeWithRoutes, toasts, type ApiRoute } from "./routes-support"
+import { answerOf, createScheme, openRoute, pick, routeCommand, routeMenu, routeRead, schemeWithRoutes, toasts, type ApiRoute } from "./routes-support"
 import { listAll, projectNamed } from "./tester"
 
 // The dispatch day's tooling on the API (O5 of #290). Dispatch day beside
@@ -99,7 +99,8 @@ test("Optimise from a route's details asks for a Plan; once the worker has measu
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Optimise"), 7, { depot: "Nordhavn Depot" })
   const route = routes.find((candidate) => candidate.progress.total >= 2) ?? routes[0]
   const details = await openRoute(page, route)
-  const optimise = details.getByTestId("route-commands").getByRole("button", { name: "Optimise" })
+  await expect(routeMenu(details)).toBeVisible({ timeout: 30_000 })
+  const optimise = await routeCommand(page, details, "Optimise")
   await expect(optimise).toBeEnabled({ timeout: 30_000 })
   const [asked] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/optimise`), optimise.click()])
   // 202 for a Plan this request made, 200 for the identical one generation already asked for.
@@ -130,9 +131,7 @@ test("a reschedule onto the project's weekend is refused in the domain's sentenc
   const provider = (await listAll<{ id: string; legalName: string }>(api, "/service-providers")).find((row) => row.legalName === "NordRen ApS")
   expect(provider, "the seed holds NordRen ApS").toBeTruthy()
   const details = await openRoute(page, route)
-  const commands = details.getByTestId("route-commands")
-
-  await commands.getByRole("button", { name: "Reschedule" }).click()
+  await (await routeCommand(page, details, "Reschedule")).click()
   const reschedule = page.getByRole("dialog", { name: "Reschedule" })
   await reschedule.getByRole("textbox", { name: /^Operating date/ }).fill(saturday)
   const [refused] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/reschedule`), reschedule.getByRole("button", { name: "Reschedule" }).click()])
@@ -147,7 +146,7 @@ test("a reschedule onto the project's weekend is refused in the domain's sentenc
   await expect(reschedule).toBeHidden()
   await expect(details).toContainText(`Operating date${saturday}`)
 
-  await commands.getByRole("button", { name: "Assign" }).click()
+  await (await routeCommand(page, details, "Assign")).click()
   const assign = page.getByRole("dialog", { name: "Assign" })
   await pick(assign, page, "Service provider", "NordRen ApS")
   const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), assign.getByRole("button", { name: "Assign" }).click()])
@@ -155,7 +154,7 @@ test("a reschedule onto the project's weekend is refused in the domain's sentenc
   expect(assigned.request().postDataJSON()).toEqual({ serviceProviderId: provider?.id })
   await expect(details).toContainText("Service providerNordRen ApS")
 
-  await commands.getByRole("button", { name: "Cancel route" }).click()
+  await (await routeCommand(page, details, "Cancel route")).click()
   const cancel = page.getByRole("dialog", { name: "Cancel route" })
   const reason = uniqueName("Storm warning")
   await pick(cancel, page, "Why", "Weather")
