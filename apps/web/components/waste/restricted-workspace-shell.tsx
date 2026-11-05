@@ -31,6 +31,8 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import type { RoleAccessMap } from "@/lib/data/role-permissions"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
+import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
+import { ShellIdentityProvider, type ShellIdentity } from "@/components/top-bar/shell-identity"
 
 type RestrictedWorkspacePage = {
   id: string
@@ -182,11 +184,20 @@ type WorkspaceScope = {
   onApi: boolean
 }
 
+// The top bar's account menu and bell in a restricted shell: its persona in
+// fixture mode, no link to the office's Settings, and not the office's inbox.
+const RESTRICTED_SHELLS: Record<RestrictedPersona, ShellIdentity> = {
+  citizen: { fixture: CITIZEN_IDENTITY, offersSettings: false, readsInbox: false },
+  "service-provider": { fixture: SERVICE_PROVIDER_IDENTITY, offersSettings: false, readsInbox: false },
+}
+
 function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; children: ReactNode }) {
   return (
     <SidebarProvider>
       <RestrictedPersonaSidebar persona={persona} />
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset>
+        <ShellIdentityProvider identity={RESTRICTED_SHELLS[persona]}>{children}</ShellIdentityProvider>
+      </SidebarInset>
     </SidebarProvider>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
 import { Bell, ChatCircleDots, CheckCircle, EnvelopeSimple } from "@phosphor-icons/react/dist/ssr"
 
@@ -12,106 +13,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { InboxFilterPopover } from "./InboxFilterPopover"
-
-type InboxItemType = "comment" | "task" | "client" | "project" | "system"
-
-type InboxItem = {
-    id: string
-    title: string
-    preview: string
-    createdAt: Date
-    type: InboxItemType
-    unread: boolean
-    client?: string
-    project?: string
-}
-
-const MOCK_INBOX_ITEMS: InboxItem[] = [
-    {
-        id: "1",
-        title: "Blocked access reported at stop 18",
-        preview:
-            "The driver could not access the organic-waste containers at Parkvej 18.\n\nEvidence\n- Gate was locked at 08:42.\n- Driver attached one photo and a location stamp.\n- The stop was marked failed with reason: blocked access.\n\nSuggested next steps\n- Contact the property manager.\n- Approve a recollection for the afternoon recovery route.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 10),
-        type: "comment",
-        unread: true,
-        client: "Østerbro Housing",
-        project: "RC-1048 · Østerbro Organic",
-    },
-    {
-        id: "2",
-        title: "You were assigned a new ticket",
-        preview:
-            "A service ticket has been assigned to you for a reported container overflow.\n\nScope\n- Review the customer photo and service history.\n- Confirm whether the scheduled collection was completed.\n- Decide between a recollection or a container-capacity adjustment.\n\nResponse target\n- First customer update is due within two hours.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 45),
-        type: "task",
-        unread: true,
-        client: "Amager District",
-        project: "RC-1051 · Amager Glass",
-    },
-    {
-        id: "3",
-        title: "Customer agreement moved to Active",
-        preview:
-            "The Copenhagen Central service agreement is now active.\n\nWhat this enables\n- Covered properties can be added to published route schemes.\n- Included waste fractions and service frequencies are billable.\n- Exceptions can now be tracked against the agreement SLA.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3),
-        type: "client",
-        unread: false,
-        client: "Copenhagen Central",
-    },
-    {
-        id: "4",
-        title: "Route completed with all proof captured",
-        preview:
-            "RC-1044 has been completed and closed.\n\nCompletion summary\n- 42 of 42 planned stops were serviced.\n- Disposal weight was recorded at the transfer station.\n- Required proof was captured for every exception.\n\nThe route is ready for billing review.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6),
-        type: "project",
-        unread: false,
-        project: "RC-1044 · Nørrebro Mixed",
-    },
-    {
-        id: "5",
-        title: "Daily operations summary is ready",
-        preview:
-            "Your Copenhagen operations summary is ready.\n\nRoutes\n- 4 routes are currently in progress.\n- 1 route is delayed by more than 20 minutes.\n- 87% of planned stops are complete.\n\nExceptions\n- 3 failed stops require review.\n- 1 recollection needs approval.\n\nSuggested focus\n- Resolve blocked-access tickets before the afternoon dispatch.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-        type: "system",
-        unread: true,
-    },
-    {
-        id: "6",
-        title: "New contract route is ready for planning",
-        preview:
-            "Harbor Commercial Cardboard has been created from a draft customer agreement.\n\nPlanning checklist\n- Confirm service points and access instructions.\n- Allocate containers from warehouse stock.\n- Assign a suitable vehicle and driver.\n- Publish the first collection date after commercial approval.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
-        type: "project",
-        unread: true,
-        client: "Harbor Offices ApS",
-        project: "Harbor Commercial Cardboard",
-    },
-    {
-        id: "7",
-        title: "Vehicle capacity warning on Amager route",
-        preview:
-            "The estimated glass volume is above the assigned vehicle's safe capacity.\n\nBefore dispatch\n- Review historical weights for the route.\n- Reassign a larger vehicle or add an unloading trip.\n- Confirm that the receiving facility remains within its opening window.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 40),
-        type: "task",
-        unread: false,
-        client: "Amager District",
-        project: "RC-1051 · Amager Glass",
-    },
-    {
-        id: "8",
-        title: "New property contact added",
-        preview:
-            "Mikkel Sørensen has been added as the service contact for Parkvej 18.\n\nContact scope\n- Access-window coordination.\n- Locked-gate and container-location issues.\n- Approval of urgent recollections.\n\nThe contact is now available from the customer and property views.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 60),
-        type: "client",
-        unread: false,
-        client: "Østerbro Housing",
-        project: "RC-1048 · Østerbro Organic",
-    },
-]
+import { markAllInboxRead, markInboxItemRead, useInboxItems } from "./inbox-store"
+import { INBOX_FIXTURE_ITEMS, inboxTypeLabel, type InboxItemType } from "@/lib/data/inbox"
 
 type InboxFilters = {
     types: InboxItemType[]
@@ -126,19 +29,19 @@ function getTypeIcon(type: InboxItemType) {
     return Bell
 }
 
-function getTypeLabel(type: InboxItemType): string {
-    if (type === "comment") return "Comment"
-    if (type === "task") return "Ticket"
-    if (type === "client") return "Customer"
-    if (type === "project") return "Route"
-    return "Update"
-}
-
 export function InboxPage() {
     const [tab, setTab] = useState<"all" | "unread" | "mentions">("all")
-    const [selectedId, setSelectedId] = useState<string | null>(MOCK_INBOX_ITEMS[0]?.id ?? null)
+    // `?item=` is the item the top bar's bell opened; the page stays mounted
+    // across navigations, so a later one selects its item too.
+    const requestedId = useSearchParams().get("item")
+    const [selectedId, setSelectedId] = useState<string | null>(requestedId ?? INBOX_FIXTURE_ITEMS[0]?.id ?? null)
+    const [lastRequestedId, setLastRequestedId] = useState(requestedId)
+    if (requestedId !== lastRequestedId) {
+        setLastRequestedId(requestedId)
+        if (requestedId) setSelectedId(requestedId)
+    }
     const [filters, setFilters] = useState<InboxFilters>({ types: [], clients: [] })
-    const [inboxItems, setInboxItems] = useState<InboxItem[]>(MOCK_INBOX_ITEMS)
+    const inboxItems = useInboxItems()
 
     const availableClients = useMemo(
         () =>
@@ -179,13 +82,8 @@ export function InboxPage() {
         return inboxItems.find((item) => item.id === selectedId) ?? null
     }, [selectedId, inboxItems])
 
-    const markItemAsRead = (id: string) => {
-        setInboxItems((prev) => prev.map((item) => (item.id === id ? { ...item, unread: false } : item)))
-    }
-
-    const markAllAsRead = () => {
-        setInboxItems((prev) => prev.map((item) => (item.unread ? { ...item, unread: false } : item)))
-    }
+    const markItemAsRead = markInboxItemRead
+    const markAllAsRead = markAllInboxRead
 
     return (
         <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
@@ -266,7 +164,7 @@ export function InboxPage() {
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
                                             <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px] font-medium">
-                                                {getTypeLabel(item.type)}
+                                                {inboxTypeLabel(item.type)}
                                             </Badge>
                                             {item.client && (
                                                 <span className="text-[10px] text-muted-foreground truncate">

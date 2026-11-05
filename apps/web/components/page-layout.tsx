@@ -1,13 +1,15 @@
 import type { ReactNode } from "react"
 
+import { NotificationsMenu } from "@/components/top-bar/notifications-menu"
+import { TopAccountMenu } from "@/components/top-bar/top-account-menu"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
 /**
  * The bar at the top of every page: the sidebar toggle and the page's title
- * (its breadcrumbs, badges and subtitle) on the left. The right side is kept
- * for the app-wide items — notifications and the account menu — so a page
- * never puts its own buttons here: they go in its content, in `PageActions`.
+ * (its breadcrumbs, badges and subtitle) on the left, the app-wide items —
+ * the notifications bell and the account menu — on the right. A page never
+ * puts its own buttons here: they go in its content, in `PageActions`.
  */
 export function PageTopBar({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -18,6 +20,10 @@ export function PageTopBar({ children, className }: { children: ReactNode; class
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <SidebarTrigger className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-accent" />
         <div className="min-w-0 flex-1">{children}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <NotificationsMenu />
+        <TopAccountMenu />
       </div>
     </div>
   )
