@@ -1,40 +1,31 @@
 // Vehicle maintenance through the API (O20 of #290): a plan created on a
 // vehicle and read with where it stands — by its date on the project's day,
-// and by the odometer and the engine hours a driver's pre-trip check last
-// read — patched under the rule over the merged row, and retired; a
+// and by its last service's odometer and engine hours — patched under the
+// rule over the merged row, and retired; a
 // Maintenance Order of a plan opened under its name and completed, which
 // moves the plan's last service; a one-off order cancelled; and the refusals.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { CommandOutcomeRow, DriverCommandBatchOutcome } from "@waste/contracts/driver-commands"
 import { MaintenanceOrder, MaintenancePlan, NAME_THE_ORDER } from "@waste/contracts/maintenance"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
-import { createJobSender } from "@waste/db/jobs"
-import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { AN_INTERVAL, KM_NEEDS_A_READING } from "@waste/domain/resources/maintenance"
-import { FakeProvider } from "@waste/routing/fake"
 import { Hono } from "hono"
 
 import type { createApp } from "../app"
 import { authenticate } from "../auth/principal"
 import { errorHandler } from "../problem"
-import { driverDoorRoutes } from "../routes/driver"
 import { alreadyClosed, maintenanceRoutes, NEEDS_THE_ODOMETER, NOT_A_PLAN_OF_THE_VEHICLE, NOT_A_VEHICLE_HERE, NOT_AHEAD } from "../routes/maintenance"
-import { preTripRoutes } from "../routes/pre-trip-checks"
-import { routeRoutes } from "../routes/routes"
 import { callingAs, type Call } from "./calls"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures } from "./execution-fixtures"
+import { databaseUnderTest } from "./database"
+import { FIXTURE_DAY } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys } from "./tokens"
 
 const database = databaseUnderTest()
-/** The owner sweeps the pre-trip checks this suite appends, which `wms_api` may not delete. */
-const owner = ownerUnderTest()
 
 const PlanPage = Page(MaintenancePlan)
 const OrderPage = Page(MaintenanceOrder)
@@ -45,40 +36,30 @@ const NOW = new Date(`${FIXTURE_DAY}T14:00:00Z`)
 let tick = Date.now()
 const mint = (): string => testId((tick += 1))
 
-describe("vehicle maintenance", { skip: database.skip || owner.skip }, () => {
+describe("vehicle maintenance", { skip: database.skip }, () => {
   let pool: Database
-  let ownerPool: Database
   let a: Tenant
   let fleet: FleetFixtures
-  let fixtures: DriverFixtures
   let olivia: Call
   let viewer: Call
-  let mads: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 6 })
-    ownerPool = createDb(owner.url, { max: 1 })
     const keys = await signingKeys()
     a = await seedTenant(pool)
     const planning = await seedPlanning(pool, a)
     fleet = await seedFleet(pool, a, planning)
-    fixtures = await seedDriverFixtures(pool, a, fleet)
     const guard = authenticate({ pool, verifier: keys.verifier })
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", driverDoorRoutes(guard, { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
-    app.route("/", routeRoutes(guard, { now: () => NOW, routing: new FakeProvider(), jobs: createJobSender(pool) }))
-    app.route("/", preTripRoutes(guard, { now: () => NOW }))
     app.route("/", maintenanceRoutes(guard, { now: () => NOW }))
     const asApp = app as unknown as ReturnType<typeof createApp>
     olivia = callingAs(asApp, keys, a.users.olivia, a.companyId)
     viewer = callingAs(asApp, keys, a.users.viewer, a.companyId)
-    mads = callingAs(asApp, keys, fixtures.accounts.mads, a.companyId)
   })
   after(async () => {
-    if (a) await dropTenant(pool, a.companyId, ownerPool)
+    if (a) await dropTenant(pool, a.companyId)
     await pool?.close()
-    await ownerPool?.close()
   })
 
   const createPlan = async (body: Record<string, unknown>): Promise<MaintenancePlan> => {
@@ -96,19 +77,7 @@ describe("vehicle maintenance", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
     return MaintenanceOrder.parse(await response.json())
   }
-  /** A driver's pre-trip check of the vehicle reading the odometer and the engine hours, on a route of the fixture day. */
-  const checkReads = async (vehicleId: string, odometerKm: number, engineHours: number): Promise<CommandOutcomeRow> => {
-    const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
-    const kind: DriverCommandKind = "pre-trip-check"
-    const command = { id: mint(), kind, routeId: route.id, occurredAt: `${FIXTURE_DAY}T06:15:00.000Z`, deviceId: "device-mads-01", body: { vehicleId, items: [], odometerKm, engineHours } }
-    const response = await mads("/driver/commands", { method: "POST", body: { commands: [command] } })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    const [outcome] = DriverCommandBatchOutcome.parse(await response.json()).outcomes
-    assert.equal(outcome.outcome, "applied", JSON.stringify(outcome.problem))
-    return outcome
-  }
-
-  test("a plan is read with where it stands: by its date on the project's day, and by the latest reading of a pre-trip check over the last service's", async () => {
+  test("a plan is read with where it stands: by its date on the project's day, and by its last service's readings", async () => {
     const annual = await createPlan({ vehicleId: fleet.vehicles.wh25.id, name: "Annual service", intervalDays: 365, lastDoneOn: "2025-10-12" })
     assert.equal(annual.projectId, a.projects.copenhagen.id)
     assert.equal(annual.status, "active")
@@ -116,17 +85,15 @@ describe("vehicle maintenance", { skip: database.skip || owner.skip }, () => {
 
     const brakes = await createPlan({ vehicleId: fleet.vehicles.wh24.id, name: "Brake inspection", intervalKm: 20_000, intervalHours: 1_000, lastDoneOn: "2026-06-01", lastDoneKm: 170_000, lastDoneHours: 5_500 })
     assert.equal(brakes.due.state, "ok")
-    assert.equal(brakes.due.odometerKm, 170_000, "nothing read since: the service's own reading")
-    await checkReads(fleet.vehicles.wh24.id, 189_200, 6_120)
     const read = await readPlan(brakes.id)
-    assert.deepEqual(read.due, { state: "due-soon", nextDueOn: null, nextDueKm: 190_000, nextDueHours: 6_500, odometerKm: 189_200, engineHours: 6_120 })
+    assert.deepEqual(read.due, { state: "ok", nextDueOn: null, nextDueKm: 190_000, nextDueHours: 6_500, odometerKm: 170_000, engineHours: 5_500 }, "the service's own readings")
 
     const listed = PlanPage.parse(await (await olivia(`/maintenance-plans?vehicleId=${fleet.vehicles.wh24.id}`)).json()).items
     assert.deepEqual(
       listed.map((plan) => plan.id),
       [brakes.id],
     )
-    assert.equal(listed[0].due.state, "due-soon")
+    assert.equal(listed[0].due.state, "ok")
   })
 
   test("a create is held to the rule: an interval, the reading a distance interval counts from, and a vehicle of the caller's projects", async () => {
@@ -187,7 +154,7 @@ describe("vehicle maintenance", { skip: database.skip || owner.skip }, () => {
   test("a one-off order needs a title, is cancelled with why, and leaves no plan moved; the list narrows by vehicle and status", async () => {
     const untitled = await olivia("/maintenance-orders", { method: "POST", body: { vehicleId: fleet.vehicles.trailer.id } })
     assert.deepEqual((await readProblem(untitled)).errors, [{ path: "title", message: NAME_THE_ORDER }])
-    const order = await openOrder({ vehicleId: fleet.vehicles.trailer.id, title: "Replace the left tail light", note: "From the pre-trip defect" })
+    const order = await openOrder({ vehicleId: fleet.vehicles.trailer.id, title: "Replace the left tail light", note: "Seen by the driver at the depot" })
     assert.equal(order.planId, null)
     const cancelled = await olivia(`/maintenance-orders/${order.id}/cancel`, { method: "POST", body: { note: "Done under warranty" } })
     assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()))

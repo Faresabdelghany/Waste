@@ -34,7 +34,6 @@ export const DEFAULT_TICKET_TYPE_NAMES: Readonly<Record<TicketKind, string>> = {
   "reported-problem": "Reported problem",
   "rejected-command": "Rejected command",
   "internal-task": "Internal task",
-  "vehicle-defect": "Vehicle defect",
   other: "Other",
 }
 

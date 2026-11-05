@@ -20,13 +20,14 @@ import { auditTrail, INSPECTIONS_AUDITED } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import { withPreTripCheck } from "./pre-trip-as-of"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The receipt's kinds as this file spelled them: today's less `record-volume`, which 0094 added since (M11 of #293). */
-const KINDS_AS_OF_0092 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-volume")
+/** The receipt's kinds as this file spelled them: today's less `record-volume`, which 0094 added since (M11 of #293), and with `pre-trip-check`, which the pre-trip inspection's removal took since. */
+const KINDS_AS_OF_0092 = withPreTripCheck(DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-volume"))
 
 /** What drizzle-kit wrote into the tables already applied: the receipt's kind respelt, and the stop's fill estimate with its check. */
 const ALTERED = [

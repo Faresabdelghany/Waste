@@ -44,8 +44,7 @@
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
-// vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
-// vehicle's walk-round before or during the day (O13 of #290), and
+// vehicle was while the session ran (O8 of #290), and
 // `record-fill`, how full a stop's container was (M23 of #293), and
 // `record-volume`, the litres a tank was emptied of (M11 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
@@ -89,7 +88,7 @@ export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-fill", "record-volume"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "record-fill", "record-volume"] as const
 /** How full a container was when the driver emptied it (M23 of #293): the driver's estimate by eye, a quarter at a time, and past full. What right-sizing reads. */
 export const FILL_LEVELS = ["empty", "quarter", "half", "three-quarters", "full", "overflowing"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */

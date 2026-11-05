@@ -30,13 +30,13 @@ const IntervalDays = PositiveInt.max(MAINTENANCE_INTERVAL_MAX.days)
 const IntervalKm = PositiveInt.max(MAINTENANCE_INTERVAL_MAX.km)
 const IntervalHours = PositiveInt.max(MAINTENANCE_INTERVAL_MAX.hours)
 
-/** Where a plan stands on the project's day, against the vehicle's latest readings. */
+/** Where a plan stands on the project's day, against the readings of its last service. */
 export const MaintenanceDue = z.object({
   state: MaintenanceDueState,
   nextDueOn: IsoDate.nullable(),
   nextDueKm: NonNegativeInt.nullable(),
   nextDueHours: NonNegativeInt.nullable(),
-  /** The readings it was judged on: the latest a pre-trip check read, else the last service's. */
+  /** The readings it was judged on: the last service's, since nothing reads a vehicle's odometer or engine hours between services. */
   odometerKm: NonNegativeInt.nullable(),
   engineHours: NonNegativeInt.nullable(),
 })

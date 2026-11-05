@@ -4,8 +4,9 @@
 // which has to begin with exactly those statements and carry below them the
 // table's fence and trigger and its audit trail (`TICKET_SLA_AUDITED`), since
 // the office's edits of it are history. Migration 0075 (O13 of #290) grew
-// the kinds by `vehicle-defect`, so 0026 is held to the list as it was then
-// and pre-trip-rendering.test.ts pins the replacement. No database.
+// the kinds by `vehicle-defect` and the pre-trip inspection's removal took it
+// again, so today's list is 0026's; pre-trip-rendering.test.ts and
+// pre-trip-removal-rendering.test.ts pin the two replacements. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -25,9 +26,6 @@ import { statementsFor } from "./specimen"
 const MIGRATION = "0026_ticket_sla.sql"
 
 const HOURS = `${ref("ticket_sla", "hours")} between 1 and ${TICKET_SLA_HOURS_MAX}`
-
-/** The kinds as of 0026: today's less the one 0075 added. */
-const KINDS_AS_OF_0026 = TICKET_KINDS.filter((kind) => kind !== "vehicle-defect")
 
 /** What drizzle-kit writes for the table, with its kind's check over the list given. */
 const expectedWith = (kinds: readonly string[]) => [
@@ -56,7 +54,7 @@ describe("the SLA as drizzle-kit writes it", () => {
   })
 
   test("migration 0026 is exactly that, then the table's fence and trigger, then its audit trail", async () => {
-    assert.deepEqual(await fileStatements(), [...expectedWith(KINDS_AS_OF_0026), ...handWrittenStatements(ticketSla), ...TICKET_SLA_AUDITED.flatMap(auditTrail)].map(normalised))
+    assert.deepEqual(await fileStatements(), [...expected, ...handWrittenStatements(ticketSla), ...TICKET_SLA_AUDITED.flatMap(auditTrail)].map(normalised))
   })
 })
 

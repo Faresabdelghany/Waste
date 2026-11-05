@@ -1,4 +1,4 @@
-// The Driver App's commands (Issue #145, O1, O2, O8 and O13 of #290, M11 and M23 of #293): the door's eighteen kinds, which
+// The Driver App's commands (Issue #145, O1, O2 and O8 of #290, M11 and M23 of #293): the door's seventeen kinds, which
 // of them carry a position or name an object, and the ids the browser mints for them — UUIDv7
 // through @waste/domain/ids over the browser's clock and randomness, each
 // after the last so the queue's key order is the order of the taps.

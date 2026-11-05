@@ -137,7 +137,7 @@ const CONFIGURATION_COUNTS = {
   fuelEmissionFactors: 3,
   vehicleTypeConsumptions: 4,
   decommissionReasons: 8,
-  ticketTypes: 12,
+  ticketTypes: 11,
   holidayLists: 2,
   holidayListHolidays: 31,
 }

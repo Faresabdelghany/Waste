@@ -29,7 +29,6 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { fieldInspection, fieldInspectionPhoto, rightSizingProposal } from "@waste/db/schema/inspections"
-import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scale-house"
 import { tankInspection, tankInstallation } from "@waste/db/schema/tanks"
@@ -380,9 +379,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A weight charge names the Unload it charges a share of (O28 of #290), so the events, and the settlement lines that name them, go before the ledger.
     await owner.db.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
     await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
-    // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
-    await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
-    await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
     // A weighbridge's ticket names the Unload it was written as (O27 of #290): it goes first.
     await owner.db.delete(weighbridgeTicket).where(eq(weighbridgeTicket.companyId, companyId))
     await owner.db.delete(fillReading).where(eq(fillReading.companyId, companyId))
@@ -496,7 +492,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
     await tx.delete(vehicleTypeConsumption).where(eq(vehicleTypeConsumption.companyId, companyId))
-    await tx.delete(preTripChecklistItem).where(eq(preTripChecklistItem.companyId, companyId))
     await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))

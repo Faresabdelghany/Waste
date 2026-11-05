@@ -54,7 +54,6 @@ import * as planningModule from "../planning"
 import * as planningAreasModule from "../planning-areas"
 import * as plansModule from "../plans"
 import * as positionsModule from "../positions"
-import * as preTripModule from "../pre-trip"
 import * as tanksModule from "../tanks"
 import * as priceListsModule from "../price-lists"
 import * as problemModule from "../problem"
@@ -156,7 +155,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "planning-areas": planningAreasModule,
   "plans": plansModule,
   "positions": positionsModule,
-  "pre-trip": preTripModule,
   tanks: tanksModule,
   "price-lists": priceListsModule,
   "problem": problemModule,

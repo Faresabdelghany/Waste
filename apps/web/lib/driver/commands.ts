@@ -1,5 +1,5 @@
-// The Driver App's commands (Issue #145, decided on #125; O1, O2, O8 and O13
-// of #290, M11 and M23 of #293): the driver door's eighteen kinds, each an
+// The Driver App's commands (Issue #145, decided on #125; O1, O2 and O8
+// of #290, M11 and M23 of #293): the driver door's seventeen kinds, each an
 // envelope of `@waste/contracts/driver-commands`, imported as a type only, so
 // no zod reaches the browser (CLAUDE.md, contracts). The door parses each
 // body against its kind and answers a shape mistake as that command's
@@ -34,7 +34,6 @@ export const PILOT_COMMAND_KINDS = [
   "add-photo",
   "add-signature",
   "record-positions",
-  "pre-trip-check",
   "record-fill",
   "record-volume",
 ] as const

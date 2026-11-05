@@ -1,6 +1,6 @@
 // A vehicle's maintenance on the Pilot (O20 of #290): the reads by vehicle, the
 // most due plan and the open order first; the five actions' requests through
-// the real client, which the vehicle's adapter offers beside its defects, each
+// the real client, which the vehicle's adapter offers beside its periods out of use, each
 // body one the contracts take; the local refusals in the domain's words; and
 // the lines a plan and an order read as.
 import assert from "node:assert/strict"
@@ -81,7 +81,7 @@ describe("the reads", () => {
 describe("the actions", () => {
   const action = (name: string) => VEHICLE_MAINTENANCE_ACTIONS[name]
 
-  test("are the vehicle's, beside its defects", () => {
+  test("are the vehicle's, beside its periods out of use", () => {
     for (const name of [ADD_PLAN, RETIRE_PLAN, OPEN_ORDER, COMPLETE_ORDER, CANCEL_ORDER]) assert.ok(vehicleAdapter.actions?.[name] !== undefined, name)
   })
 
