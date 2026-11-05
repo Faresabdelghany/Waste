@@ -337,13 +337,24 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   }
 }
 
-/** The ticket type a form names (#545 of #544), with its record for its fields: undefined for blank or the picker's None, a refusal for a type the API does not hold. */
-function ticketTypeOf(record: BusinessRecord, context: MappingContext): { serverId: string; record: BusinessRecord } | undefined | LocalRefusal {
+/**
+ * The ticket type a record names (#545 of #544), by server id: undefined for
+ * blank or the picker's None, a refusal for a type the API does not hold. A
+ * type of a role that reads no types is named by the id its web id carries, as
+ * a team's is, so a ticket's patch never waits on the types being read.
+ */
+function ticketTypeIdOf(record: BusinessRecord, context: MappingContext): string | undefined | LocalRefusal {
   const webId = typed(record, "ticketTypeId")
   if (webId === undefined || webId === NO_ONE) return undefined
-  const serverId = referencedServerId(webId, TICKET_TYPE_PREFIX, context, { owns: isTicketTypeRecord })
-  const type = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
-  return serverId === undefined || type === undefined ? refusal("ticketTypeId", "Pick a ticket type the API holds") : { serverId, record: type }
+  return referencedServerId(webId, TICKET_TYPE_PREFIX, context, { owns: isTicketTypeRecord }) ?? refusal("ticketTypeId", "Pick a ticket type the API holds")
+}
+
+/** The ticket type a create names, with its record for the fields its form asked for: a type is picked from the loaded ones, so a create names one the store holds. */
+function ticketTypeOf(record: BusinessRecord, context: MappingContext): { serverId: string; record: BusinessRecord } | undefined | LocalRefusal {
+  const serverId = ticketTypeIdOf(record, context)
+  if (serverId === undefined || isLocalRefusal(serverId)) return serverId
+  const type = context.resolve.byServerId(serverId)
+  return type === undefined ? refusal("ticketTypeId", "Pick a ticket type the API holds") : { serverId, record: type }
 }
 
 /** The values a ticket's record carries (#545 of #544): the wire's object, kept as JSON. */
@@ -397,16 +408,17 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
   if (isLocalRefusal(due)) return due
   const team = teamOf(typed(after, "teamId"), context)
   if (isLocalRefusal(team)) return team
-  const type = ticketTypeOf(after, context)
+  // The type by the id its web id carries: the patch names no fields of it, so it never waits on the types being read.
+  const type = ticketTypeIdOf(after, context)
   if (isLocalRefusal(type)) return type
   const fields = patchOf(before, after, (record) => {
-    const named = ticketTypeOf(record, context)
+    const named = ticketTypeIdOf(record, context)
     return {
       subject: typed(record, "subject"),
       description: typed(record, "description"),
       kind: typed(record, "kind") === undefined ? undefined : statusToken(typed(record, "kind") as string),
       // Moved to another type, its kind following (#545 of #544); refused above where the type is not one the API holds.
-      ticketTypeId: named === undefined || isLocalRefusal(named) ? undefined : named.serverId,
+      ticketTypeId: named === undefined || isLocalRefusal(named) ? undefined : named,
       priority: typed(record, "priority") === undefined ? undefined : statusToken(typed(record, "priority") as string),
       // A cleared due is null, which clears it; the instant is compared, not the spelling.
       dueAt: typed(record, "dueAt") === undefined ? null : instantOn(typed(record, "dueAt") as string, timezone),
