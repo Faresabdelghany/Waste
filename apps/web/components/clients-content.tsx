@@ -1,6 +1,6 @@
 "use client"
 
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -215,18 +215,9 @@ export function ClientsContent() {
   return (
     <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <Breadcrumbs items={[{ label: "Customers" }]} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setIsWizardOpen(true)}>
-              <Plus className="h-4 w-4" weight="bold" />
-              New customer
-            </Button>
-          </div>
-        </div>
+        <PageTopBar>
+          <Breadcrumbs items={[{ label: "Customers" }]} />
+        </PageTopBar>
 
         <div className="flex items-center justify-between px-4 pb-3 pt-3 gap-3 flex-wrap">
           <div className="flex-1 min-w-[260px]">
@@ -272,6 +263,12 @@ export function ClientsContent() {
                 className="h-9 rounded-lg bg-muted/50 text-sm placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary/20 border-border border shadow-none pl-9"
               />
             </div>
+            <PageActions>
+              <Button size="sm" onClick={() => setIsWizardOpen(true)}>
+                <Plus className="h-4 w-4" weight="bold" />
+                New customer
+              </Button>
+            </PageActions>
           </div>
         </div>
       </header>

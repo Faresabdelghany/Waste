@@ -36,7 +36,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageTopBar } from "@/components/page-layout"
 import { ReportCard, ReportNotice } from "@/components/insight/report-card"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
@@ -202,12 +202,11 @@ export function ImportsOnApi() {
 
   return (
     <div className="m-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sidebar bg-background" data-testid="imports-on-api">
-      <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-border/70 px-3 sm:px-4">
-        <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
-        <div className="min-w-0">
+      <header>
+        <PageTopBar>
           <Breadcrumbs items={[{ label: "Dashboard", href: "/performance" }, { label: "Imports" }]} />
           <p className="hidden text-[11px] text-muted-foreground sm:block">Customers, properties, containers and agreements from a CSV file, previewed before anything is written</p>
-        </div>
+        </PageTopBar>
       </header>
 
       <main className="min-w-0 flex-1 space-y-4 overflow-y-auto p-4">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -51,9 +51,7 @@ export function ClientDetailsPage({ clientId }: ClientDetailsPageProps) {
 
   return (
     <div className="flex flex-1 flex-col min-w-0 m-2 border border-border rounded-lg">
-      <div className="flex items-center justify-between gap-4 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
+      <PageTopBar className="border-b-0 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <Avatar className="h-11 w-11">
               <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
@@ -76,23 +74,21 @@ export function ClientDetailsPage({ clientId }: ClientDetailsPageProps) {
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setIsWizardOpen(true)}>
-            Edit client
-          </Button>
-          <Button size="sm">
-            New project
-          </Button>
-        </div>
-      </div>
+      </PageTopBar>
 
       <div className="flex flex-1 flex-col bg-background px-2 my-0 rounded-b-lg min-w-0 border-t">
         <div className="px-4">
           <div className="mx-auto w-full max-w-7xl">
             <div className="mt-0 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,320px)]">
               <div className="space-y-6 pt-4">
+                <PageActions>
+                  <Button variant="ghost" size="sm" onClick={() => setIsWizardOpen(true)}>
+                    Edit client
+                  </Button>
+                  <Button size="sm">
+                    New project
+                  </Button>
+                </PageActions>
                 <Tabs defaultValue="overview">
                   <TabsList className="w-full gap-6">
                     <TabsTrigger value="overview">Overview</TabsTrigger>

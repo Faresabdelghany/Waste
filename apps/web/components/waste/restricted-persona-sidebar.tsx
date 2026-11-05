@@ -2,35 +2,25 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useMemo, type ComponentType } from "react"
 import {
-  CaretRight,
   ClipboardText,
   ChartBar,
   HouseLine,
   MagnifyingGlass,
   Path,
   ShieldCheck,
-  SignOut,
   Ticket,
   Truck,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr"
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -41,7 +31,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProgressCircle } from "@/components/progress-circle"
-import { AccountMenu } from "@/components/auth/account-menu"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
 import { useProviderWorkspace } from "@/components/waste/provider-account"
@@ -117,7 +106,6 @@ const PROVIDER_LANDING = "/service-provider-workspace"
  */
 function ServiceProviderManagerSidebar() {
   const pathname = usePathname()
-  const router = useRouter()
   const { setOpenMobile } = useSidebar()
   const apiConfigured = useApiConfigured()
   const { starredRouteIds } = useActiveRoutes("service-provider")
@@ -228,41 +216,6 @@ function ServiceProviderManagerSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      <SidebarFooter className="border-t border-sidebar-border p-2">
-        {apiConfigured ? (
-          <AccountMenu />
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent"
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-accent-foreground">
-                    LM
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-1 flex-col">
-                  <span className="text-sm font-medium">Lars Mikkelsen</span>
-                  <span className="text-xs text-sidebar-foreground/60">NordRen ApS · Manager</span>
-                </div>
-                <CaretRight className="h-4 w-4 text-sidebar-foreground/55" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" className="w-40">
-              <DropdownMenuItem
-                className="cursor-pointer text-destructive focus:text-destructive"
-                onSelect={() => router.push("/login")}
-              >
-                <SignOut className="h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </SidebarFooter>
     </Sidebar>
   )
 }
@@ -274,8 +227,6 @@ type RestrictedPersonaSidebarProps = {
 export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarProps) {
   const { setOpenMobile } = useSidebar()
   const pathname = usePathname()
-  const router = useRouter()
-  const apiConfigured = useApiConfigured()
 
   if (persona === "service-provider") return <ServiceProviderManagerSidebar />
 
@@ -353,41 +304,6 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
           </SidebarGroup>
         )}
       </SidebarContent>
-
-      <SidebarFooter className="border-t border-sidebar-border p-3">
-        {apiConfigured ? (
-          <AccountMenu className="gap-3 rounded-lg p-2" />
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full cursor-pointer items-center gap-3 rounded-lg p-2 text-left hover:bg-sidebar-accent"
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-accent-foreground">
-                    {definition.initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{definition.identityName}</p>
-                  <p className="truncate text-xs text-sidebar-foreground/60">{definition.identityDetail}</p>
-                </div>
-                <CaretRight className="h-4 w-4 shrink-0 text-sidebar-foreground/55" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" className="w-40">
-              <DropdownMenuItem
-                className="cursor-pointer text-destructive focus:text-destructive"
-                onSelect={() => router.push("/login")}
-              >
-                <SignOut className="h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </SidebarFooter>
     </Sidebar>
   )
 }
