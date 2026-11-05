@@ -5,11 +5,10 @@ import type { ReactNode } from "react"
 import { PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
-import { Badge } from "@/components/ui/badge"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { RouteSurfacePage } from "@/components/waste/commands/route-surfaces"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
-import { cn } from "@/lib/utils"
 
 /**
  * A route's own page on the Pilot: its name and status in the top bar, its
@@ -38,9 +37,9 @@ export function RouteDetailsOnApi({
         <PageTopBar>
           <div className="flex flex-wrap items-center gap-2">
             <Breadcrumbs items={[{ label: module.label, onClick: onBack }, { label: record.name }]} />
-            <Badge variant="outline" className={cn("rounded-full text-[11px]", statusClasses(record.status))}>
+            <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
-            </Badge>
+            </StatusBadge>
           </div>
           {record.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.description}</p>}
         </PageTopBar>
