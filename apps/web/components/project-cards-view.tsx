@@ -1,6 +1,5 @@
 "use client"
 
-import { cn } from "@/lib/utils"
 import type { Project } from "@/lib/data/projects"
 import { ProjectCard } from "@/components/project-card"
 import { Plus, FolderOpen } from "@phosphor-icons/react/dist/ssr"
@@ -32,8 +31,8 @@ export function ProjectCardsView({ projects, loading = false, onCreateProject }:
           <h3 className="mb-2 text-lg font-semibold text-foreground">No routes yet</h3>
           <p className="mb-6 text-sm text-muted-foreground">Create your first route to get started</p>
           <Button
-            variant="ghost"
-            className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal font-normal h-auto shrink has-[>svg]:px-4 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-accent transition-colors cursor-pointer dark:hover:bg-accent")}
+            variant="unstyled"
+            className="rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
             onClick={onCreateProject}
           >
             <Plus className="mr-2 inline size-4" />
@@ -45,13 +44,13 @@ export function ProjectCardsView({ projects, loading = false, onCreateProject }:
           {projects.map((p) => (
             <ProjectCard key={p.id} project={p} />
           ))}
-          <button
+          <Button variant="unstyled"
             className="rounded-2xl border border-dashed border-border/60 bg-background p-6 text-center text-sm text-muted-foreground hover:border-solid hover:border-border/80 hover:text-foreground transition-colors min-h-[180px] flex flex-col items-center justify-center cursor-pointer"
             onClick={onCreateProject}
           >
             <Plus className="mb-2 h-5 w-5" />
             Create new route
-          </button>
+          </Button>
         </div>
       )}
     </div>

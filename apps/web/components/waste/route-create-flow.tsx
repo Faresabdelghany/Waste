@@ -306,7 +306,7 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
         {serviceProviders.map((serviceProvider) => {
           const isSelected = data.serviceProviderId === serviceProvider.id
           return (
-            <button
+            <Button variant="unstyled"
               key={serviceProvider.id}
               type="button"
               onClick={() => updateData({ serviceProviderId: serviceProvider.id })}
@@ -331,7 +331,7 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
               >
                 {isSelected && <Check className="h-4 w-4 text-primary-foreground" />}
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>

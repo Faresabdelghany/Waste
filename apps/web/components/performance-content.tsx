@@ -141,9 +141,9 @@ function MetricCard({ title, value, description, icon, tooltip, tone = "neutral"
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="ghost"
+                variant="unstyled"
                 type="button"
-                className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground")}
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                 aria-label={`Info about ${title}`}
               >
                 <Info className="size-3.5" />
@@ -240,11 +240,11 @@ function PerformanceFilterPopover({
           <div className="border-r border-border/40 p-3">
             <div className="space-y-1">
               <Button
-                variant="ghost"
+                variant="unstyled"
                 type="button"
                 onClick={() => setActive("project")}
-                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
                   active === "project" && "bg-accent",
                 )}
               >
@@ -252,11 +252,11 @@ function PerformanceFilterPopover({
                 <span className="text-xs text-muted-foreground">{projects.length}</span>
               </Button>
               <Button
-                variant="ghost"
+                variant="unstyled"
                 type="button"
                 onClick={() => setActive("member")}
-                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
                   active === "member" && "bg-accent",
                 )}
               >
@@ -271,12 +271,12 @@ function PerformanceFilterPopover({
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route</p>
                 <div className="mt-2 space-y-1">
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
                     onClick={() => setTempProjectId("all")}
-                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                    className={cn(
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempProjectId === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
+                      tempProjectId === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
                     )}
                   >
                     <span>All routes</span>
@@ -284,15 +284,15 @@ function PerformanceFilterPopover({
                   </Button>
                   {projects.map((project) => (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={project.id}
                       type="button"
                       onClick={() => setTempProjectId(project.id)}
-                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                      className={cn(
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
                         tempProjectId === project.id
-                          ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground"
-                          : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:bg-accent",
                       )}
                     >
                       <span className="truncate">{project.name}</span>
@@ -307,12 +307,12 @@ function PerformanceFilterPopover({
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Member</p>
                 <div className="mt-2 space-y-1">
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
                     onClick={() => setTempMember("all")}
-                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                    className={cn(
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempMember === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
+                      tempMember === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
                     )}
                   >
                     <span>All members</span>
@@ -320,13 +320,13 @@ function PerformanceFilterPopover({
                   </Button>
                   {availableMembers.map((member) => (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={member}
                       type="button"
                       onClick={() => setTempMember(member)}
-                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                      className={cn(
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                        tempMember === member ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
+                        tempMember === member ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
                       )}
                     >
                       <span className="truncate">{member}</span>

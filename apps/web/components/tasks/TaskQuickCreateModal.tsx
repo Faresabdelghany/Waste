@@ -1,6 +1,5 @@
 'use client'
 
-import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import React, { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
@@ -295,8 +294,8 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             )}
             trigger={
               <Button
-                variant="ghost"
-                className={cn("justify-start whitespace-normal font-normal cursor-default shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-7 items-center px-2 py-1 rounded-lg border border-background hover:border-primary/50 transition-colors text-xs disabled:opacity-60 hover:bg-background dark:hover:bg-background")}
+                variant="unstyled"
+                className="bg-background flex gap-2 h-7 items-center px-2 py-1 rounded-lg border border-background hover:border-primary/50 transition-colors text-xs disabled:opacity-60"
               >
                 <Folder className="size-4 text-muted-foreground" />
                 <span className="truncate max-w-[160px] font-medium text-foreground">
@@ -323,8 +322,8 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
                 )}
                 trigger={
                   <Button
-                    variant="ghost"
-                    className={cn("justify-start whitespace-normal font-normal cursor-default shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-7 items-center px-2 py-1 rounded-lg border border-background hover:border-primary/50 transition-colors text-xs disabled:opacity-60 hover:bg-background dark:hover:bg-background")}
+                    variant="unstyled"
+                    className="bg-background flex gap-2 h-7 items-center px-2 py-1 rounded-lg border border-background hover:border-primary/50 transition-colors text-xs disabled:opacity-60"
                   >
                     <Rows className="size-4 text-muted-foreground" />
                     <span className="truncate max-w-[160px] font-medium text-foreground">
@@ -389,7 +388,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors hover:bg-muted dark:hover:bg-muted")}>
+            <Button variant="unstyled" className="bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
               <div className="size-4 rounded-full bg-background flex items-center justify-center text-[10px] font-medium">
                 {assignee?.name.charAt(0) ?? '?'}
               </div>
@@ -405,7 +404,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
           date={startDate}
           onSelect={setStartDate}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors hover:bg-muted dark:hover:bg-muted")}>
+            <Button variant="unstyled" className="bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
               <CalendarBlank className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {startDate ? `Start: ${format(startDate, 'dd/MM/yyyy')}` : 'Start date'}
@@ -426,7 +425,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
+            <Button variant="unstyled" className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <UserCircle className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {status.label}
@@ -440,7 +439,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
           date={targetDate}
           onSelect={setTargetDate}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
+            <Button variant="unstyled" className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <CalendarBlank className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {targetDate ? format(targetDate, 'dd/MM/yyyy') : 'Target'}
@@ -461,7 +460,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
+            <Button variant="unstyled" className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <ChartBar className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {priority?.label ?? 'Priority'}
@@ -482,7 +481,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
+            <Button variant="unstyled" className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <TagIcon className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {selectedTag?.label ?? 'Tag'}
@@ -495,10 +494,10 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
       {/* Footer */}
       <div className="flex items-center justify-between mt-auto w-full pt-4 shrink-0">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-center size-10 rounded-lg hover:bg-muted transition-colors dark:hover:bg-muted")}>
+          <Button variant="unstyled" className="flex items-center justify-center size-10 rounded-lg hover:bg-muted transition-colors">
             <Paperclip className="size-4 text-muted-foreground" />
           </Button>
-          <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-center size-10 rounded-lg hover:bg-muted transition-colors dark:hover:bg-muted")}>
+          <Button variant="unstyled" className="flex items-center justify-center size-10 rounded-lg hover:bg-muted transition-colors">
             <Microphone className="size-4 text-muted-foreground" />
           </Button>
         </div>

@@ -46,7 +46,7 @@ export function ChipOverflow<K extends string = string>({
       {hidden.length > 0 && (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" className="justify-start gap-0 whitespace-normal font-normal shrink py-0 transition-none cursor-default flex h-8 items-center rounded-full border border-border/60 bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:text-muted-foreground dark:hover:bg-accent">
+            <Button variant="unstyled" className="flex h-8 items-center rounded-full border border-border/60 bg-background px-3 text-sm text-muted-foreground hover:bg-accent">
               +{hidden.length} more
             </Button>
           </PopoverTrigger>

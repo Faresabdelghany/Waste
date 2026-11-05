@@ -67,7 +67,7 @@ function ThemeChoice({
   ]
 
   return (
-    <button
+    <Button variant="unstyled"
       type="button"
       role="radio"
       aria-label={`Use ${preset.label} theme`}
@@ -104,7 +104,7 @@ function ThemeChoice({
           </span>
         )}
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -216,7 +216,7 @@ export function ThemeCustomizer() {
               />
             ))}
           </div>
-          <button
+          <Button variant="unstyled"
             type="button"
             aria-pressed={mounted && selection === "custom"}
             disabled={!mounted}
@@ -238,7 +238,7 @@ export function ThemeCustomizer() {
                 <Check className="h-3.5 w-3.5 text-primary" weight="bold" />
               )}
             </span>
-          </button>
+          </Button>
         </div>
 
         {selection === "custom" && mounted && (

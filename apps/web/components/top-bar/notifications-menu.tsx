@@ -45,7 +45,7 @@ export function NotificationsMenu() {
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <p className="text-sm font-medium">Notifications</p>
           {unread > 0 && (
-            <Button variant="ghost" type="button" className="inline-block whitespace-normal rounded-none font-normal shrink h-auto p-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent text-xs text-muted-foreground hover:text-foreground" onClick={markAllInboxRead}>
+            <Button variant="unstyled" type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={markAllInboxRead}>
               Mark all as read
             </Button>
           )}

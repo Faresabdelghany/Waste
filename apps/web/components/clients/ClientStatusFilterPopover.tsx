@@ -29,9 +29,9 @@ export function ClientStatusFilterPopover({ initialStatus }: ClientStatusFilterP
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
-                    className="whitespace-normal shrink h-auto has-[>svg]:px-3 flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-muted sm:w-auto sm:justify-start sm:gap-8 hover:text-foreground dark:hover:bg-muted"
+                    className="flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-muted sm:w-auto sm:justify-start sm:gap-8"
                 >
                     <span className="text-xs text-muted-foreground">Stage</span>
                     <span className="inline-flex items-center gap-2 rounded-full p-0 text-xs font-medium text-foreground">
@@ -46,16 +46,16 @@ export function ClientStatusFilterPopover({ initialStatus }: ClientStatusFilterP
                         const isActive = item.value === status
                         return (
                             <Button
-                                variant="ghost"
+                                variant="unstyled"
                                 key={item.value}
                                 type="button"
                                 onClick={() => {
                                     setStatus(item.value)
                                     setOpen(false)
                                 }}
-                                className={cn("gap-0 whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                                className={cn(
                                     "flex w-full items-center justify-between rounded-full px-3 py-1.5 text-sm transition-colors",
-                                    isActive ? "bg-muted hover:bg-muted dark:hover:bg-muted" : "hover:bg-muted/70 dark:hover:bg-muted/70",
+                                    isActive ? "bg-muted" : "hover:bg-muted/70",
                                 )}
                             >
                                 <ClientStatusBadge status={item.value} />

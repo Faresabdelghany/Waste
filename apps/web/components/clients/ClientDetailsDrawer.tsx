@@ -111,7 +111,8 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <button
+      <Button
+        variant="unstyled"
         type="button"
         aria-label="Close client details"
         className="flex-1 bg-background/40 backdrop-blur-sm"
@@ -192,9 +193,9 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
             ) : (
               <div className="relative flex-1">
                 <Button
-                  variant="ghost"
+                  variant="unstyled"
                   type="button"
-                  className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "absolute left-0 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer dark:hover:bg-accent")}
+                  className="absolute left-0 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer"
                   disabled={!canPrev}
                   onClick={() => {
                     if (!projectsRowRef.current || !canPrev) return
@@ -229,9 +230,9 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                   ))}
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="unstyled"
                   type="button"
-                  className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "absolute right-0 top-1/2 flex h-8 w-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer dark:hover:bg-accent")}
+                  className="absolute right-0 top-1/2 flex h-8 w-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer"
                   disabled={!canNext}
                   onClick={() => {
                     if (!projectsRowRef.current || !canNext) return
@@ -247,9 +248,9 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
             )}
 
             <Button
-              variant="ghost"
+              variant="unstyled"
               type="button"
-              className={cn("whitespace-normal font-normal transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted cursor-pointer dark:hover:bg-muted hover:text-muted-foreground")}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted cursor-pointer"
               onClick={() => setIsProjectWizardOpen(true)}
             >
               <Plus className="size-4" />
@@ -260,9 +261,9 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
           {client.notes && (
             <div className="space-y-2 pt-1">
               <Button
-                variant="ghost"
+                variant="unstyled"
                 type="button"
-                className={cn("gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex w-full items-center justify-between cursor-pointer hover:text-foreground")}
+                className="flex w-full items-center justify-between cursor-pointer hover:text-foreground"
                 onClick={() => setNotesOpen((open) => !open)}
               >
                 <p className="text-sm font-medium text-foreground">Notes</p>
@@ -285,9 +286,9 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
 
           <div className="space-y-3 pt-1">
             <Button
-              variant="ghost"
+              variant="unstyled"
               type="button"
-              className={cn("gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex w-full items-center justify-between cursor-pointer hover:text-foreground")}
+              className="flex w-full items-center justify-between cursor-pointer hover:text-foreground"
               onClick={() => setSharedOpen((open) => !open)}
             >
               <p className="text-sm font-medium text-foreground">Shared file</p>
