@@ -31,7 +31,7 @@ export function Stepper({ currentStep, steps, onStepClick, maxStepReached }: Ste
               className={cn(
                 "mr-3 flex size-5.5 items-center justify-center rounded-full border text-xs font-semibold transition-all",
                 isCompleted
-                  ? "border-teal-50 bg-teal-50 text-teal-700"
+                  ? "border-success/30 bg-success/10 text-success-foreground"
                   : isCurrent
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background text-muted-foreground"

@@ -34,13 +34,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowSquareOut, ArrowUp } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageActions } from "@/components/page-layout"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
-import { statusClasses } from "@/components/waste/business-record-views"
-import { cn } from "@/lib/utils"
+import { recordStatusTone } from "@/components/waste/business-record-views"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -708,9 +707,9 @@ function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layou
                           <TableCell className="font-medium">{stopName(pickup)}</TableCell>
                           <TableCell className="text-muted-foreground">{PICKUP_SERVICE_LABELS[pickup.service]}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("rounded-full text-[11px]", statusClasses(statusLabel(pickup.status)))}>
+                            <StatusBadge tone={recordStatusTone(statusLabel(pickup.status))} className="rounded-full text-[11px]">
                               {statusLabel(pickup.status)}
-                            </Badge>
+                            </StatusBadge>
                           </TableCell>
                           <TableCell className="text-muted-foreground">{stopNote(pickup)}</TableCell>
                           <TableCell className="pr-4 text-right">

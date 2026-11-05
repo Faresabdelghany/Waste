@@ -38,7 +38,7 @@ export function ConflictDialog({
             Resolve the listed issues before continuing
           </DialogDescription>
         </DialogHeader>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm text-amber-800">
+        <ul className="list-disc space-y-1.5 pl-5 text-sm text-warning-foreground">
           {issues.map((issue) => (
             <li key={issue.text}>{issue.text}</li>
           ))}

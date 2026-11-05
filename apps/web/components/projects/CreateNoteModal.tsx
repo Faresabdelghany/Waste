@@ -5,6 +5,7 @@ import { Paperclip, Microphone, UploadSimple, Tag, X } from "@phosphor-icons/rea
 
 import type { User } from "@/lib/data/project-details"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { QuickCreateModalLayout } from "@/components/QuickCreateModalLayout"
 import { ProjectDescriptionEditor } from "@/components/project-wizard/ProjectDescriptionEditor"
@@ -62,13 +63,13 @@ export function CreateNoteModal({
             <div className="flex items-center justify-between gap-2 w-full shrink-0 mt-1">
                 <div className="flex flex-col gap-2 flex-1">
                     <div className="flex gap-1 h-10 items-center w-full">
-                        <input
+                        <Input
                             id="note-create-title"
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="Note title"
-                            className="w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
+                            className="h-auto min-w-auto rounded-none shadow-none focus-visible:ring-0 dark:bg-transparent md:text-xl w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
                             autoComplete="off"
                         />
                     </div>

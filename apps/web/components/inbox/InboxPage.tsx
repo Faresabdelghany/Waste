@@ -177,7 +177,7 @@ export function InboxPage() {
                                                 </span>
                                             )}
                                             {item.unread && (
-                                                <span className="ml-auto h-2 w-2 rounded-full bg-emerald-500" />
+                                                <span className="ml-auto h-2 w-2 rounded-full bg-success" />
                                             )}
                                         </div>
                                     </div>

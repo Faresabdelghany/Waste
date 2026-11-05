@@ -113,18 +113,19 @@ export function InboxFilterPopover({ filters, availableClients, onChange }: Inbo
                         </div>
                         <div className="space-y-1">
                             {filteredCategories.map((cat) => (
-                                <button
+                                <Button
+                                    variant="ghost"
                                     key={cat.id}
                                     type="button"
                                     onClick={() => setActive(cat.id)}
-                                    className={cn(
-                                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-accent",
+                                    className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 transition-none cursor-default hover:text-inherit",
+                                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-accent dark:hover:bg-accent",
                                         active === cat.id && "bg-accent",
                                     )}
                                 >
-                                    <cat.icon className="h-4 w-4" />
+                                    <cat.icon className="size-4" />
                                     <span className="flex-1 text-left">{cat.label}</span>
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </div>
@@ -173,13 +174,14 @@ export function InboxFilterPopover({ filters, availableClients, onChange }: Inbo
                         )}
 
                         <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3">
-                            <button
+                            <Button
+                                variant="link"
                                 type="button"
                                 onClick={handleClear}
-                                className="text-xs font-medium text-primary hover:underline"
+                                className="inline-block whitespace-normal rounded-none shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-xs font-medium text-primary hover:underline"
                             >
                                 Clear
-                            </button>
+                            </Button>
                             <Button size="sm" className="h-8 rounded-lg text-xs" onClick={handleApply}>
                                 Apply
                             </Button>

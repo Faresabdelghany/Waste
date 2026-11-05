@@ -312,7 +312,7 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
               onClick={() => updateData({ serviceProviderId: serviceProvider.id })}
               className={cn(
                 "flex w-full items-center justify-between rounded-2xl border border-border/60 bg-background p-4 text-left transition-all hover:shadow-md/5",
-                isSelected && "border-green-600 ring-1 ring-green-600",
+                isSelected && "border-success ring-1 ring-success",
               )}
             >
               <div className="min-w-0 pr-4">
@@ -326,7 +326,7 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
               <span
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-background",
-                  isSelected && "border-green-600 bg-green-600",
+                  isSelected && "border-success bg-success",
                 )}
               >
                 {isSelected && <Check className="h-4 w-4 text-primary-foreground" />}

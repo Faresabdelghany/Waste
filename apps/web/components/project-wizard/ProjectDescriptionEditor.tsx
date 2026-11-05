@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button"
 import React, { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -306,17 +307,18 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
           </div>
 
           {(isFocused || isExpanded) && (
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsExpanded((prev) => !prev);
               }}
-              className="absolute top-0 right-0 p-2 opacity-50 hover:opacity-100 transition-opacity z-30"
+              className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:p-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "absolute top-0 right-0 p-2 opacity-50 hover:opacity-100 transition-opacity z-30")}
               title={isExpanded ? "Collapse" : "Expand"}
             >
               <ArrowsOutSimple className="size-4 text-muted-foreground" />
-            </button>
+            </Button>
           )}
         </div>
 
@@ -327,81 +329,87 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
               {showTemplates && (
                 <>
                   {!existingSections.goal && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("goal")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         Goal
                       </span>
-                    </button>
+                    </Button>
                   )}
 
                   {!existingSections.scope && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("scope")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         Scope
                       </span>
-                    </button>
+                    </Button>
                   )}
 
                   {!existingSections.scope && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("inScope")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         In scope
                       </span>
-                    </button>
+                    </Button>
                   )}
 
                   {!existingSections.outcomes && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("outcomes")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         Outcomes
                       </span>
-                    </button>
+                    </Button>
                   )}
 
                   {!existingSections.outScope && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("outScope")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         Out of scope
                       </span>
-                    </button>
+                    </Button>
                   )}
 
                   {!existingSections.feature && (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => handleInsertTemplate("feature")}
-                      className="flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all"
+                      className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex gap-1.5 items-center opacity-60 hover:opacity-100 hover:bg-muted/50 px-2 py-1 rounded transition-all dark:hover:bg-muted/50")}
                     >
                       <Plus className="size-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground text-xs">
                         Key feature
                       </span>
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
@@ -409,9 +417,10 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
               <div className="flex-1" />
 
               <div className="flex flex-col items-center justify-center ml-2">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
-                  className="bg-muted-foreground/8 flex gap-1.5 h-7 items-center px-3 py-0.5 rounded-full hover:bg-muted-foreground/20 transition-colors cursor-pointer"
+                  className={cn("justify-start whitespace-normal text-[length:inherit] font-normal shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-muted-foreground/8 flex gap-1.5 h-7 items-center px-3 py-0.5 rounded-full hover:bg-muted-foreground/20 transition-colors cursor-pointer dark:hover:bg-muted-foreground/20")}
                 >
                   <div className="size-3.5">
                     <StarFour
@@ -422,7 +431,7 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
                   <span className="font-medium text-foreground text-xs tracking-wide">
                     Write with AI
                   </span>
-                </button>
+                </Button>
               </div>
             </div>
           </div>

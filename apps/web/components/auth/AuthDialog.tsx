@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Eye, EyeOff } from "lucide-react"
+import { ArrowRight, Eye, EyeSlash } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -180,14 +180,15 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                                 autoComplete="current-password"
                                                 className="h-11 rounded-xl pr-10"
                                             />
-                                            <button
+                                            <Button
                                                 type="button"
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                                variant="ghost"
+                                                className="absolute right-3 top-1/2 h-auto -translate-y-1/2 gap-0 rounded-none p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent has-[>svg]:px-0"
                                                 onClick={() => setShowPassword((prev) => !prev)}
                                                 aria-label={showPassword ? "Hide password" : "Show password"}
                                             >
-                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                            </button>
+                                                {showPassword ? <EyeSlash className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                            </Button>
                                         </div>
                                         <Button
                                             type="button"
@@ -252,14 +253,15 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                             autoComplete="new-password"
                                             className="h-11 rounded-xl pr-10"
                                         />
-                                        <button
+                                        <Button
                                             type="button"
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                            variant="ghost"
+                                            className="absolute right-3 top-1/2 h-auto -translate-y-1/2 gap-0 rounded-none p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-muted-foreground dark:hover:bg-transparent has-[>svg]:px-0"
                                             onClick={() => setShowPassword((prev) => !prev)}
                                             aria-label={showPassword ? "Hide password" : "Show password"}
                                         >
-                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                        </button>
+                                            {showPassword ? <EyeSlash className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </Button>
                                     </div>
                                 </div>
 
@@ -271,13 +273,13 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                                     />
                                     <Label htmlFor="auth-terms" className="leading-5">
                                         I agree to the{" "}
-                                        <button type="button" className="underline">
+                                        <Button type="button" variant="link" className="h-auto p-0 align-baseline text-inherit underline underline-offset-auto">
                                             Terms of Service
-                                        </button>{" "}
+                                        </Button>{" "}
                                         and{" "}
-                                        <button type="button" className="underline">
+                                        <Button type="button" variant="link" className="h-auto p-0 align-baseline text-inherit underline underline-offset-auto">
                                             Privacy Policy
-                                        </button>
+                                        </Button>
                                         .
                                     </Label>
                                 </div>
@@ -300,24 +302,26 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
                     {isSignIn ? (
                         <span>
                             Don&apos;t have an account?{" "}
-                            <button
+                            <Button
                                 type="button"
-                                className="font-semibold text-foreground hover:underline"
+                                variant="link"
+                                className="h-auto p-0 align-baseline font-semibold text-foreground underline-offset-auto hover:underline"
                                 onClick={() => onModeChange("sign-up")}
                             >
                                 Sign up
-                            </button>
+                            </Button>
                         </span>
                     ) : (
                         <span>
                             Already have an account?{" "}
-                            <button
+                            <Button
                                 type="button"
-                                className="font-semibold text-foreground hover:underline"
+                                variant="link"
+                                className="h-auto p-0 align-baseline font-semibold text-foreground underline-offset-auto hover:underline"
                                 onClick={() => onModeChange("sign-in")}
                             >
                                 Sign in
-                            </button>
+                            </Button>
                         </span>
                     )}
                 </div>

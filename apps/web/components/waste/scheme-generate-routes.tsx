@@ -53,13 +53,13 @@ const ACTION_LABELS: Record<PlannedRouteAction, string> = {
 
 const ACTION_BADGE_CLASSES: Record<PlannedRouteAction, string> = {
   create:
-    "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100",
+    "bg-success/10 text-success-foreground border-transparent",
   refresh:
-    "bg-blue-50 text-blue-700 border-transparent dark:bg-blue-500/15 dark:text-blue-100",
+    "bg-info/10 text-info-foreground border-transparent",
   skip: "border-transparent bg-muted text-muted-foreground",
   cancel:
-    "bg-red-50 text-red-700 border-transparent dark:bg-red-500/15 dark:text-red-100",
-  omit: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100",
+    "bg-destructive/10 text-destructive-foreground border-transparent",
+  omit: "bg-warning/10 text-warning-foreground border-transparent",
 }
 
 export function SchemeGenerateRoutesDialog({
@@ -282,29 +282,29 @@ export function SchemeGenerateRoutesDialog({
                           </span>
                         )}
                         {planned.action === "omit" && planned.note && (
-                          <span className="text-xs text-amber-700 dark:text-amber-400">
+                          <span className="text-xs text-warning-foreground">
                             {planned.note}
                           </span>
                         )}
                         {planned.action === "cancel" && (
-                          <span className="text-xs text-red-600 dark:text-red-400">
+                          <span className="text-xs text-destructive-foreground">
                             {planned.note}
                           </span>
                         )}
                         {planned.action !== "cancel" &&
                           deviationNote &&
                           deviationNote !== "None" && (
-                          <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
+                          <span className="basis-full pl-[92px] text-xs text-warning-foreground">
                             {deviationNote}
                           </span>
                         )}
                         {planned.holidayNote && (
-                          <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
+                          <span className="basis-full pl-[92px] text-xs text-warning-foreground">
                             {planned.holidayNote}
                           </span>
                         )}
                         {planned.matchWarning && (
-                          <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
+                          <span className="basis-full pl-[92px] text-xs text-warning-foreground">
                             {planned.matchWarning} — add matching containers or
                             adjust the scheme&apos;s stop rule
                           </span>
@@ -317,7 +317,7 @@ export function SchemeGenerateRoutesDialog({
             </div>
 
             {generation && generation.plan.containerDrift.length > 0 && (
-              <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
                 {containerDriftWarning(generation.plan.containerDrift)} — the
                 routes above follow the new set.
               </p>

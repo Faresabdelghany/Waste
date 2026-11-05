@@ -9,7 +9,7 @@
 // onCreate, which owns record creation.
 
 import { useCallback, useMemo, useState } from "react"
-import { Check, ChevronLeft, ChevronRight } from "lucide-react"
+import { CaretLeft, CaretRight, Check } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -138,7 +138,7 @@ export function SchemeWizard({
                       className={cn(
                         "mt-px inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs",
                         state === "active" && "bg-primary text-primary-foreground",
-                        state === "done" && "bg-emerald-50 text-emerald-600",
+                        state === "done" && "bg-success/10 text-success",
                         state === "visited" && "border border-foreground/40 text-foreground",
                         state === "todo" && "border border-border text-muted-foreground/60",
                       )}
@@ -189,20 +189,20 @@ export function SchemeWizard({
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">
             {step === 1 ? (
               <Button variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
-                <ChevronLeft /> Cancel
+                <CaretLeft /> Cancel
               </Button>
             ) : (
               <Button variant="outline" className="rounded-xl" onClick={back}>
-                <ChevronLeft /> Back
+                <CaretLeft /> Back
               </Button>
             )}
             {step < 5 ? (
               <Button className="rounded-xl" disabled={!canNext} onClick={next}>
-                Next <ChevronRight />
+                Next <CaretRight />
               </Button>
             ) : (
               <Button className="rounded-xl" onClick={() => onCreate(data)}>
-                Create route scheme <ChevronRight />
+                Create route scheme <CaretRight />
               </Button>
             )}
           </footer>

@@ -172,6 +172,7 @@ import { createModuleSync } from "@/lib/url/module-sync"
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -254,7 +255,7 @@ import {
   BusinessRecordDayTimeline,
   RecordActionsMenu,
   recordProgress,
-  statusClasses,
+  recordStatusTone,
   type RecordExtraAction,
 } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
@@ -5283,13 +5284,14 @@ export function BusinessWorkspace({
               <h1 className="text-lg font-semibold tracking-tight">{activeModule.title}</h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent text-muted-foreground hover:text-foreground"
                     aria-label={`About ${activeModule.title}`}
                   >
-                    <Info className="h-4 w-4" />
-                  </button>
+                    <Info className="size-4" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm text-xs">
                   <p>{activeModule.description}</p>
@@ -5361,15 +5363,9 @@ export function BusinessWorkspace({
                         .filter(Boolean)
                         .join(" · ")}
                       titleSuffix={
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(record.status),
-                          )}
-                        >
+                        <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {record.status}
-                        </Badge>
+                        </StatusBadge>
                       }
                       meta={viewOptions.showUpdated ? (
                         <span className="hidden text-muted-foreground sm:inline">{record.updated}</span>
@@ -5546,15 +5542,9 @@ export function BusinessWorkspace({
                                 >
                                   <div className="flex items-center gap-2">
                                     {viewOptions.groupBy === "status" ? (
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                          statusClasses(group.label),
-                                        )}
-                                      >
+                                      <StatusBadge tone={recordStatusTone(group.label)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                                         {group.label}
-                                      </Badge>
+                                      </StatusBadge>
                                     ) : (
                                       <span className="text-xs font-semibold text-foreground">
                                         {group.label}
@@ -5605,15 +5595,9 @@ export function BusinessWorkspace({
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                      statusClasses(record.status),
-                                    )}
-                                  >
+                                  <StatusBadge tone={recordStatusTone(record.status)} className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium">
                                     {record.status}
-                                  </Badge>
+                                  </StatusBadge>
                                 </TableCell>
                                 {viewOptions.showContainerType && (
                                   <TableCell className="min-w-[190px] text-sm text-muted-foreground">
@@ -5666,7 +5650,8 @@ export function BusinessWorkspace({
                                     onClick={(event) => event.stopPropagation()}
                                     onKeyDown={(event) => event.stopPropagation()}
                                   >
-                                    <button
+                                    <Button
+                                      variant="ghost"
                                       type="button"
                                       aria-pressed={isRouteStarred(record.id)}
                                       aria-label={
@@ -5674,7 +5659,7 @@ export function BusinessWorkspace({
                                           ? `Remove ${record.name} from Active Routes`
                                           : `Add ${record.name} to Active Routes`
                                       }
-                                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
+                                      className="gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 transition-none hover:text-inherit flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted dark:hover:bg-muted"
                                       onClick={() => toggleRouteStarred(record.id)}
                                     >
                                       <Star
@@ -5682,13 +5667,13 @@ export function BusinessWorkspace({
                                           isRouteStarred(record.id) ? "fill" : "regular"
                                         }
                                         className={cn(
-                                          "h-4 w-4",
+                                          "size-4",
                                           isRouteStarred(record.id)
-                                            ? "text-amber-500"
+                                            ? "text-warning"
                                             : "text-muted-foreground/60 hover:text-foreground",
                                         )}
                                       />
-                                    </button>
+                                    </Button>
                                   </TableCell>
                                 )}
                                 <TableCell
@@ -5773,15 +5758,9 @@ export function BusinessWorkspace({
                                 )}
                                 <TableCell>
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                        statusClasses(record.status),
-                                      )}
-                                    >
+                                    <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                                       {record.status}
-                                    </Badge>
+                                    </StatusBadge>
                                     <SchemeAttentionBadge
                                       warnings={schemeRowsById.get(record.id)?.attention}
                                     />
@@ -6016,7 +5995,7 @@ function SchemeAttentionBadge({ warnings }: { warnings?: string[] }) {
     <Badge
       variant="outline"
       title={warnings.join("\n")}
-      className="rounded-full border-transparent bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-100"
+      className="rounded-full border-transparent bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning-foreground"
     >
       Attention
     </Badge>
@@ -6069,12 +6048,9 @@ function RecordDetailsDialog({
           <>
             <SheetHeader className="border-b border-border px-5 py-4 pr-12 text-left">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn("rounded-full text-[11px]", statusClasses(record.status))}
-                >
+                <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
                   {record.status}
-                </Badge>
+                </StatusBadge>
                 <SchemeAttentionBadge warnings={attention} />
                 {key !== undefined && (
                   <Badge variant="outline" className="rounded-full text-[11px] font-normal">
@@ -6109,12 +6085,9 @@ function RecordDetailsDialog({
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>
                 {offLifecycle && (
-                  <Badge
-                    variant="outline"
-                    className={cn("rounded-full text-[11px]", statusClasses(record.status))}
-                  >
+                  <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
                     Current status · {record.status}
-                  </Badge>
+                  </StatusBadge>
                 )}
                 {!(onApi && offLifecycle) && (
                   <div className="flex flex-wrap items-center gap-2">

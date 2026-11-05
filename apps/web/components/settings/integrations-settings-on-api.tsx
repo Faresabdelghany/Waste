@@ -105,7 +105,7 @@ export function IntegrationsSettingsOnApi() {
 
 function State({ tone, value }: { tone: IntegrationTone; value: string }) {
   const Icon = tone === "healthy" ? CheckCircle : tone === "neutral" ? Gear : Warning
-  const className = tone === "healthy" ? "text-emerald-600" : tone === "danger" ? "text-rose-600" : tone === "warning" ? "text-amber-600" : "text-muted-foreground"
+  const className = tone === "healthy" ? "text-success" : tone === "danger" ? "text-destructive-foreground" : tone === "warning" ? "text-warning-foreground" : "text-muted-foreground"
   return (
     <span className={cn("inline-flex items-center gap-2 text-xs font-medium", className)}>
       <Icon className="h-4 w-4" weight={tone === "healthy" || tone === "danger" ? "fill" : "regular"} />

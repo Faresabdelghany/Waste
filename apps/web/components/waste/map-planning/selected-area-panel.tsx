@@ -32,7 +32,7 @@ import type { SelectionStatistics } from "@waste/domain/map-planning/statistics"
 import { count } from "@waste/domain/text"
 import { cn } from "@/lib/utils"
 
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 export type SelectedAreaPanelProps = {
   shape: SelectionShape | null
@@ -273,7 +273,7 @@ export function SelectedAreaPanel({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate font-medium">{area.name}</span>
-                          <StatusBadge status={area.status} />
+                          <MapStatusBadge status={area.status} />
                         </div>
                         <p className="truncate text-xs text-muted-foreground">
                           {area.serviceProvider} · {area.services}
@@ -338,7 +338,7 @@ export function SelectedAreaPanel({
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1 truncate font-medium">{route.name}</span>
-                      <StatusBadge status={route.status} />
+                      <MapStatusBadge status={route.status} />
                       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                         {route.date
                           ? formatShortDate(route.date)
@@ -381,12 +381,13 @@ export function SelectedAreaPanel({
                     const highlighted = point.containerIds.some((id) => highlightedContainerIds.has(id))
                     return (
                       <li key={point.id}>
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           data-container-row={point.id}
                           data-highlighted={highlighted ? "true" : undefined}
-                          className={cn(
-                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          className={cn("justify-start whitespace-normal text-[length:inherit] font-normal shrink h-auto transition-none cursor-default hover:text-inherit",
+                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-accent/60",
                             highlighted && "bg-accent",
                           )}
                           onMouseEnter={() => onHoverContainers(point.containerIds)}
@@ -409,7 +410,7 @@ export function SelectedAreaPanel({
                           <span className="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
                             {point.fractions.join(" · ")}
                           </span>
-                        </button>
+                        </Button>
                       </li>
                     )
                   })}
@@ -491,9 +492,9 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const COUNT_TONES: Readonly<Record<RouteBucket, { dot: string; value: string }>> = {
-  awaiting: { dot: "bg-amber-500", value: "text-amber-600 dark:text-amber-400" },
-  "in-progress": { dot: "bg-blue-500", value: "text-blue-600 dark:text-blue-400" },
-  completed: { dot: "bg-emerald-500", value: "text-emerald-600 dark:text-emerald-400" },
+  awaiting: { dot: "bg-warning", value: "text-warning-foreground" },
+  "in-progress": { dot: "bg-info", value: "text-info" },
+  completed: { dot: "bg-success", value: "text-success" },
 }
 
 /** A label/value row with the status colour on the dot and the number. */

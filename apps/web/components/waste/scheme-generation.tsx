@@ -282,7 +282,7 @@ export function SchemeGenerationRunsSection({ generation }: { generation: Scheme
                 </TableCell>
                 <TableCell>
                   {unreported.has(run.id) && !isFinished(run) ? (
-                    <span className="text-xs text-amber-700 dark:text-amber-400">Open since {timeOn(run.updatedAt, timezone)}, the worker has not reported</span>
+                    <span className="text-xs text-warning-foreground">Open since {timeOn(run.updatedAt, timezone)}, the worker has not reported</span>
                   ) : (
                     <Badge variant={run.status === "succeeded" ? "secondary" : "outline"} className={run.status === "failed" ? "border-destructive/40 text-destructive" : undefined}>
                       {STATUS_LABELS[run.status]}
@@ -292,7 +292,7 @@ export function SchemeGenerationRunsSection({ generation }: { generation: Scheme
                 <TableCell className="text-xs text-muted-foreground">
                   {run.status === "succeeded" ? runCounts(run) : run.status === "failed" ? (run.error ?? "The worker gave no reason") : "—"}
                   {run.warnings.length > 0 && (
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-amber-700 dark:text-amber-400">
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-warning-foreground">
                       {run.warnings.map((warning) => (
                         <li key={warning}>{warning}</li>
                       ))}

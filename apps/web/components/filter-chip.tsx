@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
 import { X } from "@phosphor-icons/react/dist/ssr"
 
 interface FilterChipProps {
@@ -11,14 +12,15 @@ export function FilterChip({ label, onRemove }: FilterChipProps) {
   return (
     <div className="flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-muted px-3 text-sm min-w-0 max-w-[200px]">
       <span className="truncate">{label}</span>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         aria-label={`Remove ${label}`}
         onClick={onRemove}
-        className="ml-0.5 rounded-md p-0.5 hover:bg-accent flex-shrink-0"
+        className="inline-block whitespace-normal text-[length:inherit] font-normal h-auto has-[>svg]:px-0.5 transition-none cursor-default hover:text-inherit ml-0.5 rounded-md p-0.5 hover:bg-accent flex-shrink-0 dark:hover:bg-accent"
       >
-        <X className="h-3.5 w-3.5" weight="bold" />
-      </button>
+        <X className="size-3.5" weight="bold" />
+      </Button>
     </div>
   )
 }

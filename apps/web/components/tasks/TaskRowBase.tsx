@@ -49,7 +49,7 @@ export function TaskRowBase({
         checked={checked}
         onCheckedChange={onCheckedChange}
         aria-label={titleAriaLabel ?? title}
-        className="rounded-full border-border bg-background data-[state=checked]:border-teal-600 data-[state=checked]:bg-teal-600 hover:cursor-pointer"
+        className="rounded-full border-border bg-background data-[state=checked]:border-success data-[state=checked]:bg-success hover:cursor-pointer"
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">

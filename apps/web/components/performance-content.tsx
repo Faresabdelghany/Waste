@@ -83,20 +83,20 @@ function getStatusLabel(status: string) {
 }
 
 function getStatusBadgeClass(status: string) {
-  if (status === "active") return "bg-teal-50 text-teal-700 border-transparent"
-  if (status === "planned") return "bg-amber-50 text-amber-700 border-transparent"
+  if (status === "active") return "bg-success/10 text-success-foreground border-transparent"
+  if (status === "planned") return "bg-warning/10 text-warning-foreground border-transparent"
   if (status === "backlog") return "bg-muted text-muted-foreground border-transparent"
-  if (status === "completed") return "bg-emerald-50 text-emerald-700 border-transparent"
+  if (status === "completed") return "bg-success/10 text-success-foreground border-transparent"
   if (status === "cancelled") return "bg-muted text-muted-foreground border-transparent"
   return "bg-muted text-muted-foreground border-transparent"
 }
 
 function getHealthBadgeClass(tone: HealthTone) {
-  if (tone === "positive") return "bg-emerald-50 text-emerald-700 border-transparent"
-  if (tone === "warning") return "bg-amber-50 text-amber-700 border-transparent"
-  if (tone === "danger") return "bg-rose-50 text-rose-700 border-transparent"
+  if (tone === "positive") return "bg-success/10 text-success-foreground border-transparent"
+  if (tone === "warning") return "bg-warning/10 text-warning-foreground border-transparent"
+  if (tone === "danger") return "bg-destructive/10 text-destructive-foreground border-transparent"
   if (tone === "muted") return "bg-muted text-muted-foreground border-transparent"
-  return "bg-blue-50 text-blue-700 border-transparent"
+  return "bg-info/10 text-info-foreground border-transparent"
 }
 
 function getHealthLabel({ status, variance }: { status: string; variance: number }) {
@@ -126,11 +126,11 @@ type MetricCardProps = {
 function MetricCard({ title, value, description, icon, tooltip, tone = "neutral" }: MetricCardProps) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-600"
+      ? "text-success"
       : tone === "warning"
-        ? "text-amber-600"
+        ? "text-warning-foreground"
         : tone === "danger"
-          ? "text-rose-600"
+          ? "text-destructive-foreground"
           : "text-muted-foreground"
 
   return (
@@ -140,13 +140,14 @@ function MetricCard({ title, value, description, icon, tooltip, tone = "neutral"
           <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground")}
                 aria-label={`Info about ${title}`}
               >
-                <Info className="h-3.5 w-3.5" />
-              </button>
+                <Info className="size-3.5" />
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[220px] text-xs">
               {tooltip}
@@ -238,28 +239,30 @@ function PerformanceFilterPopover({
         <div className="grid grid-cols-[220px_minmax(0,1fr)]">
           <div className="border-r border-border/40 p-3">
             <div className="space-y-1">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setActive("project")}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
                   active === "project" && "bg-accent",
                 )}
               >
                 <span>Route</span>
                 <span className="text-xs text-muted-foreground">{projects.length}</span>
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setActive("member")}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
                   active === "member" && "bg-accent",
                 )}
               >
                 <span>Members</span>
                 <span className="text-xs text-muted-foreground">{availableMembers.length}</span>
-              </button>
+              </Button>
             </div>
           </div>
           <div className="p-3">
@@ -267,32 +270,34 @@ function PerformanceFilterPopover({
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route</p>
                 <div className="mt-2 space-y-1">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setTempProjectId("all")}
-                    className={cn(
+                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempProjectId === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                      tempProjectId === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                     )}
                   >
                     <span>All routes</span>
-                    {tempProjectId === "all" && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                  </button>
+                    {tempProjectId === "all" && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                  </Button>
                   {projects.map((project) => (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={project.id}
                       type="button"
                       onClick={() => setTempProjectId(project.id)}
-                      className={cn(
+                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
                         tempProjectId === project.id
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:bg-accent",
+                          ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground"
+                          : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                       )}
                     >
                       <span className="truncate">{project.name}</span>
-                      {tempProjectId === project.id && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                    </button>
+                      {tempProjectId === project.id && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                    </Button>
                   ))}
                 </div>
               </>
@@ -301,30 +306,32 @@ function PerformanceFilterPopover({
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Member</p>
                 <div className="mt-2 space-y-1">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setTempMember("all")}
-                    className={cn(
+                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempMember === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                      tempMember === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                     )}
                   >
                     <span>All members</span>
-                    {tempMember === "all" && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                  </button>
+                    {tempMember === "all" && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                  </Button>
                   {availableMembers.map((member) => (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={member}
                       type="button"
                       onClick={() => setTempMember(member)}
-                      className={cn(
+                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                        tempMember === member ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                        tempMember === member ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                       )}
                     >
                       <span className="truncate">{member}</span>
-                      {tempMember === member && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                    </button>
+                      {tempMember === member && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                    </Button>
                   ))}
                 </div>
               </>
@@ -843,29 +850,29 @@ export function PerformanceContent() {
                   <>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                       <div className="flex h-full w-full">
-                        <div className="h-full bg-rose-500" style={{ width: `${workMixPercent.bug}%` }} />
-                        <div className="h-full bg-amber-500" style={{ width: `${workMixPercent.improvement}%` }} />
-                        <div className="h-full bg-blue-500" style={{ width: `${workMixPercent.task}%` }} />
+                        <div className="h-full bg-destructive" style={{ width: `${workMixPercent.bug}%` }} />
+                        <div className="h-full bg-warning" style={{ width: `${workMixPercent.improvement}%` }} />
+                        <div className="h-full bg-info" style={{ width: `${workMixPercent.task}%` }} />
                       </div>
                     </div>
                     <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
                           Exception
                         </span>
                         <span className="text-foreground">{workMix.bug}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-warning" />
                           Recovery
                         </span>
                         <span className="text-foreground">{workMix.improvement}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-info" />
                           Service stop
                         </span>
                         <span className="text-foreground">{workMix.task}</span>
@@ -882,7 +889,7 @@ export function PerformanceContent() {
                   <CardTitle className="text-base font-semibold">Exception clearance</CardTitle>
                   <p className="text-xs text-muted-foreground">Resolved exceptions in range</p>
                 </div>
-                <WarningOctagon className="h-4 w-4 text-rose-500" weight="fill" />
+                <WarningOctagon className="h-4 w-4 text-destructive-foreground" weight="fill" />
               </CardHeader>
               <CardContent className="flex-1 flex flex-col space-y-3">
                 {bugSummary.open === 0 && totalBugThroughput === 0 ? (
@@ -893,7 +900,7 @@ export function PerformanceContent() {
                   <>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>Open exceptions</span>
-                      <Badge variant="outline" className="rounded-full px-2 py-0.5 text-rose-600 border-rose-200">
+                      <Badge variant="outline" className="rounded-full px-2 py-0.5 text-destructive-foreground border-destructive/30">
                         {bugSummary.open}
                       </Badge>
                     </div>
@@ -905,12 +912,12 @@ export function PerformanceContent() {
                         {bugSeries.map((item) => (
                           <Tooltip key={item.label}>
                             <TooltipTrigger asChild>
-                              <div className="flex h-full w-full items-end rounded-md p-1 transition-colors hover:bg-rose-500/10">
+                              <div className="flex h-full w-full items-end rounded-md p-1 transition-colors hover:bg-destructive/10">
                                 <div
-                                  className="w-full rounded-md bg-rose-500/20"
+                                  className="w-full rounded-md bg-destructive/20"
                                   style={{ height: `${Math.max(6, item.height)}%` }}
                                 >
-                                  <div className="h-full w-full rounded-md bg-rose-500/70" />
+                                  <div className="h-full w-full rounded-md bg-destructive/70" />
                                 </div>
                               </div>
                             </TooltipTrigger>
@@ -948,7 +955,7 @@ export function PerformanceContent() {
                   <CardTitle className="text-base font-semibold">Delivery risk</CardTitle>
                   <p className="text-xs text-muted-foreground">Routes falling behind schedule</p>
                 </div>
-                <WarningOctagon className="h-4 w-4 text-rose-500" weight="fill" />
+                <WarningOctagon className="h-4 w-4 text-destructive-foreground" weight="fill" />
               </CardHeader>
               <CardContent className="space-y-4">
                 {riskProjects.length === 0 && (
@@ -975,9 +982,9 @@ export function PerformanceContent() {
                     <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
                         {project.variance < 0 ? (
-                          <ArrowDown className="h-3 w-3 text-rose-500" />
+                          <ArrowDown className="h-3 w-3 text-destructive-foreground" />
                         ) : (
-                          <ArrowUp className="h-3 w-3 text-emerald-500" />
+                          <ArrowUp className="h-3 w-3 text-success" />
                         )}
                         {Math.abs(project.variance)}% vs schedule
                       </div>
@@ -1020,15 +1027,15 @@ export function PerformanceContent() {
                                 {item.total > 0 ? (
                                   <>
                                     <div
-                                      className="w-full bg-rose-500/80"
+                                      className="w-full bg-destructive/80"
                                       style={{ height: `${(item.bug / item.total) * 100}%` }}
                                     />
                                     <div
-                                      className="w-full bg-amber-500/80"
+                                      className="w-full bg-warning/80"
                                       style={{ height: `${(item.improvement / item.total) * 100}%` }}
                                     />
                                     <div
-                                      className="w-full bg-blue-500/80"
+                                      className="w-full bg-info/80"
                                       style={{ height: `${(item.task / item.total) * 100}%` }}
                                     />
                                   </>
@@ -1059,15 +1066,15 @@ export function PerformanceContent() {
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
                       Exception
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-warning" />
                       Recovery
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-info" />
                       Service stop
                     </span>
                   </div>
@@ -1133,7 +1140,7 @@ export function PerformanceContent() {
                           </div>
                           <Progress
                             value={project.progress}
-                            className="h-2 [&_[data-slot=progress-indicator]]:bg-emerald-500"
+                            className="h-2 [&_[data-slot=progress-indicator]]:bg-success"
                           />
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Schedule</span>
@@ -1148,9 +1155,9 @@ export function PerformanceContent() {
                           </Badge>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             {project.variance < 0 ? (
-                              <ArrowDown className="h-3 w-3 text-rose-500" />
+                              <ArrowDown className="h-3 w-3 text-destructive-foreground" />
                             ) : (
-                              <ArrowUp className="h-3 w-3 text-emerald-500" />
+                              <ArrowUp className="h-3 w-3 text-success" />
                             )}
                             {Math.abs(project.variance)}% vs schedule
                           </div>
@@ -1163,7 +1170,7 @@ export function PerformanceContent() {
                           </div>
                           <div className={cn(
                             "text-xs",
-                            project.daysToDue < 0 ? "text-rose-600" : "text-muted-foreground",
+                            project.daysToDue < 0 ? "text-destructive-foreground" : "text-muted-foreground",
                           )}>
                             {getDueLabel(project.daysToDue)}
                           </div>

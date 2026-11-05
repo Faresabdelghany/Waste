@@ -545,7 +545,7 @@ export function ProjectTimeline() {
                               onCheckedChange={(_checked: boolean) => toggleTaskStatus(project.id, task.id)}
                               className={cn(
                                 "h-4 w-4 rounded-sm",
-                                "data-[state=checked]:bg-teal-500 data-[state=checked]:border-teal-500 data-[state=checked]:text-white",
+                                "data-[state=checked]:bg-success data-[state=checked]:border-success data-[state=checked]:text-white",
                               )}
                             />
                             <div className="flex flex-col flex-1 min-w-0">
@@ -662,7 +662,7 @@ export function ProjectTimeline() {
                         onCheckedChange={(_checked: boolean) => toggleTaskStatus(project.id, task.id)}
                         className={cn(
                           "h-4 w-4 rounded-sm mt-0.5",
-                          "data-[state=checked]:bg-teal-500 data-[state=checked]:border-teal-500 data-[state=checked]:text-white",
+                          "data-[state=checked]:bg-success data-[state=checked]:border-success data-[state=checked]:text-white",
                         )}
                       />
                       <div className="flex-1 min-w-0">

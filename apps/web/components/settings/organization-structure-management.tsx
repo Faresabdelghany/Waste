@@ -98,8 +98,8 @@ const projectKindOptions = [
 
 function statusClassName(status: string) {
   return status === "Active"
-    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-    : "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+    ? "border-success/20 bg-success/10 text-success-foreground"
+    : "border-info/20 bg-info/10 text-info-foreground"
 }
 
 function errorMessage(error: unknown) {
@@ -891,9 +891,9 @@ export function OrganizationStructureManagement() {
               </TabsContent>
             </Tabs>
 
-            <div className="mt-5 flex gap-3 border-y border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+            <div className="mt-5 flex gap-3 border-y border-success/20 bg-success/5 px-4 py-3">
                 <CheckCircle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+                  className="mt-0.5 h-4 w-4 shrink-0 text-success"
                   weight="fill"
                 />
                 <p className="text-xs leading-5 text-muted-foreground">

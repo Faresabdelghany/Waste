@@ -27,7 +27,7 @@ export function RoutingQuotaBanner({ className }: { className?: string }) {
       data-tone={banner.tone}
       className={cn(
         "flex items-center gap-2 px-4 py-2 text-xs",
-        banner.tone === "refused" ? "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200" : "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+        banner.tone === "refused" ? "bg-destructive/10 text-destructive-foreground" : "bg-warning/10 text-warning-foreground",
         className,
       )}
     >

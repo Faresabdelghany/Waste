@@ -26,6 +26,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -156,18 +157,18 @@ const fallbackAssignees = [
 ]
 
 const statusOptions: TicketInformationOption[] = [
-  { value: "Open", label: "Open", dotClassName: "bg-blue-500" },
-  { value: "In progress", label: "In progress", dotClassName: "bg-amber-500" },
+  { value: "Open", label: "Open", dotClassName: "bg-info" },
+  { value: "In progress", label: "In progress", dotClassName: "bg-warning" },
   { value: "Waiting on customer", label: "Waiting on customer", dotClassName: "bg-violet-500" },
-  { value: "Resolved", label: "Resolved", dotClassName: "bg-emerald-500" },
+  { value: "Resolved", label: "Resolved", dotClassName: "bg-success" },
   { value: "Closed", label: "Closed", dotClassName: "bg-muted-foreground" },
 ]
 
 const priorityOptions: TicketInformationOption[] = [
-  { value: "Urgent", label: "Urgent", dotClassName: "bg-rose-600" },
-  { value: "High", label: "High", dotClassName: "bg-rose-500" },
-  { value: "Medium", label: "Medium", dotClassName: "bg-amber-500" },
-  { value: "Low", label: "Low", dotClassName: "bg-blue-500" },
+  { value: "Urgent", label: "Urgent", dotClassName: "bg-destructive" },
+  { value: "High", label: "High", dotClassName: "bg-destructive/80" },
+  { value: "Medium", label: "Medium", dotClassName: "bg-warning" },
+  { value: "Low", label: "Low", dotClassName: "bg-info" },
   { value: "No priority", label: "No priority", dotClassName: "bg-muted-foreground/50" },
 ]
 
@@ -239,24 +240,24 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function priorityClasses(priority: string): string {
+function ticketPriorityTone(priority: string): StatusTone {
   if (/critical|high/i.test(priority)) {
-    return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-200"
+    return "destructive"
   }
   if (/medium/i.test(priority)) {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+    return "warning"
   }
-  return "border-border bg-muted/60 text-muted-foreground"
+  return "neutral"
 }
 
-function statusClasses(status: string): string {
+function ticketStatusTone(status: string): StatusTone {
   if (/completed|resolved/i.test(status)) {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+    return "success"
   }
   if (/progress|open/i.test(status)) {
-    return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-200"
+    return "info"
   }
-  return "border-border bg-muted/60 text-muted-foreground"
+  return "neutral"
 }
 
 function withCurrentOption(
@@ -548,12 +549,9 @@ function FixtureTicketDetailsDialog({
                     <DialogTitle className="truncate text-lg font-semibold">
                       {record.name}
                     </DialogTitle>
-                    <Badge
-                      variant="outline"
-                      className={cn("rounded-full text-[11px]", statusClasses(information.status))}
-                    >
+                    <StatusBadge outlined tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                       {information.status}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                   <DialogDescription className="mt-0.5 truncate text-xs sm:text-sm">
                     {[readableKey(record.id), information.context, `Updated ${informationActivities.length > 0 ? "now" : record.updated.toLowerCase()}`].filter(Boolean).join(" · ")}
@@ -589,12 +587,9 @@ function FixtureTicketDetailsDialog({
                         <Badge variant="outline" className="rounded-full font-normal">
                           {information.type}
                         </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn("rounded-full font-normal", priorityClasses(information.priority))}
-                        >
+                        <StatusBadge outlined tone={ticketPriorityTone(information.priority)} className="rounded-full font-normal">
                           {information.priority} priority
-                        </Badge>
+                        </StatusBadge>
                       </div>
                     </div>
                   </div>
@@ -603,7 +598,7 @@ function FixtureTicketDetailsDialog({
                 <div className="pl-12">
                   <div className="rounded-xl border border-border/60 bg-muted/25 px-4 py-4">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-emerald-600" weight="fill" />
+                      <CheckCircle className="h-4 w-4 text-success" weight="fill" />
                       <h3 className="text-sm font-semibold">Resolution context</h3>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -641,8 +636,8 @@ function FixtureTicketDetailsDialog({
                             className={cn(
                               "rounded-full px-2 py-0 text-[10px] font-medium",
                               comment.kind === "internal"
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
-                                : "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200",
+                                ? "border-warning/30 bg-warning/10 text-warning-foreground"
+                                : "border-info/30 bg-info/10 text-info-foreground",
                             )}
                           >
                             {composerModeConfig[comment.kind].label}
@@ -653,9 +648,9 @@ function FixtureTicketDetailsDialog({
                         className={cn(
                           "mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground",
                           comment.kind === "internal" &&
-                            "rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2",
+                            "rounded-lg border border-warning/20 bg-warning/5 px-3 py-2",
                           comment.kind === "sms" &&
-                            "rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2",
+                            "rounded-lg border border-info/20 bg-info/5 px-3 py-2",
                         )}
                       >
                         {comment.body}
@@ -673,15 +668,15 @@ function FixtureTicketDetailsDialog({
                     className={cn(
                       "flex items-center justify-between gap-3 border-b px-3 py-2",
                       composerMode === "internal"
-                        ? "border-amber-500/20 bg-amber-500/5"
-                        : "border-blue-500/20 bg-blue-500/5",
+                        ? "border-warning/20 bg-warning/5"
+                        : "border-info/20 bg-info/5",
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       {composerMode === "internal" ? (
-                        <LockKey className="h-4 w-4 shrink-0 text-amber-600" />
+                        <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" />
                       ) : (
-                        <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />
+                        <ChatCircleText className="h-4 w-4 shrink-0 text-info" />
                       )}
                       <div className="min-w-0">
                         <p className="text-xs font-semibold">{activeComposer.label}</p>
@@ -738,14 +733,15 @@ function FixtureTicketDetailsDialog({
                         <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className="max-w-44 truncate">{attachment.name}</span>
                         <span className="text-muted-foreground">{formatFileSize(attachment.size)}</span>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
                           aria-label={`Remove ${attachment.name}`}
-                          className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          className="h-auto gap-0 rounded-sm p-0.5 font-normal text-muted-foreground hover:bg-accent hover:text-foreground has-[>svg]:px-0.5"
                           onClick={() => removeAttachment(attachment)}
                         >
-                          <X className="h-3 w-3" />
-                        </button>
+                          <X className="size-3" />
+                        </Button>
                       </span>
                     ))}
                   </div>
@@ -781,7 +777,7 @@ function FixtureTicketDetailsDialog({
                             focusComposerAt(message.length)
                           }}
                         >
-                          <LockKey className="h-4 w-4 shrink-0 text-amber-600" />
+                          <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" />
                           <span>
                             <span className="block">Internal note</span>
                             <span className="block text-xs font-normal text-muted-foreground">
@@ -799,7 +795,7 @@ function FixtureTicketDetailsDialog({
                             focusComposerAt(message.length)
                           }}
                         >
-                          <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />
+                          <ChatCircleText className="h-4 w-4 shrink-0 text-info" />
                           <span>
                             <span className="block">SMS</span>
                             <span className="block text-xs font-normal text-muted-foreground">
@@ -843,18 +839,19 @@ function FixtureTicketDetailsDialog({
                       >
                         <div className="grid grid-cols-6 gap-1">
                           {quickEmojis.map((emoji) => (
-                            <button
+                            <Button
                               key={emoji}
                               type="button"
+                              variant="ghost"
                               aria-label={`Insert ${emoji}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-base hover:bg-accent"
+                              className="flex h-8 w-8 items-center justify-center gap-0 rounded-md p-0 text-base font-normal hover:bg-accent"
                               onClick={() => {
                                 insertAtSelection(`${emoji} `)
                                 setEmojiMenuOpen(false)
                               }}
                             >
                               {emoji}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </PopoverContent>
@@ -1002,12 +999,9 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(statusOptions, information.status)}
                         onValueChange={(value) => updateInformation("status", "Status", value)}
                         renderValue={() => (
-                          <Badge
-                            variant="outline"
-                            className={cn("rounded-full text-[11px]", statusClasses(information.status))}
-                          >
+                          <StatusBadge outlined tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                             {information.status}
-                          </Badge>
+                          </StatusBadge>
                         )}
                       />
                       <EditableInformationRow
@@ -1016,12 +1010,9 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(priorityOptions, information.priority)}
                         onValueChange={(value) => updateInformation("priority", "Priority", value)}
                         renderValue={() => (
-                          <Badge
-                            variant="outline"
-                            className={cn("rounded-full text-[11px]", priorityClasses(information.priority))}
-                          >
+                          <StatusBadge outlined tone={ticketPriorityTone(information.priority)} className="rounded-full text-[11px]">
                             {information.priority}
-                          </Badge>
+                          </StatusBadge>
                         )}
                       />
                       <EditableInformationRow
@@ -1108,7 +1099,7 @@ function FixtureTicketDetailsDialog({
                         className={cn(
                           "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background",
                           activity.tone === "success" &&
-                            "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+                            "border-success/30 bg-success/10 text-success",
                         )}
                       >
                         {activity.tone === "success" ? (
@@ -1218,13 +1209,14 @@ function EditableInformationRow({
       <span className="pl-0.5 text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             aria-label={`Change ${label}`}
-            className="flex min-h-8 min-w-0 items-center justify-end gap-1.5 rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
+            className="flex h-auto min-h-8 min-w-0 items-center justify-end gap-1.5 whitespace-normal rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
           >
             <span className="min-w-0 flex-1 truncate">{renderValue?.() ?? value}</span>
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="end"

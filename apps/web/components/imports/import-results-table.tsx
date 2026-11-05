@@ -28,8 +28,8 @@ type OutcomeFilter = (typeof OUTCOMES)[number]["id"]
 const OUTCOME_LABEL: Record<ImportRowResult["outcome"], string> = { created: "New", updated: "Changed", unchanged: "Unchanged", refused: "Refused" }
 
 const OUTCOME_TONE: Record<ImportRowResult["outcome"], string> = {
-  created: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  updated: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  created: "border-success/30 bg-success/10 text-success-foreground",
+  updated: "border-info/30 bg-info/10 text-info-foreground",
   unchanged: "border-border bg-muted/40 text-muted-foreground",
   refused: "border-destructive/30 bg-destructive/10 text-destructive",
 }

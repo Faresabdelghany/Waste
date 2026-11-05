@@ -158,15 +158,16 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             </div>
             <div className="space-y-1">
               {filteredCategories.map((cat) => (
-                <button
+                <Button
+                  variant="ghost"
                   key={cat.id}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                  className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 transition-none cursor-default hover:text-inherit",
+                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
                     active === cat.id && "bg-accent"
                   )}
                   onClick={() => setActive(cat.id)}
                 >
-                  <cat.icon className="h-4 w-4" />
+                  <cat.icon className="size-4" />
                   <span className="flex-1 text-left">{cat.label}</span>
                   {counts && counts[cat.id as keyof FilterCounts] && (
                     <span className="text-xs text-muted-foreground">
@@ -177,7 +178,7 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
                       )}
                     </span>
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -267,9 +268,9 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             )}
 
             <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3">
-              <button onClick={handleClear} className="text-sm text-primary hover:underline">
+              <Button variant="link" onClick={handleClear} className="inline-block whitespace-normal rounded-none font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-sm text-primary hover:underline">
                 Clear
-              </button>
+              </Button>
               <Button size="sm" className="h-8 rounded-lg" onClick={handleApply}>
                 Apply
               </Button>

@@ -6,8 +6,7 @@ import { format } from "date-fns"
 
 import type { ProjectNote, NoteStatus } from "@/lib/data/project-details"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -116,7 +115,7 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
                                     {format(note.addedDate, "d MMM")}
                                 </TableCell>
                                 <TableCell>
-                                    <StatusBadge status={note.status} />
+                                    <NoteStatusBadge status={note.status} />
                                 </TableCell>
                                 <TableCell onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                                     <DropdownMenu>
@@ -149,18 +148,10 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
     )
 }
 
-function StatusBadge({ status }: { status: NoteStatus }) {
+function NoteStatusBadge({ status }: { status: NoteStatus }) {
     return (
-        <Badge
-            variant="outline"
-            className={cn(
-                "text-xs font-normal capitalize",
-                status === "completed"
-                    ? "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-100"
-                    : "border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-50"
-            )}
-        >
+        <StatusBadge outlined tone={status === "completed" ? "success" : "warning"} className="text-xs font-normal capitalize">
             {status}
-        </Badge>
+        </StatusBadge>
     )
 }

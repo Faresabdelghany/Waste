@@ -9,7 +9,7 @@
 // domain's schemeDraftChanges; ids read as names through the records.
 
 import { useState } from "react"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { count } from "@waste/domain/text"

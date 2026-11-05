@@ -97,7 +97,7 @@ import { MapToolbar } from "./map-toolbar"
 import { SavedSelectionsMenu } from "./saved-selections-menu"
 import type { DrawTool, PlanningMapApi } from "./planning-map"
 import { SelectedAreaPanel } from "./selected-area-panel"
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 const PlanningMap = dynamic(
   () => import("./planning-map").then((module) => module.PlanningMap),
@@ -775,7 +775,7 @@ export function MapPlanningView({
                     {routeCard.route.timeWindow ? ` · ${routeCard.route.timeWindow}` : ""}
                   </p>
                 </div>
-                <StatusBadge status={routeCard.route.status} />
+                <MapStatusBadge status={routeCard.route.status} />
               </div>
               <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-muted-foreground">Vehicle</dt>
@@ -841,10 +841,11 @@ export function MapPlanningView({
               <ul className="max-h-64 space-y-0.5 overflow-y-auto">
                 {clusterList.cluster.points.map((point) => (
                   <li key={point.id}>
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent",
+                      className={cn("justify-start whitespace-normal font-normal shrink h-auto transition-none cursor-default hover:text-inherit",
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent dark:hover:bg-accent",
                         point.containerIds.some((id) => highlightedIds.has(id)) && "bg-accent",
                       )}
                       onMouseEnter={() => hoverContainers(point.containerIds)}
@@ -864,7 +865,7 @@ export function MapPlanningView({
                       <span className="truncate text-muted-foreground">
                         {point.fractions.join(" · ")}
                       </span>
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

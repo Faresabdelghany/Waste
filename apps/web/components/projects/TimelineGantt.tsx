@@ -230,9 +230,9 @@ export function TimelineGantt({
                       className={cn(
                         "absolute top-1/2 flex h-7 -translate-y-1/2 items-center rounded-md border px-2",
                         t.status === "done"
-                          ? "border-emerald-500/30 bg-emerald-500/10"
+                          ? "border-success/30 bg-success/10"
                           : t.status === "in-progress"
-                            ? "border-amber-500/30 bg-amber-500/10"
+                            ? "border-warning/30 bg-warning/10"
                             : "border-border bg-muted",
                         onTaskSelect && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                       )}

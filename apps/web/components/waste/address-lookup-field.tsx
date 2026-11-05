@@ -130,16 +130,17 @@ export function AddressLookupField({
         <ul className="grid gap-1 rounded-md border border-border p-1" role="listbox" aria-label="Addresses found">
           {shown.search.items.map((match) => (
             <li key={match.id}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 role="option"
                 aria-selected={false}
                 disabled={picking}
                 onClick={() => pick(match.id)}
-                className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                className="h-auto w-full justify-start whitespace-normal rounded px-2 py-1.5 text-left text-sm font-normal hover:bg-muted hover:text-current focus-visible:bg-muted focus-visible:outline-none dark:hover:bg-muted"
               >
                 {match.designation}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
