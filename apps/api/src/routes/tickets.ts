@@ -76,9 +76,12 @@ import {
   type TicketLinksSet,
 } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
+import { runTicketAutomation } from "@waste/db/commands/ticket-automation"
+import type { JobSender } from "@waste/db/jobs"
 import { propertyParty } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
+import { triggerOf } from "@waste/domain/resolution/automation"
 import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
@@ -319,6 +322,9 @@ const statusCommandProblems = () => ({
 /** What every status command says of the ticket's type (#545 of #544). */
 const TYPE_ROLES = " Where the ticket's type names the roles that may give the command (`PUT /ticket-types/{id}/permissions`), a caller of another role is refused (403, naming them), after the machine's own 409."
 
+/** What a move and an opening say of the type's automation (#546 of #544). */
+const TYPE_ACTIONS = " The type's actions on the status reached (`PUT /ticket-types/{id}/actions`) then run in the same transaction, as the system, each leaving its line in the history, and the ticket is answered as they leave it."
+
 /** The note on the `status-changed` row of a case the stop's record answered. */
 const ANSWERED_BY_RECORD = "Answered with the stop's record."
 /** The 409 of a reply with evidence on a ticket about no stop. */
@@ -330,7 +336,7 @@ function overdueAt(overdue: boolean, at: Date): SQL | undefined {
   return overdue ? pastDue : or(notInArray(ticket.status, [...OPEN_TICKET_STATUSES]), isNull(ticket.dueAt), gte(ticket.dueAt, at))
 }
 
-export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
   /**
    * One machine command: the lock, the read, the transition, and on a move
    * the row written with what the command carries beside the status and one
@@ -380,7 +386,15 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       sourceEventId: null,
     }
     await appendTicketEvent(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, event)
-    return { row, wrote: true }
+    // The news of a close, then the type's actions on the status reached (#546 of #544); the ticket is answered as they leave it.
+    if (transition.to === "completed" || transition.to === "rejected") {
+      await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(row), projectId: row.projectId, occurredAt: row.closedAt ?? now() })
+    }
+    const reached = triggerOf(transition.to)
+    if (reached === undefined) return { row, wrote: true }
+    await runTicketAutomation(tx, { send: jobs.send, by: principal.user.id, companyId: principal.companyId, newId, now }, row.id, reached)
+    const after = await findTicket(tx, principal, row.id)
+    return { row: after ?? row, wrote: true }
   }
 
   return new Hono<AuthEnv>()
@@ -447,7 +461,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
-          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `teamId` is the team the ticket waits with (O30 of #290): one of this company's (400) that is active (409, `The team \"…\" is retired; a ticket waits with an active team`), null for none, and, absent, the project's default team for the kind (`GET /projects/:id/ticket-team-defaults`) while that team is active, else none. `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered, and `ticket-assigned` after it where an assignee is named (O16 of #290). A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee, a team nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. The ticket's Ticket Type (#545 of #544) is `ticketTypeId`, a type of this company (400, `Not a ticket type of this company`) that is active (409, `The ticket type \"…\" is retired; a ticket is of an active type`), whose kind `kind` agrees with where both are named (400 at `kind`), the ticket taking the type's kind; `kind` alone opens the kind's default type. `fieldValues` holds the type's custom fields' values by key: each key a field of the type and each value one its field takes (400 at `fieldValues.<key>`), and every field the type requires to open filled in (400 at its key, `Fill in Requested date: a ticket of type … is opened with it`).",
+          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `teamId` is the team the ticket waits with (O30 of #290): one of this company's (400) that is active (409, `The team \"…\" is retired; a ticket waits with an active team`), null for none, and, absent, the project's default team for the kind (`GET /projects/:id/ticket-team-defaults`) while that team is active, else none. `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered, and `ticket-assigned` after it where an assignee is named (O16 of #290). A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee, a team nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. The ticket's Ticket Type (#545 of #544) is `ticketTypeId`, a type of this company (400, `Not a ticket type of this company`) that is active (409, `The ticket type \"…\" is retired; a ticket is of an active type`), whose kind `kind` agrees with where both are named (400 at `kind`), the ticket taking the type's kind; `kind` alone opens the kind's default type. `fieldValues` holds the type's custom fields' values by key: each key a field of the type and each value one its field takes (400 at `fieldValues.<key>`), and every field the type requires to open filled in (400 at its key, `Fill in Requested date: a ticket of type … is opened with it`). The type's opening actions (#546 of #544, `PUT /ticket-types/{id}/actions`) run after `ticket-opened`, in the same transaction, as the system and held to neither the type's roles nor its required fields, each leaving its line in the history; the 201 answers the ticket as they leave it. `ticket-assigned` for the body's assignee follows `ticket-opened` before them, carrying the ticket as it opened, and an action's assignee is told by its own; a missed collection its type's actions closed is not answered closed again, the record's reply recorded all the same.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
@@ -505,18 +519,18 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           sourceEventId: null,
           newId,
           now: () => at,
+          automation: { send: jobs.send, by: principal.user.id },
         })
-        if (answered.assigneeUserAccountId !== null) await emit(tx, principal, { aggregate: "ticket", aggregateId: answered.id, kind: "ticket-assigned", payload: answered, projectId: answered.projectId, occurredAt: at })
         if (kind !== "missed-collection" || !body.answerFromRecord || links.pickupId === null) return created(c, "/tickets", answered)
         // A missed collection the stop's record answers is answered as it opens (M6): the reply that quotes the record, then the case completed `answered`, in this transaction.
         const opened = await findTicket(tx, principal, answered.id)
         const evidence = opened === undefined ? null : await stopEvidenceFor(tx, principal.companyId, opened)
         if (opened === undefined || evidence === null || !evidence.answeredByRecord) return created(c, "/tickets", answered)
         await recordCustomerReply(tx, { companyId: principal.companyId, projectId: opened.projectId, id: opened.id }, { status: opened.status as TicketStatus, assigneeUserAccountId: opened.assigneeUserAccountId }, evidence.reply, principal.user.id)
+        // The type's opening actions may have closed it already: the reply stands, and the case is not closed twice.
+        if (isClosedTicketStatus(opened.status as TicketStatus)) return created(c, "/tickets", ticketOf(opened))
         const { row } = await moved(tx, principal, opened.id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }), { asPerson: false })
-        const completed = ticketOf(row)
-        await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: completed, projectId: row.projectId, occurredAt: at })
-        return created(c, "/tickets", completed)
+        return created(c, "/tickets", ticketOf(row))
       },
     )
     .get(
@@ -654,7 +668,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "startTicket",
         summary: "Start work on a ticket",
         description:
-          "The `start` command: `open`, `pending` or `on-hold` becomes `in-progress`, and a `status-changed` event is appended with the body's note if any. A ticket already in progress answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES,
+          "The `start` command: `open`, `pending` or `on-hold` becomes `in-progress`, and a `status-changed` event is appended with the body's note if any. A ticket already in progress answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, in progress.", Ticket),
@@ -680,7 +694,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "waitTicket",
         summary: "Wait for the customer",
         description:
-          "The `wait` command: `open`, `in-progress` or `on-hold` becomes `pending` — waiting for the customer, and the note says for what — with a `status-changed` event carrying the note. A ticket already pending answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES,
+          "The `wait` command: `open`, `in-progress` or `on-hold` becomes `pending` — waiting for the customer, and the note says for what — with a `status-changed` event carrying the note. A ticket already pending answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, pending.", Ticket),
@@ -706,7 +720,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "holdTicket",
         summary: "Put a ticket on hold",
         description:
-          "The `hold` command: `open`, `in-progress` or `pending` becomes `on-hold` — waiting on us, and the note says for what — with a `status-changed` event carrying the note. A ticket already on hold answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES,
+          "The `hold` command: `open`, `in-progress` or `pending` becomes `on-hold` — waiting on us, and the note says for what — with a `status-changed` event carrying the note. A ticket already on hold answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, on hold.", Ticket),
@@ -736,7 +750,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           CLOSED +
           TYPE_ROLES +
           " A ticket whose type requires a field to open or to complete that it leaves empty is refused (409, `Ticket T-8831 needs Decision before it is completed`), before the body's 400s." +
-          " The `ticket-completed` event is written in the same transaction, carrying the ticket as answered; Finance is its consumer.",
+          " The `ticket-completed` event is written in the same transaction, carrying the ticket as the completion left it; Finance is its consumer." +
+          TYPE_ACTIONS,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, completed.", Ticket),
@@ -763,9 +778,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           refuseUnofferedProduct(productStatus)
           return { resolution, recollectionRouteId: recollectionRouteId ?? null, recollectionPickupId: recollectionPickupId ?? null, chargeProductId: productId ?? null, closedAt: at }
         })
-        const answered = ticketOf(row)
-        await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: answered, projectId: row.projectId, occurredAt: at })
-        return c.json(answered)
+        return c.json(ticketOf(row))
       },
     )
     .post(
@@ -777,7 +790,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           "The `reject` command: any open status becomes `rejected` with the body's `reason` as the `status-changed` event's body and `closedAt` stamped with the request's clock; a rejected ticket has a reason and no resolution. Not idempotent: a second rejection is a change a person meant. Under the ticket's row lock. " +
           CLOSED +
           TYPE_ROLES +
-          " The `ticket-rejected` event is written in the same transaction, carrying the ticket as answered.",
+          " The `ticket-rejected` event is written in the same transaction, carrying the ticket as the rejection left it." +
+          TYPE_ACTIONS,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, rejected.", Ticket),
@@ -797,9 +811,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const at = now()
         const { row } = await moved(tx, principal, id, "reject", reason, async () => ({ closedAt: at }))
-        const answered = ticketOf(row)
-        await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-rejected", payload: answered, projectId: row.projectId, occurredAt: at })
-        return c.json(answered)
+        return c.json(ticketOf(row))
       },
     )
     .post(
@@ -885,7 +897,6 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         // A completion the machine refuses is a 409, which discards the request's transaction and the reply with it (the guard, auth/principal.ts).
         await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
         const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }))).row : current
-        if (complete) await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
         return c.json(await detailOf(tx, principal, row), 201)
       },
     )

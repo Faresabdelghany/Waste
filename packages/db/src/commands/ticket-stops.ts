@@ -24,6 +24,7 @@ import type { Tx } from "../client"
 import { newId, type IdMinter } from "../ids"
 import { ticket, ticketBooking } from "../schema/resolution"
 import { appendTicketEvent } from "./open-ticket"
+import { runTicketAutomation, type AutomationCause } from "./ticket-automation"
 import { emit } from "./outbox"
 import { labelOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
 
@@ -80,7 +81,7 @@ const comment = (row: TicketRow, body: string, actor: Actor) => ({
  * booked since where that is still planned (`stillBooked`), for the office to
  * take off.
  */
-export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop, at: Date, stillBooked?: StopRef, mint: IdMinter = newId): Promise<void> {
+export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop, at: Date, automation: AutomationCause, stillBooked?: StopRef, mint: IdMinter = newId): Promise<void> {
   if (ticketTransition(current.status as TicketStatus, "complete", labelOf(current)).kind !== "move") {
     await appendTicketEvent(tx, refOf(actor.companyId, current), comment(current, servedAfterClose({ position: stop.position, route: stop.routeLabel, service: stop.service }), actor), mint)
     return
@@ -97,6 +98,8 @@ export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow
     mint,
   )
   await emit(tx, { companyId: actor.companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
+  // Its type's actions on completion (#546 of #544): the stop's completion is the change that sets them going.
+  await runTicketAutomation(tx, { ...automation, companyId: actor.companyId, newId: mint, now: () => at }, row.id, "completed")
 }
 
 /**

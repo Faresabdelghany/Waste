@@ -107,10 +107,12 @@ import { routeLabel } from "@waste/contracts/execution"
 import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, BY_SLA, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
+import { runTicketAutomation } from "@waste/db/commands/ticket-automation"
 import { bookedTicket } from "@waste/db/commands/ticket-stops"
 import { emit } from "@waste/db/commands/outbox"
 import { labelOf, ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
+import type { Send } from "@waste/db/jobs"
 import { tableObjectName } from "@waste/db/names"
 import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -365,7 +367,7 @@ const refOf = (companyId: string, row: TicketRow) => ({ companyId, projectId: ro
  * and its words, and the problems folded into it since, copied onto the
  * missed collection; otherwise each case names the other in a comment.
  */
-async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: TicketRow, at: Date): Promise<Superseding> {
+async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: TicketRow, at: Date, send: Send): Promise<Superseding> {
   const found = superseding(await asFound(tx, companyId, problem))
   const how = found === "duplicate" && ticketTransition(problem.status as TicketStatus, "complete", labelOf(problem)).kind === "move" ? "duplicate" : "named"
   if (how === "duplicate") {
@@ -388,6 +390,8 @@ async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: 
     await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: completed.id, kind: "ticket-completed", payload: ticketOf(completed), projectId: completed.projectId, occurredAt: at })
     await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
     for (const { body } of folded) if (body !== null) await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, copiedNote(labelOf(problem), body), null), newId)
+    // A completion as the system's own: the duplicate's type's completion actions run (#546 of #544).
+    await runTicketAutomation(tx, { send, by: null, companyId, newId, now: () => at }, completed.id, "completed")
     return how
   }
   await appendTicketEvent(tx, refOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
@@ -420,7 +424,7 @@ async function bookedTicketOf(tx: Tx, event: OutboxJob): Promise<{ row: TicketRo
 }
 
 /** One event, in one transaction as the tenant: the reads, the rule, the fold or the ticket, and what the ticket supersedes. */
-async function consume(api: Database, event: OutboxJob, now: () => Date): Promise<OpenTicketsOutcome> {
+async function consume(api: Database, event: OutboxJob, now: () => Date, send: Send): Promise<OpenTicketsOutcome> {
   return await withCompany(api.db, event.companyId, async (tx) => {
     const { companyId, projectId } = event
     // A stop booked to answer a ticket: its miss is that ticket's news, and no case of its own.
@@ -447,9 +451,9 @@ async function consume(api: Database, event: OutboxJob, now: () => Date): Promis
     }
     // The case it supersedes locked before the counter, so a wait on the office's hold of that case holds no company row the company's numbering waits on.
     const superseded = rule === undefined ? undefined : await openCaseOf(tx, companyId, projectId, rule, rule.supersedes)
-    const { row } = await openTicket(tx, { companyId, draft: asTicketDraft(event, draft), createdBy: null, sourceEventId: event.id, newId, now })
+    const { row } = await openTicket(tx, { companyId, draft: asTicketDraft(event, draft), createdBy: null, sourceEventId: event.id, newId, now, automation: { send, by: null } })
     if (superseded === undefined) return { outcome: "opened", ticketId: row.id }
-    return { outcome: "opened", ticketId: row.id, superseded: { ticketId: superseded.id, as: await supersede(tx, companyId, superseded, row, now()) } }
+    return { outcome: "opened", ticketId: row.id, superseded: { ticketId: superseded.id, as: await supersede(tx, companyId, superseded, row, now(), send) } }
   })
 }
 
@@ -459,10 +463,10 @@ async function readBack(api: Database, event: OutboxJob): Promise<string | undef
 }
 
 /** One job's event to its outcome: parsed, consumed, and a duplicate met at a key read back. */
-export async function openTicketFor(data: unknown, { api, now, log }: Pick<JobContext, "api" | "now" | "log">): Promise<OpenTicketsOutcome> {
+export async function openTicketFor(data: unknown, { api, now, log, send }: Pick<JobContext, "api" | "now" | "log" | "send">): Promise<OpenTicketsOutcome> {
   const event: OutboxJob = RelayedEvent.parse(data)
   try {
-    const outcome = await consume(api, event, now)
+    const outcome = await consume(api, event, now, send)
     const superseded = outcome.outcome === "opened" && outcome.superseded !== undefined ? `, ticket ${outcome.superseded.ticketId} ${outcome.superseded.as === "duplicate" ? "its duplicate" : "named"}` : ""
     log(`resolution.open-tickets: ${event.kind} ${event.id} → ${outcome.outcome}${"ticketId" in outcome ? ` (ticket ${outcome.ticketId}${superseded})` : ""}`)
     return outcome

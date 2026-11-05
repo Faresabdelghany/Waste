@@ -112,6 +112,7 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
         sourceEventId: null,
         newId: testId,
         now: () => daysAgo(RETENTION_DAYS + 2),
+        automation: { send: async () => null, by: null },
       }),
     )
   })

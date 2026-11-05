@@ -11,6 +11,7 @@ import { CommandOutcomeRow, DriverCommandBatchOutcome } from "@waste/contracts/d
 import { NO_PROOF_STORAGE, type ProblemKind } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
+import { createJobSender } from "@waste/db/jobs"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { noRouteAssigned, objectKeyOf } from "@waste/domain/execution/commands"
 import { notActive } from "@waste/domain/execution/transitions"
@@ -87,7 +88,7 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
     const app = new Hono()
     app.onError(errorHandler())
     app.route("/", proofObjectRoutes(identify({ pool, verifier: keys.verifier }), { pool, storage, now: () => NOW, log: (entry) => logged.push(entry) }))
-    app.route("/", driverDoorRoutes(authenticate({ pool, verifier: keys.verifier }), { now: () => NOW, log: () => {} }))
+    app.route("/", driverDoorRoutes(authenticate({ pool, verifier: keys.verifier }), { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
     return app as unknown as ReturnType<typeof createApp>
   }
 

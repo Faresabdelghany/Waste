@@ -4,19 +4,27 @@
 // or takes from the kind, the fields' values a create and a patch hold to the
 // type, the patch that moves a ticket to another type, the roles a status
 // command is theirs alone, the fields a completion needs, and
-// `GET /tickets?ticketTypeId=`.
+// `GET /tickets?ticketTypeId=`; and a type's automation (#546 of #544), its
+// actions replaced whole and run as the system on opening and on a status.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { AuditEvent } from "@waste/contracts/audit"
 import { Page } from "@waste/contracts/pagination"
+import { Team } from "@waste/contracts/ticket-teams"
 import { DEFAULT_TYPE_OFFERED, TicketType } from "@waste/contracts/ticket-types"
-import { Ticket } from "@waste/contracts/tickets"
+import { Ticket, TicketEvent } from "@waste/contracts/tickets"
 import { createDb, type Database } from "@waste/db/client"
+import { outboxEvent } from "@waste/db/schema/execution"
+import { ticketEvent } from "@waste/db/schema/resolution"
+import { withCompany } from "@waste/db/tenant"
+import { AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED } from "@waste/domain/resolution/automation"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, inArray } from "drizzle-orm"
 
 import { createApp } from "../app"
+import { NOT_A_TEAM, NOT_A_USER_ACCOUNT } from "../routes/references"
 import { retiredTicketType } from "../routes/statuses"
 import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
 import { NOT_A_ROLE, retiredDefault } from "../routes/ticket-types"
@@ -33,6 +41,7 @@ const owner = ownerUnderTest()
 const TypePage = Page(TicketType)
 const TicketPage = Page(Ticket)
 const AuditPage = Page(AuditEvent)
+const EventPage = Page(TicketEvent)
 
 describe("ticket types", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -252,6 +261,184 @@ describe("ticket types", { skip: database.skip || owner.skip }, () => {
       await ok(await olivia(`/tickets/${ticket.id}`, { method: "PATCH", body: { ticketTypeId: counted.id } }), Ticket)
       const short = await refused(await olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "serviced", note: "Delivered" } }), 409)
       assert.equal(short.detail, `Ticket ${ticket.label} needs Sacks before it is completed`)
+    })
+  })
+  describe("a type's automation (#546 of #544)", () => {
+    const newTeam = async (name: string): Promise<Team> => created(olivia, "/teams", await olivia("/teams", { method: "POST", body: { name, memberUserAccountIds: [] } }), Team)
+    const putActions = (call: Call, id: string, actions: unknown) => call(`/ticket-types/${id}/actions`, { method: "PUT", body: { actions } })
+    const historyOf = async (id: string): Promise<TicketEvent[]> => (await ok(await olivia(`/tickets/${id}/events?limit=100`), EventPage)).items
+    const linesOf = async (id: string): Promise<(string | null)[]> => (await historyOf(id)).filter((event) => event.recordedBy === null).map((event) => event.body)
+    const ofType = async (id: string): Promise<Ticket[]> => (await ok(await olivia(`/tickets?ticketTypeId=${id}&limit=50`), TicketPage)).items
+    const outboxOf = (id: string) =>
+      withCompany(pool.db, a.companyId, (tx) =>
+        tx
+          .select({ kind: outboxEvent.kind, payload: outboxEvent.payload })
+          .from(outboxEvent)
+          .where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, id)))
+          .orderBy(asc(outboxEvent.id)),
+      )
+
+    test("the actions are replaced whole and read by trigger, each trigger's in the order they run; each names what its kind needs, moves to no status its trigger is, and names the company's team, person and type", async () => {
+      const desk = await newTeam("Container desk")
+      const type = await newType("Container swap")
+      const set = await ok(
+        await putActions(olivia, type.id, [
+          { trigger: "completed", kind: "send-message", messageTemplateName: "Swap done", recipient: "ticket-customer" },
+          { trigger: "opened", kind: "assign-team", teamId: desk.id },
+          { trigger: "opened", kind: "set-priority", priority: "high" },
+        ]),
+        TicketType,
+      )
+      assert.deepEqual(
+        set.actions.map((action) => [action.trigger, action.kind, action.teamId, action.priority, action.messageTemplateName]),
+        [
+          ["opened", "assign-team", desk.id, null, null],
+          ["opened", "set-priority", null, "high", null],
+          ["completed", "send-message", null, null, "Swap done"],
+        ],
+      )
+      assert.deepEqual((await ok(await olivia(`/ticket-types/${type.id}`), TicketType)).actions, set.actions)
+
+      const errorsOf = async (actions: unknown) => (await refused(await putActions(olivia, type.id, actions), 400)).errors?.map((error) => [error.path, error.message])
+      assert.deepEqual(await errorsOf([{ trigger: "opened", kind: "assign-team" }]), [["actions.0.teamId", "An action to assign to a team names a team"]])
+      assert.deepEqual(await errorsOf([{ trigger: "opened", kind: "set-priority", priority: "low", teamId: desk.id }]), [["actions.0.teamId", "An action to set the priority names no team"]])
+      assert.deepEqual(await errorsOf([{ trigger: "opened", kind: "set-status", command: "start", resolution: "answered" }]), [["actions.0.resolution", "Only a completion names a resolution"]])
+      assert.deepEqual(await errorsOf([{ trigger: "on-hold", kind: "set-status", command: "hold" }]), [["actions.0.command", "A ticket reaching on hold is on hold already; move it to another status"]])
+      assert.deepEqual(await errorsOf([{ trigger: "completed", kind: "assign-team", teamId: desk.id }]), [["actions.0.teamId", "A ticket reaching completed is closed and keeps its team"]], "the office's own assign refuses a closed ticket too")
+      const [theirs] = (await ok(await other("/ticket-types?kind=other"), TypePage)).items
+      assert.deepEqual(
+        await errorsOf([
+          { trigger: "opened", kind: "assign-team", teamId: a.users.olivia.id },
+          { trigger: "opened", kind: "assign-person", userAccountId: a.users.deactivated.id },
+          { trigger: "completed", kind: "open-follow-up", followUpTypeId: theirs.id },
+        ]),
+        [
+          ["actions.0.teamId", NOT_A_TEAM],
+          ["actions.1.userAccountId", NOT_A_USER_ACCOUNT],
+          ["actions.2.followUpTypeId", NOT_A_TICKET_TYPE],
+        ],
+      )
+      assert.deepEqual((await ok(await olivia(`/ticket-types/${type.id}`), TicketType)).actions, set.actions, "a refused set changes nothing")
+      assert.deepEqual((await ok(await putActions(olivia, type.id, []), TicketType)).actions, [])
+      await refused(await putActions(agent, type.id, []), 403)
+    })
+
+    test("on opening the actions run in order as the system, held to none of the type's roles: a move runs its own status's actions before the next, and each leaves its line", async () => {
+      const desk = await newTeam("Swap desk")
+      const type = await newType("Bin swap request")
+      // Olivia may not start one: the system does.
+      await ok(await putPermissions(olivia, type.id, [{ command: "start", roleIds: [a.roles.viewer.id] }]), TicketType)
+      await ok(
+        await putActions(olivia, type.id, [
+          { trigger: "opened", kind: "assign-team", teamId: desk.id },
+          { trigger: "opened", kind: "set-status", command: "start" },
+          { trigger: "in-progress", kind: "set-priority", priority: "critical" },
+          { trigger: "opened", kind: "set-priority", priority: "high" },
+        ]),
+        TicketType,
+      )
+      const answered = await opened({ ticketTypeId: type.id, priority: "low" })
+      assert.deepEqual([answered.teamId, answered.status, answered.priority], [desk.id, "in-progress", "high"], "the 201 answers the ticket as its actions left it")
+      assert.deepEqual(await linesOf(answered.id), [
+        "Automation of Bin swap request on opening: handed to team Swap desk.",
+        "Automation of Bin swap request on opening: moved to in progress.",
+        "Automation of Bin swap request on reaching in progress: priority set to critical.",
+        "Automation of Bin swap request on opening: priority set to high.",
+      ])
+    })
+
+    test("a person's completion runs the completion's actions: a follow-up of another type as the ticket's child, which runs its own opening actions; an action that cannot run leaves its line and the rest run", async () => {
+      const old = await newType("Old check", "internal-task")
+      const check = await newType("Delivery check", "internal-task")
+      await ok(await putActions(olivia, check.id, [{ trigger: "opened", kind: "set-priority", priority: "low" }]), TicketType)
+      const type = await newType("Container delivery")
+      await ok(
+        await putActions(olivia, type.id, [
+          { trigger: "completed", kind: "open-follow-up", followUpTypeId: old.id },
+          { trigger: "completed", kind: "open-follow-up", followUpTypeId: check.id },
+          { trigger: "completed", kind: "send-message", messageTemplateName: "Container delivered", recipient: "ticket-customer" },
+        ]),
+        TicketType,
+      )
+      assert.equal((await ok(await olivia(`/ticket-types/${old.id}`, { method: "PATCH", body: { status: "inactive" } }), TicketType)).status, "inactive")
+      const ticket = await opened({ ticketTypeId: type.id, priority: "medium" })
+      assert.deepEqual(await linesOf(ticket.id), [], "no action on opening")
+      const completed = await ok(await olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "serviced", note: "Delivered" } }), Ticket)
+      assert.equal(completed.status, "completed")
+      const [followUp] = await ofType(check.id)
+      assert.ok(followUp !== undefined, "the follow-up is opened")
+      assert.deepEqual([followUp.kind, followUp.status, followUp.priority, followUp.links.parentTicketId, followUp.createdBy, followUp.subject], ["internal-task", "open", "low", ticket.id, a.users.olivia.id, `Follow-up of ${ticket.label}: A sofa to collect`])
+      assert.deepEqual(await linesOf(ticket.id), [
+        'Automation of Container delivery on completion: no follow-up opened: the ticket type "Old check" is retired.',
+        `Automation of Container delivery on completion: follow-up ${followUp.label} (Delivery check) opened.`,
+        'Automation of Container delivery on completion: not sent: this ticket\'s project has no active message template "Container delivered".',
+      ])
+      assert.deepEqual(await linesOf(followUp.id), ["Automation of Delivery check on opening: priority set to low."])
+    })
+
+    test("the body's assignee hears of the ticket as it opened and an action's assignee of its own, once each; a ticket an opening action closed keeps its priority", async () => {
+      const handed = await newType("Handed over", "other")
+      await ok(await putActions(olivia, handed.id, [{ trigger: "opened", kind: "assign-person", userAccountId: a.users.olivia.id }]), TicketType)
+      const ticket = await opened({ ticketTypeId: handed.id, assigneeUserAccountId: a.users.invited.id })
+      assert.equal(ticket.assigneeUserAccountId, a.users.olivia.id)
+      const news = await outboxOf(ticket.id)
+      assert.deepEqual(
+        news.map((event) => [event.kind, event.kind === "ticket-assigned" ? Ticket.parse(event.payload).assigneeUserAccountId : null]),
+        [
+          ["ticket-opened", null],
+          ["ticket-assigned", a.users.invited.id],
+          ["ticket-assigned", a.users.olivia.id],
+        ],
+      )
+
+      const closing = await newType("Closed at once", "other")
+      await ok(
+        await putActions(olivia, closing.id, [
+          { trigger: "opened", kind: "set-status", command: "complete", resolution: "no-action" },
+          { trigger: "opened", kind: "set-priority", priority: "high" },
+        ]),
+        TicketType,
+      )
+      const closed = await opened({ ticketTypeId: closing.id, priority: "low" })
+      assert.deepEqual([closed.status, closed.resolution, closed.priority], ["completed", "no-action", "low"])
+      assert.deepEqual(await linesOf(closed.id), [
+        "Automation of Closed at once on opening: completed, no action.",
+        "Automation of Closed at once on opening: priority not set to high: the ticket is completed and keeps its priority.",
+      ])
+    })
+
+    test("rules that set each other off stop five levels deep and say so", async () => {
+      const echo = await newType("Echo", "other")
+      await ok(await putActions(olivia, echo.id, [{ trigger: "opened", kind: "open-follow-up", followUpTypeId: echo.id }]), TicketType)
+      const first = await opened({ ticketTypeId: echo.id })
+      const chain = await ofType(echo.id)
+      assert.equal(chain.length, 1 + AUTOMATION_DEPTH_MAX, "the ticket and one follow-up a level")
+      const parents = new Set(chain.map((one) => one.links.parentTicketId))
+      const last = chain.filter((one) => !parents.has(one.id))
+      assert.equal(last.length, 1)
+      assert.ok(parents.has(first.id))
+      assert.deepEqual(await linesOf(last[0].id), [AUTOMATION_STOPPED])
+    })
+
+    test("rules opening several follow-ups each stop at one change's last action, before their tickets multiply", async () => {
+      const fan = await newType("Fan-out", "other")
+      await ok(
+        await putActions(olivia, fan.id, [
+          { trigger: "opened", kind: "open-follow-up", followUpTypeId: fan.id },
+          { trigger: "opened", kind: "open-follow-up", followUpTypeId: fan.id },
+        ]),
+        TicketType,
+      )
+      await opened({ ticketTypeId: fan.id })
+      const chain = await ofType(fan.id)
+      assert.equal(chain.length, 1 + AUTOMATION_ACTIONS_MAX, "a follow-up an action, and no action past the budget")
+      const spent = await withCompany(pool.db, a.companyId, (tx) =>
+        tx
+          .select({ ticketId: ticketEvent.ticketId })
+          .from(ticketEvent)
+          .where(and(eq(ticketEvent.companyId, a.companyId), inArray(ticketEvent.ticketId, chain.map((one) => one.id)), eq(ticketEvent.body, AUTOMATION_SPENT))),
+      )
+      assert.ok(spent.length > 0, "the chain says where it stopped")
     })
   })
 })

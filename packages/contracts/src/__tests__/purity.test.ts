@@ -100,6 +100,9 @@
 // @waste/domain/resolution/transitions: ticket-types.ts holds a field's key,
 // its value and a type's set of fields to the domain's rules in the domain's
 // sentences, and names the status commands a type's permissions are for.
+// #546 of #544 added @waste/domain/resolution/automation: ticket-types.ts
+// holds an action to the parameters its kind takes, in the domain's
+// sentences, and a type's actions to the domain's cap.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -143,6 +146,7 @@ definePurityTests({
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/registry/waste-code",
+    "@waste/domain/resolution/automation",
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/sla",
     "@waste/domain/resolution/ticket-types",

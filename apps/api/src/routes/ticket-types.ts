@@ -1,9 +1,9 @@
 // Ticket Types (#545 of #544): the company's own types of case, each inside
 // one kind. `GET /ticket-types` lists them, `POST /ticket-types` adds one,
 // `GET`/`PATCH /ticket-types/:id` read and change one, `PUT
-// /ticket-types/:id/fields` replaces its custom fields and `PUT
+// /ticket-types/:id/fields` replaces its custom fields, `PUT
 // /ticket-types/:id/permissions` the roles that may give each status
-// command. No delete: a type the tickets it holds still name is retired by
+// command and `PUT /ticket-types/:id/actions` its automation (#546). No delete: a type the tickets it holds still name is retired by
 // its status, which offers it to no new ticket and keeps the ones it holds.
 //
 // A type is the company's and no project's, like the Team, so every
@@ -15,7 +15,7 @@
 // advisory lock, and the default is never retired (409) nor unmade but by
 // making another (the contracts refuse `isDefault: false`).
 //
-// The fields and the permissions are sets that travel with the type: replaced
+// The fields, the permissions and the actions are sets that travel with the type: replaced
 // whole, the type's own row stamped first, each replacement minting new ids,
 // as a pre-trip checklist's items are. A field left out is gone from the type
 // and its values stay on the tickets that hold them; each role a permission
@@ -26,13 +26,13 @@
 // `operate.tickets` too, since the people working tickets pick a type and
 // fill in its fields.
 import { Page } from "@waste/contracts/pagination"
-import { DEFAULT_TYPE_OFFERED, TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
+import { DEFAULT_TYPE_OFFERED, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction, type TicketTypeActionBody, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
 import type { Tx } from "@waste/db/client"
-import { role } from "@waste/db/schema/access"
-import { ticketType, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import { role, userAccount } from "@waste/db/schema/access"
+import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
 import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
-import type { TicketFieldInput, TicketFieldRequirement, TicketKind, TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm"
+import { TICKET_ACTION_TRIGGERS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, gt, inArray, isNull, ne, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -41,7 +41,9 @@ import { allows, requireGrant, requireGrantOf } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { NOT_A_TEAM, NOT_A_USER_ACCOUNT } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stamp, stampsOf, strengthFor } from "./shared"
+import { NOT_A_TICKET_TYPE } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
 const TICKETS = "operate.tickets"
@@ -77,7 +79,7 @@ async function findType(tx: Tx, principal: Principal, id: string): Promise<Row |
   return row
 }
 
-/** The types on the wire, each with its fields in order and its permissions in the commands' order: two reads for the whole page. */
+/** The types on the wire, each with its fields in order, its permissions in the commands' order and its actions by trigger and place: three reads for the whole page. */
 async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<TicketType[]> {
   if (rows.length === 0) return []
   const ids = rows.map((row) => row.id)
@@ -91,6 +93,12 @@ async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise
     .from(ticketTypePermission)
     .where(and(eq(ticketTypePermission.companyId, companyId), inArray(ticketTypePermission.ticketTypeId, ids)))
     .orderBy(asc(ticketTypePermission.id))
+  const actions = await tx
+    .select({ ticketTypeId: ticketTypeAction.ticketTypeId, trigger: ticketTypeAction.trigger, kind: ticketTypeAction.kind, teamId: ticketTypeAction.teamId, userAccountId: ticketTypeAction.userAccountId, priority: ticketTypeAction.priority, command: ticketTypeAction.command, resolution: ticketTypeAction.resolution, messageTemplateName: ticketTypeAction.messageTemplateName, recipient: ticketTypeAction.recipient, followUpTypeId: ticketTypeAction.followUpTypeId })
+    .from(ticketTypeAction)
+    .where(and(eq(ticketTypeAction.companyId, companyId), inArray(ticketTypeAction.ticketTypeId, ids)))
+    .orderBy(asc(ticketTypeAction.ticketTypeId), asc(ticketTypeAction.position))
+  const triggerOrder = (trigger: string) => TICKET_ACTION_TRIGGERS.indexOf(trigger as TicketActionTrigger)
   return rows.map((row) => {
     const own: TicketTypeField[] = fields
       .filter((field) => field.ticketTypeId === row.id)
@@ -99,7 +107,20 @@ async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise
       const roleIds = grants.filter((grant) => grant.ticketTypeId === row.id && grant.command === command).map((grant) => grant.roleId)
       return roleIds.length === 0 ? [] : [{ command, roleIds }]
     })
-    return { id: row.id, name: row.name, kind: row.kind as TicketKind, description: row.description, status: row.status as TicketTypeStatus, isDefault: row.isDefault, fields: own, permissions, ...stampsOf(row) }
+    const automation: TicketTypeAction[] = actions
+      .filter((action) => action.ticketTypeId === row.id)
+      // A stable sort: each trigger's actions keep their places.
+      .sort((one, other) => triggerOrder(one.trigger) - triggerOrder(other.trigger))
+      .map(({ ticketTypeId: _type, ...action }) => ({
+        ...action,
+        trigger: action.trigger as TicketActionTrigger,
+        kind: action.kind as TicketActionKind,
+        priority: action.priority as TicketPriority | null,
+        command: action.command as TicketActionCommand | null,
+        resolution: action.resolution as TicketResolution | null,
+        recipient: action.recipient as TicketMessageRecipient | null,
+      }))
+    return { id: row.id, name: row.name, kind: row.kind as TicketKind, description: row.description, status: row.status as TicketTypeStatus, isDefault: row.isDefault, fields: own, permissions, actions: automation, ...stampsOf(row) }
   })
 }
 
@@ -112,6 +133,29 @@ async function unmakeDefaults(tx: Tx, companyId: string, kind: string, except?: 
     .update(ticketType)
     .set({ isDefault: false })
     .where(and(eq(ticketType.companyId, companyId), eq(ticketType.kind, kind), eq(ticketType.isDefault, true), except === undefined ? undefined : ne(ticketType.id, except)))
+}
+
+/** Which of the ids a set names are the company's: one read for the whole set. */
+async function heldIds(tx: Tx, table: typeof team | typeof userAccount | typeof ticketType, companyId: string, ids: readonly string[], also?: SQL): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const found = await tx
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.companyId, companyId), inArray(table.id, [...ids]), also))
+  return new Set(found.map((one) => one.id))
+}
+
+/** A set's team, person and follow-up type each the company's, the person not deactivated: every one that is not, at its action. */
+async function referenceIssues(tx: Tx, companyId: string, actions: readonly TicketTypeActionBody[]): Promise<{ path: string; message: string }[]> {
+  const named = (key: "teamId" | "userAccountId" | "followUpTypeId") => [...new Set(actions.flatMap((action) => (action[key] === null ? [] : [action[key]])))]
+  const teams = await heldIds(tx, team, companyId, named("teamId"))
+  const people = await heldIds(tx, userAccount, companyId, named("userAccountId"), isNull(userAccount.deactivatedAt))
+  const types = await heldIds(tx, ticketType, companyId, named("followUpTypeId"))
+  return actions.flatMap((action, index) => [
+    ...(action.teamId === null || teams.has(action.teamId) ? [] : [{ path: `actions.${index}.teamId`, message: NOT_A_TEAM }]),
+    ...(action.userAccountId === null || people.has(action.userAccountId) ? [] : [{ path: `actions.${index}.userAccountId`, message: NOT_A_USER_ACCOUNT }]),
+    ...(action.followUpTypeId === null || types.has(action.followUpTypeId) ? [] : [{ path: `actions.${index}.followUpTypeId`, message: NOT_A_TICKET_TYPE }]),
+  ])
 }
 
 const commonProblems = (action: "view" | "edit" | "create") => ({
@@ -343,6 +387,49 @@ export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await tx.delete(ticketTypePermission).where(and(eq(ticketTypePermission.companyId, principal.companyId), eq(ticketTypePermission.ticketTypeId, id)))
         const rows = permissions.flatMap((entry) => entry.roleIds.map((roleId) => ({ id: newId(), companyId: principal.companyId, ticketTypeId: id, command: entry.command as TicketCommand, roleId })))
         if (rows.length > 0) await tx.insert(ticketTypePermission).values(rows)
+        return c.json(await typeOf(tx, principal.companyId, row))
+      },
+    )
+    .put(
+      "/ticket-types/:id/actions",
+      describeRoute({
+        operationId: "putTicketTypeActions",
+        summary: "Replace a ticket type's automation",
+        description:
+          "Replaces the type's whole automation with the one in the body (#546 of #544): actions, each on a trigger — `opened`, or reaching `in-progress`, `pending`, `on-hold`, `completed` or `rejected` — and run in the order the body names them among its trigger's. An action assigns a team (`teamId`) or a person (`userAccountId`), sets the priority (`priority`), moves the status (`command`, one of `start`, `wait`, `hold`, `complete` with its `resolution`, `reject`), sends a message from the ticket's project's template of `messageTemplateName` to `recipient` — the ticket's customer or the party of a role at its property — or opens a follow-up ticket of type `followUpTypeId`; each names what its kind needs and nothing else (400 at the member at fault), and a move to the status its trigger is is refused (400 at `actions.N.command`). A team, a person and a follow-up's type are this company's (400 at theirs), the person not deactivated. The actions run in the transaction of the change that fires them, as the system and held to neither the type's roles nor its required fields; one that cannot run — a team since retired, a person who does not work in the ticket's project, no active template of the name in its project, no one to write to — leaves a line saying why in the ticket's history and the rest run. A move fires its own status's actions and a follow-up its type's opening actions, a chain running five levels deep at most. The type's `updatedAt` moves.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The type with the automation it now has.", TicketType),
+          400: describeProblem("The path does not hold an id, or the body is missing `actions`, names more than the type holds or a member it does not own, gives an action a parameter its kind does not take or leaves out one it needs, moves a ticket to the status its trigger is, or names a team, a person or a ticket type that is not this company's — at the action at fault."),
+          ...commonProblems("edit"),
+          404: describeProblem("No ticket type with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", TicketTypeActionsSet),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { actions } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const [row] = await tx
+          .update(ticketType)
+          .set(stamp())
+          .where(and(scope(principal), eq(ticketType.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchType(id)
+        const issues = await referenceIssues(tx, principal.companyId, actions)
+        if (issues.length > 0) throw invalidRequest("body", issues)
+        await tx.delete(ticketTypeAction).where(and(eq(ticketTypeAction.companyId, principal.companyId), eq(ticketTypeAction.ticketTypeId, id)))
+        const placed = new Map<string, number>()
+        const rows = actions.map((action) => {
+          const position = (placed.get(action.trigger) ?? 0) + 1
+          placed.set(action.trigger, position)
+          return { ...action, id: newId(), companyId: principal.companyId, ticketTypeId: id, position }
+        })
+        if (rows.length > 0) await tx.insert(ticketTypeAction).values(rows)
         return c.json(await typeOf(tx, principal.companyId, row))
       },
     )

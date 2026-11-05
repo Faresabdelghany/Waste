@@ -161,6 +161,7 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Problem } from "@waste/contracts/problem"
 import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import type { JobSender, Send } from "@waste/db/jobs"
 import { bulkyItemsOf } from "@waste/db/commands/bulky-bookings"
 import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
@@ -492,6 +493,8 @@ type Applier = {
   now: Date
   /** Where a replay with a differing body, a rejection no receipt can hold, or a start the index held at the write is noted. */
   log: (entry: unknown) => void
+  /** What a ticket's automation queues a message with, for a ticket a command opens or services. */
+  send: Send
 }
 
 /** What was read for one command beyond the domain's lookups: the rows themselves, for the receipt and the effects. */
@@ -922,9 +925,9 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .set({ status: effect.status, reason: effect.reason, outcomeAt: new Date(effect.at) })
           .where(and(eq(pickup.companyId, companyId), eq(pickup.id, effect.pickupId)))
         // A delivery, a removal or a swap moves its container as the stop completes (O3b of #290): in a savepoint, a refusal becoming the office's task and never the driver's rejection.
-        if (effect.status === "completed") await recordLedgerWork(tx, applier.principal, effect.pickupId, effect.at, applier.now, "driver")
+        if (effect.status === "completed") await recordLedgerWork(tx, applier.principal, applier.send, effect.pickupId, effect.at, applier.now, "driver")
         // A stop booked to answer a ticket services it as it completes (O3c of #290); a miss reaches the ticket through Resolution's consumer.
-        if (effect.status === "completed") await ticketHearsOfStop(tx, applier.principal, effect.pickupId, { from: "planned", to: "completed" }, new Date(effect.at))
+        if (effect.status === "completed") await ticketHearsOfStop(tx, applier.principal, applier.send, effect.pickupId, { from: "planned", to: "completed" }, new Date(effect.at))
         break
       case "append-unload": {
         const { unload: draft } = effect
@@ -965,6 +968,7 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
               occurredAt: draft.occurredAt,
               takes,
               now: () => applier.now,
+              send: applier.send,
             })
           }
         }
@@ -1015,7 +1019,7 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
       case "append-pre-trip-check":
         await appendPreTripCheck(
           tx,
-          { companyId, projectId, routeId: routeRow.id, routeNumber: routeRow.number, driverId: applier.profile.id, driverName: applier.profile.name, recordedBy: applier.principal.user.id, deviceId: envelope.deviceId, now: () => applier.now },
+          { companyId, projectId, routeId: routeRow.id, routeNumber: routeRow.number, driverId: applier.profile.id, driverName: applier.profile.name, recordedBy: applier.principal.user.id, deviceId: envelope.deviceId, now: () => applier.now, send: applier.send },
           effect.check,
           effect.defects,
           effect.grounds,
@@ -1134,9 +1138,11 @@ export type DriverDoorOptions = {
   now?: () => Date
   /** Where a replay with a differing body, a rejection no receipt can hold, or a start the index held at the write (`HELD_AT_WRITE`) is noted; `console.warn` unless a test wants to look. */
   log?: (entry: unknown) => void
+  /** The app's job sender (`createJobSender`), what a ticket's automation queues a message with. */
+  jobs: JobSender
 }
 
-export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), log = console.warn }: DriverDoorOptions = {}) {
+export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), log = console.warn, jobs }: DriverDoorOptions) {
   return new Hono<AuthEnv>()
     .get(
       "/driver/me",
@@ -1281,7 +1287,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const profile = await resolveDriver(tx, principal)
         const at = now()
-        const applier: Applier = { principal, profile, clock: { now: at.toISOString(), skewAheadMs: OCCURRED_AT_SKEW_MS, backdateMs: COMMAND_BACKDATE_MS }, now: at, log }
+        const applier: Applier = { principal, profile, clock: { now: at.toISOString(), skewAheadMs: OCCURRED_AT_SKEW_MS, backdateMs: COMMAND_BACKDATE_MS }, now: at, log, send: jobs.send }
         const outcomes: CommandOutcomeRow[] = []
         for (const envelope of commands) outcomes.push(await applyOne(tx, applier, envelope))
         const body: DriverCommandBatchOutcome = { outcomes }

@@ -10,9 +10,10 @@ import { describe, test } from "node:test"
 
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
+import { PROPERTY_PARTY_ROLES } from "../../registry/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 16,["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 20, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -44,6 +45,13 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.TICKET_TYPE_STATUSES], [...vocabulary.TEAM_STATUSES])
     assert.deepEqual([...vocabulary.TICKET_FIELD_INPUTS], ["text", "paragraph", "number", "date", "yes-no", "choice"])
     assert.deepEqual([...vocabulary.TICKET_FIELD_REQUIREMENTS], ["optional", "to-open", "to-complete"])
+  })
+
+  test("a type's automation runs on opening or a status a command leads to, gives every command but reopen, and writes to the ticket's customer or a party role (#546 of #544)", () => {
+    assert.deepEqual([...vocabulary.TICKET_ACTION_TRIGGERS], ["opened", ...vocabulary.TICKET_STATUSES.filter((status) => status !== "open")])
+    assert.deepEqual([...vocabulary.TICKET_ACTION_KINDS], ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up"])
+    assert.deepEqual([...vocabulary.TICKET_ACTION_COMMANDS], ["start", "wait", "hold", "complete", "reject"])
+    assert.deepEqual([...vocabulary.TICKET_MESSAGE_RECIPIENTS], ["ticket-customer", ...PROPERTY_PARTY_ROLES], "the Registry's party roles by the same tokens")
   })
 
   test("an alert's kinds are the prototype's six, its sources leave the later three their token, and its statuses leave out the linked reading", () => {

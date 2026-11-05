@@ -50,6 +50,12 @@
 // is what a custom field of a type takes — a line, a paragraph, a number, a
 // date, yes or no, or one of its choices — and `TICKET_FIELD_REQUIREMENTS`
 // when it must be filled in: never, to open the ticket, or to complete it.
+// A type's automation (#546 of #544, resolution/automation.ts) runs on one of
+// `TICKET_ACTION_TRIGGERS` — opened, or reaching a status a command leads to
+// — and does one of `TICKET_ACTION_KINDS`; a status it moves to is one of
+// `TICKET_ACTION_COMMANDS`, and a message it sends goes to one of
+// `TICKET_MESSAGE_RECIPIENTS`, the ticket's customer or a role at its
+// property, the Registry's party roles by the same tokens.
 //
 // Three values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
@@ -94,6 +100,14 @@ export const TICKET_TYPE_STATUSES = ["active", "inactive"] as const
 export const TICKET_FIELD_INPUTS = ["text", "paragraph", "number", "date", "yes-no", "choice"] as const
 /** When a custom field must be filled in: never, before the ticket is opened, or before it is completed. */
 export const TICKET_FIELD_REQUIREMENTS = ["optional", "to-open", "to-complete"] as const
+/** When a Ticket Type's actions run (#546 of #544): a ticket of it opened, or reaching one of the statuses a command leads to. */
+export const TICKET_ACTION_TRIGGERS = ["opened", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
+/** What one of a type's actions does: hands the ticket to a team or a person, sets its priority, moves its status, sends a message from a template, or opens a follow-up ticket. */
+export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up"] as const
+/** The status commands an action may give: every one but reopening, which undoes a close an automation should not second-guess. */
+export const TICKET_ACTION_COMMANDS = ["start", "wait", "hold", "complete", "reject"] as const
+/** Who a message an action sends goes to: the customer the ticket names, or the customer in a role at its property. */
+export const TICKET_MESSAGE_RECIPIENTS = ["ticket-customer", "owner", "payer", "tenant", "administrator", "service-contact"] as const
 /** The worker's rules an Alert is raised by (O4 of #290, O8's stale position, O26's filling container, O20's maintenance due, and M17 of #293's disposal-site reconciliation); null on an alert a person raised. */
 export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due", "load-not-received", "load-weight-mismatch", "load-overweight", "route-not-tipped"] as const
 
@@ -113,6 +127,10 @@ export type TeamStatus = (typeof TEAM_STATUSES)[number]
 export type TicketTypeStatus = (typeof TICKET_TYPE_STATUSES)[number]
 export type TicketFieldInput = (typeof TICKET_FIELD_INPUTS)[number]
 export type TicketFieldRequirement = (typeof TICKET_FIELD_REQUIREMENTS)[number]
+export type TicketActionTrigger = (typeof TICKET_ACTION_TRIGGERS)[number]
+export type TicketActionKind = (typeof TICKET_ACTION_KINDS)[number]
+export type TicketActionCommand = (typeof TICKET_ACTION_COMMANDS)[number]
+export type TicketMessageRecipient = (typeof TICKET_MESSAGE_RECIPIENTS)[number]
 
 /** The statuses a Ticket is open in: what "open" means in a list filter and a count. A value of `TICKET_STATUSES`, not a vocabulary. */
 export const OPEN_TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold"] as const satisfies readonly TicketStatus[]
@@ -149,4 +167,8 @@ export const RESOLUTION_VOCABULARIES = {
   TICKET_TYPE_STATUSES,
   TICKET_FIELD_INPUTS,
   TICKET_FIELD_REQUIREMENTS,
+  TICKET_ACTION_TRIGGERS,
+  TICKET_ACTION_KINDS,
+  TICKET_ACTION_COMMANDS,
+  TICKET_MESSAGE_RECIPIENTS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

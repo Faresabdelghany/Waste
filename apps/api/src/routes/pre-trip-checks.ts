@@ -24,6 +24,7 @@ import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { PreTripCheck, PreTripCheckListQuery, VehicleDefect, VehicleDefectListQuery, VehicleDefectResolve, type ChecklistItem, type CheckedItem, type VehicleDefectStatus } from "@waste/contracts/pre-trip"
 import type { Tx } from "@waste/db/client"
+import type { Send } from "@waste/db/jobs"
 import { vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
@@ -146,6 +147,8 @@ export type CheckContext = {
   recordedBy: string
   deviceId: string
   now: () => Date
+  /** What the ticket's automation queues a message with. */
+  send: Send
 }
 
 /**
@@ -198,6 +201,7 @@ export async function appendPreTripCheck(tx: Tx, context: CheckContext, check: P
       alertId: null,
     },
     createdBy: context.recordedBy,
+    automation: { send: context.send, by: context.recordedBy },
     sourceEventId: null,
     newId,
     now: context.now,

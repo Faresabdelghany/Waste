@@ -108,6 +108,7 @@
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, type TicketActionParameters } from "@waste/domain/resolution/automation"
 import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
 import {
   ALERT_KINDS,
@@ -116,10 +117,14 @@ import {
   ALERT_SOURCES,
   ALERT_STATUSES,
   BILLABLE_RESOLUTIONS,
+  TICKET_ACTION_COMMANDS,
+  TICKET_ACTION_KINDS,
+  TICKET_ACTION_TRIGGERS,
   TICKET_EVENT_KINDS,
   TICKET_FIELD_INPUTS,
   TICKET_FIELD_REQUIREMENTS,
   TICKET_KINDS,
+  TICKET_MESSAGE_RECIPIENTS,
   TICKET_PRIORITIES,
   TICKET_RESOLUTIONS,
   TICKET_SOURCES,
@@ -127,6 +132,7 @@ import {
   TICKET_TYPE_STATUSES,
   TICKET_VISIBILITIES,
   TEAM_STATUSES,
+  type TicketActionKind,
 } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
@@ -290,6 +296,67 @@ export const ticketTypePermission = wms.table(
     unique(tableObjectName(t.id.table, "grant_key", "ticketTypePermission")).on(t.companyId, t.ticketTypeId, t.command, t.roleId),
     oneOf(t.command, TICKET_COMMANDS),
     tenantIndex(t, t.roleId),
+  ],
+)
+
+/** One `WHEN` of an action's kind CASE: the parameters its kind carries and the ones it does not, a completion's resolution with it. */
+function actionKindClause(kind: TicketActionKind, columns: Record<keyof TicketActionParameters, PgColumn>): SQL {
+  const terms = ACTION_PARAMETER_KEYS.filter((key) => key !== "resolution").map((key) => (ACTION_PARAMETERS[kind].includes(key) ? sql`${columns[key]} is not null` : sql`${columns[key]} is null`))
+  terms.push(kind === "set-status" ? sql`(${columns.command} = 'complete') = (${columns.resolution} is not null)` : sql`${columns.resolution} is null`)
+  return sql`when ${sql.raw(literal(kind))} then ${sql.join(terms, sql` and `)}`
+}
+
+// A Ticket Type's automation (#546 of #544): per trigger, its actions in
+// order (@waste/domain/resolution/automation). Each row is one action with
+// the parameters its kind carries and none other
+// (`ticket_type_action_kind_shape`, one CASE built from the domain's
+// `ACTION_PARAMETERS`): a team, a person, a priority, a status with a
+// completion's resolution, a message template by name — its project's, since
+// a template is a project's and the type the company's — and the recipient,
+// or the type of a follow-up. The set is replaced whole with its type
+// (`PUT /ticket-types/:id/actions`), each replacement minting new ids, so the
+// unique place per trigger is safe. A team, a person or a follow-up type
+// named is a key the database checks; whether it still takes tickets is the
+// run's to judge, which leaves a line where it does not.
+export const ticketTypeAction = wms.table(
+  "ticket_type_action",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    ticketTypeId: uuid().notNull(),
+    trigger: text().notNull(),
+    /** Its place among its trigger's actions, 1..n. */
+    position: integer().notNull(),
+    kind: text().notNull(),
+    teamId: uuid(),
+    userAccountId: uuid(),
+    priority: text(),
+    command: text(),
+    resolution: text(),
+    messageTemplateName: text(),
+    recipient: text(),
+    followUpTypeId: uuid(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantReference(t, [t.teamId], team),
+    tenantReference(t, [t.userAccountId], userAccount),
+    tenantReference(t, [t.followUpTypeId], ticketType),
+    tenantUnique(t, t.ticketTypeId, t.trigger, t.position),
+    positive(t.position),
+    oneOf(t.trigger, TICKET_ACTION_TRIGGERS),
+    oneOf(t.kind, TICKET_ACTION_KINDS),
+    oneOf(t.priority, TICKET_PRIORITIES),
+    oneOf(t.command, TICKET_ACTION_COMMANDS),
+    oneOf(t.resolution, TICKET_RESOLUTIONS),
+    oneOf(t.recipient, TICKET_MESSAGE_RECIPIENTS),
+    // What each kind carries and forbids: one CASE built from ACTION_PARAMETERS, the one spelling of the table.
+    check(tableObjectName(t.id.table, "kind_shape", "ticketTypeAction"), sql`case ${t.kind} ${sql.join(TICKET_ACTION_KINDS.map((kind) => actionKindClause(kind, t)), sql` `)} else false end`),
+    tenantIndex(t, t.teamId),
+    tenantIndex(t, t.userAccountId),
+    tenantIndex(t, t.followUpTypeId),
   ],
 )
 
