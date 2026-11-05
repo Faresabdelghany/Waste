@@ -274,7 +274,7 @@ describe("the drop-off point endpoints and the public map", { skip: database.ski
       assert.ok(!JSON.stringify(raw).includes("The office's own"))
     })
 
-    test("by the guide's fraction key: the points taking it, named; an unknown key finds none", async () => {
+    test("by a fraction's key: the points taking it, named; an unknown key finds none", async () => {
       const batteries = await map("?fraction=batteries")
       assert.deepEqual(batteries.fraction, { key: "batteries", name: "Batterier" })
       assert.deepEqual(

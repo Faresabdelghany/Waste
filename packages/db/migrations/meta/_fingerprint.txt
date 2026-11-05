@@ -3999,34 +3999,6 @@ index wms.site_visit_fraction site_visit_fraction_waste_fraction_id_idx CREATE I
 trigger wms.site_visit_fraction site_visit_fraction_audit_trail enabled=O CREATE TRIGGER site_visit_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.site_visit_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('site_visit', 'visit_id')
 trigger wms.site_visit_fraction site_visit_fraction_touch_updated_at enabled=O CREATE TRIGGER site_visit_fraction_touch_updated_at BEFORE UPDATE ON wms.site_visit_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.site_visit_fraction site_visit_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.sorting_guide_item kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.sorting_guide_item 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 4 created_at timestamp with time zone not-null default=now()
-column wms.sorting_guide_item 5 updated_at timestamp with time zone not-null default=now()
-column wms.sorting_guide_item 6 name text not-null acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 7 synonyms text[] not-null default='{}'::text[] acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 8 waste_fraction_id uuid acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 9 instructions text acl=[wms_public=SELECT/<owner>]
-column wms.sorting_guide_item 10 status text not-null acl=[wms_public=SELECT/<owner>]
-constraint wms.sorting_guide_item sorting_guide_item_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.sorting_guide_item sorting_guide_item_pkey PRIMARY KEY (id)
-constraint wms.sorting_guide_item sorting_guide_item_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.sorting_guide_item sorting_guide_item_project_id_name_key UNIQUE (company_id, project_id, name)
-constraint wms.sorting_guide_item sorting_guide_item_project_key UNIQUE (company_id, project_id, id)
-constraint wms.sorting_guide_item sorting_guide_item_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'withdrawn'::text])))
-constraint wms.sorting_guide_item sorting_guide_item_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
-index wms.sorting_guide_item sorting_guide_item_pkey CREATE UNIQUE INDEX sorting_guide_item_pkey ON wms.sorting_guide_item USING btree (id)
-index wms.sorting_guide_item sorting_guide_item_project_id_name_key CREATE UNIQUE INDEX sorting_guide_item_project_id_name_key ON wms.sorting_guide_item USING btree (company_id, project_id, name)
-index wms.sorting_guide_item sorting_guide_item_project_key CREATE UNIQUE INDEX sorting_guide_item_project_key ON wms.sorting_guide_item USING btree (company_id, project_id, id)
-index wms.sorting_guide_item sorting_guide_item_waste_fraction_id_idx CREATE INDEX sorting_guide_item_waste_fraction_id_idx ON wms.sorting_guide_item USING btree (company_id, waste_fraction_id)
-trigger wms.sorting_guide_item sorting_guide_item_audit_trail enabled=O CREATE TRIGGER sorting_guide_item_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.sorting_guide_item FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
-trigger wms.sorting_guide_item sorting_guide_item_touch_updated_at enabled=O CREATE TRIGGER sorting_guide_item_touch_updated_at BEFORE UPDATE ON wms.sorting_guide_item FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.sorting_guide_item sorting_guide_item_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (status = 'published'::text) AND (EXISTS ( SELECT 1
-   FROM wms.project published
-  WHERE ((published.company_id = sorting_guide_item.company_id) AND (published.id = sorting_guide_item.project_id) AND (published.public_slug IS NOT NULL))))) check=none
-policy wms.sorting_guide_item sorting_guide_item_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.stock_minimum kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.stock_minimum 1 id uuid not-null default=wms.uuidv7()
 column wms.stock_minimum 2 company_id uuid not-null
@@ -5436,4 +5408,5 @@ journal 1793908602189 7f831ac83578d6d12eef2c9b80015979de8c0b721b8981a9295755e7cb
 journal 1793909104002 e9a44efe8ffe945d7517aa814fc6007ce2402604f1aae098867369fc80b8af6f
 journal 1793952044162 5587d766cdf82edab9c6b47ceea0c32c804b946f5c8d1e52324481d954786844
 journal 1793952115029 1808664578c7521dad88cc4f0b4b419ce0f403f2a7cb9d42119c52d6d41ce82f
+journal 1793952129739 6eb121585a7a7e828ec2053f9ef25e4fff6a8832084876f40b57282d8149c55a
 pgboss-version 42

@@ -40,7 +40,7 @@
 // log's rows of that company go with it (the one cascade, schema/audit.ts).
 // SECURITY INVOKER, so the insert is the writer's own: the API role's under
 // its fence, the hook's and the owner's as theirs.
-import type { ModuleKey } from "@waste/domain/access/modules"
+import { MODULE_KEYS, type ModuleKey } from "@waste/domain/access/modules"
 import { getTableName } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
@@ -54,7 +54,7 @@ import { auditEvent } from "../schema/audit"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { collectionCalendar } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
-import { collectionCalendarHoliday, DROPPED_TABLES } from "../schema/dropped"
+import { collectionCalendarHoliday, DROPPED_TABLES, sortingGuideItem } from "../schema/dropped"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, customerContact, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "../schema/execution"
@@ -81,7 +81,6 @@ import { application, applicationDecision } from "../schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
-import { sortingGuideItem } from "../schema/sorting-guide"
 import { fillReading, sensor, sensorPairing } from "../schema/sensors"
 import { materialAdjustment, outboundLoad } from "../schema/haul-out"
 import { decommissionReason, stockMinimum, stockMovement } from "../schema/stock"
@@ -103,6 +102,12 @@ export type Audited = {
   ignored?: readonly PgColumn[]
 }
 
+/** A module key the product no longer has: a frozen list names it only for a table a later migration dropped (schema/dropped.ts). */
+export type RetiredModuleKey = "configure.sorting-guide"
+
+/** An entry of a frozen list as its file wrote it: today's shape, or a dropped table's under the module it was read in then. */
+export type AuditedAsWritten = Omit<Audited, "module"> & { module: ModuleKey | RetiredModuleKey }
+
 /** A table the log does not keep, and why. */
 export type Exempt = { table: PgTable; why: string }
 
@@ -115,7 +120,7 @@ const setOf = (table: PgTable, column: PgColumn) => ({ table, column })
  * into `AUDITED` below, and its own rendering test pins the triggers it
  * writes (the pattern `public-door.ts` set for the public door's grants).
  */
-export const AUDITED_AT_0019: readonly Audited[] = [
+export const AUDITED_AT_0019: readonly AuditedAsWritten[] = [
   // Organisation & Access, who may do what and who belongs where.
   { table: company, module: "configure.organization", ignored: [company.nextRouteNumber, company.nextTicketNumber, company.nextInvoiceNumber] },
   { table: project, module: "configure.organization" },
@@ -343,8 +348,9 @@ export const TICKET_TYPES_AUDITED: readonly Audited[] = [
 /** A Ticket Type's automation (#546 of #544): its actions, a set replaced whole with its type; their migration writes this trigger. */
 export const TICKET_AUTOMATION_AUDITED: readonly Audited[] = [{ table: ticketTypeAction, module: "configure.templates", parent: setOf(ticketType, ticketTypeAction.ticketTypeId) }]
 
-/** 0019's list less the tables a later file dropped, whose triggers went with them. */
-const AUDITED_FROM_0019: readonly Audited[] = AUDITED_AT_0019.filter((entry) => !(DROPPED_TABLES as readonly PgTable[]).includes(entry.table))
+/** 0019's list less the tables a later file dropped, whose triggers went with them: each entry left is a table of today's schema under a module key the product still has. */
+const standsToday = (entry: AuditedAsWritten): entry is Audited => !(DROPPED_TABLES as readonly PgTable[]).includes(entry.table) && (MODULE_KEYS as readonly string[]).includes(entry.module)
+const AUDITED_FROM_0019: readonly Audited[] = AUDITED_AT_0019.filter(standsToday)
 
 export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED, ...TICKET_AUTOMATION_AUDITED]
 
@@ -428,7 +434,7 @@ $$;`
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
 
 /** The statement that adds the audit trigger to this table, for migration 0019 or the file that creates a table later. */
-export function auditTrail(entry: Audited): string[] {
+export function auditTrail(entry: Omit<Audited, "module">): string[] {
   const target = qualifiedTable(entry.table, HELPER)
   const args = [entry.parent === undefined ? "" : getTableName(entry.parent.table), entry.parent === undefined ? "" : columnName(entry.parent.column), ...(entry.ignored ?? []).map(columnName)]
   return [

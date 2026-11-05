@@ -124,7 +124,6 @@ import { siteVisitRoutes } from "./routes/site-visits"
 import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { bulkyBookingRoutes } from "./routes/bulky-bookings"
 import { bulkyScheduleRoutes } from "./routes/bulky-schedules"
-import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { workOrderProductRoutes } from "./routes/work-order-charges"
@@ -359,7 +358,6 @@ export function createApp({
   app.route("/", driverDoorRoutes(guard, { now, jobs }))
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now, jobs }))
-  app.route("/", sortingGuideRoutes(guard))
   app.route("/", ticketSlaRoutes(guard))
   app.route("/", routeMessageRoutes(guard))
   app.route("/", ticketTeamRoutes(guard))

@@ -24,7 +24,7 @@ describe("the fraction key's bound", () => {
 })
 
 describe("fractionKeyOf and dropOffHrefOf", () => {
-  test("a fraction is asked by the guide's key, a lowercase slug; anything else asks for every point", () => {
+  test("a fraction is asked by its key, a lowercase slug; anything else asks for every point", () => {
     assert.equal(fractionKeyOf("glass"), "glass")
     assert.equal(fractionKeyOf(["hard-plastic", "x"]), "hard-plastic")
     assert.equal(fractionKeyOf(" glass "), "glass")

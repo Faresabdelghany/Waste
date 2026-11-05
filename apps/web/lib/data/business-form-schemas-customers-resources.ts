@@ -1955,7 +1955,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "acceptedFractionIds",
             label: "Takes",
             type: "multiselect",
-            description: "The fractions a resident may hand in here; the Sorting Guide links an item to the points that take its fraction.",
+            description: "The fractions a resident may hand in here; the public map lists the points that take each fraction.",
             relation: { workspaceId: "configure", moduleId: "master" },
           },
           { id: "openAlways", label: "Open always", type: "checkbox", description: "A bring bank on a street: no hours to keep." },

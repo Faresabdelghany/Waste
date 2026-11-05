@@ -268,7 +268,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // A controlled action moves the record's status; the wire's two are what a patch may say.
       status: PROJECT_STATUSES.find((candidate) => candidate === statusToken(record.status)),
       ...projectCalendarBody(record),
-      // Settings › Sorting guide publishes the project under a slug and takes it down again (#293); no slug is unpublished.
+      // Settings › Portals & branding publishes the project under a slug and takes it down again (#293, #487); no slug is unpublished.
       publicSlug: typed(record, "publicSlug") ?? null,
       // Settings › Finance & invoicing (#291 C4); `before` was read with both, so an unmoved value moves nothing.
       paymentTermsDays: daysOf(typedPaymentTerms(record, "refused")),

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { readCollectionDays, readCollectionFeed, readDoor, readPublishedProject, searchAddresses, searchSortingGuide, visitorOf } from "../door"
+import { readCollectionDays, readCollectionFeed, readDoor, readPublishedProject, searchAddresses, visitorOf } from "../door"
 
 type Asked = { url: string; headers: Record<string, string> }
 
@@ -36,9 +36,9 @@ describe("readDoor", () => {
   })
 
   test("sends no X-Forwarded-For where the visitor's request had none", async () => {
-    const { asked, fetching } = answering(() => json({ query: "x", matches: [] }))
-    await searchSortingGuide("kystbyen", "pizza bakke & co", { origin: "http://api.test", forwardedFor: null, fetch: fetching })
-    assert.equal(asked[0]?.url, "http://api.test/public/kystbyen/sorting-guide?q=pizza%20bakke%20%26%20co")
+    const { asked, fetching } = answering(() => json({ addresses: [] }))
+    await searchAddresses("kystbyen", "Strand 5 & co", { origin: "http://api.test", forwardedFor: null, fetch: fetching })
+    assert.equal(asked[0]?.url, "http://api.test/public/kystbyen/addresses?q=Strand%205%20%26%20co")
     assert.equal(asked[0]?.headers["x-forwarded-for"], undefined)
   })
 

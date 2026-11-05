@@ -1,8 +1,8 @@
-// The public door's migrations — the Sorting Guide's 0017, the Collection Days' 0021 and the Drop-off Points' — against Postgres (Issue #293, ADR-0010), on a fresh database
+// The public door's migrations — 0017's role, the Collection Days' 0021 and the Drop-off Points' — against Postgres (Issue #293, ADR-0010), on a fresh database
 // of this file's own: the public role as the catalog shows it, the exact
 // columns it may read and the nothing else it may do, and what a public
 // transaction (`withPublishedProject`) sees — a published project's own
-// published rows, never a draft, an unpublished project or another company.
+// rows on the map, never a draft, an unpublished project or another company.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 import { getTableName, sql } from "drizzle-orm"
@@ -15,7 +15,6 @@ import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { wasteFraction } from "../schema/catalogue"
 import { company, project } from "../schema/organisation"
 import { dropOffPoint, dropOffPointHours } from "../schema/drop-off-points"
-import { sortingGuideItem } from "../schema/sorting-guide"
 import { PUBLIC_DOOR_TABLES } from "../sql/public-door"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
@@ -28,7 +27,6 @@ const insufficientPrivilege = (error: { cause?: { code?: string }; code?: string
 const companyId = (n: "a" | "b") => `018f7c34-${n}000-7000-8000-000000000001`
 const projectId = (n: "a" | "b", m: 1 | 2) => `018f7c34-${n}00${m}-7000-8000-000000000002`
 const fractionId = (n: "a" | "b") => `018f7c34-${n}000-7000-8000-000000000003`
-const itemId = (n: "a" | "b", m: number) => `018f7c34-${n}00${m}-7000-8000-000000000004`
 const pointId = (n: "a" | "b", m: number) => `018f7c34-${n}00${m}-7000-8000-000000000005`
 
 /** The columns the door names, as `table.column`, sorted: what the role must read and all it may. */
@@ -61,17 +59,6 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       { id: fractionId("a"), companyId: companyId("a"), key: "glass", name: "Glas" },
       { id: fractionId("b"), companyId: companyId("b"), key: "glass", name: "Glass" },
     ])
-    const item = (n: "a" | "b", m: number, p: 1 | 2, status: string) => ({
-      id: itemId(n, m),
-      companyId: companyId(n),
-      projectId: projectId(n, p),
-      name: `Item ${n}${m}`,
-      synonyms: ["thing"],
-      wasteFractionId: fractionId(n),
-      instructions: "Rinse it",
-      status,
-    })
-    await owner.db.insert(sortingGuideItem).values([item("a", 1, 1, "published"), item("a", 2, 1, "draft"), item("a", 3, 1, "withdrawn"), item("a", 4, 2, "published"), item("b", 1, 1, "published")])
     const point = (n: "a" | "b", m: number, p: 1 | 2, status: string) => ({
       id: pointId(n, m),
       companyId: companyId(n),
@@ -162,17 +149,15 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
     )
   })
 
-  test("a published project's slug opens its own published items and its company's fractions, and nothing of a draft, a withdrawn item, an unpublished project or the other company", async () => {
+  test("a published project's slug opens its company's fractions and every published project, and neither the other company's fractions nor an unpublished project", async () => {
     const seen = await withPublishedProject(owner.db, "door-a", async (tx, published) => {
-      const items = await tx.select({ id: sortingGuideItem.id }).from(sortingGuideItem).orderBy(sortingGuideItem.id)
       const fractions = await tx.select({ id: wasteFraction.id }).from(wasteFraction)
       const projects = await tx.select({ id: project.id }).from(project).orderBy(project.id)
       const [role] = await tx.execute<{ role: string }>(sql`select current_user as role`)
-      return { published, items: items.map((row) => row.id), fractions: fractions.map((row) => row.id), projects: projects.map((row) => row.id), role: role?.role }
+      return { published, fractions: fractions.map((row) => row.id), projects: projects.map((row) => row.id), role: role?.role }
     })
     assert.deepEqual(seen, {
       published: { id: projectId("a", 1), companyId: companyId("a"), name: "Project a1", language: "da", timezone: "Europe/Copenhagen", slug: "door-a", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
-      items: [itemId("a", 1)],
       fractions: [fractionId("a")],
       projects: [projectId("a", 1), projectId("b", 1)],
       role: PUBLIC_ROLE,
@@ -204,7 +189,7 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       insufficientPrivilege,
     )
     await assert.rejects(
-      withPublishedProject(owner.db, "door-a", (tx) => tx.execute(sql`update wms.sorting_guide_item set name = 'Changed'`)),
+      withPublishedProject(owner.db, "door-a", (tx) => tx.execute(sql`update wms.waste_fraction set name = 'Changed'`)),
       insufficientPrivilege,
     )
   })

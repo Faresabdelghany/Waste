@@ -57,7 +57,6 @@ import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/se
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
-import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { NotificationsSettingsOnApi } from "@/components/settings/notifications-settings-on-api"
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
@@ -74,7 +73,6 @@ import { useApiConfigured, useApiSession } from "@/components/waste/api-session-
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
-import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
@@ -210,8 +208,6 @@ const settingsSections: Array<{
       // The browser's pane in fixture mode; on the Pilot the API's (#487), the projects' public pages and the Driver App.
       { id: PORTALS_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
       { id: PORTALS_ON_API_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
-      // The Sorting Guide on the API (#293): offered with the adapter configured, since it has no fixtures.
-      { id: SORTING_GUIDE_SETTINGS_PANE_ID, label: "Sorting guide", icon: Recycle },
     ],
   },
   {
@@ -1322,11 +1318,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence.",
     groups: [],
   },
-  [SORTING_GUIDE_SETTINGS_PANE_ID]: {
-    title: "Sorting guide",
-    description: "What residents find when they search where a thing goes, on the project's public page.",
-    groups: [],
-  },
   [MASTER_DATA_SETTINGS_PANE_ID]: {
     title: "Master data",
     description:
@@ -1453,7 +1444,6 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
-    paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
     paneId === TICKET_TYPES_SETTINGS_PANE_ID ||
@@ -1875,8 +1865,6 @@ function SettingsPane({
         <HolidayListsSettings />
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
-      ) : paneId === SORTING_GUIDE_SETTINGS_PANE_ID ? (
-        <SortingGuideSettings />
       ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
         <TicketSlaSettings />
       ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (

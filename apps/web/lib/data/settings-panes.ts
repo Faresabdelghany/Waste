@@ -10,10 +10,9 @@
 // company's invoice identity and each project's payment terms and reference
 // scheme. The browser's pane (`configure.finance` — cost centres, routing
 // rules and the rest, which have no API) is fixture mode's alone, and a link
-// to either opens the one its mode has. The Sorting Guide (#293) is the
-// API's alone too, so only the Pilot offers it. So is the Ticket SLA (O4 of
-// #290), which takes the place of Tickets & communication on the Pilot: that
-// pane's ticket types, templates and channels have no API, and its SLA is the
+// to either opens the one its mode has. The Ticket SLA (O4 of #290) is the
+// API's alone, so only the Pilot offers it; it takes the place of Tickets &
+// communication on the Pilot: that pane's ticket types, templates and channels have no API, and its SLA is the
 // new pane's, so a link to it there opens the SLA; its templates are the API's
 // Message templates (#291 C15), offered on the Pilot alone too. Exception charges (M5 of
 // #293), the emission factors (M10 of #293), the bulky schedules (O11 of
@@ -42,7 +41,6 @@ import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "./fleet-emissions"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "./message-templates"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "./pickup-exception-rules"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "./site-visits"
-import { SORTING_GUIDE_SETTINGS_PANE_ID } from "./sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "./ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "./ticket-types"
@@ -86,7 +84,7 @@ export const ACCOUNT_DEFAULTS_GROUP = "Defaults"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
   return true
 }

@@ -202,12 +202,10 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       // Whether a customer's payment arrived (#291 C6): read, never registered or matched.
       only("commercial.payments", VIEW),
       only("configure.templates", VIEW_EDIT),
-      // The citizen-facing Sorting Guide (#293): it keeps the items up to date — adds, edits, withdraws — and leaves publishing the project to the administrator.
-      // The pane reads the projects a guide is kept for and the fractions an item names, so it views both and changes neither.
-      only("configure.sorting-guide", VIEW_EDIT_CREATE),
+      // The projects and the fractions its panes name, read: it changes neither, and publishing a project stays the administrator's.
       only("configure.organization", VIEW),
       only("configure.master", VIEW),
-      // The Drop-off Points residents bring waste to (#293, M3): it keeps their hours and fractions up to date, as it keeps the guide that points to them.
+      // The Drop-off Points residents bring waste to (#293, M3): it keeps their hours and fractions up to date.
       only("resources.drop-off-points", VIEW_EDIT_CREATE),
     ),
   },

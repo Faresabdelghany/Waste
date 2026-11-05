@@ -9,7 +9,6 @@ import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID, COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_SETTINGS_PANE_ID, OPERATIONS_SETUP_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
-import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "../fleet-emissions"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
@@ -22,11 +21,6 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOffered(ASSET_MANAGEMENT_SETTINGS_PANE_ID, false), true)
     assert.equal(settingsPaneOffered("company", true), true)
     assert.equal(settingsPaneOffered("company", false), true)
-  })
-
-  test("the Sorting Guide on the Pilot only (#293): its items are the API's alone, with no fixtures", () => {
-    assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, true), true)
-    assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, false), false)
   })
 
   test("Exception charges on the Pilot only (M5 of #293): the rules are the API's alone", () => {

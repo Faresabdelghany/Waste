@@ -277,7 +277,7 @@ describe("the projects", () => {
     assert.ok(ProjectPatch.safeParse(body).success)
   })
 
-  test("Settings › Sorting guide publishes a project under a slug and takes it down again (#293): the public address reads back as a fact and a typed value", () => {
+  test("Settings › Portals & branding publishes a project under a slug and takes it down again (#293, #487): the public address reads back as a fact and a typed value", () => {
     const before = projectAdapter.toRecord(copenhagen, context(fixtures))
     assert.equal(before.submittedValues?.publicSlug, undefined)
     const published = { ...before, submittedValues: { ...before.submittedValues, publicSlug: "kystbyen" } }

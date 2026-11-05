@@ -69,7 +69,6 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { importRun, importRunRow } from "@waste/db/schema/imports"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
-import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { materialAdjustment, outboundLoad } from "@waste/db/schema/haul-out"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
@@ -433,7 +432,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
-    await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
     // A ticket type's actions (#546 of #544) name a team, a person and a type, so they go before all three.
     await tx.delete(ticketTypeAction).where(eq(ticketTypeAction.companyId, companyId))

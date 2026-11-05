@@ -82,7 +82,6 @@ import * as fieldInspectionsModule from "../field-inspections"
 import * as rightSizingModule from "../right-sizing"
 import * as siteVisitsModule from "../site-visits"
 import * as settlementsModule from "../settlements"
-import * as sortingGuideModule from "../sorting-guide"
 import * as stockModule from "../stock"
 import * as sustainabilityModule from "../sustainability"
 import * as textModule from "../text"
@@ -181,7 +180,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "field-inspections": fieldInspectionsModule,
   "right-sizing": rightSizingModule,
   "settlements": settlementsModule,
-  "sorting-guide": sortingGuideModule,
   "stock": stockModule,
   "sustainability": sustainabilityModule,
   "text": textModule,

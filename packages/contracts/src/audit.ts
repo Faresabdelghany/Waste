@@ -79,7 +79,6 @@ export const AUDITED_TABLES = [
   "service_area_assignment",
   "service_provider_price",
   "settlement",
-  "sorting_guide_item",
   "subscription_pause",
   "ticket_sla",
   "drop_off_point",
