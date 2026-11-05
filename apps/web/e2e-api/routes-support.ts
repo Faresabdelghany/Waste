@@ -144,18 +144,15 @@ export const routePage = (page: Page, route: Pick<Route, "label">): Locator => p
 /** A route's stops, one table row each, in the order they will be visited. */
 export const stopRows = (details: Locator): Locator => details.getByTestId("route-stops").locator("tbody tr")
 
-/** The commands under the stops' Action menu; every other route command but Dispatch is under the page's Actions menu. */
-const STOP_COMMANDS = new Set(["Add stop", "Move stops", "Split route", "Merge route", "Reorder stops", "Optimise"])
-
-/** Opens the menu a route command sits in on the route's page and answers the command: Dispatch is the page's own button, the rest menu items. */
+/** Opens the route page's Actions menu and answers the command: Dispatch is the page's own button, every other command an item of the menu. */
 export async function routeCommand(page: Page, details: Locator, name: string): Promise<Locator> {
   if (name === "Dispatch") return details.getByTestId("route-commands").getByRole("button", { name })
-  await routeMenu(details, STOP_COMMANDS.has(name) ? "Stop actions" : "Actions").click()
+  await routeMenu(details).click()
   return page.getByRole("menuitem", { name, exact: true })
 }
 
-/** The trigger of the route page's Actions menu, or of its stops' (named "Stop actions"). */
-export const routeMenu = (details: Locator, name: "Actions" | "Stop actions"): Locator => details.getByRole("button", { name, exact: true })
+/** The trigger of the route page's Actions menu, beside Dispatch over its stops. */
+export const routeMenu = (details: Locator): Locator => details.getByTestId("route-commands").getByRole("button", { name: "Actions", exact: true })
 
 export async function openRoute(page: Page, route: Pick<Route, "id" | "label">) {
   await page.goto(`/route-studio?module=routes&record=route-${route.id}`)
