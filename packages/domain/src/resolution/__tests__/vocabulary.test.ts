@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 13, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 16,["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -38,6 +38,12 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.TICKET_EVENT_KINDS], ["created", "assigned", "status-changed", "comment"])
     assert.equal((vocabulary.TICKET_EVENT_KINDS as readonly string[]).includes("edited"), false, "the history of a field edit is the audit log's (ADR-0005)")
     assert.deepEqual([...vocabulary.TICKET_VISIBILITIES], ["internal", "customer", "service-provider"])
+  })
+
+  test("a ticket type is active or retired as a team is; a custom field takes one of six inputs and is required never, to open or to complete (#545 of #544)", () => {
+    assert.deepEqual([...vocabulary.TICKET_TYPE_STATUSES], [...vocabulary.TEAM_STATUSES])
+    assert.deepEqual([...vocabulary.TICKET_FIELD_INPUTS], ["text", "paragraph", "number", "date", "yes-no", "choice"])
+    assert.deepEqual([...vocabulary.TICKET_FIELD_REQUIREMENTS], ["optional", "to-open", "to-complete"])
   })
 
   test("an alert's kinds are the prototype's six, its sources leave the later three their token, and its statuses leave out the linked reading", () => {

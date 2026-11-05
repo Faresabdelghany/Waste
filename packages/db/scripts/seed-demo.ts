@@ -54,6 +54,7 @@ const configuration = [
   count(counts.holidayLists, "holiday list"),
   count(counts.holidayListHolidays, "listed holiday"),
   count(counts.fuelEmissionFactors, "emission factor"),
+  count(counts.ticketTypes, "ticket type"),
 ].join(", ")
 console.log(
   `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +

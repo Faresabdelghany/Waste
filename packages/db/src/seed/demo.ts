@@ -96,6 +96,7 @@ import { applyDecommissionReasons, DECOMMISSION_REASON_IDS, DECOMMISSION_REASONS
 import { applyPickupExceptions, PICKUP_EXCEPTIONS_COUNTS, PICKUP_EXCEPTIONS_IDS, type PickupExceptionsCounts } from "./pickup-exceptions"
 import { applyResources, RESOURCES_COUNTS, RESOURCES_IDS, type ResourcesCounts } from "./resources"
 import { applyHolidayLists, HOLIDAY_LIST_IDS, HOLIDAY_LISTS_COUNTS, type HolidayListsCounts } from "./holiday-lists"
+import { applyTicketTypes, TICKET_TYPE_IDS, TICKET_TYPES_COUNTS, type TicketTypesCounts } from "./ticket-types"
 import { upsertOwned } from "./upsert"
 
 /**
@@ -135,6 +136,7 @@ export const DEMO_IDS = {
   decommissionReasons: DECOMMISSION_REASON_IDS,
   holidayLists: HOLIDAY_LIST_IDS,
   emissions: EMISSIONS_IDS,
+  ticketTypes: TICKET_TYPE_IDS,
   planning: PLANNING_IDS,
   finance: FINANCE_IDS,
 } as const
@@ -303,7 +305,8 @@ export type DemoSeedCounts = {
   PickupExceptionsCounts &
   DecommissionReasonsCounts &
   HolidayListsCounts &
-  EmissionsCounts
+  EmissionsCounts &
+  TicketTypesCounts
 
 export type DemoSeedReport = {
   companyId: string
@@ -328,6 +331,7 @@ const COUNTS: DemoSeedCounts = {
   ...DECOMMISSION_REASONS_COUNTS,
   ...HOLIDAY_LISTS_COUNTS,
   ...EMISSIONS_COUNTS,
+  ...TICKET_TYPES_COUNTS,
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
@@ -463,6 +467,8 @@ export async function applyDemo(tx: Tx): Promise<number> {
   changed += await applyDecommissionReasons(tx)
   // The fleet's emission factors and its vehicle types' consumption (M10 of #293) name Resources' types and nothing after them.
   changed += await applyEmissions(tx)
+  // The default ticket types (#545 of #544) name the company alone.
+  changed += await applyTicketTypes(tx)
 
   return changed
 }

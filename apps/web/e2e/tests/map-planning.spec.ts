@@ -76,6 +76,21 @@ test("clusters carry their count and fractions; lone containers are dots; there 
   await expect(page.getByRole("button", { name: "Legend" })).toHaveCount(0)
 })
 
+test("the markers move with the map when it pans", async ({ page }) => {
+  // React Compiler kept the positions of the first camera while the map moved beneath them.
+  const marker = page.locator('[data-marker="cluster"]').first()
+  const before = await marker.boundingBox()
+  if (!before) throw new Error("marker has no box")
+  await page.evaluate(
+    (selector) =>
+      (document.querySelector(selector) as HTMLElement & { __planningMap?: { panBy(offset: [number, number], options: { duration: number }): void } })
+        .__planningMap?.panBy([120, 80], { duration: 0 }),
+    CANVAS,
+  )
+  await expect.poll(async () => (await marker.boundingBox())?.x).toBeCloseTo(before.x - 120, 0)
+  await expect.poll(async () => (await marker.boundingBox())?.y).toBeCloseTo(before.y - 80, 0)
+})
+
 test("a rectangle selection opens the Selected area panel with its statistics; the close button clears it", async ({ page }) => {
   await selectRectangle(page)
   const panel = page.getByRole("region", { name: "Selected area" })

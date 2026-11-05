@@ -2,9 +2,9 @@
 // 2026-11-05): one per list its projects name — Danish for Copenhagen
 // Central, Egyptian for Cairo Operations — holding every day its projects'
 // calendars hold (planning.ts's `CALENDARS`), named as the list names them.
-// That is what migration 0099 makes of a database the seed wrote before it,
-// so a run after the migration finds the days as they should be and writes
-// nothing. The migration minted its own ids for the lists, so a list the
+// That is what the Holiday Lists' migration makes of a database the seed
+// wrote before it, so a run after the migration finds the days as they
+// should be and writes nothing. The migration minted its own ids for the lists, so a list the
 // company already holds by its country or its name is left under the id it
 // has, and its days are written against that id; the days are a set `PUT
 // /holiday-lists/:id/holidays` replaces whole, written through `replaceSets`.

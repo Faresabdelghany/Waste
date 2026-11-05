@@ -15,14 +15,15 @@
 
 import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { pointMapLibreWorkerAtRouteHandler } from "@/components/waste/map-planning/maplibre-worker"
+import { useMapProjection, type ScreenPoint } from "@/components/waste/map-planning/use-map-projection"
 import type { RoadState } from "@/components/waste/map-planning/use-road-geometries"
 import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
-import { roadOverlay, roadOverlayPath, roadPath, type ScreenPoint } from "@/lib/map-planning/road-geometry"
-import type { LngLat, LngLatBounds } from "@waste/domain/map-planning/geo"
+import { roadOverlay, roadOverlayPath, roadPath } from "@/lib/map-planning/road-geometry"
+import type { LngLatBounds } from "@waste/domain/map-planning/geo"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
 import type { PreviewStop, RoutePreview } from "@waste/domain/map-planning/route-preview"
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
@@ -86,7 +87,8 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
   const mapRef = useRef<MapLibreMap | null>(null)
   const loadedRef = useRef(false)
   const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
-  const [, setFrame] = useState(0)
+  // Before the framing effect below, so the first fit's move is heard.
+  const project = useMapProjection(mapInstance)
   const [baseMapFailed, setBaseMapFailed] = useState(false)
 
   useEffect(() => {
@@ -121,9 +123,6 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
       console.warn("[route-map]", event.error?.message ?? event)
       if (!loadedRef.current) setBaseMapFailed(true)
     })
-    const onMove = () => setFrame((frame) => frame + 1)
-    map.on("move", onMove)
-    map.on("resize", onMove)
     mapRef.current = map
     setMapInstance(map)
     return () => {
@@ -170,14 +169,6 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
     )
   }, [frame, mapInstance])
 
-  const project = useCallback(
-    (lngLat: LngLat): ScreenPoint | null => {
-      if (!mapInstance) return null
-      const point = mapInstance.project([lngLat.lng, lngLat.lat])
-      return { x: point.x, y: point.y }
-    },
-    [mapInstance],
-  )
 
   // Road paths are built once, in world pixels at the reference zoom
   // relative to the city centre; per frame only the group transform changes.

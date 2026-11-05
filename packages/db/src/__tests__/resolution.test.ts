@@ -21,7 +21,7 @@ import { after, before, describe, test } from "node:test"
 
 import type { Point } from "@waste/contracts/geojson"
 import { TICKET_EVENT_SHAPES, ticketEventShape, type TicketEventRow } from "@waste/domain/resolution/event-shapes"
-import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq, getTableName, sql } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
 
@@ -38,7 +38,8 @@ import { driver, vehicle } from "../schema/fleet"
 import { vehicleType } from "../schema/fleet-types"
 import { company, project } from "../schema/organisation"
 import { depot } from "../schema/places"
-import { alert, ticket, ticketBooking, ticketEvent } from "../schema/resolution"
+import { defaultTicketTypeRows } from "../commands/ticket-types"
+import { alert, ticket, ticketBooking, ticketEvent, ticketType, ticketTypeField, ticketTypePermission } from "../schema/resolution"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { ticketBookingBackfill } from "../sql/ticket-booking"
 import { withCompany } from "../tenant"
@@ -101,6 +102,12 @@ const ids = (n: "a" | "b") => ({
 const a = ids("a")
 const b = ids("b")
 
+/** A company's default ticket type of a kind (#545 of #544), on this file's ids: a ticket names a type of its kind. */
+const typeOf = (companyId: string, kind: string): string => `${companyId.slice(0, 24)}0000000002${TICKET_KINDS.indexOf(kind as TicketKind).toString(16).padStart(2, "0")}`
+
+/** The default types a company starts with, on this file's ids. */
+const defaultTypes = (companyId: string) => defaultTicketTypeRows(companyId, () => "").map((row) => ({ ...row, id: typeOf(companyId, row.kind) }))
+
 const NORDHAVN: Point = { type: "Point", coordinates: [12.5951, 55.7089] }
 const OPENED = "2026-01-01"
 const DAY = "2026-10-05"
@@ -117,6 +124,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(company).values({ id: own.company, ...tenant, name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `1000000${n}`, country: "DK", status: "active" })
   await tx.insert(project).values({ id: own.project, ...tenant, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" })
   await tx.insert(role).values({ id: own.role, ...tenant, name: "Dispatcher", scope: "Company", description: "Dispatches", system: false })
+  await tx.insert(ticketType).values(defaultTypes(own.company))
   await tx.insert(userAccount).values([
     { id: own.account, ...tenant, email: `sofie@${n}.example`, fullName: "Sofie Nielsen", roleId: own.role },
     { id: own.secondAccount, ...tenant, email: `mads@${n}.example`, fullName: "Mads Jensen", roleId: own.role },
@@ -147,6 +155,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
     ...scoped,
     number: n === "a" ? 8831 : 8832,
     kind: "missed-collection",
+    ticketTypeId: typeOf(own.company, "missed-collection"),
     priority: "high",
     source: "office",
     subject: "Missed collection: BIN-82014 at Parkvej 18",
@@ -178,23 +187,26 @@ async function seedHarbor(tx: Tx): Promise<void> {
   await tx.insert(route).values({ id: a.harborRoute, ...scoped, routeSchemeId: a.harborScheme, collectionGroupId: a.harborGroup, serviceDate: "2026-10-06", operatingDate: "2026-10-06", number: 1050 })
   await tx.insert(pickup).values({ id: a.harborPickup, ...scoped, routeId: a.harborRoute, containerId: a.harborContainer, position: 1, propertyId: a.harborProperty, wasteFractionId: a.wasteFraction })
   await tx.insert(agreement).values({ id: a.harborAgreement, ...scoped, validFrom: OPENED, number: "AGR-3000", customerId: a.customer, payerCustomerId: a.customer, status: "active", billingCadence: "monthly", currency: "DKK" })
-  await tx.insert(ticket).values({ id: a.harborTicket, ...scoped, number: 9000, kind: "internal-task", source: "office", subject: "Check the harbor gate", description: "The gate code changed", occurredAt: at(9), createdBy: a.account })
+  await tx.insert(ticket).values({ id: a.harborTicket, ...scoped, number: 9000, kind: "internal-task", ticketTypeId: typeOf(a.company, "internal-task"), source: "office", subject: "Check the harbor gate", description: "The gate code changed", occurredAt: at(9), createdBy: a.account })
 }
 
-/** A sound open ticket of company a's first project, an internal task about nothing, but for what a test overrides. */
-const opened = (values: Partial<typeof ticket.$inferInsert>): typeof ticket.$inferInsert => ({
-  id: a.spare,
-  companyId: a.company,
-  projectId: a.project,
-  number: 8900,
-  kind: "internal-task",
-  source: "office",
-  subject: "Call the customer back",
-  description: "About the container request",
-  occurredAt: at(9),
-  createdBy: a.account,
-  ...values,
-})
+/** A sound open ticket of company a's first project, an internal task about nothing, but for what a test overrides; of its company's default type of its kind unless the test names one. */
+const opened = (values: Partial<typeof ticket.$inferInsert>): typeof ticket.$inferInsert => {
+  const row = {
+    id: a.spare,
+    companyId: a.company,
+    projectId: a.project,
+    number: 8900,
+    kind: "internal-task",
+    source: "office",
+    subject: "Call the customer back",
+    description: "About the container request",
+    occurredAt: at(9),
+    createdBy: a.account,
+    ...values,
+  }
+  return { ticketTypeId: typeOf(row.companyId, row.kind), ...row }
+}
 
 /** A sound comment on company a's ticket, but for what a test overrides. */
 const comment = (values: Partial<typeof ticketEvent.$inferInsert>): typeof ticketEvent.$inferInsert => ({
@@ -636,6 +648,34 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await tx.execute(sql.raw(ticketBookingBackfill()))
       const rows = await tx.select({ companyId: ticketBooking.companyId, projectId: ticketBooking.projectId, ticketId: ticketBooking.ticketId, routeId: ticketBooking.routeId, pickupId: ticketBooking.pickupId }).from(ticketBooking)
       assert.deepEqual(rows, [{ companyId: a.company, projectId: a.project, ticketId: a.ticket, routeId: a.secondRoute, pickupId: a.secondPickup }], "b's ticket is booked for nothing")
+    }))
+
+  test("a ticket's type is one of its own company's types of its kind (23503 ticket_ticket_type_id_kind_fk), and its values are an object (23514 ticket_field_values_shape) (#545 of #544)", () =>
+    seeded(async (tx) => {
+      const refuse = (values: Partial<typeof ticket.$inferInsert>, code: string, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticket).values(opened(values))), refusedWith(code, constraint), why)
+      await refuse({ ticketTypeId: typeOf(a.company, "complaint") }, "23503", /ticket_ticket_type_id_kind_fk/, "a type of another kind")
+      await refuse({ ticketTypeId: typeOf(b.company, "internal-task") }, "23503", /ticket_ticket_type_id_kind_fk/, "another company's type")
+      await refuse({ fieldValues: ["a list"] }, "23514", /ticket_field_values_shape/, "values held by key")
+      await tx.insert(ticket).values(opened({ fieldValues: { "requested-date": "2026-10-09", bags: 2 } }))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(ticket).set({ kind: "complaint" }).where(eq(ticket.id, a.spare))), refusedWith("23503", /ticket_ticket_type_id_kind_fk/), "the kind moves with the type and never without it")
+    }))
+
+  test("a kind has one default type, and the default is offered (23505 ticket_type_default_kind_key, 23514 ticket_type_default_shape); a field offers choices exactly when it is a choice, each key and place once (#545 of #544)", () =>
+    seeded(async (tx) => {
+      const type = { companyId: a.company, kind: "container-request" }
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketType).values({ ...type, id: a.spare, name: "Bulky waste collection", isDefault: true })), refusedWith("23505", /ticket_type_default_kind_key/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(ticketType).set({ status: "inactive" }).where(eq(ticketType.id, typeOf(a.company, "container-request")))), refusedWith("23514", /ticket_type_default_shape/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketType).values({ ...type, id: a.spare, name: "Container request" })), refusedWith("23505", /ticket_type_name_key/), "a name is one type's")
+      await tx.insert(ticketType).values({ ...type, id: a.spare, name: "Bulky waste collection" })
+      const field = { companyId: a.company, ticketTypeId: a.spare, label: "Decision" }
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypeField).values({ ...field, id: a.other, position: 1, key: "decision", input: "choice" })), refusedWith("23514", /ticket_type_field_choices_shape/), "a choice without choices")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypeField).values({ ...field, id: a.other, position: 1, key: "decision", input: "text", choices: ["Granted"] })), refusedWith("23514", /ticket_type_field_choices_shape/), "choices on a line")
+      await tx.insert(ticketTypeField).values({ ...field, id: a.other, position: 1, key: "decision", input: "choice", choices: ["Granted", "Refused"] })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypeField).values({ ...field, id: a.third, position: 2, key: "decision", input: "text" })), refusedWith("23505", /ticket_type_field_ticket_type_id_key_key/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypeField).values({ ...field, id: a.third, position: 1, key: "note", input: "text" })), refusedWith("23505", /ticket_type_field_ticket_type_id_position_key/))
+      await tx.insert(ticketTypePermission).values({ id: a.third, companyId: a.company, ticketTypeId: a.spare, command: "complete", roleId: a.role })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypePermission).values({ id: a.fourth, companyId: a.company, ticketTypeId: a.spare, command: "complete", roleId: a.role })), refusedWith("23505", /ticket_type_permission_grant_key/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketTypePermission).values({ id: a.fourth, companyId: a.company, ticketTypeId: a.spare, command: "complete", roleId: b.role })), refusedWith("23503", /ticket_type_permission_role_id_fk/), "another company's role")
     }))
 })
 

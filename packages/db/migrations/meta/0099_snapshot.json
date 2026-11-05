@@ -1,5 +1,5 @@
 {
-  "id": "4ddcd174-5e53-4f2b-a6b5-d02837d0b7f8",
+  "id": "c61533b1-535e-4fca-8616-350abb361d3b",
   "prevId": "b01daa04-4be9-4f88-bb9c-1016b27cf2df",
   "version": "7",
   "dialect": "postgresql",
@@ -166,202 +166,6 @@
       },
       "isRLSEnabled": false
     },
-    "wms.holiday_list": {
-      "name": "holiday_list",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "country": {
-          "name": "country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "holiday_list_company_id_fk": {
-          "name": "holiday_list_company_id_fk",
-          "tableFrom": "holiday_list",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "holiday_list_country_key": {
-          "name": "holiday_list_country_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "country"
-          ]
-        },
-        "holiday_list_name_key": {
-          "name": "holiday_list_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "name"
-          ]
-        },
-        "holiday_list_tenant_key": {
-          "name": "holiday_list_tenant_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "holiday_list_country_shape": {
-          "name": "holiday_list_country_shape",
-          "value": "\"wms\".\"holiday_list\".\"country\" ~ '^[A-Z]{2}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.holiday_list_holiday": {
-      "name": "holiday_list_holiday",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "holiday_list_id": {
-          "name": "holiday_list_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "day": {
-          "name": "day",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "holiday_list_holiday_company_id_fk": {
-          "name": "holiday_list_holiday_company_id_fk",
-          "tableFrom": "holiday_list_holiday",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "holiday_list_holiday_holiday_list_id_fk": {
-          "name": "holiday_list_holiday_holiday_list_id_fk",
-          "tableFrom": "holiday_list_holiday",
-          "tableTo": "holiday_list",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "holiday_list_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "holiday_list_holiday_holiday_list_id_day_key": {
-          "name": "holiday_list_holiday_holiday_list_id_day_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "holiday_list_id",
-            "day"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "wms.project": {
       "name": "project",
       "schema": "wms",
@@ -513,29 +317,7 @@
           "notNull": false
         }
       },
-      "indexes": {
-        "project_holiday_list_idx": {
-          "name": "project_holiday_list_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "holiday_list",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "project_company_id_fk": {
           "name": "project_company_id_fk",
@@ -550,22 +332,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "project_holiday_list_fk": {
-          "name": "project_holiday_list_fk",
-          "tableFrom": "project",
-          "tableTo": "holiday_list",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "holiday_list"
-          ],
-          "columnsTo": [
-            "company_id",
-            "name"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -15551,6 +15317,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "ticket_type_id": {
+          "name": "ticket_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "field_values": {
+          "name": "field_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -15832,6 +15611,33 @@
             },
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_ticket_type_id_kind_idx": {
+          "name": "ticket_ticket_type_id_kind_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ticket_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -16200,6 +16006,24 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "ticket_ticket_type_id_kind_fk": {
+          "name": "ticket_ticket_type_id_kind_fk",
+          "tableFrom": "ticket",
+          "tableTo": "ticket_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "ticket_type_id",
+            "kind"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id",
+            "kind"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "ticket_created_by_fk": {
           "name": "ticket_created_by_fk",
           "tableFrom": "ticket",
@@ -16528,6 +16352,10 @@
         "ticket_booked_shape": {
           "name": "ticket_booked_shape",
           "value": "(\"wms\".\"ticket\".\"booked_route_id\" is null) = (\"wms\".\"ticket\".\"booked_pickup_id\" is null)"
+        },
+        "ticket_field_values_shape": {
+          "name": "ticket_field_values_shape",
+          "value": "jsonb_typeof(\"wms\".\"ticket\".\"field_values\") = 'object'"
         },
         "ticket_closed_shape": {
           "name": "ticket_closed_shape",
@@ -17304,6 +17132,459 @@
         "ticket_team_default_kind_one_of": {
           "name": "ticket_team_default_kind_one_of",
           "value": "\"wms\".\"ticket_team_default\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.ticket_type": {
+      "name": "ticket_type",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "ticket_type_default_kind_key": {
+          "name": "ticket_type_default_kind_key",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"ticket_type\".\"is_default\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ticket_type_company_id_fk": {
+          "name": "ticket_type_company_id_fk",
+          "tableFrom": "ticket_type",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ticket_type_name_key": {
+          "name": "ticket_type_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "name"
+          ]
+        },
+        "ticket_type_tenant_key": {
+          "name": "ticket_type_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        },
+        "ticket_type_kind_key": {
+          "name": "ticket_type_kind_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id",
+            "kind"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "ticket_type_kind_one_of": {
+          "name": "ticket_type_kind_one_of",
+          "value": "\"wms\".\"ticket_type\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
+        },
+        "ticket_type_status_one_of": {
+          "name": "ticket_type_status_one_of",
+          "value": "\"wms\".\"ticket_type\".\"status\" in ('active', 'inactive')"
+        },
+        "ticket_type_default_shape": {
+          "name": "ticket_type_default_shape",
+          "value": "not \"wms\".\"ticket_type\".\"is_default\" or \"wms\".\"ticket_type\".\"status\" = 'active'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.ticket_type_field": {
+      "name": "ticket_type_field",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ticket_type_id": {
+          "name": "ticket_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "help_text": {
+          "name": "help_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input": {
+          "name": "input",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "choices": {
+          "name": "choices",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "requirement": {
+          "name": "requirement",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'optional'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ticket_type_field_company_id_fk": {
+          "name": "ticket_type_field_company_id_fk",
+          "tableFrom": "ticket_type_field",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ticket_type_field_ticket_type_id_fk": {
+          "name": "ticket_type_field_ticket_type_id_fk",
+          "tableFrom": "ticket_type_field",
+          "tableTo": "ticket_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "ticket_type_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ticket_type_field_ticket_type_id_key_key": {
+          "name": "ticket_type_field_ticket_type_id_key_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "ticket_type_id",
+            "key"
+          ]
+        },
+        "ticket_type_field_ticket_type_id_position_key": {
+          "name": "ticket_type_field_ticket_type_id_position_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "ticket_type_id",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "ticket_type_field_position_positive": {
+          "name": "ticket_type_field_position_positive",
+          "value": "\"wms\".\"ticket_type_field\".\"position\" > 0"
+        },
+        "ticket_type_field_key_lowercase": {
+          "name": "ticket_type_field_key_lowercase",
+          "value": "\"wms\".\"ticket_type_field\".\"key\" = lower(\"wms\".\"ticket_type_field\".\"key\")"
+        },
+        "ticket_type_field_input_one_of": {
+          "name": "ticket_type_field_input_one_of",
+          "value": "\"wms\".\"ticket_type_field\".\"input\" in ('text', 'paragraph', 'number', 'date', 'yes-no', 'choice')"
+        },
+        "ticket_type_field_requirement_one_of": {
+          "name": "ticket_type_field_requirement_one_of",
+          "value": "\"wms\".\"ticket_type_field\".\"requirement\" in ('optional', 'to-open', 'to-complete')"
+        },
+        "ticket_type_field_choices_shape": {
+          "name": "ticket_type_field_choices_shape",
+          "value": "(\"wms\".\"ticket_type_field\".\"input\" = 'choice') = (cardinality(\"wms\".\"ticket_type_field\".\"choices\") > 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.ticket_type_permission": {
+      "name": "ticket_type_permission",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ticket_type_id": {
+          "name": "ticket_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "command": {
+          "name": "command",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "ticket_type_permission_role_id_idx": {
+          "name": "ticket_type_permission_role_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ticket_type_permission_company_id_fk": {
+          "name": "ticket_type_permission_company_id_fk",
+          "tableFrom": "ticket_type_permission",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ticket_type_permission_ticket_type_id_fk": {
+          "name": "ticket_type_permission_ticket_type_id_fk",
+          "tableFrom": "ticket_type_permission",
+          "tableTo": "ticket_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "ticket_type_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ticket_type_permission_role_id_fk": {
+          "name": "ticket_type_permission_role_id_fk",
+          "tableFrom": "ticket_type_permission",
+          "tableTo": "role",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "role_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ticket_type_permission_grant_key": {
+          "name": "ticket_type_permission_grant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "ticket_type_id",
+            "command",
+            "role_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "ticket_type_permission_command_one_of": {
+          "name": "ticket_type_permission_command_one_of",
+          "value": "\"wms\".\"ticket_type_permission\".\"command\" in ('start', 'wait', 'hold', 'complete', 'reject', 'reopen')"
         }
       },
       "isRLSEnabled": false

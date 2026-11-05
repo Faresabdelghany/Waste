@@ -67,6 +67,7 @@ import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
+import type { TicketTypeStatus } from "@waste/contracts/ticket-types"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
@@ -254,6 +255,15 @@ export const retiredTeam = (name: string): string => `The team ${JSON.stringify(
 export function refuseRetiredTeam(status: TeamStatus, name: string): void {
   if (status === "active") return
   throw problem(409, { detail: retiredTeam(name) })
+}
+
+/** What a new ticket or a patch naming a retired Ticket Type is told (#545 of #544). */
+export const retiredTicketType = (name: string): string => `The ticket type ${JSON.stringify(name)} is retired; a ticket is of an active type`
+
+/** A Ticket Type a new ticket or a patch moving a ticket's type names: active, or the sentence. The type a ticket already is of is kept whatever its status. */
+export function refuseRetiredTicketType(status: TicketTypeStatus, name: string): void {
+  if (status === "active") return
+  throw problem(409, { detail: retiredTicketType(name) })
 }
 
 /** What a rule's step naming a product that is not offered is told. */

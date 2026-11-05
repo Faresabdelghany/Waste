@@ -4384,6 +4384,8 @@ column wms.ticket 31 charge_product_id uuid
 column wms.ticket 32 booked_route_id uuid
 column wms.ticket 33 booked_pickup_id uuid
 column wms.ticket 34 team_id uuid
+column wms.ticket 35 ticket_type_id uuid not-null
+column wms.ticket 36 field_values jsonb not-null default='{}'::jsonb
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_booked_route_id_booked_pickup_id_fk FOREIGN KEY (company_id, project_id, booked_route_id, booked_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
@@ -4396,6 +4398,7 @@ constraint wms.ticket ticket_container_id_fk FOREIGN KEY (company_id, project_id
 constraint wms.ticket ticket_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
 constraint wms.ticket ticket_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
+constraint wms.ticket ticket_field_values_shape CHECK ((jsonb_typeof(field_values) = 'object'::text))
 constraint wms.ticket ticket_kind_one_of CHECK ((kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'vehicle-defect'::text, 'other'::text])))
 constraint wms.ticket ticket_number_key UNIQUE (company_id, number)
 constraint wms.ticket ticket_origin_shape CHECK (((created_by IS NULL) = (source_event_id IS NOT NULL)))
@@ -4419,6 +4422,7 @@ constraint wms.ticket ticket_shared_collection_point_id_fk FOREIGN KEY (company_
 constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text, 'service-provider'::text])))
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 constraint wms.ticket ticket_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+constraint wms.ticket ticket_ticket_type_id_kind_fk FOREIGN KEY (company_id, ticket_type_id, kind) REFERENCES wms.ticket_type(company_id, id, kind)
 index wms.ticket ticket_agreement_id_idx CREATE INDEX ticket_agreement_id_idx ON wms.ticket USING btree (company_id, agreement_id)
 index wms.ticket ticket_assignee_user_account_id_status_idx CREATE INDEX ticket_assignee_user_account_id_status_idx ON wms.ticket USING btree (company_id, assignee_user_account_id, status)
 index wms.ticket ticket_booked_pickup_id_key CREATE UNIQUE INDEX ticket_booked_pickup_id_key ON wms.ticket USING btree (company_id, booked_pickup_id) WHERE (booked_pickup_id IS NOT NULL)
@@ -4441,6 +4445,7 @@ index wms.ticket ticket_route_id_idx CREATE INDEX ticket_route_id_idx ON wms.tic
 index wms.ticket ticket_shared_collection_point_id_idx CREATE INDEX ticket_shared_collection_point_id_idx ON wms.ticket USING btree (company_id, shared_collection_point_id)
 index wms.ticket ticket_source_event_id_idx CREATE UNIQUE INDEX ticket_source_event_id_idx ON wms.ticket USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
 index wms.ticket ticket_team_id_status_idx CREATE INDEX ticket_team_id_status_idx ON wms.ticket USING btree (company_id, team_id, status)
+index wms.ticket ticket_ticket_type_id_kind_idx CREATE INDEX ticket_ticket_type_id_kind_idx ON wms.ticket USING btree (company_id, ticket_type_id, kind)
 trigger wms.ticket ticket_touch_updated_at enabled=O CREATE TRIGGER ticket_touch_updated_at BEFORE UPDATE ON wms.ticket FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket ticket_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket_booking kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -4562,6 +4567,81 @@ index wms.ticket_team_default ticket_team_default_team_id_idx CREATE INDEX ticke
 trigger wms.ticket_team_default ticket_team_default_audit_trail enabled=O CREATE TRIGGER ticket_team_default_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.ticket_team_default ticket_team_default_touch_updated_at enabled=O CREATE TRIGGER ticket_team_default_touch_updated_at BEFORE UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_team_default ticket_team_default_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_type 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_type 2 company_id uuid not-null
+column wms.ticket_type 3 created_at timestamp with time zone not-null default=now()
+column wms.ticket_type 4 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_type 5 name text not-null
+column wms.ticket_type 6 kind text not-null
+column wms.ticket_type 7 description text
+column wms.ticket_type 8 status text not-null default='active'::text
+column wms.ticket_type 9 is_default boolean not-null default=false
+constraint wms.ticket_type ticket_type_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_type ticket_type_default_shape CHECK (((NOT is_default) OR (status = 'active'::text)))
+constraint wms.ticket_type ticket_type_kind_key UNIQUE (company_id, id, kind)
+constraint wms.ticket_type ticket_type_kind_one_of CHECK ((kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'vehicle-defect'::text, 'other'::text])))
+constraint wms.ticket_type ticket_type_name_key UNIQUE (company_id, name)
+constraint wms.ticket_type ticket_type_pkey PRIMARY KEY (id)
+constraint wms.ticket_type ticket_type_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.ticket_type ticket_type_tenant_key UNIQUE (company_id, id)
+index wms.ticket_type ticket_type_default_kind_key CREATE UNIQUE INDEX ticket_type_default_kind_key ON wms.ticket_type USING btree (company_id, kind) WHERE is_default
+index wms.ticket_type ticket_type_kind_key CREATE UNIQUE INDEX ticket_type_kind_key ON wms.ticket_type USING btree (company_id, id, kind)
+index wms.ticket_type ticket_type_name_key CREATE UNIQUE INDEX ticket_type_name_key ON wms.ticket_type USING btree (company_id, name)
+index wms.ticket_type ticket_type_pkey CREATE UNIQUE INDEX ticket_type_pkey ON wms.ticket_type USING btree (id)
+index wms.ticket_type ticket_type_tenant_key CREATE UNIQUE INDEX ticket_type_tenant_key ON wms.ticket_type USING btree (company_id, id)
+trigger wms.ticket_type ticket_type_audit_trail enabled=O CREATE TRIGGER ticket_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.ticket_type ticket_type_touch_updated_at enabled=O CREATE TRIGGER ticket_type_touch_updated_at BEFORE UPDATE ON wms.ticket_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_type ticket_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_type_field kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_type_field 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_type_field 2 company_id uuid not-null
+column wms.ticket_type_field 3 created_at timestamp with time zone not-null default=now()
+column wms.ticket_type_field 4 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_type_field 5 ticket_type_id uuid not-null
+column wms.ticket_type_field 6 position integer not-null
+column wms.ticket_type_field 7 key text not-null
+column wms.ticket_type_field 8 label text not-null
+column wms.ticket_type_field 9 help_text text
+column wms.ticket_type_field 10 input text not-null
+column wms.ticket_type_field 11 choices text[] not-null default='{}'::text[]
+column wms.ticket_type_field 12 requirement text not-null default='optional'::text
+constraint wms.ticket_type_field ticket_type_field_choices_shape CHECK (((input = 'choice'::text) = (cardinality(choices) > 0)))
+constraint wms.ticket_type_field ticket_type_field_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_type_field ticket_type_field_input_one_of CHECK ((input = ANY (ARRAY['text'::text, 'paragraph'::text, 'number'::text, 'date'::text, 'yes-no'::text, 'choice'::text])))
+constraint wms.ticket_type_field ticket_type_field_key_lowercase CHECK ((key = lower(key)))
+constraint wms.ticket_type_field ticket_type_field_pkey PRIMARY KEY (id)
+constraint wms.ticket_type_field ticket_type_field_position_positive CHECK (("position" > 0))
+constraint wms.ticket_type_field ticket_type_field_requirement_one_of CHECK ((requirement = ANY (ARRAY['optional'::text, 'to-open'::text, 'to-complete'::text])))
+constraint wms.ticket_type_field ticket_type_field_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
+constraint wms.ticket_type_field ticket_type_field_ticket_type_id_key_key UNIQUE (company_id, ticket_type_id, key)
+constraint wms.ticket_type_field ticket_type_field_ticket_type_id_position_key UNIQUE (company_id, ticket_type_id, "position")
+index wms.ticket_type_field ticket_type_field_pkey CREATE UNIQUE INDEX ticket_type_field_pkey ON wms.ticket_type_field USING btree (id)
+index wms.ticket_type_field ticket_type_field_ticket_type_id_key_key CREATE UNIQUE INDEX ticket_type_field_ticket_type_id_key_key ON wms.ticket_type_field USING btree (company_id, ticket_type_id, key)
+index wms.ticket_type_field ticket_type_field_ticket_type_id_position_key CREATE UNIQUE INDEX ticket_type_field_ticket_type_id_position_key ON wms.ticket_type_field USING btree (company_id, ticket_type_id, "position")
+trigger wms.ticket_type_field ticket_type_field_audit_trail enabled=O CREATE TRIGGER ticket_type_field_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type_field FOR EACH ROW EXECUTE FUNCTION wms.audit_row('ticket_type', 'ticket_type_id')
+trigger wms.ticket_type_field ticket_type_field_touch_updated_at enabled=O CREATE TRIGGER ticket_type_field_touch_updated_at BEFORE UPDATE ON wms.ticket_type_field FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_type_field ticket_type_field_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_type_permission kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_type_permission 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_type_permission 2 company_id uuid not-null
+column wms.ticket_type_permission 3 created_at timestamp with time zone not-null default=now()
+column wms.ticket_type_permission 4 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_type_permission 5 ticket_type_id uuid not-null
+column wms.ticket_type_permission 6 command text not-null
+column wms.ticket_type_permission 7 role_id uuid not-null
+constraint wms.ticket_type_permission ticket_type_permission_command_one_of CHECK ((command = ANY (ARRAY['start'::text, 'wait'::text, 'hold'::text, 'complete'::text, 'reject'::text, 'reopen'::text])))
+constraint wms.ticket_type_permission ticket_type_permission_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_type_permission ticket_type_permission_grant_key UNIQUE (company_id, ticket_type_id, command, role_id)
+constraint wms.ticket_type_permission ticket_type_permission_pkey PRIMARY KEY (id)
+constraint wms.ticket_type_permission ticket_type_permission_role_id_fk FOREIGN KEY (company_id, role_id) REFERENCES wms.role(company_id, id)
+constraint wms.ticket_type_permission ticket_type_permission_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
+index wms.ticket_type_permission ticket_type_permission_grant_key CREATE UNIQUE INDEX ticket_type_permission_grant_key ON wms.ticket_type_permission USING btree (company_id, ticket_type_id, command, role_id)
+index wms.ticket_type_permission ticket_type_permission_pkey CREATE UNIQUE INDEX ticket_type_permission_pkey ON wms.ticket_type_permission USING btree (id)
+index wms.ticket_type_permission ticket_type_permission_role_id_idx CREATE INDEX ticket_type_permission_role_id_idx ON wms.ticket_type_permission USING btree (company_id, role_id)
+trigger wms.ticket_type_permission ticket_type_permission_audit_trail enabled=O CREATE TRIGGER ticket_type_permission_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type_permission FOR EACH ROW EXECUTE FUNCTION wms.audit_row('ticket_type', 'ticket_type_id')
+trigger wms.ticket_type_permission ticket_type_permission_touch_updated_at enabled=O CREATE TRIGGER ticket_type_permission_touch_updated_at BEFORE UPDATE ON wms.ticket_type_permission FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_type_permission ticket_type_permission_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.unload kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.unload 1 id uuid not-null default=wms.uuidv7()
 column wms.unload 2 company_id uuid not-null
@@ -5411,5 +5491,6 @@ journal 1793819252515 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86
 journal 1793819334732 01e9eab6e971605b07b65b2d8e6344013082d5a8f2e5f441748193488483a62f
 journal 1793819438754 69211a9db7ef26f17b5eb0ca05c26144c7c7b5b1c49bcfe216140eb16e5528f7
 journal 1793867212088 2007cb8587e6cfd3460449eb5b158cc56ec1652c21ea98668a4d7ae3e34befe0
-journal 1793899324901 7603b62eed847016da2a36566ed930e136dc3237619f7a99b0ca92aedf43f538
+journal 1793897654220 e01891e8825899c0eccf4e4dd1e4f1a2e357955da604bb62681a0e6307d31683
+journal 1793902123253 7603b62eed847016da2a36566ed930e136dc3237619f7a99b0ca92aedf43f538
 pgboss-version 42

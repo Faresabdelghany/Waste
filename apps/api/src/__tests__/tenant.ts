@@ -92,7 +92,8 @@ import { notificationPreference, notificationRule, notificationRuleArea } from "
 import { company, holidayList, holidayListHoliday, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "@waste/db/schema/resolution"
+import { defaultTicketTypeRows } from "@waste/db/commands/ticket-types"
+import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
@@ -238,6 +239,8 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
     ])
     await tx.insert(projectAccess).values({ companyId, userAccountId: viewer.id, projectId: tenant.projects.copenhagen.id })
     await tx.insert(serviceProviderAccess).values({ companyId, userAccountId: lars.id, serviceProviderId: tenant.serviceProviders.nordren.id })
+    // A default ticket type per kind (#545 of #544), as a provisioned company starts with.
+    await tx.insert(ticketType).values(defaultTicketTypeRows(companyId, testId))
   })
 
   return tenant
@@ -440,6 +443,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(ticketTeamDefault).where(eq(ticketTeamDefault.companyId, companyId))
     await tx.delete(teamMember).where(eq(teamMember.companyId, companyId))
     await tx.delete(team).where(eq(team.companyId, companyId))
+    // The ticket types (#545 of #544): the fields and the permissions name a type, and a ticket did, so the type goes after the tickets and before the roles.
+    await tx.delete(ticketTypeField).where(eq(ticketTypeField.companyId, companyId))
+    await tx.delete(ticketTypePermission).where(eq(ticketTypePermission.companyId, companyId))
+    await tx.delete(ticketType).where(eq(ticketType.companyId, companyId))
     // The Drop-off Points (#293 M3): the three sets, then the point, before the fractions and the project they name.
     await tx.delete(dropOffPointFraction).where(eq(dropOffPointFraction.companyId, companyId))
     await tx.delete(dropOffPointHours).where(eq(dropOffPointHours.companyId, companyId))

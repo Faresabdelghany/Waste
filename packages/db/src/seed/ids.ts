@@ -33,9 +33,10 @@ const BUCKET = "01a0d2a4-a280-7"
  * Planning's schemes and groups name its rows (demo.ts). The Pickup
  * Exceptions' contaminant codes and their fractions (M5 of #293) follow
  * Finance's, and the fleet's emission factors and its vehicle types'
- * consumption (M10 of #293) take 0x02c and 0x02d after them, and the
- * decommission reasons (O30 of #290, row 9.6) 0x02e, and the Holiday Lists
- * and their days 0x02f and 0x030.
+ * consumption (M10 of #293) take 0x02c and 0x02d after them, the
+ * decommission reasons (O30 of #290, row 9.6) 0x02e, the default ticket
+ * types (#545 of #544) 0x02f, and the Holiday Lists and their days 0x030
+ * and 0x031.
  */
 export const DEMO_KINDS = {
   company: 0x001,
@@ -84,8 +85,9 @@ export const DEMO_KINDS = {
   fuelEmissionFactor: 0x02c,
   vehicleTypeConsumption: 0x02d,
   decommissionReason: 0x02e,
-  holidayList: 0x02f,
-  holidayListHoliday: 0x030,
+  ticketType: 0x02f,
+  holidayList: 0x030,
+  holidayListHoliday: 0x031,
 } as const
 
 export type DemoKind = keyof typeof DEMO_KINDS

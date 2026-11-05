@@ -13,12 +13,13 @@
 
 import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { pointMapLibreWorkerAtRouteHandler } from "@/components/waste/map-planning/maplibre-worker"
+import { useMapProjection, type ScreenPoint } from "@/components/waste/map-planning/use-map-projection"
 import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
-import { roadOverlay, roadOverlayPath, roadPath, type RoadGeometry, type ScreenPoint } from "@/lib/map-planning/road-geometry"
+import { roadOverlay, roadOverlayPath, roadPath, type RoadGeometry } from "@/lib/map-planning/road-geometry"
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
 
@@ -70,7 +71,8 @@ export function RouteMapCanvas({ points, road, baseMap, label }: RouteMapCanvasP
   const mapRef = useRef<MapLibreMap | null>(null)
   const loadedRef = useRef(false)
   const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
-  const [, setFrame] = useState(0)
+  // Before the framing effect below, so the first fit's move is heard.
+  const project = useMapProjection(mapInstance)
   const [baseMapFailed, setBaseMapFailed] = useState(false)
 
   useEffect(() => {
@@ -100,9 +102,6 @@ export function RouteMapCanvas({ points, road, baseMap, label }: RouteMapCanvasP
       console.warn("[route-map]", event.error?.message ?? event)
       if (!loadedRef.current) setBaseMapFailed(true)
     })
-    const onMove = () => setFrame((frame) => frame + 1)
-    map.on("move", onMove)
-    map.on("resize", onMove)
     mapRef.current = map
     setMapInstance(map)
     return () => {
@@ -142,14 +141,6 @@ export function RouteMapCanvas({ points, road, baseMap, label }: RouteMapCanvasP
     )
   }, [frameKey, mapInstance])
 
-  const project = useCallback(
-    (lngLat: LngLat): ScreenPoint | null => {
-      if (!mapInstance) return null
-      const point = mapInstance.project([lngLat.lng, lngLat.lat])
-      return { x: point.x, y: point.y }
-    },
-    [mapInstance],
-  )
   // The road's path is built once, in world pixels; per frame only the group transform changes.
   const roadData = useMemo(() => (road && road.legs.length > 0 ? roadOverlayPath(roadPath(road)) : null), [road])
   const overlay = roadOverlay(project)

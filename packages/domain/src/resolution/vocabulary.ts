@@ -43,7 +43,13 @@
 // `ticket_id`, and `ALERT_RULES` the worker's rules an alert is raised by
 // (resolution/alert-rules.ts). `TEAM_STATUSES` is whether a Team takes
 // tickets (O30 of #290, row 7.20): a team is retired, never deleted, since
-// the tickets it held still name it.
+// the tickets it held still name it. A Ticket Type (#545 of #544) is the
+// company's own name for a kind of case, inside one kind
+// (resolution/ticket-types.ts): `TICKET_TYPE_STATUSES` is whether it is
+// offered to a new ticket, retired the way a team is; `TICKET_FIELD_INPUTS`
+// is what a custom field of a type takes — a line, a paragraph, a number, a
+// date, yes or no, or one of its choices — and `TICKET_FIELD_REQUIREMENTS`
+// when it must be filled in: never, to open the ticket, or to complete it.
 //
 // Three values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
@@ -82,6 +88,12 @@ export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as con
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
 /** Whether a Team takes tickets (O30 of #290, row 7.20): an inactive team is offered to no new ticket and keeps the ones it holds. */
 export const TEAM_STATUSES = ["active", "inactive"] as const
+/** Whether a Ticket Type is offered to a new ticket (#545 of #544): an inactive type is offered to none and keeps the tickets it holds. */
+export const TICKET_TYPE_STATUSES = ["active", "inactive"] as const
+/** What a Ticket Type's custom field takes: a line of text, a paragraph, a number, a calendar date, yes or no, or one of the field's choices. */
+export const TICKET_FIELD_INPUTS = ["text", "paragraph", "number", "date", "yes-no", "choice"] as const
+/** When a custom field must be filled in: never, before the ticket is opened, or before it is completed. */
+export const TICKET_FIELD_REQUIREMENTS = ["optional", "to-open", "to-complete"] as const
 /** The worker's rules an Alert is raised by (O4 of #290, O8's stale position, O26's filling container, O20's maintenance due, and M17 of #293's disposal-site reconciliation); null on an alert a person raised. */
 export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due", "load-not-received", "load-weight-mismatch", "load-overweight", "route-not-tipped"] as const
 
@@ -98,6 +110,9 @@ export type AlertSource = (typeof ALERT_SOURCES)[number]
 export type AlertStatus = (typeof ALERT_STATUSES)[number]
 export type AlertRule = (typeof ALERT_RULES)[number]
 export type TeamStatus = (typeof TEAM_STATUSES)[number]
+export type TicketTypeStatus = (typeof TICKET_TYPE_STATUSES)[number]
+export type TicketFieldInput = (typeof TICKET_FIELD_INPUTS)[number]
+export type TicketFieldRequirement = (typeof TICKET_FIELD_REQUIREMENTS)[number]
 
 /** The statuses a Ticket is open in: what "open" means in a list filter and a count. A value of `TICKET_STATUSES`, not a vocabulary. */
 export const OPEN_TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold"] as const satisfies readonly TicketStatus[]
@@ -131,4 +146,7 @@ export const RESOLUTION_VOCABULARIES = {
   ALERT_STATUSES,
   ALERT_RULES,
   TEAM_STATUSES,
+  TICKET_TYPE_STATUSES,
+  TICKET_FIELD_INPUTS,
+  TICKET_FIELD_REQUIREMENTS,
 } as const satisfies Record<string, readonly [string, ...string[]]>
