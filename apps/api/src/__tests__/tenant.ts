@@ -22,7 +22,7 @@ import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -497,7 +497,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(preTripChecklistItem).where(eq(preTripChecklistItem.companyId, companyId))
     await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
-    await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
     await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))

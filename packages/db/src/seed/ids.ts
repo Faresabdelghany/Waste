@@ -63,7 +63,7 @@ export const DEMO_KINDS = {
   planningArea: 0x016,
   planningAreaBoundary: 0x017,
   collectionCalendar: 0x018,
-  collectionCalendarHoliday: 0x019,
+  // 0x019 was the calendars' holidays', retired with their table (2026-11-05) and never reused.
   routeScheme: 0x01a,
   collectionGroup: 0x01b,
   collectionGroupFraction: 0x01c,

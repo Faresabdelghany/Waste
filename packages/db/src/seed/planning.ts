@@ -35,14 +35,9 @@
 //   Calendars. The five per-year records at their fixture names, each
 //   period's inclusive last day made the first day out of force (+1 day, the
 //   rule every fixture end date follows here: 31 Dec 2026 is 2027-01-01).
-//   The holidays are the fixtures' dates, 11 + 11 + 0 + 1 + 8, named as the
-//   calendar's project's holiday list names them — the lookup the prototype
-//   and the generation job both read unnamed dates through
-//   (`holidayNamesFor`, @waste/domain/route-schemes/holiday-names) — and
-//   unnamed where the list does not name the date: Cairo's two Eid days of
-//   2027. Harbor's calendar has no holidays and its "Draft" label no column:
-//   Harbor Commercial names no holiday list, so the calendar is read by
-//   nothing, which is the fixture's truth.
+//   A calendar carries no holidays: a project's are the days of the
+//   company's Holiday List it names (holiday-lists.ts). Harbor's "Draft"
+//   label has no column.
 //
 //   Schemes. The fixtures hold two Route Schemes, not the "38" their list's
 //   tile shows, and both are Copenhagen Central's. Each is `validated`: the
@@ -95,11 +90,10 @@ import { planningAreaOutline } from "@waste/domain/map-planning/areas"
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import type { PlanningAreaPurpose, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { IMPLICIT_GROUP_ID } from "@waste/domain/route-schemes/groups"
-import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 
 import type { Tx } from "../client"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, keyed, required } from "./ids"
@@ -156,11 +150,8 @@ export type CalendarSpec = {
   validFrom: string
   /** The fixture's last day, inclusive. */
   validThrough: string
-  /** The project's holiday list, whose lookup names the dates (demo.ts spells it on the project); null for none. */
-  holidayList: string | null
-  holidays: readonly string[]
 }
-/** The calendars, and the holidays each year holds; the Holiday Lists (holiday-lists.ts) are seeded from the same days. */
+/** The calendars, one per project and year. */
 export const CALENDARS: readonly CalendarSpec[] = [
   {
     key: "calendar-central",
@@ -168,8 +159,6 @@ export const CALENDARS: readonly CalendarSpec[] = [
     name: "Copenhagen Central 2026",
     validFrom: "2026-01-01",
     validThrough: "2026-12-31",
-    holidayList: "Danish public holidays",
-    holidays: ["2026-01-01", "2026-04-02", "2026-04-03", "2026-04-05", "2026-04-06", "2026-05-14", "2026-05-24", "2026-05-25", "2026-06-05", "2026-12-25", "2026-12-26"],
   },
   {
     key: "calendar-central-2027",
@@ -177,19 +166,15 @@ export const CALENDARS: readonly CalendarSpec[] = [
     name: "Copenhagen Central 2027",
     validFrom: "2027-01-01",
     validThrough: "2027-12-31",
-    holidayList: "Danish public holidays",
-    holidays: ["2027-01-01", "2027-03-25", "2027-03-26", "2027-03-28", "2027-03-29", "2027-05-06", "2027-05-16", "2027-05-17", "2027-06-05", "2027-12-25", "2027-12-26"],
   },
-  { key: "calendar-harbor", project: "harbor", name: "Harbor Offices service calendar", validFrom: "2026-09-01", validThrough: "2027-08-31", holidayList: null, holidays: [] },
-  { key: "calendar-cairo-2026", project: "cairo", name: "Cairo Operations 2026", validFrom: "2026-09-01", validThrough: "2026-12-31", holidayList: "Egyptian public holidays", holidays: ["2026-10-06"] },
+  { key: "calendar-harbor", project: "harbor", name: "Harbor Offices service calendar", validFrom: "2026-09-01", validThrough: "2027-08-31" },
+  { key: "calendar-cairo-2026", project: "cairo", name: "Cairo Operations 2026", validFrom: "2026-09-01", validThrough: "2026-12-31" },
   {
     key: "calendar-cairo-2027",
     project: "cairo",
     name: "Cairo Operations 2027",
     validFrom: "2027-01-01",
     validThrough: "2027-12-31",
-    holidayList: "Egyptian public holidays",
-    holidays: ["2027-01-07", "2027-01-25", "2027-03-08", "2027-03-09", "2027-04-25", "2027-05-01", "2027-06-30", "2027-07-23"],
   },
 ]
 
@@ -270,8 +255,6 @@ export type PlanningIds = {
   /** By the area it bounds: one version each. */
   planningAreaBoundaries: Readonly<Record<string, string>>
   collectionCalendars: Readonly<Record<string, string>>
-  /** `<calendar>:<day>` */
-  collectionCalendarHolidays: Readonly<Record<string, string>>
   routeSchemes: Readonly<Record<string, string>>
   /** `<scheme>:default`, the prototype's implicit group. */
   collectionGroups: Readonly<Record<string, string>>
@@ -285,7 +268,6 @@ type PlanningRows = {
   planningAreas: (typeof planningArea.$inferInsert)[]
   planningAreaBoundaries: (typeof planningAreaBoundary.$inferInsert)[]
   collectionCalendars: (typeof collectionCalendar.$inferInsert)[]
-  collectionCalendarHolidays: (typeof collectionCalendarHoliday.$inferInsert)[]
   routeSchemes: (typeof routeScheme.$inferInsert)[]
   collectionGroups: (typeof collectionGroup.$inferInsert)[]
   collectionGroupFractions: (typeof collectionGroupFraction.$inferInsert)[]
@@ -301,9 +283,6 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
   const boundaryIds = keyed(bounded, (spec) => spec.key, "planningAreaBoundary")
   const areaId = (key: string) => required(areaIds, key, "planning area")
   const calendarIds = keyed(CALENDARS, (spec) => spec.key, "collectionCalendar")
-  const holidays = CALENDARS.flatMap((spec) => spec.holidays.map((day) => ({ calendar: spec, day })))
-  const holidayKey = (entry: (typeof holidays)[number]): string => `${entry.calendar.key}:${entry.day}`
-  const holidayIds = keyed(holidays, holidayKey, "collectionCalendarHoliday")
   const schemeIds = keyed(SCHEMES, (spec) => spec.key, "routeScheme")
   const groupIds = keyed(SCHEMES, groupKeyOf, "collectionGroup")
   const ruleFractions = SCHEMES.flatMap((spec) => spec.group.fractions.map((fraction) => ({ group: groupKeyOf(spec), project: spec.project, fraction })))
@@ -321,7 +300,6 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
       planningAreas: areaIds,
       planningAreaBoundaries: boundaryIds,
       collectionCalendars: calendarIds,
-      collectionCalendarHolidays: holidayIds,
       routeSchemes: schemeIds,
       collectionGroups: groupIds,
       collectionGroupFractions: ruleFractionIds,
@@ -352,14 +330,6 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
         validFrom: spec.validFrom,
         validTo: addDays(spec.validThrough, 1),
         name: spec.name,
-      })),
-      collectionCalendarHolidays: holidays.map((entry) => ({
-        id: required(holidayIds, holidayKey(entry), "holiday"),
-        companyId: COMPANY_ID,
-        projectId: DEMO_PROJECT_IDS[entry.calendar.project],
-        collectionCalendarId: required(calendarIds, entry.calendar.key, "calendar"),
-        day: entry.day,
-        name: holidayNamesFor(entry.calendar.holidayList ?? undefined)(entry.day) ?? null,
       })),
       routeSchemes: SCHEMES.map((spec) => ({
         id: required(schemeIds, spec.key, "route scheme"),
@@ -436,14 +406,6 @@ export async function applyPlanning(tx: Tx): Promise<number> {
     planningAreaBoundary.boundary,
   ])
   changed += await upsertOwned(tx, collectionCalendar, rows.collectionCalendars, [collectionCalendar.validFrom, collectionCalendar.validTo, collectionCalendar.name])
-  // A calendar's holidays, a set `PUT …/holidays` replaces whole.
-  changed += await replaceSets(tx, {
-    table: collectionCalendarHoliday,
-    of: collectionCalendarHoliday.collectionCalendarId,
-    parents: Object.values(PLANNING_IDS.collectionCalendars),
-    rows: rows.collectionCalendarHolidays,
-    compared: [collectionCalendarHoliday.day, collectionCalendarHoliday.name],
-  })
   changed += await upsertOwned(tx, routeScheme, rows.routeSchemes, [
     routeScheme.validFrom,
     routeScheme.validTo,

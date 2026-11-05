@@ -61,3 +61,38 @@ export function holidaysFromCalendars(): string {
 
 /** The three, in the order the migration runs them. */
 export const holidayListsBackfill = (): string[] => [holidayListsFromProjects(), projectsOntoTheirList(), holidaysFromCalendars()]
+
+// The calendars' holidays dropped (2026-11-05): once nothing read
+// `collection_calendar_holiday` the table went, behind a guard of the kind
+// migrations/README.md asks of a dropped column ("A column dropped from a
+// table already applied") — not a backfill, since 0099's step 3 already
+// carried every day across, but a proof that it did and that nothing written
+// since was left behind. The guard fails the migration while any calendar
+// holiday's day is not a day of the list its project names, a project that
+// names no list included: such a database refuses to lose the day, and
+// whoever holds it puts the day on the project's list (or deletes the
+// calendar's row, if it should never have been a holiday) first. A name is
+// not compared, since the list's is the one a person has edited since.
+
+/** The calendar holidays whose day is not on the list their project names: what the guard counts. */
+const calendarHolidaysOffTheLists = (): string =>
+  `SELECT h."company_id", h."collection_calendar_id", h."day" FROM "wms"."collection_calendar_holiday" AS h ` +
+  `JOIN "wms"."project" AS p ON p."company_id" = h."company_id" AND p."id" = h."project_id" ` +
+  `WHERE NOT EXISTS (SELECT 1 FROM "wms"."holiday_list" AS l JOIN "wms"."holiday_list_holiday" AS d ON d."company_id" = l."company_id" AND d."holiday_list_id" = l."id" ` +
+  `WHERE l."company_id" = p."company_id" AND l."name" = p."holiday_list" AND d."day" = h."day")`
+
+/** The guard before the drop: refuses, counting them and naming the first, while any calendar holiday is off its project's list. */
+export function calendarHolidaysOnLists(): string {
+  return `DO $$
+DECLARE
+  stranded int;
+  first record;
+BEGIN
+  SELECT count(*) INTO stranded FROM (${calendarHolidaysOffTheLists()}) AS off;
+  IF stranded > 0 THEN
+    SELECT * INTO first FROM (${calendarHolidaysOffTheLists()}) AS off ORDER BY off."company_id", off."collection_calendar_id", off."day" LIMIT 1;
+    RAISE EXCEPTION 'collection_calendar_holiday still holds % day(s) that are not on the holiday list their project names (the first: company %, calendar %, %); put each on the list, or delete the calendar''s row, before dropping the table', stranded, first.company_id, first.collection_calendar_id, first.day;
+  END IF;
+END
+$$;`
+}

@@ -458,32 +458,27 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual([mads.employment, mads.licenceClass, mads.licenceExpiry, mads.homeDepotId], ["employee", "c", "2029-06-30", yard.id])
     })
 
-    test("writes collection calendars (O30 of #290) by name, a holiday a row: added or renamed, never removed, and held to the period", async () => {
+    test("writes collection calendars (O30 of #290) by name, the period a row moves; a calendar carries no holidays", async () => {
       const result = await commit(
         olivia,
         "collection-calendars",
         rowsOf(
-          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2032-01-01", day: "2031-06-05", holiday: "Constitution Day" },
-          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-12-25", holiday: "Christmas Day" },
-          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-06-05", holiday: "Grundlovsdag" },
-          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-12-25" },
-          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2033-01-01", holiday: "Too late" },
-          { calendar: "Import 2031", "valid from": "2031-01-01", holiday: "No day" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2032-01-01" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2032-01-01" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2031-12-01" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2030-01-01" },
         ),
         copenhagen,
       )
       assert.deepEqual(result.rows.map((row) => [row.row, row.outcome, row.key]), [
-        [2, "created", "calendar Import 2031, 2031-06-05"],
-        [3, "updated", "calendar Import 2031, 2031-12-25"],
-        [4, "updated", "calendar Import 2031, 2031-06-05"],
-        [5, "unchanged", "calendar Import 2031, 2031-12-25"],
-        [6, "refused", "calendar Import 2031, 2033-01-01"],
-        [7, "refused", "calendar Import 2031"],
+        [2, "created", "calendar Import 2031"],
+        [3, "unchanged", "calendar Import 2031"],
+        [4, "updated", "calendar Import 2031"],
+        [5, "refused", "calendar Import 2031"],
       ])
-      assert.match(result.rows[4]!.detail ?? "", /^day: /)
-      assert.equal(result.rows[5]!.detail, "day: give the holiday's day")
       const calendar = await read(`/collection-calendars/${result.rows[0]!.resourceId}`, CollectionCalendar)
-      assert.deepEqual([calendar.validFrom, calendar.validTo, calendar.holidays], ["2031-01-01", "2032-01-01", [{ day: "2031-06-05", name: "Grundlovsdag" }, { day: "2031-12-25", name: "Christmas Day" }]])
+      assert.deepEqual([calendar.validFrom, calendar.validTo], ["2031-01-01", "2031-12-01"])
+      assert.equal("holidays" in calendar, false)
     })
 
     test("writes planning areas (O30 of #290) by code, each with its boundary from a day: redrawn where a version starts that day, else a new version meeting the one before", async () => {

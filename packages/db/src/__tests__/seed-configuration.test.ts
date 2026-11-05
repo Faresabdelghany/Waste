@@ -18,16 +18,16 @@ import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import type { LicenceClass } from "@waste/domain/resources/vocabulary"
 import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
 import { CONTAINER_VEHICLE_COMPATIBILITY } from "@waste/domain/route-schemes/matching"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
 import { migrateDatabase } from "../migrate"
 import { containerType, product } from "../schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
 import { priceList, priceListRow } from "../schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
-import { project } from "../schema/organisation"
+import { holidayList, holidayListHoliday, project } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
@@ -36,6 +36,8 @@ import { PLANNING_BOUNDARY_SOURCES } from "../seed/planning"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
+const DANISH = "Danish public holidays"
+const EGYPTIAN = "Egyptian public holidays"
 
 describe("the pilot's configuration against a fresh database", { skip: database.skip }, () => {
   let fresh: FreshDatabase
@@ -305,7 +307,7 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     assert.deepEqual(elsewhere, ["asset-66420"])
   })
 
-  test("Planning: five collection calendars with half-open periods, and thirty-one holidays named as their project's holiday list names them", async () => {
+  test("Planning: five collection calendars with half-open periods, and two holiday lists holding thirty-one days named as each list names them", async () => {
     const { planning, projects } = DEMO_IDS
     const calendars = await owner.db.select().from(collectionCalendar).orderBy(collectionCalendar.id)
     assert.deepEqual(
@@ -314,21 +316,26 @@ describe("the pilot's configuration against a fresh database", { skip: database.
         // "1 Jan – 31 Dec 2026": the end is the first day out of force.
         [planning.collectionCalendars["calendar-central"], projects.copenhagen, "Copenhagen Central 2026", "2026-01-01", "2027-01-01"],
         [planning.collectionCalendars["calendar-central-2027"], projects.copenhagen, "Copenhagen Central 2027", "2027-01-01", "2028-01-01"],
-        // Its "Draft" has no column: Harbor names no holiday list, so the calendar is read by nothing, which is the fixture's truth.
+        // Its "Draft" has no column.
         [planning.collectionCalendars["calendar-harbor"], projects.harbor, "Harbor Offices service calendar", "2026-09-01", "2027-09-01"],
         [planning.collectionCalendars["calendar-cairo-2026"], projects.cairo, "Cairo Operations 2026", "2026-09-01", "2027-01-01"],
         [planning.collectionCalendars["calendar-cairo-2027"], projects.cairo, "Cairo Operations 2027", "2027-01-01", "2028-01-01"],
       ],
     )
 
-    const holidays = await owner.db.select().from(collectionCalendarHoliday).orderBy(collectionCalendarHoliday.collectionCalendarId, collectionCalendarHoliday.day)
-    const of = (calendar: string) => holidays.filter((row) => row.collectionCalendarId === planning.collectionCalendars[calendar])
+    // A calendar carries no holidays (2026-11-05): a project's are the days of the list it names.
+    const holidays = await owner.db
+      .select({ id: holidayListHoliday.id, list: holidayList.name, day: holidayListHoliday.day, name: holidayListHoliday.name })
+      .from(holidayListHoliday)
+      .innerJoin(holidayList, eq(holidayList.id, holidayListHoliday.holidayListId))
+      .orderBy(holidayList.name, holidayListHoliday.day)
+    const of = (list: string, year: string) => holidays.filter((row) => row.list === list && row.day.startsWith(year))
     assert.deepEqual(
-      Object.keys(planning.collectionCalendars).map((calendar) => of(calendar).length),
-      [11, 11, 0, 1, 8],
+      [of(DANISH, "2026").length, of(DANISH, "2027").length, of(EGYPTIAN, "2026").length, of(EGYPTIAN, "2027").length],
+      [11, 11, 1, 8],
     )
     assert.deepEqual(
-      of("calendar-central").map((row) => [row.id, row.projectId, row.day, row.name]),
+      of(DANISH, "2026").map((row) => [row.day, row.name]),
       [
         ["2026-01-01", "New Year's Day"],
         ["2026-04-02", "Maundy Thursday"],
@@ -341,11 +348,11 @@ describe("the pilot's configuration against a fresh database", { skip: database.
         ["2026-06-05", "Constitution Day"],
         ["2026-12-25", "Christmas Day"],
         ["2026-12-26", "2nd Christmas Day"],
-      ].map(([day, name]) => [planning.collectionCalendarHolidays[`calendar-central:${day}`], projects.copenhagen, day, name]),
+      ],
     )
     // The Egyptian list names its fixed dates; the two Eid days of 2027 move every year and are nobody's name here.
     assert.deepEqual(
-      of("calendar-cairo-2027").map((row) => [row.day, row.name]),
+      of(EGYPTIAN, "2027").map((row) => [row.day, row.name]),
       [
         ["2027-01-07", "Coptic Christmas"],
         ["2027-01-25", "Revolution Day"],
@@ -357,10 +364,12 @@ describe("the pilot's configuration against a fresh database", { skip: database.
         ["2027-07-23", "Revolution Day"],
       ],
     )
-    assert.deepEqual(of("calendar-cairo-2026").map((row) => [row.day, row.name]), [["2026-10-06", "Armed Forces Day"]])
-    // Each name is what its project's own list names the day — the list the generation job reads unnamed days through — so a list renamed on the project cannot leave these behind.
+    assert.deepEqual(of(EGYPTIAN, "2026").map((row) => [row.day, row.name]), [["2026-10-06", "Armed Forces Day"]])
+    // Each name is what its list's own lookup names the day — the lookup the generation job reads unnamed days through.
+    for (const row of holidays) assert.equal(row.name, holidayNamesFor(row.list)(row.day) ?? null, row.day)
+    // And each project names its list, Harbor none.
     const lists = new Map((await owner.db.select({ id: project.id, holidayList: project.holidayList }).from(project)).map((row) => [row.id, row.holidayList]))
-    for (const row of holidays) assert.equal(row.name, holidayNamesFor(lists.get(row.projectId) ?? undefined)(row.day) ?? null, row.day)
+    assert.deepEqual([lists.get(projects.copenhagen), lists.get(projects.harbor), lists.get(projects.cairo)], [DANISH, null, EGYPTIAN])
   })
 
   test("Planning: RS-Central · Week A and RS-Østerbro · Organic B, validated from their fixture start with no end, each with its implicit group made explicit", async () => {
@@ -620,7 +629,7 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     assert.equal(priced("person", registry.customers["owner-property-sundbyvej-91"]), 1850)
   })
 
-  test("every row is the company's, and holds what the API holds and the keys cannot: days inside their periods, groups inside their schemes, the driver's project his account's, and the Driver App's chain", async () => {
+  test("every row is the company's, and holds what the API holds and the keys cannot: rows inside their periods, groups inside their schemes, the driver's project his account's, and the Driver App's chain", async () => {
     const { planning, resources, registry } = DEMO_IDS
     for (const name of CONFIGURATION_TABLES) {
       const [{ companies }] = await owner.sql<{ companies: string[] }[]>`select coalesce(array_agg(distinct company_id), '{}') as companies from ${owner.sql("wms")}.${owner.sql(name)}`
@@ -633,9 +642,6 @@ describe("the pilot's configuration against a fresh database", { skip: database.
 
     const [strays] = await owner.sql<Record<string, number>[]>`
       select
-        -- A holiday inside its calendar's period (the API's 400).
-        (select count(*)::int from wms.collection_calendar_holiday h join wms.collection_calendar c on c.id = h.collection_calendar_id
-          where h.day < c.valid_from or (c.valid_to is not null and h.day >= c.valid_to)) as holidays,
         -- A price row inside its list's period (routes/periods.ts).
         (select count(*)::int from wms.price_list_row r join wms.price_list l on l.id = r.price_list_id
           where r.valid_from < l.valid_from or (l.valid_to is not null and (r.valid_to is null or r.valid_to > l.valid_to))) as rows,
@@ -647,7 +653,7 @@ describe("the pilot's configuration against a fresh database", { skip: database.
         -- A driver's account works in the driver's project.
         (select count(*)::int from wms.driver d where d.user_account_id is not null and not exists (
           select 1 from wms.project_access a where a.user_account_id = d.user_account_id and a.project_id = d.project_id)) as accounts`
-    assert.deepEqual(strays, { holidays: 0, rows: 0, days: 0, trailers: 0, compartments: 0, accounts: 0 })
+    assert.deepEqual(strays, { rows: 0, days: 0, trailers: 0, compartments: 0, accounts: 0 })
 
     // The Driver App's acceptance chain (#125, #143): RS-Central's rule fraction is what WH-24 carries and ARC Amager accepts, over a boundary in force when the scheme starts.
     const [chain] = await owner.sql<{ carried: boolean; accepted: boolean; bounded: boolean }[]>`
@@ -727,9 +733,10 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     await owner.db.update(collectionGroup).set({ driverId: resources.drivers["driver-lars"] }).where(eq(collectionGroup.id, planning.collectionGroups["scheme-osterbro-b:default"]))
     await owner.db.update(priceListRow).set({ unitPriceMinor: 1 }).where(eq(priceListRow.id, finance.priceListRows.copenhagen["price-row-res-default"]))
     await owner.db.update(product).set({ vatPercent: 0 }).where(eq(product.id, registry.products.harbor["product-bulky"]))
-    // Sets: a holiday renamed and one added; the picks reversed with a fifth; WH-24's compartment made to carry glass; a compatibility pair dropped; Central's rule restricted to one container type.
-    await owner.db.update(collectionCalendarHoliday).set({ name: "Renamed" }).where(eq(collectionCalendarHoliday.id, planning.collectionCalendarHolidays["calendar-central:2026-06-05"]))
-    await owner.db.insert(collectionCalendarHoliday).values({ ...tenant, collectionCalendarId: planning.collectionCalendars["calendar-central"], day: "2026-07-01", name: "Extra" })
+    // Sets: a listed holiday renamed and one added; the picks reversed with a fifth; WH-24's compartment made to carry glass; a compatibility pair dropped; Central's rule restricted to one container type.
+    const danish = DEMO_IDS.holidayLists[DANISH]
+    await owner.db.update(holidayListHoliday).set({ name: "Renamed" }).where(and(eq(holidayListHoliday.holidayListId, danish), eq(holidayListHoliday.day, "2026-06-05")))
+    await owner.db.insert(holidayListHoliday).values({ companyId: DEMO_IDS.company, holidayListId: danish, day: "2026-07-01", name: "Extra" })
     const osterbro = planning.collectionGroups["scheme-osterbro-b:default"]
     await owner.db.delete(collectionGroupContainer).where(eq(collectionGroupContainer.collectionGroupId, osterbro))
     await owner.db.insert(collectionGroupContainer).values(
@@ -750,7 +757,7 @@ describe("the pilot's configuration against a fresh database", { skip: database.
   test("a set the API wrote back under ids of its own is left as it is when it says what the seed says, and nothing is written", async () => {
     const { planning, resources } = DEMO_IDS
     // What the API does on every edit of a set: the rows go, and the same content comes back under ids it mints.
-    const rewrite = async <T extends typeof collectionCalendarHoliday | typeof collectionGroupContainer | typeof collectionGroupFraction | typeof unloadingStationFraction | typeof containerTypeVehicleType>(
+    const rewrite = async <T extends typeof holidayListHoliday | typeof collectionGroupContainer | typeof collectionGroupFraction | typeof unloadingStationFraction | typeof containerTypeVehicleType>(
       table: T,
       parent: T["_"]["columns"][keyof T["_"]["columns"]],
       parentId: string,
@@ -759,7 +766,9 @@ describe("the pilot's configuration against a fresh database", { skip: database.
       await owner.db.delete(table as never).where(eq(parent as never, parentId))
       await owner.db.insert(table as never).values(rows.map(({ id: _id, createdAt: _created, updatedAt: _updated, ...rest }) => rest) as never)
     }
-    await rewrite(collectionCalendarHoliday, collectionCalendarHoliday.collectionCalendarId, planning.collectionCalendars["calendar-central"])
+    const danish = DEMO_IDS.holidayLists[DANISH]
+    const [seededDay] = await owner.db.select({ id: holidayListHoliday.id }).from(holidayListHoliday).where(and(eq(holidayListHoliday.holidayListId, danish), eq(holidayListHoliday.day, "2026-06-05")))
+    await rewrite(holidayListHoliday, holidayListHoliday.holidayListId, danish)
     await rewrite(collectionGroupContainer, collectionGroupContainer.collectionGroupId, planning.collectionGroups["scheme-osterbro-b:default"])
     await rewrite(collectionGroupFraction, collectionGroupFraction.collectionGroupId, planning.collectionGroups["scheme-central-a:default"])
     await rewrite(unloadingStationFraction, unloadingStationFraction.unloadingStationId, resources.unloadingStations["station-arc"])
@@ -778,9 +787,9 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     assert.equal((await seedDemo(fresh.url)).changed, 0)
     assert.equal(JSON.stringify(await Promise.all(CONFIGURATION_TABLES.map((name) => owner.sql`select * from ${owner.sql("wms")}.${owner.sql(name)} order by id`))), settled)
     const [{ fixed, minted }] = await owner.sql<{ fixed: number; minted: number }[]>`
-      select count(*) filter (where id = ${planning.collectionCalendarHolidays["calendar-central:2026-06-05"]})::int as fixed,
+      select count(*) filter (where id = ${seededDay.id})::int as fixed,
              count(*) filter (where day = '2026-06-05')::int as minted
-      from wms.collection_calendar_holiday where collection_calendar_id = ${planning.collectionCalendars["calendar-central"]}`
+      from wms.holiday_list_holiday where holiday_list_id = ${danish}`
     assert.deepEqual({ fixed, minted }, { fixed: 0, minted: 1 }, "the API's id is the one kept")
   })
 })
@@ -801,7 +810,8 @@ const CONFIGURATION_TABLES = [
   "planning_area",
   "planning_area_boundary",
   "collection_calendar",
-  "collection_calendar_holiday",
+  "holiday_list",
+  "holiday_list_holiday",
   "route_scheme",
   "collection_group",
   "collection_group_fraction",

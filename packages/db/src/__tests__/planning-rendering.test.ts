@@ -19,6 +19,10 @@
 // organisation-access-rendering.test.ts holds 0002 to its own day.
 // resources-rendering.test.ts pins the ALTER TABLE statements themselves.
 //
+// `collection_calendar_holiday` has since been dropped (the calendar
+// holidays' drop, 2026-11-05); 0006 is held to it as schema/dropped.ts keeps
+// its spelling.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/planning/vocabulary fails this test until a migration replaces
@@ -33,7 +37,8 @@ import { check, getTableConfig, text } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { nonEmpty, subsetOf } from "../schema/checks"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
+import { collectionCalendarHoliday } from "../schema/dropped"
 import { id, tenant } from "../schema/columns"
 import { tableObjectName } from "../names"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"

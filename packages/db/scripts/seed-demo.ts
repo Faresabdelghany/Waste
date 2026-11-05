@@ -45,7 +45,6 @@ const configuration = [
   count(counts.planningAreas, "planning area"),
   count(counts.planningAreaBoundaries, "boundary", "boundaries"),
   count(counts.collectionCalendars, "calendar"),
-  count(counts.collectionCalendarHolidays, "holiday"),
   count(counts.routeSchemes, "route scheme"),
   count(counts.priceLists, "price list"),
   count(counts.priceListRows, "price row"),
