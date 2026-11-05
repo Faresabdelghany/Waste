@@ -5,15 +5,19 @@
 //   weekend      the weekdays the project rests on (Egypt Friday–Saturday,
 //                Denmark Saturday–Sunday), never derived from the weekday
 //                number; DEFAULT_WEEKEND only when nothing is set;
-//   holidayList  the name of the project's holiday list, or absent = no list.
-//                The list's dates are the project's per-year Collection
-//                Calendar records (holidays.ts). Ticket #36's Settings screen
-//                edits both; the wizard only reads them.
+//   holidayList  the name of the company's Holiday List the project rests
+//                on, or absent = no list. Since 2026-11-05 the list is a
+//                record of its own (holiday-list-records.ts), riding among
+//                the calendar records, and its dates are the list's; a name
+//                no list record carries falls back to the project's per-year
+//                Collection Calendar records (holidays.ts), as before. The
+//                Settings screen edits both; the wizard only reads them.
 // Pure data logic (type-only import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
+import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
 import { holidayNamesFor, withCarriedNames } from "./holiday-names"
 import {
   holidayListFromDates,
@@ -35,7 +39,9 @@ export type ProjectHolidayList = {
   /** "Danish public holidays". */
   name: string
   dates: HolidayList
-  /** The per-year Collection Calendar records the dates are read from. */
+  /** The company's Holiday List record the dates are read from, where one carries the name. */
+  listRecord?: BusinessRecord
+  /** The per-year Collection Calendar records the dates are read from where no list record does. */
   records: BusinessRecord[]
 }
 
@@ -70,6 +76,22 @@ export function resolveProjectCalendar(
     ? records.projects.find((record) => record.id === projectId)
     : undefined
   const name = projectHolidayListName(project)
+  const listRecord = holidayListNamed(name, records.calendars)
+  if (name && listRecord) {
+    const entries = holidayListEntries(listRecord)
+    return {
+      list: {
+        name,
+        dates: holidayListFromDates(
+          entries.map((entry) => entry.date),
+          withCarriedNames(new Map(entries.flatMap((entry) => (entry.name ? [[entry.date, entry.name] as const] : []))), holidayNamesFor(name)),
+        ),
+        listRecord,
+        records: [],
+      },
+      weekend: projectWeekend(project),
+    }
+  }
   return {
     list: name
       ? {

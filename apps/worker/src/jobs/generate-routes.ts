@@ -103,7 +103,7 @@ import { cancelRoutesByGeneration, skipStopsByGeneration } from "@waste/db/comma
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/contracts/execution"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
-import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { listHolidayRows } from "@waste/db/query/holidays"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -269,20 +269,10 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     validTo: scheme.validTo,
     seasons: seasons.map((season) => ({ ...season, frequency: season.frequency as SeasonFrequency, weekRotation: season.weekRotation as WeekRotation | null })),
   })
-  const holidayRows =
-    calendar.holidayList === null
-      ? []
-      : await tx
-          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-          .from(collectionCalendarHoliday)
-          .where(
-            and(
-              eq(collectionCalendarHoliday.companyId, companyId),
-              eq(collectionCalendarHoliday.projectId, scheme.projectId),
-              gte(collectionCalendarHoliday.day, addDays(window.from, -SHIFT_SEARCH_DAYS)),
-              lte(collectionCalendarHoliday.day, addDays(window.to, SHIFT_SEARCH_DAYS)),
-            ),
-          )
+  const holidayRows = await listHolidayRows(tx, companyId, calendar.holidayList, {
+    from: addDays(window.from, -SHIFT_SEARCH_DAYS),
+    to: addDays(window.to, SHIFT_SEARCH_DAYS),
+  })
   const holidays = holidayListOf(holidayRows, calendar.holidayList)
 
   // The routes of the scheme inside the walk, locked in id order: a dispatch racing the run takes its turn, and a bulk dispatch (O5 of #290), which locks its routes in the same order, never waits on the run's second row while the run waits on its first.

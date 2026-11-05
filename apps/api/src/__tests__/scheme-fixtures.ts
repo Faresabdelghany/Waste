@@ -1,15 +1,15 @@
 // What the route-scheme and collection-group suites need of Planning beyond
 // their own routes (Issue #97, slice 4): a planning area per project, each
-// project's working week and holiday list, and a collection calendar with the
-// holidays the occurrence read is proved against. The rows are written
+// project's working week and holiday list, a collection calendar, and the
+// holidays the occurrence read is proved against on the lists the projects
+// rest on. The rows are written
 // directly through `tx` as `wms_api` inside `withCompany`, the way tenant.ts
 // seeds its company — the suites prove the scheme routes, not the area and
 // calendar ones — and `dropTenant` drops them with the rest of the company.
 //
 // The three projects say three different things about a working week:
 // Copenhagen Central rests Saturday–Sunday on the Danish list, Harbor
-// Commercial has calendar rows but no list, so its holidays are read by
-// nobody, and Cairo Operations rests Friday–Saturday on the Egyptian list, so
+// Commercial rests on no list, so it has no holidays, and Cairo Operations rests Friday–Saturday on the Egyptian list, so
 // a Thursday holiday shifts to Sunday there.
 //
 // `seedFleet` is the same for Resources (Issue #101, slice 6): the depot, the
@@ -26,10 +26,10 @@
 // and suspended, and WH-77, an active truck a suite takes out of service
 // itself to prove that a reference already made stands.
 import type { Database, Tx } from "@waste/db/client"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
-import { project } from "@waste/db/schema/organisation"
+import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { withCompany } from "@waste/db/tenant"
@@ -95,15 +95,17 @@ export async function seedPlanning(pool: Database, tenant: Tenant): Promise<Plan
       { id: calendars.harbor, companyId, projectId: harbor, name: "Harbor Commercial 2026", validFrom: "2026-01-01", validTo: "2027-01-01" },
       { id: calendars.cairo, companyId, projectId: cairo, name: "Cairo Operations 2026", validFrom: "2026-01-01", validTo: "2027-01-01" },
     ])
-    await tx.insert(collectionCalendarHoliday).values([
-      { id: testId(), companyId, projectId: copenhagen, collectionCalendarId: calendars.copenhagen, day: COPENHAGEN_HOLIDAYS.constitutionDay, name: null },
-      { id: testId(), companyId, projectId: copenhagen, collectionCalendarId: calendars.copenhagen, day: COPENHAGEN_HOLIDAYS.christmasEve, name: null },
-      { id: testId(), companyId, projectId: copenhagen, collectionCalendarId: calendars.copenhagen, day: COPENHAGEN_HOLIDAYS.christmasDay, name: "Juledag" },
-      { id: testId(), companyId, projectId: copenhagen, collectionCalendarId: calendars.copenhagen, day: COPENHAGEN_HOLIDAYS.newYearsEve, name: null },
-      // Harbor has the rows and no list: nobody reads them.
-      { id: testId(), companyId, projectId: harbor, collectionCalendarId: calendars.harbor, day: COPENHAGEN_HOLIDAYS.christmasEve, name: "Juleaftensdag" },
-      { id: testId(), companyId, projectId: cairo, collectionCalendarId: calendars.cairo, day: CAIRO_HOLIDAYS.companyHoliday, name: "Company holiday" },
-      { id: testId(), companyId, projectId: cairo, collectionCalendarId: calendars.cairo, day: CAIRO_HOLIDAYS.armedForcesDay, name: null },
+    // The days are on the company's Holiday Lists the projects rest on (2026-11-05), not on the calendars.
+    const listId = async (name: string) => (await tx.select({ id: holidayList.id }).from(holidayList).where(and(eq(holidayList.companyId, companyId), eq(holidayList.name, name))))[0].id
+    const danish = await listId("Danish public holidays")
+    const egyptian = await listId("Egyptian public holidays")
+    await tx.insert(holidayListHoliday).values([
+      { id: testId(), companyId, holidayListId: danish, day: COPENHAGEN_HOLIDAYS.constitutionDay, name: null },
+      { id: testId(), companyId, holidayListId: danish, day: COPENHAGEN_HOLIDAYS.christmasEve, name: null },
+      { id: testId(), companyId, holidayListId: danish, day: COPENHAGEN_HOLIDAYS.christmasDay, name: "Juledag" },
+      { id: testId(), companyId, holidayListId: danish, day: COPENHAGEN_HOLIDAYS.newYearsEve, name: null },
+      { id: testId(), companyId, holidayListId: egyptian, day: CAIRO_HOLIDAYS.companyHoliday, name: "Company holiday" },
+      { id: testId(), companyId, holidayListId: egyptian, day: CAIRO_HOLIDAYS.armedForcesDay, name: null },
     ])
   })
   return fixtures

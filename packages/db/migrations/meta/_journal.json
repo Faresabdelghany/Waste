@@ -694,6 +694,13 @@
       "when": 1793867212088,
       "tag": "0098_window_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793899324901,
+      "tag": "0099_holiday_lists",
+      "breakpoints": true
     }
   ]
 }

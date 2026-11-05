@@ -26,7 +26,7 @@ import { containerType, wasteFraction } from "../schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
 import { container } from "../schema/containers"
 import { vehicleType } from "../schema/fleet-types"
-import { company, project, serviceProvider } from "../schema/organisation"
+import { company, holidayList, project, serviceProvider } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { triggersOf } from "../sql/audit-trail"
@@ -113,6 +113,11 @@ const tables: Record<string, PgTable> = {
 async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   const own = ids(n)
   await tx.insert(company).values({ id: own.company, companyId: own.company, name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `1000000${n}`, country: "DK", status: "active" })
+  // The company's lists the projects name (2026-11-05): a project's list name is a key into them.
+  await tx.insert(holidayList).values([
+    { companyId: own.company, country: "DK", name: "Danish public holidays" },
+    { companyId: own.company, country: "EG", name: "Egyptian public holidays" },
+  ])
   await tx.insert(project).values({
     id: own.project,
     companyId: own.company,

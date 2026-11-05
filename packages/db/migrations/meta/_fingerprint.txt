@@ -1752,6 +1752,51 @@ index wms.generation_run generation_run_project_key CREATE UNIQUE INDEX generati
 index wms.generation_run generation_run_route_scheme_id_idx CREATE INDEX generation_run_route_scheme_id_idx ON wms.generation_run USING btree (company_id, route_scheme_id)
 trigger wms.generation_run generation_run_touch_updated_at enabled=O CREATE TRIGGER generation_run_touch_updated_at BEFORE UPDATE ON wms.generation_run FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.generation_run generation_run_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.holiday_list kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.holiday_list 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list 3 created_at timestamp with time zone not-null default=now()
+column wms.holiday_list 4 updated_at timestamp with time zone not-null default=now()
+column wms.holiday_list 5 country text not-null acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list 6 name text not-null acl=[wms_public=SELECT/<owner>]
+constraint wms.holiday_list holiday_list_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.holiday_list holiday_list_country_key UNIQUE (company_id, country)
+constraint wms.holiday_list holiday_list_country_shape CHECK ((country ~ '^[A-Z]{2}$'::text))
+constraint wms.holiday_list holiday_list_name_key UNIQUE (company_id, name)
+constraint wms.holiday_list holiday_list_pkey PRIMARY KEY (id)
+constraint wms.holiday_list holiday_list_tenant_key UNIQUE (company_id, id)
+index wms.holiday_list holiday_list_country_key CREATE UNIQUE INDEX holiday_list_country_key ON wms.holiday_list USING btree (company_id, country)
+index wms.holiday_list holiday_list_name_key CREATE UNIQUE INDEX holiday_list_name_key ON wms.holiday_list USING btree (company_id, name)
+index wms.holiday_list holiday_list_pkey CREATE UNIQUE INDEX holiday_list_pkey ON wms.holiday_list USING btree (id)
+index wms.holiday_list holiday_list_tenant_key CREATE UNIQUE INDEX holiday_list_tenant_key ON wms.holiday_list USING btree (company_id, id)
+trigger wms.holiday_list holiday_list_audit_trail enabled=O CREATE TRIGGER holiday_list_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.holiday_list FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.holiday_list holiday_list_touch_updated_at enabled=O CREATE TRIGGER holiday_list_touch_updated_at BEFORE UPDATE ON wms.holiday_list FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.holiday_list holiday_list_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = holiday_list.company_id) AND (published.holiday_list = holiday_list.name) AND (published.public_slug IS NOT NULL))))) check=none
+policy wms.holiday_list holiday_list_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.holiday_list_holiday kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.holiday_list_holiday 1 id uuid not-null default=wms.uuidv7()
+column wms.holiday_list_holiday 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list_holiday 3 created_at timestamp with time zone not-null default=now()
+column wms.holiday_list_holiday 4 updated_at timestamp with time zone not-null default=now()
+column wms.holiday_list_holiday 5 holiday_list_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list_holiday 6 day date not-null acl=[wms_public=SELECT/<owner>]
+column wms.holiday_list_holiday 7 name text acl=[wms_public=SELECT/<owner>]
+constraint wms.holiday_list_holiday holiday_list_holiday_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.holiday_list_holiday holiday_list_holiday_holiday_list_id_day_key UNIQUE (company_id, holiday_list_id, day)
+constraint wms.holiday_list_holiday holiday_list_holiday_holiday_list_id_fk FOREIGN KEY (company_id, holiday_list_id) REFERENCES wms.holiday_list(company_id, id)
+constraint wms.holiday_list_holiday holiday_list_holiday_pkey PRIMARY KEY (id)
+index wms.holiday_list_holiday holiday_list_holiday_holiday_list_id_day_key CREATE UNIQUE INDEX holiday_list_holiday_holiday_list_id_day_key ON wms.holiday_list_holiday USING btree (company_id, holiday_list_id, day)
+index wms.holiday_list_holiday holiday_list_holiday_pkey CREATE UNIQUE INDEX holiday_list_holiday_pkey ON wms.holiday_list_holiday USING btree (id)
+trigger wms.holiday_list_holiday holiday_list_holiday_audit_trail enabled=O CREATE TRIGGER holiday_list_holiday_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.holiday_list_holiday FOR EACH ROW EXECUTE FUNCTION wms.audit_row('holiday_list', 'holiday_list_id')
+trigger wms.holiday_list_holiday holiday_list_holiday_touch_updated_at enabled=O CREATE TRIGGER holiday_list_holiday_touch_updated_at BEFORE UPDATE ON wms.holiday_list_holiday FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.holiday_list_holiday holiday_list_holiday_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.holiday_list list
+  WHERE ((list.company_id = holiday_list_holiday.company_id) AND (list.id = holiday_list_holiday.holiday_list_id) AND (EXISTS ( SELECT 1
+           FROM wms.project published
+          WHERE ((published.company_id = list.company_id) AND (published.holiday_list = list.name) AND (published.public_slug IS NOT NULL)))))))) check=none
+policy wms.holiday_list_holiday holiday_list_holiday_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.import_run kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.import_run 1 id uuid not-null default=wms.uuidv7()
 column wms.import_run 2 company_id uuid not-null
@@ -2720,6 +2765,7 @@ constraint wms.project project_accessibility_statement_url_shape CHECK (((access
 constraint wms.project project_brand_color_shape CHECK ((brand_color ~ '^#[0-9a-fA-F]{6}$'::text))
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.project project_gps_purpose_one_of CHECK ((gps_purpose = ANY (ARRAY['dispatch'::text, 'dispatch-and-proof'::text])))
+constraint wms.project project_holiday_list_fk FOREIGN KEY (company_id, holiday_list) REFERENCES wms.holiday_list(company_id, name) ON UPDATE CASCADE
 constraint wms.project project_logo_url_shape CHECK (((logo_url ~ '^https://[^\s/?#]+[^\s]*$'::text) AND (char_length(logo_url) <= 2048)))
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
@@ -2734,6 +2780,7 @@ constraint wms.project project_tenant_key UNIQUE (company_id, id)
 constraint wms.project project_weekend_not_every_day CHECK ((cardinality(weekend) < 7))
 constraint wms.project project_weekend_subset_of CHECK ((weekend <@ ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text]))
 constraint wms.project project_weight_tolerance_percent_range CHECK (((weight_tolerance_percent >= 1) AND (weight_tolerance_percent <= 100)))
+index wms.project project_holiday_list_idx CREATE INDEX project_holiday_list_idx ON wms.project USING btree (company_id, holiday_list)
 index wms.project project_name_key CREATE UNIQUE INDEX project_name_key ON wms.project USING btree (company_id, name)
 index wms.project project_pkey CREATE UNIQUE INDEX project_pkey ON wms.project USING btree (id)
 index wms.project project_public_slug_key CREATE UNIQUE INDEX project_public_slug_key ON wms.project USING btree (public_slug)
@@ -5364,4 +5411,5 @@ journal 1793819252515 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86
 journal 1793819334732 01e9eab6e971605b07b65b2d8e6344013082d5a8f2e5f441748193488483a62f
 journal 1793819438754 69211a9db7ef26f17b5eb0ca05c26144c7c7b5b1c49bcfe216140eb16e5528f7
 journal 1793867212088 2007cb8587e6cfd3460449eb5b158cc56ec1652c21ea98668a4d7ae3e34befe0
+journal 1793899324901 7603b62eed847016da2a36566ed930e136dc3237619f7a99b0ca92aedf43f538
 pgboss-version 42

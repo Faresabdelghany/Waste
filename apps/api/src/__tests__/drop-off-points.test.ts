@@ -7,10 +7,10 @@ import { Page } from "@waste/contracts/pagination"
 import { PublicDropOffPoints } from "@waste/contracts/public"
 import { createDb, type Database } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
-import { project } from "@waste/db/schema/organisation"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
+import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -64,7 +64,8 @@ describe("the drop-off point endpoints and the public map", { skip: database.ski
       ])
       await tx.update(project).set({ publicSlug: slug, holidayList: "Danish public holidays" }).where(eq(project.id, copenhagen))
       await tx.insert(collectionCalendar).values({ id: ids.calendar, companyId: a.companyId, projectId: copenhagen, validFrom: "2026-01-01", name: `Holidays ${testId().slice(-6)}` })
-      await tx.insert(collectionCalendarHoliday).values({ companyId: a.companyId, projectId: copenhagen, collectionCalendarId: ids.calendar, day: "2026-12-25", name: "Juledag" })
+      // The day is on the company's list the project rests on (2026-11-05), not on the calendar.
+      await tx.insert(holidayListHoliday).values({ companyId: a.companyId, holidayListId: (await tx.select({ id: holidayList.id }).from(holidayList).where(and(eq(holidayList.companyId, a.companyId), eq(holidayList.name, "Danish public holidays"))))[0].id, day: "2026-12-25", name: "Juledag" })
     })
     await withCompany(pool.db, b.companyId, async (tx) => {
       await tx.insert(wasteFraction).values({ id: ids.theirs, companyId: b.companyId, key: "glass", name: "Glass" })

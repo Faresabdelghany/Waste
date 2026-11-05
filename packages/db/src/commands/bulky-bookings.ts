@@ -31,7 +31,7 @@ import type { Tx } from "../client"
 import { validOn } from "../query/valid-on"
 import { agreement, subscription } from "../schema/agreements"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
-import { collectionCalendarHoliday } from "../schema/collection-calendars"
+import { listHolidayRows } from "../query/holidays"
 import { property, sharedCollectionPoint } from "../schema/customers"
 import { project } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
@@ -81,20 +81,10 @@ async function calendarNear(tx: Tx, scope: Scope, window: { from: string; to: st
     .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
     .limit(1)
   if (row === undefined) throw new Error(`calendarNear: no project ${scope.projectId}`)
-  const holidays =
-    row.holidayList === null
-      ? []
-      : await tx
-          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-          .from(collectionCalendarHoliday)
-          .where(
-            and(
-              eq(collectionCalendarHoliday.companyId, scope.companyId),
-              eq(collectionCalendarHoliday.projectId, scope.projectId),
-              gte(collectionCalendarHoliday.day, addDays(window.from, -2 * SHIFT_SEARCH_DAYS)),
-              lte(collectionCalendarHoliday.day, addDays(window.to, 2 * SHIFT_SEARCH_DAYS)),
-            ),
-          )
+  const holidays = await listHolidayRows(tx, scope.companyId, row.holidayList, {
+    from: addDays(window.from, -2 * SHIFT_SEARCH_DAYS),
+    to: addDays(window.to, 2 * SHIFT_SEARCH_DAYS),
+  })
   return { weekend: row.weekend as ServiceDay[], holidays: holidayListOf(holidays, row.holidayList) }
 }
 

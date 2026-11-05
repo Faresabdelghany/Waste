@@ -35,6 +35,7 @@ import * as fleetModule from "../fleet"
 import * as generationModule from "../generation"
 import * as geojsonModule from "../geojson"
 import * as haulOutModule from "../haul-out"
+import * as holidayListsModule from "../holiday-lists"
 import * as healthModule from "../health"
 import * as idsModule from "../ids"
 import * as importsModule from "../imports"
@@ -133,6 +134,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "generation": generationModule,
   "geojson": geojsonModule,
   "haul-out": haulOutModule,
+  "holiday-lists": holidayListsModule,
   "health": healthModule,
   "ids": idsModule,
   "imports": importsModule,

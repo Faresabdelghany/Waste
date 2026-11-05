@@ -149,7 +149,7 @@ export const PLANNING_BOUNDARY_SOURCES: Readonly<Record<string, readonly MapPlac
 
 /* -------------------------------- calendars -------------------------------- */
 
-type CalendarSpec = {
+export type CalendarSpec = {
   key: string
   project: PlanningProject
   name: string
@@ -160,7 +160,8 @@ type CalendarSpec = {
   holidayList: string | null
   holidays: readonly string[]
 }
-const CALENDARS: readonly CalendarSpec[] = [
+/** The calendars, and the holidays each year holds; the Holiday Lists (holiday-lists.ts) are seeded from the same days. */
+export const CALENDARS: readonly CalendarSpec[] = [
   {
     key: "calendar-central",
     project: "copenhagen",

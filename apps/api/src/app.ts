@@ -51,6 +51,7 @@ import { catalogueRoutes } from "./routes/catalogue"
 import { contaminantCodeRoutes } from "./routes/contaminant-codes"
 import { decommissionReasonRoutes } from "./routes/decommission-reasons"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
+import { holidayListRoutes } from "./routes/holiday-lists"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
@@ -309,6 +310,7 @@ export function createApp({
   app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard, { now }))
   app.route("/", collectionCalendarRoutes(guard))
+  app.route("/", holidayListRoutes(guard))
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
   app.route("/", schemeLifecycleRoutes(guard, { now, jobs }))

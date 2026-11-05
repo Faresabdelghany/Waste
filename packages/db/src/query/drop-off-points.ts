@@ -22,7 +22,7 @@ import { and, asc, eq, exists, gte, inArray, lte, sql } from "drizzle-orm"
 import type { Tx } from "../client"
 import type { ScopedProject } from "./collection-days"
 import { wasteFraction } from "../schema/catalogue"
-import { collectionCalendarHoliday } from "../schema/collection-calendars"
+import { listHolidayRows } from "./holidays"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { project } from "../schema/organisation"
 
@@ -137,10 +137,7 @@ export async function readDropOffMap(tx: Tx, scope: ScopedProject, { fractionKey
       .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
       .limit(1)
     if (calendarRow?.holidayList != null) {
-      const holidayRows = await tx
-        .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-        .from(collectionCalendarHoliday)
-        .where(and(eq(collectionCalendarHoliday.companyId, scope.companyId), eq(collectionCalendarHoliday.projectId, scope.projectId), gte(collectionCalendarHoliday.day, from), lte(collectionCalendarHoliday.day, to)))
+      const holidayRows = await listHolidayRows(tx, scope.companyId, calendarRow.holidayList, { from, to })
       holidays = holidayListOf(holidayRows, calendarRow.holidayList)
     }
   }

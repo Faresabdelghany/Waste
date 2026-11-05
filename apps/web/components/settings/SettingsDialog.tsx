@@ -1377,7 +1377,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [HOLIDAY_LISTS_SETTINGS_PANE_ID]: {
     title: "Holiday lists",
     description:
-      "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
+      "The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend.",
     groups: [],
   },
   [EMISSION_FACTORS_SETTINGS_PANE_ID]: {

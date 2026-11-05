@@ -89,7 +89,7 @@ import {
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { routeMessage } from "@waste/db/schema/route-messages"
 import { notificationPreference, notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
-import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { company, holidayList, holidayListHoliday, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "@waste/db/schema/resolution"
@@ -204,6 +204,11 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
       country: "DK",
       status: "active",
     })
+    // The company's two Holiday Lists (2026-11-05), empty: a project names a list by its name, a key into them.
+    await tx.insert(holidayList).values([
+      { companyId, country: "DK", name: "Danish public holidays" },
+      { companyId, country: "EG", name: "Egyptian public holidays" },
+    ])
     await tx.insert(project).values([
       { id: tenant.projects.copenhagen.id, companyId, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" },
       { id: tenant.projects.harbor.id, companyId, name: "Harbor Commercial", kind: "Business unit", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "onboarding" },
@@ -531,6 +536,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(role).where(eq(role.companyId, companyId))
     await tx.delete(serviceProvider).where(eq(serviceProvider.companyId, companyId))
     await tx.delete(project).where(eq(project.companyId, companyId))
+    await tx.delete(holidayListHoliday).where(eq(holidayListHoliday.companyId, companyId))
+    await tx.delete(holidayList).where(eq(holidayList.companyId, companyId))
     await tx.delete(company).where(eq(company.companyId, companyId))
   })
 }

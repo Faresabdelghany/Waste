@@ -139,6 +139,8 @@ export const AUDITED_TABLES = [
   "right_sizing_proposal",
   "tank_installation",
   "outbound_load",
+  "holiday_list",
+  "holiday_list_holiday",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

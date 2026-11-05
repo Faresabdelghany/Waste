@@ -99,7 +99,7 @@ import {
   withinServiceDays,
 } from "@waste/contracts/route-schemes"
 import { validOn } from "@waste/db/query/valid-on"
-import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { listHolidayRows } from "@waste/db/query/holidays"
 import { project } from "@waste/db/schema/organisation"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { schemeRecurrenceOf } from "@waste/domain/planning/generation"
@@ -108,7 +108,7 @@ import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/r
 import { generateOccurrences, NO_HOLIDAYS, SHIFT_SEARCH_DAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, isNotNull, isNull, lte } from "drizzle-orm"
+import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
@@ -491,18 +491,11 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           // recurrence date lies inside it and a shift walks at most
           // SHIFT_SEARCH_DAYS from one (the domain's own bound), so nothing
           // further out is read and the two cannot diverge.
-          const rows = await tx
-            .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-            .from(collectionCalendarHoliday)
-            .where(
-              and(
-                eq(collectionCalendarHoliday.companyId, principal.companyId),
-                eq(collectionCalendarHoliday.projectId, scheme.projectId),
-                gte(collectionCalendarHoliday.day, addDays(window.from, -SHIFT_SEARCH_DAYS)),
-                lte(collectionCalendarHoliday.day, addDays(window.to, SHIFT_SEARCH_DAYS)),
-              ),
-            )
-          // A name the calendar carries wins; the list's lookup names the days it does not.
+          const rows = await listHolidayRows(tx, principal.companyId, calendar.holidayList, {
+            from: addDays(window.from, -SHIFT_SEARCH_DAYS),
+            to: addDays(window.to, SHIFT_SEARCH_DAYS),
+          })
+          // A name the list carries wins; the known list's lookup names the days it does not.
           const carried = new Map(rows.flatMap((row) => (row.name === null ? [] : [[row.day, row.name] as const])))
           const names = withCarriedNames(carried, holidayNamesFor(calendar.holidayList))
           holidays = new Map(rows.map((row) => [row.day, holidayLabel(row.day, names)]))

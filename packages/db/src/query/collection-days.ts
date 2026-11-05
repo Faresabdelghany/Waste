@@ -31,7 +31,7 @@ import type { PgColumn } from "drizzle-orm/pg-core"
 import type { Tx } from "../client"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
-import { collectionCalendarHoliday } from "../schema/collection-calendars"
+import { listHolidayRows } from "./holidays"
 import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
 import { route } from "../schema/execution"
@@ -98,20 +98,10 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
     .from(project)
     .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
     .limit(1)
-  const holidayRows =
-    calendarRow?.holidayList == null
-      ? []
-      : await tx
-          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-          .from(collectionCalendarHoliday)
-          .where(
-            and(
-              eq(collectionCalendarHoliday.companyId, scope.companyId),
-              eq(collectionCalendarHoliday.projectId, scope.projectId),
-              gte(collectionCalendarHoliday.day, addDays(lookbackOf(window), -SHIFT_SEARCH_DAYS)),
-              lte(collectionCalendarHoliday.day, addDays(window.to, SHIFT_SEARCH_DAYS)),
-            ),
-          )
+  const holidayRows = await listHolidayRows(tx, scope.companyId, calendarRow?.holidayList ?? null, {
+    from: addDays(lookbackOf(window), -SHIFT_SEARCH_DAYS),
+    to: addDays(window.to, SHIFT_SEARCH_DAYS),
+  })
   const calendar: SchemeCalendar = { holidays: holidayListOf(holidayRows, calendarRow?.holidayList ?? null), weekend: (calendarRow?.weekend ?? []) as ServiceDay[] }
 
   // Every placement of the property's containers in force on some service date the plan walks: from the lookback a shift can reach from, to the window's end.

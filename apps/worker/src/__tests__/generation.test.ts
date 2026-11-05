@@ -48,14 +48,14 @@ import { tankInstallation } from "@waste/db/schema/tanks"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
-import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { company, holidayList, holidayListHoliday, project, serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
@@ -117,6 +117,7 @@ const ids = (n: "a" | "b") => ({
   boundary: `018f7c36-${n}000-7000-8000-000000000032`,
   calendar: `018f7c36-${n}000-7000-8000-000000000033`,
   holiday: `018f7c36-${n}000-7000-8000-000000000034`,
+  holidayList: `018f7c36-${n}000-7000-8000-0000000000f4`,
   scheme: `018f7c36-${n}000-7000-8000-000000000041`,
   residualGroup: `018f7c36-${n}000-7000-8000-000000000042`,
   glassGroup: `018f7c36-${n}000-7000-8000-000000000043`,
@@ -169,6 +170,8 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   const tenant = { companyId: own.company }
   const scoped = { ...tenant, projectId: own.project }
   await tx.insert(company).values({ id: own.company, ...tenant, name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `1000000${n}`, country: "DK", status: "active" })
+  // The company's Holiday List the project rests on (2026-11-05), named by the project.
+  await tx.insert(holidayList).values({ id: own.holidayList, ...tenant, country: "DK", name: "Danish public holidays" })
   await tx.insert(project).values({ id: own.project, ...tenant, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays" })
   await tx.insert(wasteFraction).values([
     { id: own.wasteFraction, ...tenant, key: "residual", name: "Residual waste" },
@@ -215,7 +218,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(planningAreaBoundary).values({ id: own.boundary, ...scoped, validFrom: OPENED, planningAreaId: own.planningArea, boundary: SQUARE })
   await tx.insert(collectionCalendar).values({ id: own.calendar, ...scoped, validFrom: OPENED, validTo: "2027-01-01", name: "Copenhagen Central 2026" })
   // Thursday 8 October 2026 is a holiday here.
-  await tx.insert(collectionCalendarHoliday).values({ id: own.holiday, ...scoped, collectionCalendarId: own.calendar, day: "2026-10-08", name: "Test Day" })
+  await tx.insert(holidayListHoliday).values({ id: own.holiday, ...tenant, holidayListId: own.holidayList, day: "2026-10-08", name: "Test Day" })
   await tx.insert(routeScheme).values([
     { id: own.scheme, ...scoped, validFrom: OPENED, name: "Residual weekly", planningAreaId: own.planningArea, serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday", "thursday"], holidayPolicy: "shift-next", status: "validated", plannedStartTime: "06:30" },
     { id: own.draftScheme, ...scoped, validFrom: OPENED, name: "Paper draft", planningAreaId: own.planningArea, serviceType: "container-collection", frequency: "weekly", serviceDays: ["tuesday"], status: "draft" },
@@ -510,11 +513,11 @@ describe("generation against a migrated database", { skip }, () => {
     const thursdays = async () => (await routesOfA()).filter((row) => row.serviceDate === "2026-10-08" && row.collectionGroupId === a.residualGroup).map((row) => [row.operatingDate, row.heldAt !== null, row.note])
     const residualThursday = (await routesOfA()).find((row) => row.serviceDate === "2026-10-08" && row.collectionGroupId === a.residualGroup)
     assert.ok(residualThursday, "the holiday Thursday's residual route, shifted to Friday")
-    const [holiday] = await ownerPool.db.select().from(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.id, a.holiday))
+    const [holiday] = await ownerPool.db.select().from(holidayListHoliday).where(eq(holidayListHoliday.id, a.holiday))
     // Held where the shift put it, for its crew alone: the office's day is the scheme's.
     await ownerPool.db.update(route).set({ heldAt: NOW }).where(eq(route.id, residualThursday.id))
     try {
-      await ownerPool.db.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.id, a.holiday))
+      await ownerPool.db.delete(holidayListHoliday).where(eq(holidayListHoliday.id, a.holiday))
       await generateA()
       assert.deepEqual(await thursdays(), [["2026-10-09", true, null]], "held, it stays on Friday, the shift's note gone with the holiday")
 
@@ -527,7 +530,7 @@ describe("generation against a migrated database", { skip }, () => {
       assert.deepEqual(await thursdays(), [["2026-10-08", false, null]], "released, it is collected on its Thursday")
     } finally {
       // Test Day again, the hold gone: the routes shift back, the scheme's, for the tests after.
-      await ownerPool.db.insert(collectionCalendarHoliday).values(holiday).onConflictDoNothing()
+      await ownerPool.db.insert(holidayListHoliday).values(holiday).onConflictDoNothing()
       await ownerPool.db.update(route).set({ heldAt: null }).where(eq(route.id, residualThursday.id))
       await generateA()
     }

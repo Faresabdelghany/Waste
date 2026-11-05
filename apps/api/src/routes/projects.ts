@@ -41,6 +41,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
+import { requireHolidayList } from "./holiday-lists"
 import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
@@ -179,7 +180,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createProject",
         summary: "Add a project",
         description:
-          "Creates a project in the caller's company. The server mints the id; a body that carries one is refused. `weekend` is the days the project rests on, each named once — Saturday and Sunday unless the body says otherwise, Friday and Saturday for a project in Cairo — and `holidayList` the name its holidays are looked up under (`Danish public holidays`); null or absent is no list, and a project without one rests on its weekend only, whatever collection calendars it has. `paymentTermsDays` is the days after issue its invoices are due, 0 to 365, 30 unless the body says otherwise, a customer's own terms standing in for theirs, and `paymentReferenceScheme` how they are referenced for payment, `none` unless said: a FI card's (`fik-71`, `fik-75`) needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`) (#291 C4).",
+          "Creates a project in the caller's company. The server mints the id; a body that carries one is refused. `weekend` is the days the project rests on, each named once — Saturday and Sunday unless the body says otherwise, Friday and Saturday for a project in Cairo — and `holidayList` the name of the company's holiday list it rests on (`Danish public holidays`, `GET /holiday-lists`; 400 for a name the company holds no list under); null or absent is no list, and a project without one rests on its weekend only, whatever collection calendars it has. `paymentTermsDays` is the days after issue its invoices are due, 0 to 365, 30 unless the body says otherwise, a customer's own terms standing in for theirs, and `paymentReferenceScheme` how they are referenced for payment, `none` unless said: a FI card's (`fik-71`, `fik-75`) needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`) (#291 C4).",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The project as it was written.", Project),
@@ -195,6 +196,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       async (c) => {
         const values = c.req.valid("json")
         await requireFikCreditor(c.get("tx"), c.get("principal").companyId, values.paymentReferenceScheme)
+        await requireHolidayList(c.get("tx"), c.get("principal").companyId, values.holidayList)
         const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
           c
             .get("tx")
@@ -244,7 +246,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProject",
         summary: "Change a project",
         description:
-          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. A change of `weekend`, or a `holidayList` set or taken away (a rename changes no day), releases in the same transaction the hold on each route the office moved by hand (`heldAt`) that the change re-decides — one standing where its scheme put the collection, when the change moves or skips that collection, and one the office moved to a day the change makes a holiday its scheme moves collections off — so the next generation run plans them with their neighbours (#226). `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock; `weightTolerancePercent` is how far a weighbridge's net may differ from what the stops weighed on board before an unload reads as above tolerance, in whole percent from 1 to 100 (5 when a project is made without one).",
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` puts it on another of the company's holiday lists (400 for a name the company holds none under), or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. A change of `weekend` or of `holidayList` releases in the same transaction the hold on each route the office moved by hand (`heldAt`) that the change re-decides — one standing where its scheme put the collection, when the change moves or skips that collection, and one the office moved to a day the change makes a holiday its scheme moves collections off — so the next generation run plans them with their neighbours (#226). `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock; `weightTolerancePercent` is how far a weighbridge's net may differ from what the stops weighed on board before an unload reads as above tolerance, in whole percent from 1 to 100 (5 when a project is made without one).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),
@@ -264,17 +266,18 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const companyId = c.get("principal").companyId
-        if (patch.paymentReferenceScheme !== undefined && patch.paymentReferenceScheme !== "none") {
-          // The path's row first (404), then the 409 the body's scheme needs.
+        if (patch.holidayList != null || (patch.paymentReferenceScheme !== undefined && patch.paymentReferenceScheme !== "none")) {
+          // The path's row first (404), then the 400 of a list the company does not hold, then the 409 the body's scheme needs.
           const [found] = await tx.select({ id: project.id }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, id))).limit(1)
           if (found === undefined) throw noSuchProject(id)
-          await requireFikCreditor(tx, companyId, patch.paymentReferenceScheme)
+          await requireHolidayList(tx, companyId, patch.holidayList)
+          if (patch.paymentReferenceScheme !== undefined) await requireFikCreditor(tx, companyId, patch.paymentReferenceScheme)
         }
         const sentences: Record<string, string> = {
           ...(patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }),
           ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),
         }
-        // The holiday inputs as they stand before the patch, where it changes them (#226): `holidayList` matters by whether it is set.
+        // The holiday inputs as they stand before the patch, where it changes them (#226): `holidayList` matters by the days its list holds.
         const holidayInputs = patch.weekend !== undefined || patch.holidayList !== undefined ? await projectCalendarOf(tx, companyId, id) : undefined
         const [row] = await refuseDuplicate(sentences, () =>
           c
