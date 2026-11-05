@@ -1,7 +1,7 @@
 import { dispatchedRouteFor, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, onCopenhagenClock, openRoute, pick, routeRead, routeWithCrewFree, schemeWithRoutes, toasts } from "./routes-support"
+import { answerOf, onCopenhagenClock, openRoute, pick, routePage, routeRead, routeWithCrewFree, schemeWithRoutes, stopRows, toasts } from "./routes-support"
 import { ensureTester, listAll, roleNamed } from "./tester"
 
 // Route Studio's routes, stops and Live board on the API (Issue #179, slice
@@ -39,13 +39,13 @@ test("a generated route is the API's row: listed under its label, opened under t
   await page.getByRole("main").getByText(route.label, { exact: true }).first().click()
   await expect(page).toHaveURL(new RegExp(`record=route-${route.id}`))
 
-  const details = page.getByRole("dialog", { name: route.label })
+  const details = routePage(page, route)
   await expect(details).toContainText(scheme.name)
   await expect(details).toContainText("Indre By Operations")
   await expect(details).toContainText("06:30")
-  const stops = details.getByTestId("route-stops").locator("li")
+  const stops = stopRows(details)
   await expect(stops).toHaveCount(detail.pickups.length)
-  await expect(stops.first()).toContainText(`1. ${label.get(detail.pickups[0].containerId)} · Planned`)
+  for (const cell of ["1", label.get(detail.pickups[0].containerId) ?? "", "Planned"]) await expect(stops.first()).toContainText(cell)
   await expect(details.getByTestId("route-sessions")).toHaveCount(0)
   await expect(details).toContainText("Not started: no driver has started this route.")
 
@@ -56,7 +56,7 @@ test("a generated route is the API's row: listed under its label, opened under t
   await page.getByRole("tab", { name: "Routes" }).click()
   await page.getByRole("button", { name: `Open ${route.label}` }).click()
   await expect(page).toHaveURL(new RegExp(`module=routes&record=route-${route.id}`))
-  await expect(page.getByRole("dialog", { name: route.label })).toBeVisible()
+  await expect(routePage(page, route)).toBeVisible()
 })
 
 test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign names the driver and the vehicle, reschedule moves the start, dispatch makes it Ready, and cancel's reason is its deviation", async ({ api, page }) => {
@@ -110,7 +110,7 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   await expect(details).toContainText(reason)
   // The code beside the free reason (O5 of #290).
   await expect(details).toContainText("Cancel reasonRoad closure")
-  await expect(details.getByTestId("route-stops")).toContainText("Skipped · Route cancelled")
+  for (const cell of ["Skipped", "Route cancelled"]) await expect(stopRows(details).first()).toContainText(cell)
 
   const read = await routeRead(api, route.id)
   expect({ status: read.status, note: read.note, plannedStartTime: read.plannedStartTime, driverId: read.planned.driverId, vehicleId: read.planned.vehicleId }).toEqual({
@@ -166,7 +166,7 @@ test("reorder stops: the open stops are PUT whole in their new order, which the 
   expect(put.status()).toBe(200)
   expect(put.request().postDataJSON()).toEqual({ pickupIds: reordered })
   await expect(dialog).toBeHidden()
-  await expect(details.getByTestId("route-stops").locator("li").first()).toContainText(`1. ${label.get(second.containerId)}`)
+  await expect(stopRows(details).first()).toContainText(label.get(second.containerId) ?? "")
 
   const after = await routeRead(api, route.id)
   expect(after.activePlan?.solver).toBe("manual")
@@ -252,7 +252,7 @@ test("the Live board reads what the driver's device reports, and the office's ca
   // The live row is its route: the office reads the device's log there, and its cancel ends the session.
   await live.getByRole("button", { name: "Open route" }).click()
   await expect(page).toHaveURL(new RegExp(`module=routes&record=route-${route.id}`))
-  const details = page.getByRole("dialog", { name: route.label })
+  const details = routePage(page, route)
   const log = details.getByTestId("route-command-log")
   await expect(log).toContainText("Start route · Applied")
   await expect(log).toContainText("Complete pickup · Applied")
@@ -301,7 +301,7 @@ test("a Dispatcher, who views neither the organisation nor the depots, sees the 
     // The rows name their project through /me's projects, so the pinned scope keeps them.
     await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(route.label)
     await page.getByRole("main").getByText(route.label, { exact: true }).first().click()
-    const details = page.getByRole("dialog", { name: route.label })
+    const details = routePage(page, route)
     await expect(details).toContainText("Copenhagen Central")
     // The depots are not the Dispatcher's to view: Assign does not wait for them.
     const assign = details.getByTestId("route-commands").getByRole("button", { name: "Assign" })
