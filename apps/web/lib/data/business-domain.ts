@@ -150,7 +150,7 @@ export const blueprintModuleCatalog: Record<
   M23: {
     id: "M23",
     name: "Documents, audit, history, privacy, and compliance",
-    primaryHref: "/settings?pane=privacy",
+    primaryHref: "/improve?module=compliance",
   },
   M24: {
     id: "M24",

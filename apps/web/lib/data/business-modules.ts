@@ -1892,7 +1892,7 @@ const operate: WorkspaceDefinition = {
       rules: [
         "Drivers see only assigned routes and the minimum customer and access information needed to perform the work.",
         "Offline and stale state are explicit, every action gives immediate feedback, and synchronization prevents duplicate completion.",
-        "Location transmission requires a visible lawful purpose and configured privacy policy; billing and unrelated routes remain hidden.",
+        "Location transmission requires a visible lawful purpose; billing and unrelated routes remain hidden.",
       ],
       records: [
         record(
@@ -5919,7 +5919,7 @@ const improve: WorkspaceDefinition = {
 const configure: WorkspaceDefinition = {
   id: "configure",
   label: "Configure",
-  description: "Control organization, access, master data, integrations, portals, finance, privacy, and feature behavior.",
+  description: "Control organization, access, master data, integrations, portals, finance, and feature behavior.",
   modules: [
     {
       id: "organization",
@@ -6519,60 +6519,6 @@ const configure: WorkspaceDefinition = {
         "An item is withdrawn, never deleted.",
       ],
       records: [],
-    },
-    {
-      id: "privacy",
-      label: "Privacy, Audit & Retention",
-      title: "Privacy, Audit, History, and Retention",
-      description: "Sensitive access purpose, GPS governance, retention, before-and-after history, evidence, and compliance.",
-      entityLabel: "Policy or audit",
-      contextLabel: "Data · purpose",
-      valueLabel: "Control state",
-      primaryAction: "New retention rule",
-      metrics: [
-        { label: "Sensitive policies", value: "12", helper: "All owner assigned" },
-        { label: "GPS access events", value: "48", helper: "Last 30 days" },
-        { label: "Retention actions", value: "1,842", helper: "Last run successful", tone: "positive" },
-        { label: "Overdue reviews", value: "2", helper: "Purpose and notice", tone: "danger" },
-      ],
-      lifecycle: ["Draft", "Active", "Review due", "Superseded", "Archived"],
-      rules: [
-        "Audit history is not editable by ordinary users.",
-        "Sensitive access records actor, purpose, time, scope, and source.",
-        "Retention distinguishes operational, financial, evidence, and personal data.",
-      ],
-      records: [
-        record(
-          "policy-gps",
-          "Employee GPS monitoring policy",
-          "Vehicle and driver location · dispatch purpose",
-          "Review due",
-          "Privacy Officer",
-          "2 controls overdue",
-          "Yesterday",
-          "Policy controls lawful purpose, notice, permitted roles, access audit, and ninety-day retention.",
-          { Purpose: "Dispatch + proof", Retention: "90 days", Roles: "Dispatcher · manager", Notice: "v4" },
-          ["48 access events", "Monitoring register", "2 overdue controls"],
-          "Privacy configuration",
-          "Yesterday",
-          ["Complete review", "Create version"],
-        ),
-        record(
-          "retention-ticket",
-          "Ticket and message retention",
-          "Customer service records · legal and service purpose",
-          "Active",
-          "Privacy Officer",
-          "7 years closed cases",
-          "1 month ago",
-          "Retention distinguishes customer messages, internal comments, attachments, and audit records.",
-          { Purpose: "Service + claims", Retention: "7 years", Roles: "Customer service", Notice: "Privacy v6" },
-          ["18 ticket types", "3 storage classes", "Last deletion run RET-201"],
-          "Retention policy",
-          "1 month",
-          ["Create version", "Archive"],
-        ),
-      ],
     },
     {
       id: "control-center",

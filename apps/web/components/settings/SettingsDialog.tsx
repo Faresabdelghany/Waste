@@ -21,7 +21,6 @@ import {
   PaintBrush,
   Recycle,
   Receipt,
-  ShieldCheck,
   SlidersHorizontal,
   SquaresFour,
   Tag,
@@ -61,7 +60,6 @@ import { HolidayListsSettings } from "@/components/settings/holiday-lists-settin
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { NotificationsSettingsOnApi } from "@/components/settings/notifications-settings-on-api"
-import { PrivacySettingsOnApi } from "@/components/settings/privacy-settings-on-api"
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
 import { MessageTemplatesSettings } from "@/components/settings/message-templates-settings"
@@ -75,7 +73,7 @@ import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
@@ -214,9 +212,6 @@ const settingsSections: Array<{
       { id: PORTALS_ON_API_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
       // The Sorting Guide on the API (#293): offered with the adapter configured, since it has no fixtures.
       { id: SORTING_GUIDE_SETTINGS_PANE_ID, label: "Sorting guide", icon: Recycle },
-      // The browser's pane in fixture mode; on the Pilot the API's (#487), the company's audit history.
-      { id: PRIVACY_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
-      { id: PRIVACY_ON_API_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
   {
@@ -1170,98 +1165,6 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
       },
     ],
   },
-  privacy: {
-    title: "Privacy, audit, and retention",
-    description: "Sensitive access, GPS governance, change history, evidence classes, retention, and compliance controls.",
-    groups: [
-      {
-        title: "GPS and employee monitoring",
-        controls: [
-          {
-            id: "privacy-purpose",
-            label: "Permitted GPS purpose",
-            description: "Dispatch, operational recovery, route evidence, and approved compliance use.",
-            scope: "Company",
-            type: "select",
-            value: "dispatch-proof",
-            options: [
-              { value: "dispatch-proof", label: "Dispatch + proof of service" },
-              { value: "dispatch", label: "Dispatch only" },
-              { value: "disabled", label: "Location disabled" },
-            ],
-          },
-          {
-            id: "privacy-retention-gps",
-            label: "GPS retention",
-            description: "Historic position records are removed or aggregated after this period.",
-            scope: "Company",
-            type: "select",
-            value: "90",
-            options: [
-              { value: "30", label: "30 days" },
-              { value: "90", label: "90 days" },
-              { value: "180", label: "180 days" },
-            ],
-          },
-          {
-            id: "privacy-review",
-            label: "Monitoring register review",
-            description: "Purpose and employee-notice reviews are overdue.",
-            scope: "Company",
-            type: "status",
-            value: "2 controls overdue",
-            tone: "danger",
-            action: "Complete review",
-          },
-          {
-            id: "privacy-access",
-            label: "Require purpose for sensitive access",
-            description: "GPS, financial, customer export, and restricted evidence views record a user-supplied purpose.",
-            scope: "Company",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-        ],
-      },
-      {
-        title: "Retention and audit",
-        controls: [
-          {
-            id: "privacy-ticket-retention",
-            label: "Closed ticket retention",
-            description: "Customer messages, internal comments, attachments, and audit use separate storage classes.",
-            scope: "Company",
-            type: "select",
-            value: "7y",
-            options: [
-              { value: "5y", label: "5 years" },
-              { value: "7y", label: "7 years" },
-              { value: "10y", label: "10 years" },
-            ],
-          },
-          {
-            id: "privacy-financial",
-            label: "Financial-record protection",
-            description: "Issued documents, credits, accounting rows, and settlement snapshots follow statutory retention.",
-            scope: "Company",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-          {
-            id: "privacy-history",
-            label: "Immutable audit history",
-            description: "Ordinary users cannot edit or delete before-and-after history, approvals, or evidence audit.",
-            scope: "Platform",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-        ],
-      },
-    ],
-  },
   security: {
     title: "API, SSO, and security",
     description: "Identity provider, sessions, controlled API clients, token scope, credentials, and security review.",
@@ -1521,7 +1424,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
-  privacy: paneDefinitions.privacy,
   [PORTALS_ON_API_SETTINGS_PANE_ID]: {
     title: "Portals & branding",
     description: "What each project's residents find on its public pages, and which of its drivers use the Driver App.",
@@ -1535,11 +1437,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [NOTIFICATIONS_ON_API_SETTINGS_PANE_ID]: {
     title: "Notifications",
     description: "The e-mails you get when something needs you. Nothing is sent until you ask for it.",
-    groups: [],
-  },
-  [PRIVACY_ON_API_SETTINGS_PANE_ID]: {
-    title: "Privacy, audit & retention",
-    description: "Who changed what across the company, newest first, and the controls the platform enforces.",
     groups: [],
   },
 }
@@ -1562,7 +1459,6 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === TICKET_TYPES_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
-    paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
     paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
@@ -1991,8 +1887,6 @@ function SettingsPane({
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
-      ) : paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ? (
-        <PrivacySettingsOnApi />
       ) : paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ? (
         <NotificationsSettingsOnApi />
       ) : paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ? (

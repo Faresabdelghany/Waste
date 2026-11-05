@@ -18,11 +18,6 @@
 // Message templates (#291 C15), offered on the Pilot alone too. Exception charges (M5 of
 // #293), the emission factors (M10 of #293), the bulky schedules (O11 of
 // #290) and the recycling-centre charges (#393) are the API's alone too.
-// Privacy, audit & retention is the API's on the Pilot (#487,
-// `PRIVACY_ON_API_SETTINGS_PANE_ID`): the company's audit history and the
-// controls the platform enforces; the browser's pane (`configure.privacy` —
-// the GPS purpose and the retention policies, C19's with no API yet) is
-// fixture mode's alone, and a link to either opens the one its mode has.
 // Integrations is the API's on the Pilot (#487,
 // `INTEGRATIONS_ON_API_SETTINGS_PANE_ID`): the services the deployment calls
 // and the latest import; the browser's pane (`configure.integrations` — the
@@ -58,10 +53,6 @@ export const FINANCE_SETTINGS_PANE_ID = "finance"
 export const TICKETS_COMMUNICATION_SETTINGS_PANE_ID = "ticket-comms"
 /** Settings › Finance & invoicing on the Pilot (#291 C4): the company's invoice identity and the projects' terms and schemes, the API's. */
 export const FINANCE_ON_API_SETTINGS_PANE_ID = "finance-invoicing"
-/** The fixtures' Privacy, audit & retention, where `configure.privacy` opens in fixture mode. */
-export const PRIVACY_SETTINGS_PANE_ID = "privacy"
-/** Settings › Privacy, audit & retention on the Pilot (#487): the company's audit history, the API's. */
-export const PRIVACY_ON_API_SETTINGS_PANE_ID = "privacy-audit"
 /** The fixtures' Integrations, where `configure.integrations` opens in fixture mode. */
 export const INTEGRATIONS_SETTINGS_PANE_ID = "integrations"
 /** Settings › Integrations on the Pilot (#487): the deployment's connections, the API's. */
@@ -95,21 +86,19 @@ export const ACCOUNT_DEFAULTS_GROUP = "Defaults"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
-  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === PRIVACY_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Privacy's, Integrations' and Portals & branding's the API's, Tickets & communication's the Ticket SLA, and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Privacy, Integrations and Portals panes are the browser's. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Integrations' and Portals & branding's the API's, Tickets & communication's the Ticket SLA, and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Integrations and Portals panes are the browser's. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
   if (!configured) {
     if (paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return FINANCE_SETTINGS_PANE_ID
-    if (paneId === PRIVACY_ON_API_SETTINGS_PANE_ID) return PRIVACY_SETTINGS_PANE_ID
     if (paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID) return INTEGRATIONS_SETTINGS_PANE_ID
     if (paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return NOTIFICATIONS_SETTINGS_PANE_ID
     return paneId === PORTALS_ON_API_SETTINGS_PANE_ID ? PORTALS_SETTINGS_PANE_ID : paneId
   }
-  if (paneId === PRIVACY_SETTINGS_PANE_ID) return PRIVACY_ON_API_SETTINGS_PANE_ID
   if (paneId === INTEGRATIONS_SETTINGS_PANE_ID) return INTEGRATIONS_ON_API_SETTINGS_PANE_ID
   if (paneId === PORTALS_SETTINGS_PANE_ID) return PORTALS_ON_API_SETTINGS_PANE_ID
   const landing = BROWSER_ONLY_PANES.get(paneId)

@@ -2677,24 +2677,18 @@ column wms.project 14 payment_terms_days integer not-null default=30
 column wms.project 15 payment_reference_scheme text not-null default='none'::text
 column wms.project 16 weight_tolerance_percent integer not-null default=5
 column wms.project 17 hold_for_review boolean not-null default=false
-column wms.project 18 position_retention_days integer
-column wms.project 19 proof_retention_days integer
-column wms.project 20 gps_purpose text
-column wms.project 21 brand_color text acl=[wms_public=SELECT/<owner>]
-column wms.project 22 logo_url text acl=[wms_public=SELECT/<owner>]
-column wms.project 23 accessibility_statement_url text acl=[wms_public=SELECT/<owner>]
+column wms.project 18 brand_color text acl=[wms_public=SELECT/<owner>]
+column wms.project 19 logo_url text acl=[wms_public=SELECT/<owner>]
+column wms.project 20 accessibility_statement_url text acl=[wms_public=SELECT/<owner>]
 constraint wms.project project_accessibility_statement_url_shape CHECK (((accessibility_statement_url ~ '^https://[^\s/?#]+[^\s]*$'::text) AND (char_length(accessibility_statement_url) <= 2048)))
 constraint wms.project project_brand_color_shape CHECK ((brand_color ~ '^#[0-9a-fA-F]{6}$'::text))
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.project project_gps_purpose_one_of CHECK ((gps_purpose = ANY (ARRAY['dispatch'::text, 'dispatch-and-proof'::text])))
 constraint wms.project project_holiday_list_fk FOREIGN KEY (company_id, holiday_list) REFERENCES wms.holiday_list(company_id, name) ON UPDATE CASCADE
 constraint wms.project project_logo_url_shape CHECK (((logo_url ~ '^https://[^\s/?#]+[^\s]*$'::text) AND (char_length(logo_url) <= 2048)))
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
 constraint wms.project project_payment_terms_range CHECK (((payment_terms_days >= 0) AND (payment_terms_days <= 365)))
 constraint wms.project project_pkey PRIMARY KEY (id)
-constraint wms.project project_position_retention_range CHECK (((position_retention_days >= 1) AND (position_retention_days <= 30)))
-constraint wms.project project_proof_retention_range CHECK (((proof_retention_days >= 1) AND (proof_retention_days <= 3650)))
 constraint wms.project project_public_slug_key UNIQUE (public_slug)
 constraint wms.project project_public_slug_shape CHECK (((public_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(public_slug) >= 3) AND (char_length(public_slug) <= 63))))
 constraint wms.project project_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'onboarding'::text])))
@@ -5441,4 +5435,5 @@ journal 1793906444180 9fc68765a1a042144f7892a750d6798b5d65972be82a56f14a53a71e4b
 journal 1793908602189 7f831ac83578d6d12eef2c9b80015979de8c0b721b8981a9295755e7cb578fef
 journal 1793909104002 e9a44efe8ffe945d7517aa814fc6007ce2402604f1aae098867369fc80b8af6f
 journal 1793952044162 5587d766cdf82edab9c6b47ceea0c32c804b946f5c8d1e52324481d954786844
+journal 1793952115029 1808664578c7521dad88cc4f0b4b419ce0f403f2a7cb9d42119c52d6d41ce82f
 pgboss-version 42

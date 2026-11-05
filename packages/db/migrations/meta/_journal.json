@@ -736,6 +736,13 @@
       "when": 1793952044162,
       "tag": "0104_pre_trip_removal",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793952115029,
+      "tag": "0105_drop_privacy_policy",
+      "breakpoints": true
     }
   ]
 }

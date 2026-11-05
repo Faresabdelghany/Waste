@@ -92,7 +92,6 @@ const settingsPaneByModule: Record<string, string> = {
   portals: "portals",
   // The Sorting Guide's own pane (#293): an item or the module opens Settings › Sorting guide.
   "sorting-guide": SORTING_GUIDE_SETTINGS_PANE_ID,
-  privacy: "privacy",
 }
 
 const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [

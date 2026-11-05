@@ -169,12 +169,11 @@ export const AuditEvent = z.object({
 export type AuditEvent = z.infer<typeof AuditEvent>
 
 /**
- * A page of history, newest first: one row's — its own changes and those of
- * the sets it is the parent of, two levels down — when `table` and `rowId`
- * are both given, else the whole company's.
+ * A page of one row's history, newest first: its own changes and those of
+ * the sets it is the parent of, two levels down.
  */
 export const AuditEventListQuery = PageRequest.extend({
-  table: TableName.optional(),
-  rowId: Id.optional(),
-}).refine((query) => (query.table === undefined) === (query.rowId === undefined), { message: "Give both table and rowId, or neither", path: ["rowId"] })
+  table: TableName,
+  rowId: Id,
+})
 export type AuditEventListQuery = z.infer<typeof AuditEventListQuery>

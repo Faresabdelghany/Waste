@@ -1,13 +1,11 @@
 // The audit log's one read (#291, slice 9): `GET /audit-events`, newest
-// first. With `table` and `rowId` it is one row's history — the row's own
-// changes, and those of the sets it is the parent of two levels down (a
-// role's grants, a vehicle's compartments and their fractions, a scheme's
-// groups and their picks) — read under `view` on the module the table belongs
-// to (the audit list, @waste/db/sql/audit-trail), the grant its own routes
-// are read under. Without them it is the company's whole history, read under
-// `view` on `configure.privacy`. Either way a row of a project the caller does
-// not work in is not there, as anywhere else; a company-wide row (a customer,
-// a role) is.
+// first, one row's history — the row's own changes, and those of the sets it
+// is the parent of two levels down (a role's grants, a vehicle's compartments
+// and their fractions, a scheme's groups and their picks) — read under `view`
+// on the module the table belongs to (the audit list,
+// @waste/db/sql/audit-trail), the grant its own routes are read under. A row
+// of a project the caller does not work in is not there, as anywhere else; a
+// company-wide row (a customer, a role) is.
 //
 // What the trigger wrote is what is answered: the table and the row, the
 // columns that moved as `[before, after]`, the actor — the account, with its
@@ -34,9 +32,6 @@ const AuditPage = Page(AuditEvent)
 
 /** The module each audited table's history is read under, by the table's name. */
 const MODULE_OF: ReadonlyMap<string, ModuleKey> = new Map(AUDITED.map((entry) => [getTableName(entry.table), entry.module]))
-
-/** The company's whole history is read under the privacy module's view (#291): who changed what, everywhere. */
-const COMPANY_HISTORY: ModuleKey = "configure.privacy"
 
 const columns = {
   id: auditEvent.id,
@@ -93,13 +88,13 @@ export function auditEventRoutes(guard: MiddlewareHandler<AuthEnv>) {
       operationId: "listAuditEvents",
       summary: "The audit log",
       description:
-        "One page of the audit log, newest first: what the audit trail recorded of every insert, update and delete of an audited table — the columns that moved as `[before, after]`, the account that made the change (null for the worker, the seed and the access token hook), the reason its request gave in the `Waste-Change-Reason` header, and the transaction it happened in, which one request's changes share. With `table` and `rowId` it is one row's history, with the changes of the sets it is the parent of two levels down — a role's grants, a property's parties, a vehicle's compartments and their fractions — under `view` on the module the table belongs to; without them, the company's whole history, under `view` on `configure.privacy`. A row of a project this account does not work in is not there. Hand `nextCursor` back as `cursor` for the next page.",
+        "One page of the audit log, newest first: what the audit trail recorded of every insert, update and delete of an audited table — the columns that moved as `[before, after]`, the account that made the change (null for the worker, the seed and the access token hook), the reason its request gave in the `Waste-Change-Reason` header, and the transaction it happened in, which one request's changes share. It is one row's history, named by `table` and `rowId`, with the changes of the sets it is the parent of two levels down — a role's grants, a property's parties, a vehicle's compartments and their fractions — under `view` on the module the table belongs to. A row of a project this account does not work in is not there. Hand `nextCursor` back as `cursor` for the next page.",
       security: BEARER_SECURITY,
       responses: {
         200: describeJson("One page of the audit log.", AuditPage),
-        400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `table` is not an audited table, or only one of `table` and `rowId` is given."),
+        400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `table` or `rowId` is missing, or `table` is not an audited table."),
         401: describeProblem("No usable token (see WWW-Authenticate)."),
-        403: describeProblem("No active account here, or the caller's role does not allow `view` on the table's module, or on `configure.privacy` for the company's whole history."),
+        403: describeProblem("No active account here, or the caller's role does not allow `view` on the table's module."),
       },
     }),
     guard,
@@ -109,17 +104,12 @@ export function auditEventRoutes(guard: MiddlewareHandler<AuthEnv>) {
       const after = afterCursor(cursor)
       const tx = c.get("tx")
       const principal = c.get("principal")
-      let ofRow = undefined
-      if (table !== undefined && rowId !== undefined) {
-        const module = MODULE_OF.get(table)
-        if (module === undefined) throw invalidRequest("query", [{ path: "table", message: "Not an audited table" }])
-        requireAllowed(principal.grants, module, "view")
-        // The row, its sets, and their sets: two levels, which every parent of the audit list is within.
-        const children = sql`select ${auditEvent.rowId} from ${auditEvent} where ${auditEvent.companyId} = ${principal.companyId} and ${auditEvent.parentTable} = ${table} and ${auditEvent.parentId} = ${rowId}`
-        ofRow = or(and(eq(auditEvent.tableName, table), eq(auditEvent.rowId, rowId)), and(eq(auditEvent.parentTable, table), eq(auditEvent.parentId, rowId)), sql`${auditEvent.parentId} in (${children})`)
-      } else {
-        requireAllowed(principal.grants, COMPANY_HISTORY, "view")
-      }
+      const module = MODULE_OF.get(table)
+      if (module === undefined) throw invalidRequest("query", [{ path: "table", message: "Not an audited table" }])
+      requireAllowed(principal.grants, module, "view")
+      // The row, its sets, and their sets: two levels, which every parent of the audit list is within.
+      const children = sql`select ${auditEvent.rowId} from ${auditEvent} where ${auditEvent.companyId} = ${principal.companyId} and ${auditEvent.parentTable} = ${table} and ${auditEvent.parentId} = ${rowId}`
+      const ofRow = or(and(eq(auditEvent.tableName, table), eq(auditEvent.rowId, rowId)), and(eq(auditEvent.parentTable, table), eq(auditEvent.parentId, rowId)), sql`${auditEvent.parentId} in (${children})`)
       const rows = await tx
         .select(columns)
         .from(auditEvent)
