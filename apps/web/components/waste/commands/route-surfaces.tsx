@@ -31,10 +31,15 @@
 // another route and cancels it as merged; the other route is one
 // `routesToJoin` offers, and the API judges each stop where it goes.
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowDown, ArrowSquareOut, ArrowUp } from "@phosphor-icons/react/dist/ssr"
+import Link from "next/link"
+import { ArrowDown, ArrowSquareOut, ArrowUp, CaretDown, CaretRight, Funnel, MagnifyingGlass, MapTrifold, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageActions } from "@/components/page-layout"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
@@ -454,16 +459,40 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
 }
 
 /**
- * A route's own page on the Pilot (`RouteDetailsOnApi`): the commands in a
- * compact bar, the stops as a table first, then its Plans, sessions, messages
- * and the device's log, with `aside` — the route's facts and History — beside
- * them; `menu` is the record's own actions, at the end of the bar.
+ * A route's own page on the Pilot (`RouteDetailsOnApi`), laid out as fixture
+ * mode's `RouteDetailsPage`: Dispatch and the route's other commands under
+ * Actions beside the tabs; Overview's stops table with its search, Filters and
+ * the stop commands under Action, the Map and the route's information beside
+ * it; then the route's tickets, sessions, Plans, messages and activity.
  */
-export function RouteSurfacePage({ record, aside, menu }: RowSurfaceProps & { aside: ReactNode; menu?: ReactNode }) {
-  return <RouteSurface record={record} layout="page" aside={aside} menu={menu} />
+export function RouteSurfacePage({
+  record,
+  information,
+  tickets,
+  history,
+  menu,
+}: RowSurfaceProps & {
+  /** The route's facts, grouped: the Route information panel beside the stops. */
+  information: ReactNode
+  /** The tickets about the route, and how many there are. */
+  tickets: { count: number; content: ReactNode }
+  /** The route's History, under its Activity tab. */
+  history?: ReactNode
+  /** The record's own actions (Delete, …), after Actions. */
+  menu?: ReactNode
+}) {
+  return <RouteSurface record={record} layout="page" page={{ information, tickets, history, menu }} />
 }
 
-function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layout: "sheet" | "page"; aside?: ReactNode; menu?: ReactNode }) {
+/** A route command as a surface offers it: a button in the side panel; on the page, Dispatch, an Actions item, or a stop command under Action. */
+type RouteCommandEntry = { name: string; place: "primary" | "route" | "stops"; offered: boolean; disabled: boolean; select: () => void }
+
+/** The stop statuses Filters narrows the stops to: the ones not collected. */
+const NEEDS_ATTENTION = new Set<string>(["skipped", "failed"])
+
+type RoutePageParts = { information: ReactNode; tickets: { count: number; content: ReactNode }; history?: ReactNode; menu?: ReactNode }
+
+function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "sheet" | "page"; page?: RoutePageParts }) {
   const pickers = useRelationPickers()
   const { me } = useApiSession()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
@@ -525,98 +554,50 @@ function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layou
   const stopLine = (pickup: Pickup & { sequence?: number }) =>
     `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
 
-  const commandButtons = (
-    <>
-      {offered(ASSIGN_ROUTE) && (
-        <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS.assign)} onClick={() => openForm("assign")}>
-          Assign
-        </Button>
-      )}
-      {offered(DISPATCH_ROUTE) && (
-        <Button variant={layout === "page" ? "default" : "outline"} size="sm" disabled={!sendable} onClick={() => run(DISPATCH_ROUTE)}>
-          Dispatch
-        </Button>
-      )}
-      {offered(RESCHEDULE_ROUTE) && (
-        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("reschedule")}>
-          Reschedule
-        </Button>
-      )}
-      {/* A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226). */}
-      {offered(RELEASE_HOLD) && isHeldRoute(record) && record.submittedValues?.status === "planned" && (
-        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => run(RELEASE_HOLD)}>
-          Release hold
-        </Button>
-      )}
-      {/* A stop of the office's own goes onto a route that has not started (#111). */}
-      {offered(ADD_STOP) && TAKES_A_STOP.has(status) && (
-        <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"])} onClick={() => openForm("add-stop")}>
-          Add stop
-        </Button>
-      )}
-      {/* Open stops onto another route, a new one of the day, or another route's taken in (O23 of #290), on a route that has not started. */}
-      {offered(MOVE_STOPS) && TAKES_A_STOP.has(status) && (
-        <Button variant="outline" size="sm" disabled={!sendable || openStops.length === 0} onClick={() => setOpen({ kind: "stops", mode: "move" })}>
-          Move stops
-        </Button>
-      )}
-      {offered(SPLIT_ROUTE) && TAKES_A_STOP.has(status) && (
-        <Button variant="outline" size="sm" disabled={!sendable || openStops.length < 2} onClick={() => setOpen({ kind: "stops", mode: "split" })}>
-          Split route
-        </Button>
-      )}
-      {offered(MERGE_ROUTE) && TAKES_A_STOP.has(status) && (
-        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => setOpen({ kind: "stops", mode: "merge" })}>
-          Merge route
-        </Button>
-      )}
-      {offered(REORDER_ROUTE) && (
-        <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
-          Reorder stops
-        </Button>
-      )}
-      {/* A Plan over the open stops, on a route that has not started (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */}
-      {offered(OPTIMISE_ROUTE) && TAKES_A_STOP.has(status) && (
-        <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length === 0} onClick={() => run(OPTIMISE_ROUTE)}>
-          Optimise
-        </Button>
-      )}
-      {offered(CANCEL_ROUTE) && (
-        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("cancel")}>
-          Cancel route
-        </Button>
-      )}
-    </>
-  )
+  // The page's own: the stops' search and filter, and which panel stands open beside them.
+  const [stopSearch, setStopSearch] = useState("")
+  const [attentionOnly, setAttentionOnly] = useState(false)
+  const [rightPanel, setRightPanel] = useState<"map" | "information">("information")
+
+  // Every command, in the order the side panel draws them.
+  const allCommands: RouteCommandEntry[] = [
+    { name: "Assign", place: "route", offered: offered(ASSIGN_ROUTE), disabled: !sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS.assign), select: () => openForm("assign") },
+    { name: "Dispatch", place: "primary", offered: offered(DISPATCH_ROUTE), disabled: !sendable, select: () => run(DISPATCH_ROUTE) },
+    { name: "Reschedule", place: "route", offered: offered(RESCHEDULE_ROUTE), disabled: !sendable, select: () => openForm("reschedule") },
+    // A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226).
+    { name: "Release hold", place: "route", offered: offered(RELEASE_HOLD) && isHeldRoute(record) && record.submittedValues?.status === "planned", disabled: !sendable, select: () => run(RELEASE_HOLD) },
+    // A stop of the office's own goes onto a route that has not started (#111).
+    { name: "Add stop", place: "stops", offered: offered(ADD_STOP) && TAKES_A_STOP.has(status), disabled: !sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"]), select: () => openForm("add-stop") },
+    // Open stops onto another route, a new one of the day, or another route's taken in (O23 of #290), on a route that has not started.
+    { name: "Move stops", place: "stops", offered: offered(MOVE_STOPS) && TAKES_A_STOP.has(status), disabled: !sendable || openStops.length === 0, select: () => setOpen({ kind: "stops", mode: "move" }) },
+    { name: "Split route", place: "stops", offered: offered(SPLIT_ROUTE) && TAKES_A_STOP.has(status), disabled: !sendable || openStops.length < 2, select: () => setOpen({ kind: "stops", mode: "split" }) },
+    { name: "Merge route", place: "stops", offered: offered(MERGE_ROUTE) && TAKES_A_STOP.has(status), disabled: !sendable, select: () => setOpen({ kind: "stops", mode: "merge" }) },
+    { name: "Reorder stops", place: "stops", offered: offered(REORDER_ROUTE), disabled: !sendable || detail === undefined || openStops.length < 2, select: () => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) }) },
+    // A Plan over the open stops, on a route that has not started (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route.
+    { name: "Optimise", place: "stops", offered: offered(OPTIMISE_ROUTE) && TAKES_A_STOP.has(status), disabled: !sendable || detail === undefined || openStops.length === 0, select: () => run(OPTIMISE_ROUTE) },
+    { name: "Cancel route", place: "route", offered: offered(CANCEL_ROUTE), disabled: !sendable, select: () => openForm("cancel") },
+  ]
+  const commands = allCommands.filter((command) => command.offered)
   const stopsEmpty = record.facts.Origin === undefined ? "No stop: generation matched no container for this route." : "No stop yet: add the route's stops."
-  const reads_ = (
-    <>
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground">Plans</h4>
-        <ReadRows
-          read={plans}
-          label="Reading the route's Plans…"
-          empty="No Plan yet: the generated order stands unmeasured."
-          testId="route-plans"
-          line={(plan) => planLine(plan, { activePlanId: detail?.activePlan?.id, timezone })}
-        />
-      </div>
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground">Sessions</h4>
-        <ReadRows read={{ rows: detail?.sessions ?? null, problem: reads.problem }} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="route-sessions" line={(session) => sessionLine(session, timezone)} />
-      </div>
-      <RouteMessagesSection record={record} timezone={timezone} canSend={allows(me?.role.grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground">Driver app commands</h4>
-        <ReadRows
-          read={log}
-          label="Reading the device's command log…"
-          empty="The driver's device has sent nothing for this route."
-          testId="route-command-log"
-          line={(receipt) => `${shownOn(receipt.occurredAt, timezone)} · ${statusLabel(receipt.kind)} · ${statusLabel(receipt.outcome)}${receipt.problem?.detail ? ` · ${receipt.problem.detail}` : ""}`}
-        />
-      </div>
-    </>
+  const plansBlock = (
+    <ReadRows
+      read={plans}
+      label="Reading the route's Plans…"
+      empty="No Plan yet: the generated order stands unmeasured."
+      testId="route-plans"
+      line={(plan) => planLine(plan, { activePlanId: detail?.activePlan?.id, timezone })}
+    />
+  )
+  const sessionsBlock = <ReadRows read={{ rows: detail?.sessions ?? null, problem: reads.problem }} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="route-sessions" line={(session) => sessionLine(session, timezone)} />
+  const messagesBlock = <RouteMessagesSection record={record} timezone={timezone} canSend={allows(me?.role.grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
+  const logBlock = (
+    <ReadRows
+      read={log}
+      label="Reading the device's command log…"
+      empty="The driver's device has sent nothing for this route."
+      testId="route-command-log"
+      line={(receipt) => `${shownOn(receipt.occurredAt, timezone)} · ${statusLabel(receipt.kind)} · ${statusLabel(receipt.outcome)}${receipt.problem?.detail ? ` · ${receipt.problem.detail}` : ""}`}
+    />
   )
   const dialogs = (
     <>
@@ -656,80 +637,241 @@ function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layou
     </>
   )
 
-  if (layout === "page") {
+  if (layout === "page" && page !== undefined) {
     const stops = detail?.pickups
+    const dispatch = commands.find((command) => command.place === "primary")
+    const routeMenu = commands.filter((command) => command.place === "route")
+    const stopMenu = commands.filter((command) => command.place === "stops")
+    const query = stopSearch.trim().toLowerCase()
+    const shownStops = (stops ?? []).filter(
+      (pickup) =>
+        (!attentionOnly || NEEDS_ATTENTION.has(pickup.status)) &&
+        (query === "" || `${stopName(pickup)} ${PICKUP_SERVICE_LABELS[pickup.service]} ${statusLabel(pickup.status)} ${stopNote(pickup)}`.toLowerCase().includes(query)),
+    )
+    const tabs: ReadonlyArray<readonly [string, string, number | undefined]> = [
+      ["overview", "Overview", undefined],
+      ["tickets", "Tickets", page.tickets.count],
+      ["sessions", "Sessions", detail?.sessions.length],
+      ["plans", "Plans", plans.rows?.length],
+      ["messages", "Messages", undefined],
+      ["activity", "Activity", undefined],
+    ]
+    // Every tab stays mounted, its reads with it, and an inactive one is hidden.
+    const tabContent = "mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
     return (
-      <>
+      <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
-          <p className="text-xs text-muted-foreground">
-            {stops === undefined ? "Reading the route's stops…" : `${stops.length} ${stops.length === 1 ? "stop" : "stops"} · ${openStops.length} open`}
-          </p>
+          <div className="min-w-0 overflow-x-auto">
+            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
+              {tabs.map(([value, label, count]) => (
+                <TabsTrigger key={value} value={value} className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground">
+                  {label}
+                  {count !== undefined && <span className="ml-1.5 text-[10px] text-muted-foreground">{count}</span>}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
           <div data-testid="route-commands">
             <PageActions>
-              {commandButtons}
-              {menu}
+              {dispatch && (
+                <Button size="sm" disabled={dispatch.disabled} onClick={dispatch.select}>
+                  <PaperPlaneTilt className="h-4 w-4" weight="fill" />
+                  {dispatch.name}
+                </Button>
+              )}
+              {routeMenu.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      Actions
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-52">
+                    {routeMenu.map((command) => (
+                      <DropdownMenuItem key={command.name} disabled={command.disabled} onSelect={command.select} className={cn(command.name === "Cancel route" && "text-destructive focus:text-destructive")}>
+                        {command.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {page.menu}
             </PageActions>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="mx-auto grid max-w-[1500px] gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0 space-y-4">
-              {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
-              <section className="overflow-hidden rounded-xl border border-border/60" aria-labelledby="route-stops-heading">
-                <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-                  <h3 id="route-stops-heading" className="text-sm font-semibold">Stops</h3>
-                  <p className="text-xs text-muted-foreground">In the order they will be visited</p>
+        {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+
+        <TabsContent value="overview" forceMount className={tabContent}>
+          <div className="grid min-h-[640px] min-[1180px]:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.95fr)]">
+            <section className="min-w-0 border-b border-border min-[1180px]:border-b-0 min-[1180px]:border-r">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+                <div className="relative min-w-[220px] max-w-sm flex-1">
+                  <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={stopSearch} onChange={(event) => setStopSearch(event.target.value)} placeholder="Search route stops" aria-label="Search route stops" className="h-8 pl-9 text-sm" />
                 </div>
-                {reads.problem !== null ? (
-                  <p className="px-4 py-6 text-sm text-destructive">{reads.problem}</p>
-                ) : stops === undefined ? (
-                  <p className="px-4 py-6 text-sm text-muted-foreground">{"Reading the route's stops…"}</p>
-                ) : stops.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-muted-foreground">{stopsEmpty}</p>
-                ) : (
-                  <Table data-testid="route-stops">
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-12 pl-4">#</TableHead>
-                        <TableHead>Stop</TableHead>
-                        <TableHead>Service</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Note</TableHead>
-                        <TableHead className="w-12 pr-4">
-                          <span className="sr-only">Open</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stops.map((pickup) => (
-                        <TableRow key={pickup.id}>
-                          <TableCell className="pl-4 tabular-nums text-muted-foreground">{pickup.sequence ?? pickup.position}</TableCell>
-                          <TableCell className="font-medium">{stopName(pickup)}</TableCell>
-                          <TableCell className="text-muted-foreground">{PICKUP_SERVICE_LABELS[pickup.service]}</TableCell>
-                          <TableCell>
-                            <StatusBadge tone={recordStatusTone(statusLabel(pickup.status))} className="rounded-full text-[11px]">
-                              {statusLabel(pickup.status)}
-                            </StatusBadge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{stopNote(pickup)}</TableCell>
-                          <TableCell className="pr-4 text-right">
-                            <Button variant="ghost" size="icon-sm" aria-label="Open stop" onClick={() => openPickup(webIdOf("pickup", pickup.id))}>
-                              <ArrowSquareOut className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                {(stopSearch !== "" || attentionOnly) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStopSearch("")
+                      setAttentionOnly(false)
+                    }}
+                  >
+                    Reset
+                  </Button>
                 )}
-              </section>
-              <div className="space-y-6 rounded-xl border border-border/60 p-4">{reads_}</div>
-            </div>
-            <aside className="min-w-0 space-y-4">{aside}</aside>
+                <Button variant={attentionOnly ? "secondary" : "outline"} size="sm" aria-pressed={attentionOnly} onClick={() => setAttentionOnly((current) => !current)}>
+                  <Funnel className="h-4 w-4" />
+                  Filters
+                </Button>
+                {stopMenu.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" aria-label="Stop actions">
+                        Action
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56">
+                      {stopMenu.map((command) => (
+                        <DropdownMenuItem key={command.name} disabled={command.disabled} onSelect={command.select}>
+                          {command.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+
+              <div className="p-3 sm:p-4">
+                <div className="max-w-full overflow-hidden rounded-xl border border-border">
+                  <div className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
+                    {stops === undefined ? "Reading the route's stops…" : attentionOnly || query !== "" ? `${shownStops.length} of ${stops.length} stops` : `${stops.length} ${stops.length === 1 ? "stop" : "stops"} · ${openStops.length} open`}
+                  </div>
+                  {reads.problem !== null ? (
+                    <p className="px-4 py-10 text-center text-sm text-destructive">{reads.problem}</p>
+                  ) : stops === undefined ? null : stops.length === 0 ? (
+                    <p className="px-4 py-10 text-center text-sm text-muted-foreground">{stopsEmpty}</p>
+                  ) : (
+                    <div className="max-w-full overflow-x-auto">
+                      <Table className="min-w-[640px]" data-testid="route-stops">
+                        <TableHeader className="bg-muted/30">
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="w-14 pl-4 text-xs font-medium text-muted-foreground">#</TableHead>
+                            <TableHead className="text-xs font-medium text-muted-foreground">Stop</TableHead>
+                            <TableHead className="text-xs font-medium text-muted-foreground">Service</TableHead>
+                            <TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead>
+                            <TableHead className="w-12" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {shownStops.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5} className="h-40 text-center">
+                                <p className="text-sm font-medium">No matching stops</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Change the search or filter.</p>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            shownStops.map((pickup) => {
+                              const note = stopNote(pickup)
+                              return (
+                                <TableRow key={pickup.id} className="hover:bg-muted/60">
+                                  <TableCell className="py-3 pl-4 text-sm tabular-nums text-muted-foreground">{pickup.sequence ?? pickup.position}</TableCell>
+                                  <TableCell className="min-w-[180px] py-3">
+                                    <p className="text-sm font-medium text-foreground">{stopName(pickup)}</p>
+                                    {note !== "" && <p className="text-xs text-muted-foreground">{note}</p>}
+                                  </TableCell>
+                                  <TableCell className="py-3 text-sm text-muted-foreground">{PICKUP_SERVICE_LABELS[pickup.service]}</TableCell>
+                                  <TableCell className="py-3">
+                                    <StatusBadge outlined tone={recordStatusTone(statusLabel(pickup.status))} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                      {statusLabel(pickup.status)}
+                                    </StatusBadge>
+                                  </TableCell>
+                                  <TableCell className="py-3 pr-4 text-right">
+                                    <Button variant="ghost" size="icon-sm" className="rounded-full text-muted-foreground hover:text-foreground" aria-label="Open stop" onClick={() => openPickup(webIdOf("pickup", pickup.id))}>
+                                      <ArrowSquareOut className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <aside className="min-w-0">
+              <Button
+                type="button"
+                variant="ghost"
+                className={cn(
+                  "flex h-auto min-h-14 w-full items-center justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-left font-normal hover:bg-transparent hover:text-current has-[>svg]:px-4 dark:hover:bg-transparent",
+                  rightPanel !== "map" && "bg-muted/20",
+                )}
+                onClick={() => setRightPanel("map")}
+                aria-expanded={rightPanel === "map"}
+              >
+                {rightPanel === "map" ? <CaretDown className="h-4 w-4 text-muted-foreground" /> : <CaretRight className="h-4 w-4 text-muted-foreground" />}
+                <MapTrifold className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Map</span>
+              </Button>
+              {rightPanel === "map" && (
+                <div className="space-y-3 border-b border-border px-5 py-6">
+                  <p className="text-sm text-muted-foreground">Map Planning draws this route&apos;s line and its stops on the map, with the day&apos;s other routes.</p>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={getBusinessModuleHref("plan", "map-planning")}>
+                      <MapTrifold className="h-4 w-4" />
+                      Open Map Planning
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex h-auto min-h-14 w-full items-center justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-left font-normal hover:bg-transparent hover:text-current has-[>svg]:px-4 dark:hover:bg-transparent"
+                onClick={() => setRightPanel("information")}
+                aria-expanded={rightPanel === "information"}
+              >
+                {rightPanel === "information" ? <CaretDown className="h-4 w-4 text-muted-foreground" /> : <CaretRight className="h-4 w-4 text-muted-foreground" />}
+                <span className="text-sm font-semibold">Route information</span>
+              </Button>
+              {rightPanel === "information" && page.information}
+            </aside>
           </div>
-        </div>
+        </TabsContent>
+
+        <TabsContent value="tickets" forceMount className={tabContent}>
+          {page.tickets.content}
+        </TabsContent>
+        <TabsContent value="sessions" forceMount className={tabContent}>
+          <RoutePageSection title="Sessions" description="Each time a driver started this route on the Driver App.">
+            {sessionsBlock}
+          </RoutePageSection>
+        </TabsContent>
+        <TabsContent value="plans" forceMount className={tabContent}>
+          <RoutePageSection title="Plans" description="The orders the route was measured in; the active one sets its distance and duration.">
+            {plansBlock}
+          </RoutePageSection>
+        </TabsContent>
+        <TabsContent value="messages" forceMount className={tabContent}>
+          <RoutePageSection title="Messages" description="The thread with the route's driver.">
+            {messagesBlock}
+          </RoutePageSection>
+        </TabsContent>
+        <TabsContent value="activity" forceMount className={tabContent}>
+          <RoutePageSection title="Driver app commands" description="What the driver's device sent for this route, and how the API took it.">
+            {logBlock}
+          </RoutePageSection>
+          {page.history !== undefined && <div className="px-5 pb-6 empty:hidden">{page.history}</div>}
+        </TabsContent>
         {dialogs}
-      </>
+      </Tabs>
     )
   }
 
@@ -737,7 +879,13 @@ function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layou
     <section className="space-y-4" data-testid="route-commands">
       <h3 className="text-sm font-semibold">Route commands</h3>
       {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
-      <div className="flex flex-wrap gap-2">{commandButtons}</div>
+      <div className="flex flex-wrap gap-2">
+        {commands.map((command) => (
+          <Button key={command.name} variant="outline" size="sm" disabled={command.disabled} onClick={command.select}>
+            {command.name}
+          </Button>
+        ))}
+      </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Stops, in the order they will be visited</h4>
         <ReadRows
@@ -756,8 +904,33 @@ function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layou
           )}
         />
       </div>
-      {reads_}
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Plans</h4>
+        {plansBlock}
+      </div>
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Sessions</h4>
+        {sessionsBlock}
+      </div>
+      {messagesBlock}
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Driver app commands</h4>
+        {logBlock}
+      </div>
       {dialogs}
+    </section>
+  )
+}
+
+/** A tab of the route's page beyond Overview: its heading over the read it shows. */
+function RoutePageSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section>
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="p-5">{children}</div>
     </section>
   )
 }
