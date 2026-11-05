@@ -7,6 +7,9 @@
 // completed does too, and one away from completed only tells the ticket.
 // Every booking is kept in the ledger (#422), so a stop the office booked the
 // ticket away from still services it when it is corrected to completed.
+// A type's automation plans one too (#546 of #544, part 2): the stop its
+// kind is answered by, on the chosen vehicle's next route, booked as Add
+// stop books it.
 import assert from "node:assert/strict"
 import { randomInt } from "node:crypto"
 import { after, before, describe, test } from "node:test"
@@ -14,6 +17,7 @@ import { after, before, describe, test } from "node:test"
 import { DriverCommandBatchOutcome, type CommandOutcomeRow } from "@waste/contracts/driver-commands"
 import { PickupDetail } from "@waste/contracts/pickups"
 import { RouteDetail } from "@waste/contracts/routes"
+import { TicketType } from "@waste/contracts/ticket-types"
 import { Ticket } from "@waste/contracts/tickets"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { agreement, subscription } from "@waste/db/schema/agreements"
@@ -27,6 +31,7 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { NOT_A_TICKET } from "../routes/ticket-stops"
+import { NOT_A_COMPANY_VEHICLE } from "../routes/ticket-types"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -53,6 +58,8 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
   let ex: ExecutionFixtures
   let olivia: Call
   let mads: Call
+  /** On a custom role in Copenhagen alone, given the templates' edit: keeps types without working the harbour. */
+  let viewer: Call
   let warehouseId: string
   let subscriptionId: string
   let bin = 40
@@ -119,7 +126,10 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
     a = await seedTenant(pool)
     fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
     ex = await seedExecution(pool, a, fleet)
-    await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: "operate.driver-app", actions: ["view", "edit"] }])
+    await grantRole(pool, a.companyId, a.roles.viewer.id, [
+      { moduleKey: "operate.driver-app", actions: ["view", "edit"] },
+      { moduleKey: "configure.templates", actions: ["view", "edit"] },
+    ])
     warehouseId = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "TS-1")
     subscriptionId = testId()
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
@@ -134,6 +144,7 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
     const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOON })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     mads = callingAs(app, keys, ex.logins.mads, a.companyId)
+    viewer = callingAs(app, keys, a.users.viewer, a.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -270,6 +281,74 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       assert.equal((await olivia(`/pickups/${stop.id}/correct-outcome`, { method: "POST", body: { outcome: "skipped", reason: "other", note: "Never went" } })).status, 200)
       assert.equal((await historyOf(defect.id)).at(-1)?.body, stopCorrected({ position: stop.position, route: route.label, outcome: "skipped", note: "Never went" }))
       assert.deepEqual([(await ticketOf(defect.id)).resolution, (await completedEvents(defect.id)).length], ["no-action", 1], "the office's own close stands")
+    })
+  })
+
+  describe("planned by its type's automation (#546 of #544, part 2)", () => {
+    const LATER = "2026-10-26"
+    const planningType = async (name: string, kind: string, daysAhead: number): Promise<TicketType> => {
+      const type = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name, kind } }), TicketType)
+      const set = await olivia(`/ticket-types/${type.id}/actions`, { method: "PUT", body: { actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: fleet.vehicles.wh24.id, daysAhead }] } })
+      assert.equal(set.status, 200, JSON.stringify(await set.clone().json()))
+      return TicketType.parse(await set.json())
+    }
+    const lines = async (ticketId: string) => (await historyOf(ticketId)).filter((event) => event.recordedBy === null).map((event) => event.body)
+
+    test("an overflow is planned as an emptying of its container on the vehicle's next route the days ahead, booked as Add stop books it; the same work twice is told, not booked", async () => {
+      const later = await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: LATER, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id } }), RouteDetail)
+      const type = await planningType("Overflow, planned", "overflow", 21)
+      assert.deepEqual(type.actions.map((action) => [action.kind, action.vehicleId, action.daysAhead]), [["plan-in-route", fleet.vehicles.wh24.id, 21]])
+      const bin = await inService()
+      const ticket = await created(
+        olivia,
+        "/tickets",
+        await olivia("/tickets", { method: "POST", body: { projectId: a.projects.copenhagen.id, ticketTypeId: type.id, subject: "Overflowing at Parkvej 18", description: "Bags beside the bin", links: { propertyId: ex.properties.parkvej.id, containerId: bin.id } } }),
+        Ticket,
+      )
+      assert.equal(ticket.bookedRouteId, later.id, "the 201 answers the ticket booked")
+      const stop = PickupDetail.parse(await (await olivia(`/pickups/${ticket.bookedPickupId}`)).json())
+      assert.deepEqual([stop.routeId, stop.service, stop.status, stop.origin, stop.containerId, stop.propertyId], [later.id, "empty", "planned", "office", bin.id, ex.properties.parkvej.id])
+      assert.deepEqual(await bookingsOf(ticket.id), [stop.id], "the ledger keeps the booking")
+      assert.deepEqual(await lines(ticket.id), [`Automation of Overflow, planned on opening: planned as stop ${stop.position} of route ${later.label}, an emptying on ${LATER}.`])
+
+      const again = await created(
+        olivia,
+        "/tickets",
+        await olivia("/tickets", { method: "POST", body: { projectId: a.projects.copenhagen.id, ticketTypeId: type.id, subject: "Still overflowing", description: "Called again", links: { propertyId: ex.properties.parkvej.id, containerId: bin.id } } }),
+        Ticket,
+      )
+      assert.equal(again.bookedPickupId, null)
+      assert.deepEqual(await lines(again.id), [`Automation of Overflow, planned on opening: not planned: route ${later.label} has a planned emptying of container ${bin.label} the office added already.`])
+
+      const beyond = await planningType("Overflow, planned far ahead", "overflow", 40)
+      const far = await created(
+        olivia,
+        "/tickets",
+        await olivia("/tickets", { method: "POST", body: { projectId: a.projects.copenhagen.id, ticketTypeId: beyond.id, subject: "Overflowing again", description: "Later", links: { propertyId: ex.properties.parkvej.id, containerId: (await inService()).id } } }),
+        Ticket,
+      )
+      assert.equal(far.bookedPickupId, null)
+      assert.match((await lines(far.id))[0] ?? "", /not planned: vehicle .+ has no route from 2026-11-14 that has not started\.$/)
+    })
+
+    test("a plan in a route names a vehicle of a project the caller works in, or one the type's actions name already", async () => {
+      const harbour = [{ trigger: "opened", kind: "plan-in-route", vehicleId: fleet.vehicles.harborTruck.id, daysAhead: 1 }]
+      const kept = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Overflow, harbour", kind: "overflow" } }), TicketType)
+      assert.equal((await olivia(`/ticket-types/${kept.id}/actions`, { method: "PUT", body: { actions: harbour } })).status, 200, "the office of every project names the harbour's truck")
+      assert.equal((await viewer(`/ticket-types/${kept.id}/actions`, { method: "PUT", body: { actions: harbour } })).status, 200, "a set restated whole keeps the vehicle it named")
+      const fresh = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Overflow, harbour too", kind: "overflow" } }), TicketType)
+      const problem = await refused(await viewer(`/ticket-types/${fresh.id}/actions`, { method: "PUT", body: { actions: harbour } }), 400)
+      assert.deepEqual(problem.errors?.map((error) => [error.path, error.message]), [["actions.0.vehicleId", NOT_A_COMPANY_VEHICLE]], "a vehicle of a project the caller does not work in is one it cannot name")
+    })
+
+    test("a plan in a route names a vehicle of the company, on a type of a kind a stop naming its container answers", async () => {
+      const type = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Delivery, planned", kind: "container-request" } }), TicketType)
+      const response = await olivia(`/ticket-types/${type.id}/actions`, { method: "PUT", body: { actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: testId(), daysAhead: 1 }] } })
+      const problem = await refused(response, 400)
+      assert.deepEqual(problem.errors?.map((error) => [error.path, error.message]), [
+        ["actions.0.vehicleId", NOT_A_COMPANY_VEHICLE],
+        ["actions.0.kind", "A container request is answered by a stop naming more than its container: the office books it"],
+      ])
     })
   })
 })

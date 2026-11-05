@@ -108,7 +108,7 @@
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
-import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, type TicketActionParameters } from "@waste/domain/resolution/automation"
+import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, PLAN_DAYS_AHEAD_MAX, type TicketActionParameters } from "@waste/domain/resolution/automation"
 import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
 import {
   ALERT_KINDS,
@@ -313,7 +313,10 @@ function actionKindClause(kind: TicketActionKind, columns: Record<keyof TicketAc
 // `ACTION_PARAMETERS`): a team, a person, a priority, a status with a
 // completion's resolution, a message template by name — its project's, since
 // a template is a project's and the type the company's — and the recipient,
-// or the type of a follow-up. The set is replaced whole with its type
+// or the type of a follow-up, or the vehicle whose next route a ticket is
+// planned in and how many days ahead (#546, part 2) — a vehicle is a
+// project's, so the action keeps its project beside it for the key. The set
+// is replaced whole with its type
 // (`PUT /ticket-types/:id/actions`), each replacement minting new ids, so the
 // unique place per trigger is safe. A team, a person or a follow-up type
 // named is a key the database checks; whether it still takes tickets is the
@@ -337,6 +340,10 @@ export const ticketTypeAction = wms.table(
     messageTemplateName: text(),
     recipient: text(),
     followUpTypeId: uuid(),
+    /** The vehicle's project, for the key: a vehicle is a project's and a type the company's. */
+    vehicleProjectId: uuid(),
+    vehicleId: uuid(),
+    daysAhead: integer(),
   },
   (t) => [
     companyReference(t, company),
@@ -344,6 +351,7 @@ export const ticketTypeAction = wms.table(
     tenantReference(t, [t.teamId], team),
     tenantReference(t, [t.userAccountId], userAccount),
     tenantReference(t, [t.followUpTypeId], ticketType),
+    tenantReference(t, [t.vehicleProjectId, t.vehicleId], vehicle, [vehicle.projectId, vehicle.id]),
     tenantUnique(t, t.ticketTypeId, t.trigger, t.position),
     positive(t.position),
     oneOf(t.trigger, TICKET_ACTION_TRIGGERS),
@@ -354,9 +362,13 @@ export const ticketTypeAction = wms.table(
     oneOf(t.recipient, TICKET_MESSAGE_RECIPIENTS),
     // What each kind carries and forbids: one CASE built from ACTION_PARAMETERS, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "ticketTypeAction"), sql`case ${t.kind} ${sql.join(TICKET_ACTION_KINDS.map((kind) => actionKindClause(kind, t)), sql` `)} else false end`),
+    // A vehicle with its project, or neither; and the days the domain allows.
+    check(tableObjectName(t.id.table, "vehicle_shape", "ticketTypeAction"), sql`(${t.vehicleId} is null) = (${t.vehicleProjectId} is null)`),
+    check(tableObjectName(t.id.table, "days_ahead_range", "ticketTypeAction"), sql`${t.daysAhead} between 0 and ${sql.raw(String(PLAN_DAYS_AHEAD_MAX))}`),
     tenantIndex(t, t.teamId),
     tenantIndex(t, t.userAccountId),
     tenantIndex(t, t.followUpTypeId),
+    tenantIndex(t, t.vehicleProjectId, t.vehicleId),
   ],
 )
 

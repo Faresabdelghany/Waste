@@ -14,6 +14,11 @@
 // whose stop is corrected away from completed after serving it: the ledger of
 // cases is appended to, never taken back, and reopening — which has its own
 // charge — is the office's to decide.
+//
+// A stop booked for a ticket is written to the ticket here too
+// (`bookTicket`): the office's Add stop (apps/api's routes/ticket-stops.ts)
+// and the system's plan in a route (#546 of #544,
+// commands/ticket-automation.ts) book through the one write.
 import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/execution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
@@ -36,6 +41,29 @@ export type StopRef = { position: number; route: string }
 
 /** Who decided the stop: the account recording the ticket's event. */
 export type Actor = { companyId: string; userAccountId: string }
+
+/**
+ * The ticket names the stop booked for it, with a line saying which, and the
+ * `ticket_booking` ledger keeps the booking (#422); a missed one it named
+ * before is replaced on the ticket, never in the ledger. The office's line is
+ * `bookedFor`'s, recorded by the person; the system's is its automation's, by
+ * nobody. Answers the ticket as booked.
+ */
+export async function bookTicket(tx: Tx, companyId: string, booking: TicketRow, stop: Pick<BookedStop, "pickupId" | "routeId">, line: { body: string; recordedBy: string | null }, mint: IdMinter = newId): Promise<TicketRow> {
+  const [row] = await tx
+    .update(ticket)
+    .set({ bookedRouteId: stop.routeId, bookedPickupId: stop.pickupId })
+    .where(and(eq(ticket.companyId, companyId), eq(ticket.id, booking.id)))
+    .returning(ticketColumns)
+  await tx.insert(ticketBooking).values({ id: mint(), companyId, projectId: row.projectId, ticketId: row.id, routeId: stop.routeId, pickupId: stop.pickupId })
+  await appendTicketEvent(
+    tx,
+    { companyId, projectId: row.projectId, id: row.id },
+    { kind: "comment", status: row.status as TicketStatus, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: line.body, visibility: "internal", objectKey: null, recordedBy: line.recordedBy, sourceEventId: null },
+    mint,
+  )
+  return row
+}
 
 /**
  * The ticket a booking ever named the stop for, as a condition on `ticket`

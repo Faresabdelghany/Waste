@@ -12,10 +12,33 @@
 // (`typeFieldFormId`). `fieldValuesFromForm` reads the picked type's back into
 // the wire's values, a number as a number and yes or no as a boolean, a blank
 // left out.
-import type { TicketTypeField, TicketTypePermission } from "@waste/contracts/ticket-types"
+//
+// A type's automation (#546 of #544) rides on the record the same way, as
+// the wire's list of actions in JSON, each team, person, follow-up type and
+// vehicle by its web id: what the pane's Automation tab edits, by trigger,
+// offering each trigger the kinds of action it takes (`actionKindsFor`) and
+// held to the domain's rules before the request (`actionsIssue`).
+import type { TicketTypeAction, TicketTypeField, TicketTypePermission } from "@waste/contracts/ticket-types"
+import { ACTION_KIND_WORDS, actionIssue, plannedService, TRIGGER_WORDS } from "@waste/domain/resolution/automation"
 import { fieldKeyOf, TICKET_COMMAND_VERBS } from "@waste/domain/resolution/ticket-types"
 import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
-import { TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_KINDS, type TicketFieldInput, type TicketFieldRequirement } from "@waste/domain/resolution/vocabulary"
+import {
+  isClosedTicketStatus,
+  TICKET_ACTION_COMMANDS,
+  TICKET_ACTION_KINDS,
+  TICKET_FIELD_INPUTS,
+  TICKET_FIELD_REQUIREMENTS,
+  TICKET_KINDS,
+  TICKET_MESSAGE_RECIPIENTS,
+  TICKET_PRIORITIES,
+  TICKET_RESOLUTIONS,
+  type TicketActionKind,
+  type TicketActionTrigger,
+  type TicketFieldInput,
+  type TicketFieldRequirement,
+  type TicketKind,
+  type TicketMessageRecipient,
+} from "@waste/domain/resolution/vocabulary"
 
 import { allows, type Grants } from "../api/grants"
 import { statusLabel } from "../api/records/adapter"
@@ -37,6 +60,9 @@ export const TICKET_TYPE_FIELDS_KEY = "fieldsJson"
 
 /** The record's permissions, as the wire's list in JSON, each role by its web id. */
 export const TICKET_TYPE_PERMISSIONS_KEY = "permissionsJson"
+
+/** The record's automation, as the wire's list of actions in JSON, each team, person, follow-up type and vehicle by its web id. */
+export const TICKET_TYPE_ACTIONS_KEY = "actionsJson"
 
 /** A type's two statuses as a person reads them. */
 export const TICKET_TYPE_STATUS_LABELS = ["Active", "Inactive"] as const
@@ -104,6 +130,83 @@ export function typePermissionsOf(record: Pick<BusinessRecord, "submittedValues"
   }
 }
 
+/** A type's actions as its record carries them, each reference by its web id. */
+export function typeActionsOf(record: Pick<BusinessRecord, "submittedValues">): TicketTypeAction[] {
+  const json = record.submittedValues?.[TICKET_TYPE_ACTIONS_KEY]
+  if (typeof json !== "string" || json === "") return []
+  try {
+    const parsed: unknown = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as TicketTypeAction[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** A sentence's opening word capitalised: "on opening" heads its section as "On opening". */
+const capitalised = (words: string): string => `${words[0].toUpperCase()}${words.slice(1)}`
+
+/** Each trigger as its section heads it. */
+export const TRIGGER_HEADINGS: Readonly<Record<TicketActionTrigger, string>> = Object.fromEntries(Object.entries(TRIGGER_WORDS).map(([trigger, words]) => [trigger, capitalised(words)])) as Record<TicketActionTrigger, string>
+
+/** Each kind of action as a picker offers it. */
+export const ACTION_KIND_LABELS: Readonly<Record<TicketActionKind, string>> = Object.fromEntries(TICKET_ACTION_KINDS.map((kind) => [kind, capitalised(ACTION_KIND_WORDS[kind])])) as Record<TicketActionKind, string>
+
+/** Whom a message goes to, as a picker offers it. */
+export const RECIPIENT_LABELS: Readonly<Record<TicketMessageRecipient, string>> = {
+  "ticket-customer": "The ticket's customer",
+  owner: "The property's owner",
+  payer: "The property's payer",
+  tenant: "The property's tenant",
+  administrator: "The property's administrator",
+  "service-contact": "The property's service contact",
+}
+
+/** The statuses an action moves a ticket to, the priorities and the resolutions, as pickers offer them. */
+export const ACTION_COMMAND_OPTIONS: readonly BusinessFormOption[] = TICKET_ACTION_COMMANDS.map((command) => ({ value: command, label: capitalised(TICKET_COMMAND_VERBS[command]) }))
+export const PRIORITY_OPTIONS: readonly BusinessFormOption[] = TICKET_PRIORITIES.map((priority) => ({ value: priority, label: statusLabel(priority) }))
+export const RESOLUTION_OPTIONS: readonly BusinessFormOption[] = TICKET_RESOLUTIONS.map((resolution) => ({ value: resolution, label: statusLabel(resolution) }))
+export const RECIPIENT_OPTIONS: readonly BusinessFormOption[] = TICKET_MESSAGE_RECIPIENTS.map((recipient) => ({ value: recipient, label: RECIPIENT_LABELS[recipient] }))
+
+/**
+ * The kinds of action a trigger takes on a type of the kind: on a ticket a
+ * completion or a rejection closed, a message or a follow-up alone; a plan in
+ * a route only where a stop naming nothing but the ticket's container answers
+ * the kind.
+ */
+export function actionKindsFor(trigger: TicketActionTrigger, kind: TicketKind): TicketActionKind[] {
+  const closes = trigger !== "opened" && isClosedTicketStatus(trigger)
+  return TICKET_ACTION_KINDS.filter((action) => (closes ? action === "send-message" || action === "open-follow-up" : action !== "plan-in-route" || plannedService(kind) !== undefined))
+}
+
+/** No parameter: what a new action starts from before its kind's are filled in. */
+const NO_PARAMETERS = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null } as const
+
+/** A new action of a kind on a trigger, with what it needs that has a sensible start — a priority, a status, a recipient, the days ahead — and the rest for a person to pick. */
+export function newAction(trigger: TicketActionTrigger, kind: TicketActionKind): TicketTypeAction {
+  const start: Partial<TicketTypeAction> =
+    kind === "set-priority"
+      ? { priority: "high" }
+      : kind === "set-status"
+        ? { command: trigger === "in-progress" ? "complete" : "start", resolution: trigger === "in-progress" ? "serviced" : null }
+        : kind === "send-message"
+          ? { recipient: "ticket-customer" }
+          : kind === "plan-in-route"
+            ? { daysAhead: 1 }
+            : {}
+  return { trigger, kind, ...NO_PARAMETERS, ...start }
+}
+
+/** The first action that breaks the domain's rules, in the pane's words: its trigger, its place among its trigger's and why; undefined where every one keeps them. */
+export function actionsIssue(actions: readonly TicketTypeAction[]): string | undefined {
+  for (const [index, action] of actions.entries()) {
+    const issue = actionIssue(action)
+    if (issue === undefined) continue
+    const place = actions.slice(0, index + 1).filter((other) => other.trigger === action.trigger).length
+    return `${TRIGGER_HEADINGS[action.trigger]}, action ${place}: ${issue.message}.`
+  }
+  return undefined
+}
+
 /** One field as the pane's editor holds it: the choices as the one line a person types, comma-separated. */
 export type FieldDraft = { key: string; label: string; helpText: string; input: TicketFieldInput; choices: string; requirement: TicketFieldRequirement; keyTouched: boolean }
 
@@ -121,10 +224,10 @@ export function fieldOfDraft(draft: FieldDraft): TicketTypeField {
   return { key: draft.key.trim(), label: draft.label.trim(), helpText: draft.helpText.trim() === "" ? null : draft.helpText.trim(), input: draft.input, choices, requirement: draft.requirement }
 }
 
-/** A type after the pane's edit: its own fields, its fields and its permissions as the record carries them, which the adapter writes each through its route where it changed. */
+/** A type after the pane's edit: its own fields, its fields, its permissions and its automation as the record carries them, which the adapter writes each through its route where it changed. */
 export function updatedTicketTypeRecord(
   record: BusinessRecord,
-  edit: { name: string; description: string; status: string; isDefault: boolean; fields: readonly TicketTypeField[]; permissions: readonly TicketTypePermission[] },
+  edit: { name: string; description: string; status: string; isDefault: boolean; fields: readonly TicketTypeField[]; permissions: readonly TicketTypePermission[]; actions?: readonly TicketTypeAction[] },
 ): BusinessRecord {
   return {
     ...record,
@@ -138,6 +241,7 @@ export function updatedTicketTypeRecord(
       isDefault: edit.isDefault,
       [TICKET_TYPE_FIELDS_KEY]: JSON.stringify(edit.fields),
       [TICKET_TYPE_PERMISSIONS_KEY]: JSON.stringify(edit.permissions.filter((entry) => entry.roleIds.length > 0)),
+      ...(edit.actions === undefined ? {} : { [TICKET_TYPE_ACTIONS_KEY]: JSON.stringify(edit.actions) }),
     },
   }
 }

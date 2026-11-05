@@ -20,6 +20,8 @@ export const UNIQUE_VIOLATION = "23505"
 export const EXCLUSION_VIOLATION = "23P01"
 /** A row alone whose own value a `CHECK` refused. */
 export const CHECK_VIOLATION = "23514"
+/** A row lock asked for `NOWAIT` that another transaction holds. */
+export const LOCK_NOT_AVAILABLE = "55P03"
 
 /** The SQLSTATE of a failed statement, through Drizzle's wrapper (`cause`) or straight from postgres.js; undefined for an error that is not the database's. */
 export function sqlstate(error: unknown): { code: string; constraint?: string } | undefined {

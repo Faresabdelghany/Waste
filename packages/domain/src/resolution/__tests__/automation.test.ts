@@ -4,10 +4,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, actionIssue, actionsOf, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, automationNote, commandTrigger, TICKET_TYPE_ACTIONS_MAX, triggerOf, type TicketAction } from "../automation"
+import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, actionIssue, actionsOf, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, automationNote, commandTrigger, notPlannable, PLAN_DAYS_AHEAD_MAX, plannedService, TICKET_TYPE_ACTIONS_MAX, triggerOf, type TicketAction } from "../automation"
 import { TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_STATUSES } from "../vocabulary"
 
-const NONE = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null }
+const NONE = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null }
 const action = (values: Partial<TicketAction>): TicketAction => ({ trigger: "opened", kind: "set-priority", ...NONE, priority: "high", ...values })
 
 describe("when a type's actions run", () => {
@@ -57,6 +57,20 @@ describe("what an action carries", () => {
       assert.equal(actionIssue(action({ trigger, kind: "open-follow-up", priority: null, followUpTypeId: "type-a" })), undefined)
     }
     assert.equal(actionIssue(action({ trigger: "pending", kind: "assign-team", priority: null, teamId: "team-a" })), undefined, "an open status is no closing")
+    assert.deepEqual(actionIssue(action({ trigger: "completed", kind: "plan-in-route", priority: null, vehicleId: "truck", daysAhead: 1 })), { path: "vehicleId", message: "A ticket reaching completed is closed and is answered by no stop" })
+  })
+
+  test("a plan in a route names a vehicle and from 0 to the most days ahead, and plans the stop answering its kind that names nothing but its container", () => {
+    const planning = action({ kind: "plan-in-route", priority: null, vehicleId: "truck", daysAhead: 2 })
+    assert.equal(actionIssue(planning), undefined)
+    assert.equal(actionIssue({ ...planning, daysAhead: 0 }), undefined, "the vehicle's next route from today")
+    assert.deepEqual(actionIssue({ ...planning, daysAhead: null }), { path: "daysAhead", message: "An action to plan it in a route names how many days ahead" })
+    assert.deepEqual(actionIssue({ ...planning, daysAhead: PLAN_DAYS_AHEAD_MAX + 1 }), { path: "daysAhead", message: `Plan from 0 to ${PLAN_DAYS_AHEAD_MAX} days ahead` })
+    assert.deepEqual(actionIssue({ ...planning, daysAhead: -1 }), { path: "daysAhead", message: `Plan from 0 to ${PLAN_DAYS_AHEAD_MAX} days ahead` })
+    assert.deepEqual(actionIssue({ ...planning, vehicleId: null }), { path: "vehicleId", message: "An action to plan it in a route names a vehicle" })
+    assert.deepEqual([plannedService("overflow"), plannedService("container-defect"), plannedService("container-request"), plannedService("complaint")], ["empty", "repair", undefined, undefined])
+    assert.equal(notPlannable("container-request"), "A container request is answered by a stop naming more than its container: the office books it")
+    assert.equal(notPlannable("internal-task"), "An internal task is answered by no stop to plan in a route")
   })
 })
 

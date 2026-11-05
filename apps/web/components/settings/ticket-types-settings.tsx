@@ -3,7 +3,9 @@
 // Settings › Operations › Ticket types (#545 of #544): the company's own types
 // of case, each inside one kind — added, renamed, described, retired and made
 // their kind's default, given their custom fields and the roles that may give
-// each status command — through the record store, which on the Pilot reaches
+// each status command, and given their automation (#546), the actions the
+// system takes on a ticket of the type when it opens or reaches a status —
+// through the record store, which on the Pilot reaches
 // `/ticket-types` through lib/api/records/ticket-types.ts. Every company
 // starts with a default type per kind, the type of a ticket opened by kind
 // alone; a ticket's form offers a type's fields once the type is picked.
@@ -13,11 +15,12 @@ import { useState } from "react"
 import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import type { TicketTypePermission } from "@waste/contracts/ticket-types"
+import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
 import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
-import type { TicketFieldInput, TicketFieldRequirement } from "@waste/domain/resolution/vocabulary"
+import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "@waste/domain/resolution/vocabulary"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -32,12 +35,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
-import { roleAdapter } from "@/lib/api/records/organisation"
+import { vehicleAdapter } from "@/lib/api/records/fleet"
+import { roleAdapter, userAdapter } from "@/lib/api/records/organisation"
+import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
+import { VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
 import {
+  actionsIssue,
   COMMAND_HEADINGS,
   createTicketTypeRecord,
   draftOf,
@@ -49,6 +56,7 @@ import {
   ticketTypesAccessOf,
   TICKET_TYPE_FORM,
   TICKET_TYPES_MODULE,
+  typeActionsOf,
   typeFieldsOf,
   typePermissionsOf,
   updatedTicketTypeRecord,
@@ -66,8 +74,17 @@ export function TicketTypesSettings() {
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, NO_RECORDS)
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
   const roles = users.records.filter((record) => roleAdapter.owns(record) && !isSoftDeleted(record))
+  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, NO_RECORDS)
   // The kinds' defaults first, then the company's own, each in the order they were made.
   const rows = types.records.filter((record) => isTicketTypeRecord(record) && !isSoftDeleted(record)).sort((a, b) => Number(b.submittedValues?.isDefault === true) - Number(a.submittedValues?.isDefault === true))
+  // What the Automation tab's pickers offer: the active teams, people, types and the vehicles, each by its web id.
+  const named = (records: readonly BusinessRecord[]) => records.map((record) => ({ value: record.id, label: record.name }))
+  const choices: AutomationChoices = {
+    teams: named(types.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record) && record.status === "Active")),
+    people: named(users.records.filter((record) => userAdapter.owns(record) && !isSoftDeleted(record) && record.status === "Active")),
+    types: named(rows.filter((record) => record.status === "Active")),
+    vehicles: named(vehicles.records.filter((record) => vehicleAdapter.owns(record) && !isSoftDeleted(record))),
+  }
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
@@ -123,13 +140,14 @@ export function TicketTypesSettings() {
                 <TableHead>Type</TableHead>
                 <TableHead>Kind</TableHead>
                 <TableHead>Fields</TableHead>
+                <TableHead>Automation</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint={types.notGranted ? types.problem?.detail : undefined} />
+                <EmptyRow colSpan={6} message={emptyMessage} hint={types.notGranted ? types.problem?.detail : undefined} />
               ) : (
                 rows.map((record) => (
                   <TableRow key={record.id}>
@@ -139,6 +157,7 @@ export function TicketTypesSettings() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.facts.Kind}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{record.facts.Fields ?? "None"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.facts.Automation ?? "None"}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
                     </TableCell>
@@ -157,13 +176,13 @@ export function TicketTypesSettings() {
 
       {/* The form names no row of another module: every option is its own. */}
       <BusinessRecordFormDialog schema={TICKET_TYPE_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={(field) => field.options ?? []} />
-      {editing && <TicketTypeEditor record={editing} roles={roles} saving={saving} onClose={() => setEditing(null)} onSave={(record) => write(record, () => setEditing(null), "Ticket type saved", madeDefault(editing, record))} />}
+      {editing && <TicketTypeEditor record={editing} roles={roles} choices={choices} saving={saving} onClose={() => setEditing(null)} onSave={(record) => write(record, () => setEditing(null), "Ticket type saved", madeDefault(editing, record))} />}
     </AssetPanelShell>
   )
 }
 
-/** One type's editor: its own fields, its custom fields in order, and who may give each status command — saved together, each set written where it changed. */
-function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; saving: boolean; onClose: () => void; onSave: (record: BusinessRecord) => void }) {
+/** One type's editor: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed. */
+function TicketTypeEditor({ record, roles, choices, saving, onClose, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; onClose: () => void; onSave: (record: BusinessRecord) => void }) {
   const isDefault = record.submittedValues?.isDefault === true
   const [name, setName] = useState(record.name)
   const [description, setDescription] = useState(typeof record.submittedValues?.description === "string" ? record.submittedValues.description : "")
@@ -171,6 +190,8 @@ function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: 
   const [makeDefault, setMakeDefault] = useState(isDefault)
   const [fields, setFields] = useState<FieldDraft[]>(() => typeFieldsOf(record).map(draftOf))
   const [permissions, setPermissions] = useState<TicketTypePermission[]>(() => typePermissionsOf(record))
+  const [actions, setActions] = useState<TicketTypeAction[]>(() => typeActionsOf(record))
+  const kind = record.submittedValues?.kind as TicketKind
   const [refusal, setRefusal] = useState<string | null>(null)
 
   const changeField = (index: number, change: (draft: FieldDraft) => FieldDraft) => {
@@ -203,7 +224,9 @@ function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: 
     if (issue !== undefined) return setRefusal(`Field ${issue.index + 1}: ${issue.message}.`)
     const unlabelled = wire.findIndex((field) => field.label === "")
     if (unlabelled !== -1) return setRefusal(`Field ${unlabelled + 1}: give it a label.`)
-    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions }))
+    const automation = actionsIssue(actions)
+    if (automation !== undefined) return setRefusal(automation)
+    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }))
   }
 
   return (
@@ -220,6 +243,7 @@ function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: 
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="fields">Fields ({fields.length})</TabsTrigger>
             <TabsTrigger value="permissions">Status permissions</TabsTrigger>
+            <TabsTrigger value="automation">Automation ({actions.length})</TabsTrigger>
           </TabsList>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             <TabsContent value="details" className="mt-0 grid gap-4 sm:grid-cols-2">
@@ -362,6 +386,18 @@ function TicketTypeEditor({ record, roles, saving, onClose, onSave }: { record: 
               <p className="text-xs text-muted-foreground">
                 {COMMAND_HEADINGS.map((heading) => `${heading.heading}: ${rolesOf(heading.command).length === 0 ? "everyone" : `${rolesOf(heading.command).length} role${rolesOf(heading.command).length === 1 ? "" : "s"}`}`).join(" · ")}
               </p>
+            </TabsContent>
+
+            <TabsContent value="automation" className="mt-0">
+              <TicketTypeAutomation
+                kind={kind}
+                actions={actions}
+                choices={choices}
+                onChange={(next) => {
+                  setActions(next)
+                  setRefusal(null)
+                }}
+              />
             </TabsContent>
           </div>
         </Tabs>
