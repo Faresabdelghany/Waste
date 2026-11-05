@@ -787,7 +787,7 @@ function ContainerMap({
           const profile = profileFor(record)
           const [left, top] = mapPinPositions[index % mapPinPositions.length]
           return (
-            <button
+            <Button variant="unstyled"
               key={record.id}
               type="button"
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -797,7 +797,7 @@ function ContainerMap({
               title={`${profile.id} · ${record.status} · ${profile.fillLevel}`}
             >
               {profile.id.replace("BIN-", "")}
-            </button>
+            </Button>
           )
         })}
       </div>

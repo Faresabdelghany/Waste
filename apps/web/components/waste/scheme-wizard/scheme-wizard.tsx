@@ -122,7 +122,7 @@ export function SchemeWizard({
               const summary = s.id < 5 ? model.summaries[s.id as 1 | 2 | 3 | 4] : ""
               return (
                 <li key={s.id}>
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     disabled={state === "todo"}
                     onClick={() => setStep(s.id)}
@@ -153,7 +153,7 @@ export function SchemeWizard({
                         </span>
                       ) : null}
                     </span>
-                  </button>
+                  </Button>
                 </li>
               )
             })}

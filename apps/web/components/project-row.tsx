@@ -25,7 +25,7 @@ export function ProjectRow({ project, isExpanded, onToggle, dates, cellWidth }: 
       <div className="group flex cursor-pointer hover:bg-accent/30 transition-colors" onClick={onToggle}>
         {/* Project Info */}
         <div className="w-[280px] lg:w-[320px] shrink-0 flex items-center gap-2 px-4 py-3 bg-background sticky left-0 z-10 border-r border-border/40 border-l">
-          <Button variant="ghost" className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none h-auto shrink has-[>svg]:p-0.5 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "p-0.5 rounded hover:bg-accent dark:hover:bg-accent")}>
+          <Button variant="unstyled" className="p-0.5 rounded hover:bg-accent">
             {isExpanded ? (
               <CaretDown className="size-4 text-muted-foreground" />
             ) : (

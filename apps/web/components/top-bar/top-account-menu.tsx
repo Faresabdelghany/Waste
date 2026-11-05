@@ -86,15 +86,15 @@ export function TopAccountMenu() {
             <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-0.5">
               {THEME_CHOICES.map(({ id, label, icon: Icon }) => (
                 <Button
-                  variant="ghost"
+                  variant="unstyled"
                   key={id}
                   type="button"
                   role="radio"
                   aria-checked={selection === id}
                   onClick={() => selectTheme(id)}
-                  className={cn("whitespace-normal font-normal shrink p-0 has-[>svg]:px-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent",
+                  className={cn(
                     "flex h-7 items-center justify-center gap-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground",
-                    selection === id && "bg-background font-medium text-foreground shadow-xs hover:bg-background dark:hover:bg-background",
+                    selection === id && "bg-background font-medium text-foreground shadow-xs",
                   )}
                 >
                   <Icon className="size-3.5" />

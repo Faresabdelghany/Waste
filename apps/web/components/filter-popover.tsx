@@ -159,10 +159,10 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             <div className="space-y-1">
               {filteredCategories.map((cat) => (
                 <Button
-                  variant="ghost"
+                  variant="unstyled"
                   key={cat.id}
-                  className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 transition-none cursor-default hover:text-inherit",
-                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
                     active === cat.id && "bg-accent"
                   )}
                   onClick={() => setActive(cat.id)}
@@ -268,7 +268,7 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             )}
 
             <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3">
-              <Button variant="link" onClick={handleClear} className="inline-block whitespace-normal rounded-none font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-sm text-primary hover:underline">
+              <Button variant="unstyled" onClick={handleClear} className="text-sm text-primary hover:underline">
                 Clear
               </Button>
               <Button size="sm" className="h-8 rounded-lg" onClick={handleApply}>

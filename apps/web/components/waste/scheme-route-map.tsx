@@ -86,29 +86,29 @@ export function SchemeRouteMap({
       {days.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           <Button
-            variant="ghost"
+            variant="unstyled"
             type="button"
             onClick={() => setFocusDay("all")}
-            className={cn("inline-block whitespace-normal shrink h-auto cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+            className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               focusDay === "all"
-                ? "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted",
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted",
             )}
           >
             All days
           </Button>
           {days.map((day) => (
             <Button
-              variant="ghost"
+              variant="unstyled"
               key={day}
               type="button"
               onClick={() => setFocusDay(day)}
-              className={cn("justify-start whitespace-normal shrink h-auto cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+              className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 focusDay === day
-                  ? "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted",
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted",
               )}
             >
               <span

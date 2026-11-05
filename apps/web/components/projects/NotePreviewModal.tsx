@@ -233,7 +233,7 @@ function CollapsibleSection({
     return (
         <Collapsible open={open} onOpenChange={onOpenChange}>
             <CollapsibleTrigger asChild>
-                <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:p-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/50 transition-colors dark:hover:bg-muted/50")}>
+                <Button variant="unstyled" className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="flex items-center gap-2">
                         {icon}
                         <span className="font-medium">{title}</span>
@@ -261,7 +261,7 @@ type TranscriptRowProps = {
 
 function TranscriptRow({ segment, isActive, onClick }: TranscriptRowProps) {
     return (
-        <button
+        <Button variant="unstyled"
             className={cn(
                 "w-full text-left p-3 border-b border-border/50 hover:bg-muted/50 transition-colors",
                 isActive && "bg-primary/10"
@@ -286,6 +286,6 @@ function TranscriptRow({ segment, isActive, onClick }: TranscriptRowProps) {
             <p className="mt-1 text-sm text-foreground leading-relaxed">
                 {segment.text}
             </p>
-        </button>
+        </Button>
     )
 }

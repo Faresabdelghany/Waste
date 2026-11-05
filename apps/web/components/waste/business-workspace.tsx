@@ -5285,9 +5285,9 @@ export function BusinessWorkspace({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     type="button"
-                    className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label={`About ${activeModule.title}`}
                   >
                     <Info className="size-4" />
@@ -5651,7 +5651,7 @@ export function BusinessWorkspace({
                                     onKeyDown={(event) => event.stopPropagation()}
                                   >
                                     <Button
-                                      variant="ghost"
+                                      variant="unstyled"
                                       type="button"
                                       aria-pressed={isRouteStarred(record.id)}
                                       aria-label={
@@ -5659,7 +5659,7 @@ export function BusinessWorkspace({
                                           ? `Remove ${record.name} from Active Routes`
                                           : `Add ${record.name} to Active Routes`
                                       }
-                                      className="gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 transition-none hover:text-inherit flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted dark:hover:bg-muted"
+                                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
                                       onClick={() => toggleRouteStarred(record.id)}
                                     >
                                       <Star

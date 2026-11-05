@@ -199,13 +199,13 @@ export function TimelineGantt({
               return (
                 <div key={t.id} className="grid grid-cols-[240px_1fr]">
                   {onTaskSelect ? (
-                    <button
+                    <Button variant="unstyled"
                       type="button"
                       className="cursor-pointer truncate border-r border-border bg-transparent px-4 py-2 text-left text-sm text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                       onClick={() => onTaskSelect(t.id)}
                     >
                       {t.name}
-                    </button>
+                    </Button>
                   ) : (
                     <div className="truncate border-r border-border px-4 py-2 text-sm text-foreground">
                       {t.name}

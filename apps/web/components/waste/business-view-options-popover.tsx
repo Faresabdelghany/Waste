@@ -261,14 +261,14 @@ export function BusinessViewOptionsPopover({
             <div className="flex rounded-xl bg-muted p-1">
               {viewTypes.map((tab) => (
                 <Button
-                  variant="ghost"
+                  variant="unstyled"
                   key={tab.id}
                   type="button"
                   onClick={() => onChange({ ...value, viewType: tab.id })}
-                  className={cn("justify-start whitespace-normal shrink h-auto px-0 has-[>svg]:px-0 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                  className={cn(
                     "flex flex-1 flex-col items-center gap-1 rounded-lg py-2.5 text-xs font-medium transition-colors",
                     value.viewType === tab.id
-                      ? "bg-background shadow-sm hover:bg-background dark:hover:bg-background"
+                      ? "bg-background shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -360,15 +360,15 @@ export function BusinessViewOptionsPopover({
                         option.value === "none" ? Globe : columnIcon(option.label)
                       return (
                         <Button
-                          variant="ghost"
+                          variant="unstyled"
                           key={option.value}
                           type="button"
                           onClick={() => {
                             onChange({ ...value, groupBy: option.value })
                             setGroupByOpen(false)
                           }}
-                          className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:text-inherit",
-                            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent",
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent",
                             value.groupBy === option.value && "bg-accent",
                           )}
                         >
@@ -426,11 +426,11 @@ export function BusinessViewOptionsPopover({
                               <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                               <span className="flex-1 truncate">{column}</span>
                               <Button
-                                variant="ghost"
+                                variant="unstyled"
                                 type="button"
                                 aria-label={`Remove ${column} from static columns`}
                                 onClick={() => unpinColumn(column)}
-                                className="inline-block whitespace-normal text-[length:inherit] font-normal shrink h-auto has-[>svg]:px-0.5 cursor-default hover:bg-transparent dark:hover:bg-transparent rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                               >
                                 <X className="size-3.5" />
                               </Button>
@@ -459,17 +459,17 @@ export function BusinessViewOptionsPopover({
                       const isActive = value[chip.key]
                       return (
                         <Button
-                          variant="ghost"
+                          variant="unstyled"
                           key={chip.key}
                           type="button"
                           onClick={() =>
                             onChange({ ...value, [chip.key]: !isActive })
                           }
-                          className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                          className={cn(
                             "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors",
                             isActive
-                              ? "border-border bg-background text-foreground hover:text-foreground hover:bg-background dark:hover:bg-background"
-                              : "border-border text-muted-foreground hover:bg-accent hover:text-muted-foreground dark:hover:bg-accent",
+                              ? "border-border bg-background text-foreground"
+                              : "border-border text-muted-foreground hover:bg-accent",
                           )}
                         >
                           <Icon className="size-3.5" />
@@ -481,7 +481,7 @@ export function BusinessViewOptionsPopover({
                       const Icon = columnIcon(column)
                       return (
                         <Button
-                          variant="ghost"
+                          variant="unstyled"
                           key={column}
                           type="button"
                           draggable
@@ -489,7 +489,7 @@ export function BusinessViewOptionsPopover({
                             event.dataTransfer.setData("text/column", column)
                           }
                           onClick={() => toggleFactColumn(column)}
-                          className="justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 flex cursor-grab items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent hover:text-foreground dark:hover:bg-accent"
+                          className="flex cursor-grab items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
                         >
                           <Icon className="size-3.5" />
                           {column}
@@ -499,11 +499,11 @@ export function BusinessViewOptionsPopover({
                     <Popover open={addColumnOpen} onOpenChange={setAddColumnOpen}>
                       <PopoverTrigger asChild>
                         <Button
-                          variant="ghost"
+                          variant="unstyled"
                           type="button"
                           disabled={addableColumns.length === 0}
                           aria-label="Add column"
-                          className="whitespace-normal font-normal shrink h-auto has-[>svg]:px-2.5 cursor-default flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 hover:text-muted-foreground dark:hover:bg-accent"
+                          className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Plus className="size-3.5" />
                         </Button>
@@ -518,14 +518,14 @@ export function BusinessViewOptionsPopover({
                             const Icon = columnIcon(column)
                             return (
                               <Button
-                                variant="ghost"
+                                variant="unstyled"
                                 key={column}
                                 type="button"
                                 onClick={() => {
                                   toggleFactColumn(column)
                                   setAddColumnOpen(false)
                                 }}
-                                className="justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:text-inherit flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
                               >
                                 <Icon className="size-4" />
                                 {column}
@@ -565,17 +565,17 @@ export function BusinessViewOptionsPopover({
                   const isActive = value[chip.key]
                   return (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={chip.key}
                       type="button"
                       onClick={() =>
                         onChange({ ...value, [chip.key]: !isActive })
                       }
-                      className={cn("justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
+                      className={cn(
                         "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors",
                         isActive
-                          ? "border-border bg-background text-foreground hover:text-foreground hover:bg-background dark:hover:bg-background"
-                          : "border-border text-muted-foreground hover:bg-accent hover:text-muted-foreground dark:hover:bg-accent",
+                          ? "border-border bg-background text-foreground"
+                          : "border-border text-muted-foreground hover:bg-accent",
                       )}
                     >
                       <Icon className="size-3.5" />
@@ -587,11 +587,11 @@ export function BusinessViewOptionsPopover({
                   const Icon = columnIcon(column)
                   return (
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       key={column}
                       type="button"
                       onClick={() => toggleFactColumn(column)}
-                      className="justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent hover:text-foreground dark:hover:bg-accent"
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
                     >
                       <Icon className="size-3.5" />
                       {column}
@@ -602,11 +602,11 @@ export function BusinessViewOptionsPopover({
                 <Popover open={addColumnOpen} onOpenChange={setAddColumnOpen}>
                   <PopoverTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="unstyled"
                       type="button"
                       disabled={addableColumns.length === 0}
                       aria-label="Add column"
-                      className="whitespace-normal font-normal shrink h-auto has-[>svg]:px-2.5 cursor-default flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 hover:text-muted-foreground dark:hover:bg-accent"
+                      className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Plus className="size-3.5" />
                     </Button>
@@ -621,14 +621,14 @@ export function BusinessViewOptionsPopover({
                         const Icon = columnIcon(column)
                         return (
                           <Button
-                            variant="ghost"
+                            variant="unstyled"
                             key={column}
                             type="button"
                             onClick={() => {
                               toggleFactColumn(column)
                               setAddColumnOpen(false)
                             }}
-                            className="justify-start whitespace-normal font-normal shrink h-auto has-[>svg]:px-3 cursor-default hover:text-inherit flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent dark:hover:bg-accent"
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
                           >
                             <Icon className="size-4" />
                             {column}
@@ -661,9 +661,9 @@ export function BusinessViewOptionsPopover({
           {isRecordsVariant && (
             <div className="flex items-center justify-between border-t border-border/40 pt-3">
               <Button
-                variant="link"
+                variant="unstyled"
                 type="button"
-                className="justify-start whitespace-normal rounded-none font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default underline-offset-auto flex items-center gap-1.5 text-xs text-primary hover:underline"
+                className="flex items-center gap-1.5 text-xs text-primary hover:underline"
                 onClick={() =>
                   toast.success("Default view saved", {
                     description: "This view configuration now applies for everyone.",
@@ -677,9 +677,9 @@ export function BusinessViewOptionsPopover({
                 </span>
               </Button>
               <Button
-                variant="link"
+                variant="unstyled"
                 type="button"
-                className="inline-block whitespace-normal rounded-none font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-xs text-primary hover:underline"
+                className="text-xs text-primary hover:underline"
                 onClick={() =>
                   onChange({
                     ...defaultBusinessViewOptions,

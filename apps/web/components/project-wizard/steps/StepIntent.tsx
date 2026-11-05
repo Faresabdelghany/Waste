@@ -1,5 +1,6 @@
 import { Rocket, Flask, Briefcase, Check } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button"
 import { ProjectIntent } from "../types";
 
 interface StepIntentProps {
@@ -40,7 +41,7 @@ export function StepIntent({ selected, onSelect }: StepIntentProps) {
           const isActive = selected === option.id;
 
           return (
-            <button
+            <Button variant="unstyled"
               type="button"
               key={option.id}
               onClick={() => onSelect(option.id)}
@@ -74,7 +75,7 @@ export function StepIntent({ selected, onSelect }: StepIntentProps) {
               >
                 {isActive && <Check className="h-3 w-3" />}
               </div>
-            </button>
+            </Button>
           );
         })}
       </div>

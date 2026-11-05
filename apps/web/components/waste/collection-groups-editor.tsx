@@ -192,13 +192,13 @@ export function SchemeRuleEditor({
               <Button
                 key={fraction}
                 type="button"
-                variant="ghost"
+                variant="unstyled"
                 onClick={() => toggleFraction(fraction)}
                 className={cn(
-                  "h-auto gap-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   isOn
-                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:hover:bg-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-background hover:text-muted-foreground dark:hover:bg-background",
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/50",
                 )}
               >
                 {fraction}
@@ -442,7 +442,7 @@ export function SchemeContainerPicker({
           matches.map((container) => {
             const isPicked = pickedIds.includes(container.id)
             return (
-              <button
+              <Button variant="unstyled"
                 key={container.id}
                 type="button"
                 onClick={() => toggleContainer(container.id)}
@@ -472,7 +472,7 @@ export function SchemeContainerPicker({
                       : ""}
                   </p>
                 </div>
-              </button>
+              </Button>
             )
           })
         )}
@@ -655,7 +655,7 @@ export function CollectionGroupsEditor({
                 isSelected && "bg-muted/40",
               )}
             >
-              <button
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => setSelectedId(isSelected ? null : group.id)}
                 className="min-w-0 flex-1 text-left"
@@ -695,7 +695,7 @@ export function CollectionGroupsEditor({
                     ))}
                   </ul>
                 )}
-              </button>
+              </Button>
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
@@ -835,13 +835,13 @@ function CollectionGroupSpoke({
                 <Button
                   key={day}
                   type="button"
-                  variant="ghost"
+                  variant="unstyled"
                   onClick={() => toggleDay(day)}
                   className={cn(
-                    "h-auto gap-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                     isOn
-                      ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:hover:bg-primary"
-                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-background hover:text-muted-foreground dark:hover:bg-background",
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50",
                   )}
                 >
                   {SERVICE_DAY_SHORT_LABELS[day]}

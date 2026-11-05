@@ -148,7 +148,7 @@ function PermissionSectionCard({
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <section className="overflow-hidden rounded-xl border border-border/60">
         <CollapsibleTrigger asChild>
-          <button
+          <Button variant="unstyled"
             type="button"
             className="group flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-muted/40"
           >
@@ -163,7 +163,7 @@ function PermissionSectionCard({
               {grantedCells}/{totalCells}
               <ProgressRing value={totalCells === 0 ? 0 : grantedCells / totalCells} />
             </span>
-          </button>
+          </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t border-border/60">
@@ -483,11 +483,11 @@ export function RolePermissionsMatrix({
                   <Button
                     key={section.id}
                     type="button"
-                    variant="ghost"
+                    variant="unstyled"
                     onClick={() => goToSection(section.id)}
                     aria-current={isActive ? "true" : undefined}
                     className={cn(
-                      "flex h-7 cursor-pointer items-center justify-start gap-0 rounded-md px-2.5 text-left text-xs font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted",
+                      "flex h-7 cursor-pointer items-center rounded-md px-2.5 text-left text-xs font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                       isActive && "bg-muted font-medium text-foreground",
                     )}
                   >

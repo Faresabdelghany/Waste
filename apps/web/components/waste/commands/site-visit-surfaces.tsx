@@ -500,7 +500,7 @@ function LikelyTradesSurface() {
                               {webId === undefined ? (
                                 propertyName(item.propertyId)
                               ) : (
-                                <Button type="button" variant="link" className="h-auto justify-start whitespace-normal p-0 text-left font-normal text-inherit underline-offset-2 hover:underline" onClick={() => openProperty(webId)}>
+                                <Button type="button" variant="unstyled" className="text-left underline-offset-2 hover:underline" onClick={() => openProperty(webId)}>
                                   {propertyName(item.propertyId)}
                                 </Button>
                               )}

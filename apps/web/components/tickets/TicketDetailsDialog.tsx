@@ -735,9 +735,9 @@ function FixtureTicketDetailsDialog({
                         <span className="text-muted-foreground">{formatFileSize(attachment.size)}</span>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="unstyled"
                           aria-label={`Remove ${attachment.name}`}
-                          className="h-auto gap-0 rounded-sm p-0.5 font-normal text-muted-foreground hover:bg-accent hover:text-foreground has-[>svg]:px-0.5"
+                          className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                           onClick={() => removeAttachment(attachment)}
                         >
                           <X className="size-3" />
@@ -842,9 +842,9 @@ function FixtureTicketDetailsDialog({
                             <Button
                               key={emoji}
                               type="button"
-                              variant="ghost"
+                              variant="unstyled"
                               aria-label={`Insert ${emoji}`}
-                              className="flex h-8 w-8 items-center justify-center gap-0 rounded-md p-0 text-base font-normal hover:bg-accent"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-base hover:bg-accent"
                               onClick={() => {
                                 insertAtSelection(`${emoji} `)
                                 setEmojiMenuOpen(false)
@@ -1211,9 +1211,9 @@ function EditableInformationRow({
         <PopoverTrigger asChild>
           <Button
             type="button"
-            variant="ghost"
+            variant="unstyled"
             aria-label={`Change ${label}`}
-            className="flex h-auto min-h-8 min-w-0 items-center justify-end gap-1.5 whitespace-normal rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
+            className="flex min-h-8 min-w-0 items-center justify-end gap-1.5 rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
           >
             <span className="min-w-0 flex-1 truncate">{renderValue?.() ?? value}</span>
           </Button>

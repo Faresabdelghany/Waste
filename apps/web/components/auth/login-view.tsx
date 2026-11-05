@@ -125,7 +125,7 @@ export function LoginView() {
                 <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Demo accounts</p>
               )}
               {DEMO_ACCOUNTS.map((account) => (
-                <button
+                <Button variant="unstyled"
                   key={account.id}
                   type="button"
                   className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-muted/20 p-3 text-left transition-colors hover:bg-muted/60"
@@ -146,7 +146,7 @@ export function LoginView() {
                     <span className="text-[11px] text-muted-foreground/80">{account.viewLabel}</span>
                     <ArrowRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
           )}

@@ -132,9 +132,9 @@ export function TaskBoardCard({ task, variant = "default", onToggle, onOpen, onC
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="ghost"
+              variant="unstyled"
               type="button"
-              className={cn("justify-start whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background border border-border rounded-md px-2 py-1 flex items-center gap-1 text-xs text-muted-foreground hover:bg-background/70 dark:hover:bg-background/70 hover:text-muted-foreground")}
+              className="bg-background border border-border rounded-md px-2 py-1 flex items-center gap-1 text-xs text-muted-foreground hover:bg-background/70"
             >
               <TagIcon className="size-3" />
               <span>{typeText}</span>

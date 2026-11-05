@@ -16,6 +16,7 @@ import { ArrowLeft, ArrowRight, Check, X } from "@phosphor-icons/react/dist/ssr"
 
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /* ----------------------------- fixture data ----------------------------- */
@@ -193,7 +194,7 @@ function DayToggles({ draft, setDraft, size = "md" }: Pick<VariantProps, "draft"
       {DAY_KEYS.map((day) => {
         const on = draft.serviceDays.includes(day)
         return (
-          <button
+          <Button variant="unstyled"
             key={day}
             type="button"
             onClick={() =>
@@ -212,7 +213,7 @@ function DayToggles({ draft, setDraft, size = "md" }: Pick<VariantProps, "draft"
             )}
           >
             {DAY_LABELS[day]}
-          </button>
+          </Button>
         )
       })}
     </div>
@@ -229,7 +230,7 @@ function FrequencyToggles({ draft, setDraft }: Pick<VariantProps, "draft" | "set
           ["monthly", "Once a month"],
         ] as const
       ).map(([value, label]) => (
-        <button
+        <Button variant="unstyled"
           key={value}
           type="button"
           onClick={() => setDraft({ frequency: value })}
@@ -241,7 +242,7 @@ function FrequencyToggles({ draft, setDraft }: Pick<VariantProps, "draft" | "set
           )}
         >
           {label}
-        </button>
+        </Button>
       ))}
       {draft.frequency === "every-2-weeks" && (
         <select
@@ -349,7 +350,7 @@ function ContainerPicker({
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
-        <button
+        <Button variant="unstyled"
           type="button"
           onClick={() =>
             onPick(
@@ -361,7 +362,7 @@ function ContainerPicker({
           className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/50"
         >
           {allVisiblePicked ? "Clear filtered" : `Add all filtered (${filtered.length})`}
-        </button>
+        </Button>
         <span className="ml-auto text-xs font-semibold text-primary">
           {picked.length} picked
         </span>
@@ -370,7 +371,7 @@ function ContainerPicker({
         {visible.map((c) => {
           const isPicked = picked.includes(c.id)
           return (
-            <button
+            <Button variant="unstyled"
               key={c.id}
               type="button"
               onClick={() =>
@@ -390,7 +391,7 @@ function ContainerPicker({
               <span className="text-muted-foreground">{c.facts["Waste fractions"]}</span>
               <span className="text-muted-foreground">{c.facts["Container type"]}</span>
               <span className="ml-auto truncate text-muted-foreground">{c.facts.Address}</span>
-            </button>
+            </Button>
           )
         })}
         {visible.length === 0 && (
@@ -422,13 +423,13 @@ function CreatedPanel({ draft, onClose }: { draft: SchemeDraft; onClose: () => v
           : effectiveDayPlans(draft).map((p) => `${DAY_LABELS[p.day]} ${p.containerIds.length}`).join(" · ")}{" "}
         · prototype only, nothing was saved.
       </div>
-      <button
+      <Button variant="unstyled"
         type="button"
         onClick={onClose}
         className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
       >
         Close prototype
-      </button>
+      </Button>
     </div>
   )
 }
@@ -461,7 +462,7 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
     <div className="space-y-3">
       {multiDay && (
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button variant="unstyled"
             type="button"
             onClick={() => setDraft({ sameAllDays: true })}
             className={cn(
@@ -472,8 +473,8 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
             )}
           >
             Same containers every day
-          </button>
-          <button
+          </Button>
+          <Button variant="unstyled"
             type="button"
             onClick={enablePerDay}
             className={cn(
@@ -484,7 +485,7 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
             )}
           >
             Different per day
-          </button>
+          </Button>
         </div>
       )}
       {perDay && (
@@ -492,7 +493,7 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
           {days.map((d) => {
             const count = (draft.containersByDay[d] ?? []).length
             return (
-              <button
+              <Button variant="unstyled"
                 key={d}
                 type="button"
                 onClick={() => setActiveDay(d)}
@@ -504,7 +505,7 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
                 <span className="size-2 rounded-full" style={{ backgroundColor: DAY_COLORS[d] }} />
                 {DAY_LABELS[d]}
                 <span className={cn("font-mono", d === activeDay ? "opacity-80" : "")}>{count}</span>
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -528,7 +529,7 @@ function RouteMapStep({ draft, containers }: Pick<VariantProps, "draft" | "conta
     <div className="space-y-3">
       {plans.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
-          <button
+          <Button variant="unstyled"
             type="button"
             onClick={() => setFocusDay("all")}
             className={cn(
@@ -537,9 +538,9 @@ function RouteMapStep({ draft, containers }: Pick<VariantProps, "draft" | "conta
             )}
           >
             All days
-          </button>
+          </Button>
           {plans.map((p) => (
-            <button
+            <Button variant="unstyled"
               key={p.day}
               type="button"
               onClick={() => setFocusDay(p.day)}
@@ -550,7 +551,7 @@ function RouteMapStep({ draft, containers }: Pick<VariantProps, "draft" | "conta
             >
               <span className="size-2 rounded-full" style={{ backgroundColor: DAY_COLORS[p.day] }} />
               {DAY_LABELS[p.day]}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -747,9 +748,9 @@ function VariantAStepper(props: VariantProps) {
                           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
                           <div>{value}</div>
                         </div>
-                        <button type="button" onClick={() => goTo(target as number)} className="text-xs font-medium text-primary">
+                        <Button variant="unstyled" type="button" onClick={() => goTo(target as number)} className="text-xs font-medium text-primary">
                           Edit
-                        </button>
+                        </Button>
                       </div>
                     ))}
                     {issues.length > 0 && (
@@ -761,30 +762,30 @@ function VariantAStepper(props: VariantProps) {
                 )}
               </div>
               <div className="mt-5 flex justify-between border-t border-border pt-4">
-                <button
+                <Button variant="unstyled"
                   type="button"
                   onClick={() => (step === 0 ? onClose() : setStep(step - 1))}
                   className="rounded-md border border-border px-4 py-2 text-sm font-medium"
                 >
                   {step === 0 ? "Cancel" : "Back"}
-                </button>
+                </Button>
                 {step < 5 ? (
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     onClick={() => goTo(step + 1)}
                     className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
                   >
                     Next
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     disabled={issues.length > 0}
                     onClick={() => setCreated(true)}
                     className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                   >
                     Create scheme
-                  </button>
+                  </Button>
                 )}
               </div>
             </>
@@ -810,9 +811,9 @@ function VariantBFlatForm(props: VariantProps) {
             <div className="text-base font-semibold">New route scheme</div>
             <div className="text-xs text-muted-foreground">Everything on one page — fill in any order.</div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted">
+          <Button variant="unstyled" type="button" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted">
             <X className="size-4" />
-          </button>
+          </Button>
         </div>
         {created ? (
           <CreatedPanel draft={draft} onClose={onClose} />
@@ -907,14 +908,14 @@ function VariantBFlatForm(props: VariantProps) {
                   )}
                 </ul>
               </div>
-              <button
+              <Button variant="unstyled"
                 type="button"
                 disabled={issues.length > 0}
                 onClick={() => setCreated(true)}
                 className="mt-auto rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 Create scheme
-              </button>
+              </Button>
             </aside>
           </div>
         )}
@@ -1056,14 +1057,14 @@ function VariantCCalendarFirst(props: VariantProps) {
                   compact
                 />
               </div>
-              <button
+              <Button variant="unstyled"
                 type="button"
                 disabled={issues.length > 0}
                 onClick={() => setCreated(true)}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 Create scheme
-              </button>
+              </Button>
               {issues.length > 0 && (
                 <div className="text-[11px] text-muted-foreground">{issues.join(" · ")}</div>
               )}
@@ -1081,13 +1082,13 @@ function Overlay({ children, onClose, width }: { children: React.ReactNode; onCl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className={cn("relative w-full overflow-hidden rounded-[20px] border border-border bg-background shadow-2xl", width)}>
-        <button
+        <Button variant="unstyled"
           type="button"
           onClick={onClose}
           className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-muted-foreground hover:bg-muted"
         >
           <X className="size-4" />
-        </button>
+        </Button>
         {children}
       </div>
     </div>
@@ -1151,15 +1152,15 @@ export function SchemeWizardPrototype() {
       {variant === "B" && <VariantBFlatForm {...props} />}
       {variant === "C" && <VariantCCalendarFirst {...props} />}
       <div className="fixed bottom-4 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-1 rounded-full border border-foreground/80 bg-foreground px-2 py-1.5 text-background shadow-xl">
-        <button type="button" onClick={() => cycle(-1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Previous variant">
+        <Button variant="unstyled" type="button" onClick={() => cycle(-1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Previous variant">
           <ArrowLeft className="size-4" />
-        </button>
+        </Button>
         <span className="min-w-44 px-2 text-center font-mono text-xs">
           PROTOTYPE · {variant} — {VARIANTS[idx].name}
         </span>
-        <button type="button" onClick={() => cycle(1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Next variant">
+        <Button variant="unstyled" type="button" onClick={() => cycle(1)} className="rounded-full p-1.5 hover:bg-background/20" aria-label="Next variant">
           <ArrowRight className="size-4" />
-        </button>
+        </Button>
       </div>
     </>
   )

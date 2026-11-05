@@ -1,6 +1,5 @@
 "use client"
 
-import { cn } from "@/lib/utils"
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
@@ -299,9 +298,9 @@ export function ClientsContent() {
                     </TableHead>
                     <TableHead className="w-[26%] text-xs font-medium text-muted-foreground">
                       <Button
-                        variant="ghost"
+                        variant="unstyled"
                         type="button"
-                        className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center gap-1 hover:text-foreground")}
+                        className="flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("name")}
                       >
                         <span>Customer</span>
@@ -321,9 +320,9 @@ export function ClientsContent() {
                     <TableHead className="w-[12%] text-xs font-medium text-muted-foreground">Status</TableHead>
                     <TableHead className="w-[14%] text-xs font-medium text-muted-foreground text-right">
                       <Button
-                        variant="ghost"
+                        variant="unstyled"
                         type="button"
-                        className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex items-center gap-1 hover:text-foreground")}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("projects")}
                       >
                         <span>Routes</span>

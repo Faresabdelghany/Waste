@@ -30,6 +30,7 @@ import {
   type RefObject,
 } from "react"
 
+import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
@@ -412,7 +413,7 @@ export function PlanningMap({
                 return (
                   <Tooltip key={cluster.id}>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button variant="unstyled"
                         type="button"
                         aria-label={label}
                         aria-pressed={selected}
@@ -458,7 +459,7 @@ export function PlanningMap({
               return (
                 <Tooltip key={cluster.id}>
                   <TooltipTrigger asChild>
-                    <button
+                    <Button variant="unstyled"
                       type="button"
                       aria-label={clusterLabel(cluster, selectedCount)}
                       data-marker="cluster"
@@ -527,7 +528,7 @@ export function PlanningMap({
                           )}
                         </span>
                       )}
-                    </button>
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="pointer-events-none max-w-xs text-xs">
                     <p className="font-medium">

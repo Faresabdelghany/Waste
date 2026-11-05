@@ -132,12 +132,12 @@ export function AddressLookupField({
             <li key={match.id}>
               <Button
                 type="button"
-                variant="ghost"
+                variant="unstyled"
                 role="option"
                 aria-selected={false}
                 disabled={picking}
                 onClick={() => pick(match.id)}
-                className="h-auto w-full justify-start whitespace-normal rounded px-2 py-1.5 text-left text-sm font-normal hover:bg-muted hover:text-current focus-visible:bg-muted focus-visible:outline-none dark:hover:bg-muted"
+                className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
               >
                 {match.designation}
               </Button>

@@ -1,6 +1,5 @@
 "use client"
 
-import { cn } from "@/lib/utils"
 import React, { useEffect, useMemo, useState } from "react"
 import type { Project } from "@/lib/data/projects"
 import { ProjectCard } from "@/components/project-card"
@@ -105,9 +104,9 @@ export function ProjectBoardView({ projects, loading = false, onAddProject }: Pr
               <div className="space-y-1">
                 {COLUMN_ORDER.map((s) => (
                   <Button
-                    variant="ghost"
+                    variant="unstyled"
                     key={s}
-                    className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "w-full rounded-md px-2 py-1 text-left text-sm hover:bg-accent dark:hover:bg-accent")}
+                    className="w-full rounded-md px-2 py-1 text-left text-sm hover:bg-accent"
                     onClick={() => setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: s } : x)))}
                   >
                     Move to {s}
