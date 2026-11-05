@@ -65,7 +65,7 @@ export const holidayListsBackfill = (): string[] => [holidayListsFromProjects(),
 // The calendars' holidays dropped (2026-11-05): once nothing read
 // `collection_calendar_holiday` the table went, behind a guard of the kind
 // migrations/README.md asks of a dropped column ("A column dropped from a
-// table already applied") — not a backfill, since 0099's step 3 already
+// table already applied") — not a backfill, since the Holiday Lists' migration's step 3 already
 // carried every day across, but a proof that it did and that nothing written
 // since was left behind. The guard fails the migration while any calendar
 // holiday's day is not a day of the list its project names, a project that

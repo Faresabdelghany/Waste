@@ -11,7 +11,7 @@
 // A calendar carries no holidays (2026-11-05): a project's holidays are the
 // days of the company's Holiday List it names (`project.holiday_list`,
 // organisation.ts), and the calendar's own `collection_calendar_holiday`,
-// read by nothing once the lists came (0099), was dropped behind a guard that
+// read by nothing once the lists came (0100), was dropped behind a guard that
 // proved its days were on the lists (dropped.ts says how it stood).
 import { text } from "drizzle-orm/pg-core"
 

@@ -15,7 +15,7 @@ import { wms } from "./wms"
 
 /**
  * One holiday of one Collection Calendar (0006), dropped once a project's
- * holidays were the days of the company's Holiday List it names (0099, then
+ * holidays were the days of the company's Holiday List it names (the Holiday Lists' migration, then
  * the calendar-holidays file that dropped it behind a guard proving its days
  * were on the lists).
  */
