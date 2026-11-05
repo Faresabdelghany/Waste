@@ -12,23 +12,21 @@ import path from "node:path"
 
 import { NextResponse } from "next/server"
 
-const WORKER_ASSETS: ReadonlySet<string> = new Set([
-  "maplibre-gl-worker.mjs",
-  "maplibre-gl-worker-dev.mjs",
-  "maplibre-gl-shared.mjs",
-  "maplibre-gl-shared-dev.mjs",
-])
+import { MAPLIBRE_DIST_DIR, MAPLIBRE_WORKER_ASSETS } from "@/lib/map-planning/maplibre-worker-assets"
 
 const VERSION_SHAPE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 
-const distDir = path.join(process.cwd(), "node_modules", "maplibre-gl", "dist")
+// Read through the app's own `node_modules/maplibre-gl`, a pnpm symlink:
+// next.config.mjs's `outputFileTracingIncludes` puts the files under that
+// path in the deployment's trace, without which every read misses (404).
+const distDir = path.join(process.cwd(), MAPLIBRE_DIST_DIR)
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ version: string; asset: string }> },
 ) {
   const { version, asset } = await params
-  if (!VERSION_SHAPE.test(version) || !WORKER_ASSETS.has(asset)) {
+  if (!VERSION_SHAPE.test(version) || !MAPLIBRE_WORKER_ASSETS.has(asset)) {
     return new NextResponse("Not found", { status: 404 })
   }
   try {

@@ -43,6 +43,20 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // The MapLibre worker route (app/maplibre/[version]/[asset]) reads its
+  // files through `node_modules/maplibre-gl`, a pnpm symlink. The automatic
+  // trace ships them under `.pnpm` alone, so on Vercel every read missed and
+  // the route answered 404: no worker, no base map. Naming them here puts
+  // them in the trace at the path the route reads; the list is the route's
+  // MAPLIBRE_WORKER_ASSETS, held equal by maplibre-worker-trace.test.ts.
+  outputFileTracingIncludes: {
+    "/maplibre/\\[version\\]/\\[asset\\]": [
+      "./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+      "./node_modules/maplibre-gl/dist/maplibre-gl-worker-dev.mjs",
+      "./node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs",
+      "./node_modules/maplibre-gl/dist/maplibre-gl-shared-dev.mjs",
+    ],
+  },
   async headers() {
     return [
       { source: `/:path((?!${EMBED}$).*)`, headers: FRAME_HEADERS.refused },
