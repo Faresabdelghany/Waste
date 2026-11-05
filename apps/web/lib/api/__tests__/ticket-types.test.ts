@@ -156,4 +156,14 @@ describe("a ticket of a type", () => {
     assert.ok(TicketPatch.safeParse(body).success)
     assert.deepEqual(fieldValuesFromForm(bulkyRecord, { [typeFieldFormId(bulkyRecord.id, "bags")]: " " }), {}, "a blank is no value")
   })
+
+  test("a role that reads no types still patches a ticket: its type is named by the id its web id carries, as a team's is", () => {
+    const ticket = { id: "01a0d2a4-a280-7040-8000-000000000002", ...STAMPS, projectId: copenhagen.id, number: 1002, label: "T-1002", kind: "container-request", ticketTypeId: bulkyId, fieldValues: {}, status: "open", priority: "none", source: "office", subject: "A sofa", description: "Collect it", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, teamId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null } satisfies Ticket
+    // The types' module never read: the store holds the organisation and the accounts alone.
+    const record = ticketAdapter.toRecord(ticket, context)
+    assert.equal(record.submittedValues?.ticketTypeId, `ticket-type-${bulkyId}`)
+    assert.deepEqual(ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { priority: "high" }), context), { priority: "high" })
+    const otherType = "01a0d2a4-a280-7043-8000-000000000002"
+    assert.deepEqual(ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { ticketTypeId: `ticket-type-${otherType}` }), context), { ticketTypeId: otherType })
+  })
 })
