@@ -1,7 +1,7 @@
 import { dispatchedRouteFor, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, onCopenhagenClock, openRoute, pick, routePage, routeRead, routeWithCrewFree, schemeWithRoutes, stopRows, toasts } from "./routes-support"
+import { answerOf, onCopenhagenClock, openRoute, pick, routeCommand, routeMenu, routePage, routeRead, routeWithCrewFree, schemeWithRoutes, stopRows, toasts } from "./routes-support"
 import { ensureTester, listAll, roleNamed } from "./tester"
 
 // Route Studio's routes, stops and Live board on the API (Issue #179, slice
@@ -73,7 +73,7 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   await expect(toasts(page)).toContainText(`${route.label} was not dispatched`)
   await expect(toasts(page)).toContainText(`Route ${route.label} has no planned driver; assign one first`)
 
-  await commands.getByRole("button", { name: "Assign" }).click()
+  await (await routeCommand(page, details, "Assign")).click()
   const assign = page.getByRole("dialog", { name: "Assign" })
   await pick(assign, page, "Vehicle", "WH-24 · CN 42 018 · Active")
   await pick(assign, page, "Driver", "Mads Jensen · Active")
@@ -85,7 +85,7 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   await expect(assign).toBeHidden()
   await expect(details).toContainText("Mads Jensen")
 
-  await commands.getByRole("button", { name: "Reschedule" }).click()
+  await (await routeCommand(page, details, "Reschedule")).click()
   const reschedule = page.getByRole("dialog", { name: "Reschedule" })
   await expect(reschedule.getByRole("textbox", { name: /^Operating date/ })).toHaveValue(route.operatingDate)
   await reschedule.getByRole("textbox", { name: /^Planned start/ }).fill("07:15")
@@ -99,7 +99,7 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   await expect(toasts(page)).toContainText(`${route.label} dispatched`)
   await expect(details).toContainText("Dispatched at")
 
-  await commands.getByRole("button", { name: "Cancel route" }).click()
+  await (await routeCommand(page, details, "Cancel route")).click()
   const cancel = page.getByRole("dialog", { name: "Cancel route" })
   const reason = uniqueName("Road closed")
   await pick(cancel, page, "Why", "Road closure")
@@ -127,24 +127,28 @@ test("Release hold hands a route the office moved back to its scheme, and the ge
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Hand back"))
   const [route] = routes
   const details = await openRoute(page, route)
-  const commands = details.getByTestId("route-commands")
-  await expect(commands.getByRole("button", { name: "Release hold" })).toHaveCount(0)
+  await routeMenu(details, "Actions").click()
+  await expect(page.getByRole("menuitem", { name: "Release hold" })).toHaveCount(0)
+  await page.keyboard.press("Escape")
 
   // The office moves the start by hand: the route is held.
-  await commands.getByRole("button", { name: "Reschedule" }).click()
+  await (await routeCommand(page, details, "Reschedule")).click()
   const reschedule = page.getByRole("dialog", { name: "Reschedule" })
   await reschedule.getByRole("textbox", { name: /^Planned start/ }).fill("07:45")
   const [moved] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/reschedule`), reschedule.getByRole("button", { name: "Reschedule" }).click()])
   expect(moved.status()).toBe(200)
   await expect(details).toContainText("Held by the office since")
 
-  const [released] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/release-hold`), commands.getByRole("button", { name: "Release hold" }).click()])
+  const releaseHold = await routeCommand(page, details, "Release hold")
+  const [released] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/release-hold`), releaseHold.click()])
   expect(released.status()).toBe(200)
   expect(released.request().postDataJSON()).toEqual({})
   expect(((await released.json()) as { heldAt: string | null }).heldAt).toBeNull()
   await expect(toasts(page)).toContainText(`${route.label} handed back to its scheme`)
   await expect(toasts(page)).toContainText("The next generation run brings back the scheme's day, start and assignment.")
-  await expect(commands.getByRole("button", { name: "Release hold" })).toHaveCount(0)
+  await routeMenu(details, "Actions").click()
+  await expect(page.getByRole("menuitem", { name: "Release hold" })).toHaveCount(0)
+  await page.keyboard.press("Escape")
 
   // The run the hand-back asked over the route's service date brings back the start the scheme gave it.
   await expect.poll(async () => (await routeRead(api, route.id)).plannedStartTime, { timeout: 30_000 }).toBe(route.plannedStartTime)
@@ -159,7 +163,7 @@ test("reorder stops: the open stops are PUT whole in their new order, which the 
   const reordered = [second.id, first.id, ...rest.map((pickup) => pickup.id)]
 
   const details = await openRoute(page, route)
-  await details.getByTestId("route-commands").getByRole("button", { name: "Reorder stops" }).click()
+  await (await routeCommand(page, details, "Reorder stops")).click()
   const dialog = page.getByRole("dialog", { name: "Reorder stops" })
   await dialog.getByRole("button", { name: `Move ${label.get(second.containerId)} up` }).click()
   const [put] = await Promise.all([answerOf(page, "PUT", `/routes/${route.id}/pickup-order`), dialog.getByRole("button", { name: "Save order" }).click()])
@@ -256,7 +260,7 @@ test("the Live board reads what the driver's device reports, and the office's ca
   const log = details.getByTestId("route-command-log")
   await expect(log).toContainText("Start route · Applied")
   await expect(log).toContainText("Complete pickup · Applied")
-  await details.getByTestId("route-commands").getByRole("button", { name: "Cancel route" }).click()
+  await (await routeCommand(page, details, "Cancel route")).click()
   const cancel = page.getByRole("dialog", { name: "Cancel route" })
   await pick(cancel, page, "Why", "Vehicle breakdown")
   await cancel.getByRole("textbox", { name: /^Reason/ }).fill("Vehicle breakdown on the way to the second stop")
@@ -304,7 +308,8 @@ test("a Dispatcher, who views neither the organisation nor the depots, sees the 
     const details = routePage(page, route)
     await expect(details).toContainText("Copenhagen Central")
     // The depots are not the Dispatcher's to view: Assign does not wait for them.
-    const assign = details.getByTestId("route-commands").getByRole("button", { name: "Assign" })
+    await expect(routeMenu(details, "Actions")).toBeVisible({ timeout: 30_000 })
+    const assign = await routeCommand(page, details, "Assign")
     await expect(assign).toBeEnabled({ timeout: 30_000 })
     await assign.click()
     const dialog = page.getByRole("dialog", { name: "Assign" })

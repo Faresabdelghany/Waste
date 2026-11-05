@@ -224,7 +224,7 @@ function generatedRouteStops(
   return stops
 }
 
-function routeStatusTone(status: string): StatusTone {
+export function routeStatusTone(status: string): StatusTone {
   if (/active|completed|ready/i.test(status)) {
     return "success"
   }
@@ -1125,7 +1125,8 @@ function OverviewTab({
   )
 }
 
-function TicketsTab({
+/** The tickets about a route, as its page's Tickets tab lists them: fixture mode's and the Pilot's alike. */
+export function TicketsTab({
   tickets,
 }: {
   tickets: readonly BusinessRecord[]

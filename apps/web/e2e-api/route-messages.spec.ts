@@ -25,6 +25,7 @@ test("the office writes to a route's driver from its details, the driver reads i
   // The office writes from the route's details.
   const officeText = uniqueName("Gate code at the depot is 4711")
   const details = await openRoute(office, route)
+  await details.getByRole("tab", { name: "Messages" }).click()
   const section = details.getByTestId("route-messages")
   await expect(section.getByText("No message yet between the office and the driver.")).toBeVisible()
   await section.getByLabel("Message to the driver").fill(officeText)
@@ -61,6 +62,7 @@ test("the office writes to a route's driver from its details, the driver reads i
     ["driver", driverText, SEEDED_DRIVER.name],
   ])
   const again = await openRoute(office, route)
+  await again.getByRole("tab", { name: "Messages" }).click()
   await expect(again.getByTestId("route-messages").getByText(`${SEEDED_DRIVER.name} (driver)`)).toBeVisible()
   await expect(again.getByTestId("route-messages").getByText(driverText)).toBeVisible()
 })
