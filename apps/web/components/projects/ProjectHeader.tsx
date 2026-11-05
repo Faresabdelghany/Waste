@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { Star, User, PencilSimpleLine } from "@phosphor-icons/react/dist/ssr"
 import { ArrowsClockwise, Globe, Timer } from "@phosphor-icons/react/dist/ssr"
 
@@ -7,13 +8,16 @@ import { MetaChipsRow } from "@/components/projects/MetaChipsRow"
 import { Badge } from "@/components/ui/badge"
 import { PriorityBadge, type PriorityLevel } from "@/components/priority-badge"
 import { Button } from "@/components/ui/button"
+import { PageActions } from "@/components/page-layout"
 
 type ProjectHeaderProps = {
   project: ProjectDetails
   onEditProject?: () => void
+  /** The page's own actions, set beside the title rather than in the top bar. */
+  actions?: ReactNode
 }
 
-export function ProjectHeader({ project, onEditProject }: ProjectHeaderProps) {
+export function ProjectHeader({ project, onEditProject, actions }: ProjectHeaderProps) {
   const metaItems = [
     { label: "ID", value: `#${project.id}`, icon: null },
     { label: "", value: <PriorityBadge level={project.meta.priorityLabel.toLowerCase() as PriorityLevel} appearance="inline" size="sm" />, icon: null },
@@ -45,18 +49,21 @@ export function ProjectHeader({ project, onEditProject }: ProjectHeaderProps) {
           </div>
         </div>
 
-        {onEditProject && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Edit route"
-            className="rounded-lg text-muted-foreground hover:text-foreground"
-            onClick={onEditProject}
-          >
-            <PencilSimpleLine className="h-4 w-4" />
-          </Button>
-        )}
+        <PageActions>
+          {actions}
+          {onEditProject && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Edit route"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onEditProject}
+            >
+              <PencilSimpleLine className="h-4 w-4" />
+            </Button>
+          )}
+        </PageActions>
       </div>
 
       <div className="mt-3">

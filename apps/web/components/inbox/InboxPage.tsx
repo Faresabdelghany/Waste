@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { Bell, ChatCircleDots, CheckCircle, EnvelopeSimple } from "@phosphor-icons/react/dist/ssr"
 
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -190,25 +190,22 @@ export function InboxPage() {
     return (
         <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
             <header className="flex flex-col border-b border-border/40">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
-                    <div className="flex items-center gap-3">
-                        <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-                        <Breadcrumbs items={[{ label: "Service Inbox" }]} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button size="sm" variant="ghost" onClick={markAllAsRead}>
-                            Mark all as read
-                        </Button>
-                    </div>
-                </div>
+                <PageTopBar>
+                    <Breadcrumbs items={[{ label: "Service Inbox" }]} />
+                </PageTopBar>
 
                 <div className="flex flex-col gap-2 px-4 pb-3 pt-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex w-full md:w-auto md:justify-start">
+                    <div className="flex w-full items-center justify-between gap-2 md:w-auto md:justify-start">
                         <InboxFilterPopover
                             filters={filters}
                             availableClients={availableClients}
                             onChange={setFilters}
                         />
+                        <PageActions>
+                            <Button size="sm" variant="ghost" onClick={markAllAsRead}>
+                                Mark all as read
+                            </Button>
+                        </PageActions>
                     </div>
 
                     <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="w-full md:w-auto">

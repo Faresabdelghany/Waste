@@ -19,7 +19,7 @@ import { ProjectTasksTab } from "@/components/projects/ProjectTasksTab"
 import { NotesTab } from "@/components/projects/NotesTab"
 import { AssetsFilesTab } from "@/components/projects/AssetsFilesTab"
 import { ProjectWizard } from "@/components/project-wizard/ProjectWizard"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageTopBar } from "@/components/page-layout"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -93,30 +93,11 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
 
   return (
     <div className="flex flex-1 flex-col min-w-0 m-2 border border-border rounded-lg">
-      <div className="flex items-center justify-between gap-4 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-          <div className="hidden sm:block">
-            <Breadcrumbs items={breadcrumbs} />
-          </div>
+      <PageTopBar className="border-b-0">
+        <div className="hidden sm:block">
+          <Breadcrumbs items={breadcrumbs} />
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="Copy link" onClick={copyLink}>
-            <LinkSimple className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-pressed={!showMeta}
-            aria-label={showMeta ? "Collapse meta panel" : "Expand meta panel"}
-            className={showMeta ? "bg-muted" : ""}
-            onClick={() => setShowMeta((v) => !v)}
-          >
-            <SquareHalf className="h-4 w-4" weight="duotone" />
-          </Button>
-        </div>
-      </div>
+      </PageTopBar>
 
       <div className="flex flex-1 flex-col bg-background px-2 my-0 rounded-b-lg min-w-0 border-t">
         <div className="px-4">
@@ -131,7 +112,27 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
               }
             >
               <div className="space-y-6 pt-4">
-                <ProjectHeader project={project} onEditProject={openWizard} />
+                <ProjectHeader
+                  project={project}
+                  onEditProject={openWizard}
+                  actions={
+                    <>
+                      <Button variant="ghost" size="icon-sm" aria-label="Copy link" onClick={copyLink}>
+                        <LinkSimple className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-pressed={!showMeta}
+                        aria-label={showMeta ? "Collapse meta panel" : "Expand meta panel"}
+                        className={showMeta ? "bg-muted" : ""}
+                        onClick={() => setShowMeta((v) => !v)}
+                      >
+                        <SquareHalf className="h-4 w-4" weight="duotone" />
+                      </Button>
+                    </>
+                  }
+                />
 
                 <Tabs defaultValue="overview">
                   <TabsList className="w-full gap-6">

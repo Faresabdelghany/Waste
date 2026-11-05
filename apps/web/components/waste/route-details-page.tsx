@@ -64,7 +64,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { StatRow } from "@/components/projects/StatRow"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import {
   Table,
@@ -1418,34 +1418,62 @@ export function RouteDetailsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Breadcrumbs
-                  items={[
-                    { label: module.label, onClick: onBack },
-                    { label: record.name },
-                  ]}
-                />
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "rounded-full text-[11px]",
-                    routeStatusClasses(record.status),
-                  )}
-                >
-                  {record.status}
-                </Badge>
-              </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {record.context} · {routeDate(record)}
-              </p>
-            </div>
+      <header>
+        <PageTopBar>
+          <div className="flex flex-wrap items-center gap-2">
+            <Breadcrumbs
+              items={[
+                { label: module.label, onClick: onBack },
+                { label: record.name },
+              ]}
+            />
+            <Badge
+              variant="outline"
+              className={cn(
+                "rounded-full text-[11px]",
+                routeStatusClasses(record.status),
+              )}
+            >
+              {record.status}
+            </Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {record.context} · {routeDate(record)}
+          </p>
+        </PageTopBar>
+      </header>
+
+      <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
+          <div className="min-w-0 overflow-x-auto">
+            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
+            <TabsTrigger
+              value="overview"
+              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="tickets"
+              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
+            >
+              Tickets
+              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                {tickets.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="sessions"
+              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
+            >
+              Sessions
+              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                {sessions.length}
+              </span>
+            </TabsTrigger>
+            </TabsList>
+          </div>
+          <PageActions>
             {!readOnly && (
               <Button size="sm" onClick={() => onAction(primaryAction)}>
                 <Play className="h-4 w-4" weight="fill" />
@@ -1507,40 +1535,7 @@ export function RouteDetailsPage({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </div>
-      </header>
-
-      <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-border/40 px-4 py-3">
-          <div className="overflow-x-auto">
-            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
-            <TabsTrigger
-              value="overview"
-              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="tickets"
-              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
-            >
-              Tickets
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {tickets.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="sessions"
-              className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
-            >
-              Sessions
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {sessions.length}
-              </span>
-            </TabsTrigger>
-            </TabsList>
-          </div>
+          </PageActions>
         </div>
         <TabsContent value="overview" className="mt-0 min-h-0 flex-1">
           <OverviewTab

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import {
   Table,
@@ -292,32 +292,26 @@ export function ServiceProviderDetailsPage({
   const apiConfigured = useApiConfigured()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Breadcrumbs
-                  items={[
-                    { label: "Service providers", onClick: onBack },
-                    { label: record.name },
-                  ]}
-                />
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "rounded-full text-[11px]",
-                    statusClasses(record.status),
-                  )}
-                >
-                  {record.status}
-                </Badge>
-              </div>
-            </div>
+      <header>
+        <PageTopBar>
+          <div className="flex flex-wrap items-center gap-2">
+            <Breadcrumbs
+              items={[
+                { label: "Service providers", onClick: onBack },
+                { label: record.name },
+              ]}
+            />
+            <Badge
+              variant="outline"
+              className={cn(
+                "rounded-full text-[11px]",
+                statusClasses(record.status),
+              )}
+            >
+              {record.status}
+            </Badge>
           </div>
-
-        </div>
+        </PageTopBar>
       </header>
 
       <Tabs defaultValue="information" className="flex min-h-0 flex-1 flex-col">

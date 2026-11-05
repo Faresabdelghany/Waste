@@ -115,7 +115,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
@@ -364,35 +364,64 @@ export function SchemeDetailsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Breadcrumbs
-                  items={[
-                    { label: module.label, onClick: onBack },
-                    { label: record.name },
-                  ]}
-                />
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "rounded-full text-[11px]",
-                    statusClasses(record.status),
-                  )}
-                >
-                  {record.status}
-                </Badge>
-                <SchemeAttentionBadge warnings={attention} />
-              </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {[record.context, readableKey(record.id)].filter(Boolean).join(" · ")}
-              </p>
-            </div>
+      <header>
+        <PageTopBar>
+          <div className="flex flex-wrap items-center gap-2">
+            <Breadcrumbs
+              items={[
+                { label: module.label, onClick: onBack },
+                { label: record.name },
+              ]}
+            />
+            <Badge
+              variant="outline"
+              className={cn(
+                "rounded-full text-[11px]",
+                statusClasses(record.status),
+              )}
+            >
+              {record.status}
+            </Badge>
+            <SchemeAttentionBadge warnings={attention} />
           </div>
-          <div className="flex items-center gap-2">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {[record.context, readableKey(record.id)].filter(Boolean).join(" · ")}
+          </p>
+        </PageTopBar>
+      </header>
+
+      {onApi && lifecycleDialog === "window" && <SchemePlanAheadWindowDialog record={record} stored={storedScheme} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {onApi && lifecycleDialog === "successor" && <SchemeSuccessorDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {onApi && lifecycleDialog === "archive" && <SchemeArchiveDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} onArchived={onBack} />}
+
+      <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
+          <div className="min-w-0 overflow-x-auto">
+            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
+              {(
+                [
+                  ["details", "Details", null],
+                  ["routes", "Routes", routesRead ? schemeRoutes.length : null],
+                  ["stops", "Stops", schemeStops.length],
+                  ["holidays", "Holidays", null],
+                ] as const
+              ).map(([value, label, count]) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
+                >
+                  {label}
+                  {count !== null && (
+                    <span className="ml-1.5 text-[10px] text-muted-foreground">
+                      {count}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <PageActions>
             {onGenerateRoutes && (
               <Button
                 size="sm"
@@ -474,41 +503,7 @@ export function SchemeDetailsPage({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </div>
-      </header>
-
-      {onApi && lifecycleDialog === "window" && <SchemePlanAheadWindowDialog record={record} stored={storedScheme} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
-      {onApi && lifecycleDialog === "successor" && <SchemeSuccessorDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
-      {onApi && lifecycleDialog === "archive" && <SchemeArchiveDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} onArchived={onBack} />}
-
-      <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-border/40 px-4 py-3">
-          <div className="overflow-x-auto">
-            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
-              {(
-                [
-                  ["details", "Details", null],
-                  ["routes", "Routes", routesRead ? schemeRoutes.length : null],
-                  ["stops", "Stops", schemeStops.length],
-                  ["holidays", "Holidays", null],
-                ] as const
-              ).map(([value, label, count]) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
-                >
-                  {label}
-                  {count !== null && (
-                    <span className="ml-1.5 text-[10px] text-muted-foreground">
-                      {count}
-                    </span>
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+          </PageActions>
         </div>
 
         <TabsContent value="details" className="mt-0 min-h-0 flex-1 overflow-y-auto">

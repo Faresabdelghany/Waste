@@ -14,7 +14,7 @@ import {
   WarningOctagon,
 } from "@phosphor-icons/react/dist/ssr"
 
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -665,17 +665,9 @@ export function PerformanceContent() {
   return (
     <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <p className="text-base font-medium text-foreground">Performance</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-8">
-              Export
-            </Button>
-          </div>
-        </div>
+        <PageTopBar>
+          <p className="text-base font-medium text-foreground">Performance</p>
+        </PageTopBar>
 
         <div className="flex items-center justify-between px-4 pb-3 pt-3">
           <div className="flex items-center gap-2">
@@ -742,6 +734,11 @@ export function PerformanceContent() {
                 </PopoverContent>
               </Popover>
             )}
+            <PageActions>
+              <Button variant="ghost" size="sm">
+                Export
+              </Button>
+            </PageActions>
           </div>
         </div>
       </header>
