@@ -12,7 +12,7 @@ export function OccurrenceStatusBadge({ row }: { row: Occurrence }) {
   if (row.status === "planned") return <Badge variant="secondary">Planned</Badge>
   if (row.status === "shifted") {
     return (
-      <StatusBadge tone="warning" className="border-transparent">
+      <StatusBadge tone="warning">
         Shifted {shiftedNote(row)}
       </StatusBadge>
     )
@@ -21,7 +21,7 @@ export function OccurrenceStatusBadge({ row }: { row: Occurrence }) {
     return <Badge variant="muted">Skipped · {row.note}</Badge>
   }
   return (
-    <StatusBadge tone="warning" className="border-transparent">
+    <StatusBadge tone="warning">
       Holiday · {row.note}
     </StatusBadge>
   )

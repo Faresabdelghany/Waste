@@ -98,7 +98,7 @@ function projectStatusTone(status: string): StatusTone {
 
 function ProjectStatusBadge({ status }: { status: string }) {
   return (
-    <StatusBadge tone={projectStatusTone(status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+    <StatusBadge outlined tone={projectStatusTone(status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
       {status}
     </StatusBadge>
   )

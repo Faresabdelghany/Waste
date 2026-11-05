@@ -17,7 +17,7 @@ function mapStatusTone(status: string): StatusTone {
 
 export function MapStatusBadge({ status, className }: { status: string; className?: string }) {
   return (
-    <StatusBadge tone={mapStatusTone(status)} className={cn("h-5 shrink-0 px-1.5 text-[10px] font-medium", className)}>
+    <StatusBadge outlined tone={mapStatusTone(status)} className={cn("h-5 shrink-0 px-1.5 text-[10px] font-medium", className)}>
       {status}
     </StatusBadge>
   )

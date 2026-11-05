@@ -217,7 +217,7 @@ function RelatedRecordsTable({
                         <span className="line-clamp-2">{relatedRecord.context}</span>
                       </TableCell>
                       <TableCell className="py-3">
-                        <StatusBadge tone={providerStatusTone(relatedRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                        <StatusBadge outlined tone={providerStatusTone(relatedRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {relatedRecord.status}
                         </StatusBadge>
                       </TableCell>
@@ -294,7 +294,7 @@ export function ServiceProviderDetailsPage({
                 { label: record.name },
               ]}
             />
-            <StatusBadge tone={providerStatusTone(record.status)} className="rounded-full text-[11px]">
+            <StatusBadge outlined tone={providerStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
             </StatusBadge>
           </div>

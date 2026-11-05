@@ -150,7 +150,7 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
 
 function NoteStatusBadge({ status }: { status: NoteStatus }) {
     return (
-        <StatusBadge tone={status === "completed" ? "success" : "warning"} className="text-xs font-normal capitalize">
+        <StatusBadge outlined tone={status === "completed" ? "success" : "warning"} className="text-xs font-normal capitalize">
             {status}
         </StatusBadge>
     )

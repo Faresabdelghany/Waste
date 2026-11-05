@@ -499,7 +499,7 @@ function RouteInformation({
         </div>
         <div className="text-right">
           <p className="text-xs text-muted-foreground">Route status</p>
-          <StatusBadge tone={routeStatusTone(status)} className="mt-1 rounded-full text-[11px]">
+          <StatusBadge outlined tone={routeStatusTone(status)} className="mt-1 rounded-full text-[11px]">
             {status}
           </StatusBadge>
         </div>
@@ -972,7 +972,7 @@ function OverviewTab({
                             {stop.service}
                           </TableCell>
                           <TableCell className="py-3">
-                            <StatusBadge tone={stopStatusTone(stop.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                            <StatusBadge outlined tone={stopStatusTone(stop.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                               {stop.status}
                             </StatusBadge>
                           </TableCell>
@@ -1207,7 +1207,7 @@ function TicketsTab({
                         </Badge>
                       </TableCell>
                       <TableCell className="py-3">
-                        <StatusBadge tone={routeStatusTone(ticketRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                        <StatusBadge outlined tone={routeStatusTone(ticketRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {ticketRecord.status}
                         </StatusBadge>
                       </TableCell>
@@ -1315,7 +1315,7 @@ function SessionsTab({
                         </p>
                       </TableCell>
                       <TableCell className="py-3">
-                        <StatusBadge tone={routeStatusTone(session.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                        <StatusBadge outlined tone={routeStatusTone(session.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {session.status}
                         </StatusBadge>
                       </TableCell>
@@ -1406,7 +1406,7 @@ export function RouteDetailsPage({
                 { label: record.name },
               ]}
             />
-            <StatusBadge tone={routeStatusTone(record.status)} className="rounded-full text-[11px]">
+            <StatusBadge outlined tone={routeStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
             </StatusBadge>
           </div>

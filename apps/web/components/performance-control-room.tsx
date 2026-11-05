@@ -874,7 +874,7 @@ export function PerformanceControlRoom({
                             {row.slaPercent}%
                           </td>
                           <td className="px-3 py-2">
-                            <StatusBadge tone={routeHealthTone(row.status)} className="h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium">
+                            <StatusBadge outlined tone={routeHealthTone(row.status)} className="h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium">
                               {row.status}
                             </StatusBadge>
                           </td>

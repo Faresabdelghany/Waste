@@ -583,6 +583,7 @@ export function BusinessRecordDayTimeline({
                     className={cn(
                       "absolute top-1/2 h-6 -translate-y-1/2 cursor-pointer overflow-hidden rounded-full border px-2 text-left text-[11px] font-medium whitespace-nowrap",
                       statusToneClasses[recordStatusTone(record.status)],
+                      "border-transparent",
                     )}
                     style={{ left: `${left}%`, width: `${width}%` }}
                     onClick={() => onOpenRecord(record)}

@@ -299,7 +299,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <DialogTitle className="truncate text-lg font-semibold">{live.name}</DialogTitle>
-                    <StatusBadge tone={ticketStatusTone(live.status)} className="rounded-full text-[11px]">
+                    <StatusBadge outlined tone={ticketStatusTone(live.status)} className="rounded-full text-[11px]">
                       {live.status}
                     </StatusBadge>
                   </div>
@@ -325,7 +325,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     <Badge variant="outline" className="rounded-full font-normal">
                       {live.facts.Kind}
                     </Badge>
-                    <StatusBadge tone={ticketPriorityTone(live.facts.Priority ?? "")} className="rounded-full font-normal">
+                    <StatusBadge outlined tone={ticketPriorityTone(live.facts.Priority ?? "")} className="rounded-full font-normal">
                       {live.facts.Priority} priority
                     </StatusBadge>
                     <Badge variant="outline" className="rounded-full font-normal">

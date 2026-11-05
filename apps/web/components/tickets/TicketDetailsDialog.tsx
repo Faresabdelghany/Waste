@@ -549,7 +549,7 @@ function FixtureTicketDetailsDialog({
                     <DialogTitle className="truncate text-lg font-semibold">
                       {record.name}
                     </DialogTitle>
-                    <StatusBadge tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
+                    <StatusBadge outlined tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                       {information.status}
                     </StatusBadge>
                   </div>
@@ -587,7 +587,7 @@ function FixtureTicketDetailsDialog({
                         <Badge variant="outline" className="rounded-full font-normal">
                           {information.type}
                         </Badge>
-                        <StatusBadge tone={ticketPriorityTone(information.priority)} className="rounded-full font-normal">
+                        <StatusBadge outlined tone={ticketPriorityTone(information.priority)} className="rounded-full font-normal">
                           {information.priority} priority
                         </StatusBadge>
                       </div>
@@ -999,7 +999,7 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(statusOptions, information.status)}
                         onValueChange={(value) => updateInformation("status", "Status", value)}
                         renderValue={() => (
-                          <StatusBadge tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
+                          <StatusBadge outlined tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                             {information.status}
                           </StatusBadge>
                         )}
@@ -1010,7 +1010,7 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(priorityOptions, information.priority)}
                         onValueChange={(value) => updateInformation("priority", "Priority", value)}
                         renderValue={() => (
-                          <StatusBadge tone={ticketPriorityTone(information.priority)} className="rounded-full text-[11px]">
+                          <StatusBadge outlined tone={ticketPriorityTone(information.priority)} className="rounded-full text-[11px]">
                             {information.priority}
                           </StatusBadge>
                         )}
