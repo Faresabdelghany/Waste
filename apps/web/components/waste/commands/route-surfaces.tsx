@@ -31,14 +31,13 @@
 // another route and cancels it as merged; the other route is one
 // `routesToJoin` offers, and the API judges each stop where it goes.
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import Link from "next/link"
 import { ArrowDown, ArrowSquareOut, ArrowUp, CaretDown, CaretRight, Funnel, MagnifyingGlass, MapTrifold, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { RouteMapPanel } from "@/components/waste/route-map-panel"
 import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageActions } from "@/components/page-layout"
@@ -820,17 +819,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
                 <MapTrifold className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-semibold">Map</span>
               </Button>
-              {rightPanel === "map" && (
-                <div className="space-y-3 border-b border-border px-5 py-6">
-                  <p className="text-sm text-muted-foreground">Map Planning draws this route&apos;s line and its stops on the map, with the day&apos;s other routes.</p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={getBusinessModuleHref("plan", "map-planning")}>
-                      <MapTrifold className="h-4 w-4" />
-                      Open Map Planning
-                    </Link>
-                  </Button>
-                </div>
-              )}
+              {rightPanel === "map" && <RouteMapPanel record={record} pickups={detail?.pickups} stopName={stopName} />}
               <Button
                 type="button"
                 variant="ghost"
