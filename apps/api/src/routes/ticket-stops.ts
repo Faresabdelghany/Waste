@@ -16,15 +16,14 @@
 // office's correction to completed service the ticket, a correction away from
 // completed comments on it. Misses reach it through Resolution's consumer.
 import type { Tx } from "@waste/db/client"
-import { bookedStopUncompleted, bookingTicket, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
-import { appendTicketEvent } from "@waste/db/commands/open-ticket"
+import { bookedStopUncompleted, bookingTicket, bookTicket as bookTicketStop, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
 import type { Send } from "@waste/db/jobs"
 import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { pickup, route } from "@waste/db/schema/execution"
-import { ticket, ticketBooking } from "@waste/db/schema/resolution"
+import { ticket } from "@waste/db/schema/resolution"
 import { answeredAlready, bookedFor, notAnsweredBy, onlyAnOpenTicket, servicesAnswering, stopMismatch } from "@waste/domain/execution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
-import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { routeLabel } from "@waste/contracts/execution"
 import { and, eq } from "drizzle-orm"
 
@@ -85,27 +84,7 @@ export async function requireBookableTicket(tx: Tx, scope: Scope, row: TicketRow
 
 /** The ticket names the stop booked for it, with a comment saying which, and the ledger keeps the booking; a missed one it named before is replaced on the ticket, never in the ledger. */
 export async function bookTicket(tx: Tx, principal: Principal, booking: TicketRow, stop: { pickupId: string; routeId: string; position: number; routeLabel: string; service: PickupService }): Promise<void> {
-  const [row] = await tx
-    .update(ticket)
-    .set({ bookedRouteId: stop.routeId, bookedPickupId: stop.pickupId })
-    .where(and(eq(ticket.companyId, principal.companyId), eq(ticket.id, booking.id)))
-    .returning(ticketColumns)
-  await tx.insert(ticketBooking).values({ companyId: principal.companyId, projectId: row.projectId, ticketId: row.id, routeId: stop.routeId, pickupId: stop.pickupId })
-  await appendTicketEvent(
-    tx,
-    { companyId: principal.companyId, projectId: row.projectId, id: row.id },
-    {
-      kind: "comment",
-      status: row.status as TicketStatus,
-      assigneeUserAccountId: row.assigneeUserAccountId,
-      resolution: null,
-      body: bookedFor({ position: stop.position, route: stop.routeLabel, service: stop.service }),
-      visibility: "internal",
-      objectKey: null,
-      recordedBy: principal.user.id,
-      sourceEventId: null,
-    },
-  )
+  await bookTicketStop(tx, principal.companyId, booking, stop, { body: bookedFor({ position: stop.position, route: stop.routeLabel, service: stop.service }), recordedBy: principal.user.id })
 }
 
 /** The stop as a ticket's words name it, with its status: the stop just decided, or the one its ticket is booked for now. */

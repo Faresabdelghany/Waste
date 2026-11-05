@@ -29,7 +29,9 @@ import { Page } from "@waste/contracts/pagination"
 import { DEFAULT_TYPE_OFFERED, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction, type TicketTypeActionBody, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
 import type { Tx } from "@waste/db/client"
 import { role, userAccount } from "@waste/db/schema/access"
+import { vehicle } from "@waste/db/schema/fleet"
 import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import { notPlannable, plannedService } from "@waste/domain/resolution/automation"
 import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { TICKET_ACTION_TRIGGERS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, ne, sql, type SQL } from "drizzle-orm"
@@ -94,7 +96,7 @@ async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise
     .where(and(eq(ticketTypePermission.companyId, companyId), inArray(ticketTypePermission.ticketTypeId, ids)))
     .orderBy(asc(ticketTypePermission.id))
   const actions = await tx
-    .select({ ticketTypeId: ticketTypeAction.ticketTypeId, trigger: ticketTypeAction.trigger, kind: ticketTypeAction.kind, teamId: ticketTypeAction.teamId, userAccountId: ticketTypeAction.userAccountId, priority: ticketTypeAction.priority, command: ticketTypeAction.command, resolution: ticketTypeAction.resolution, messageTemplateName: ticketTypeAction.messageTemplateName, recipient: ticketTypeAction.recipient, followUpTypeId: ticketTypeAction.followUpTypeId })
+    .select({ ticketTypeId: ticketTypeAction.ticketTypeId, trigger: ticketTypeAction.trigger, kind: ticketTypeAction.kind, teamId: ticketTypeAction.teamId, userAccountId: ticketTypeAction.userAccountId, priority: ticketTypeAction.priority, command: ticketTypeAction.command, resolution: ticketTypeAction.resolution, messageTemplateName: ticketTypeAction.messageTemplateName, recipient: ticketTypeAction.recipient, followUpTypeId: ticketTypeAction.followUpTypeId, vehicleId: ticketTypeAction.vehicleId, daysAhead: ticketTypeAction.daysAhead })
     .from(ticketTypeAction)
     .where(and(eq(ticketTypeAction.companyId, companyId), inArray(ticketTypeAction.ticketTypeId, ids)))
     .orderBy(asc(ticketTypeAction.ticketTypeId), asc(ticketTypeAction.position))
@@ -145,8 +147,22 @@ async function heldIds(tx: Tx, table: typeof team | typeof userAccount | typeof 
   return new Set(found.map((one) => one.id))
 }
 
-/** A set's team, person and follow-up type each the company's, the person not deactivated: every one that is not, at its action. */
-async function referenceIssues(tx: Tx, companyId: string, actions: readonly TicketTypeActionBody[]): Promise<{ path: string; message: string }[]> {
+/** What a plan in a route naming no vehicle of the company is told. */
+export const NOT_A_COMPANY_VEHICLE = "Not a vehicle of this company"
+
+/** The projects of the vehicles a set names, by vehicle: a vehicle is a project's, which the action keeps beside it for the key. */
+async function vehicleProjects(tx: Tx, companyId: string, actions: readonly TicketTypeActionBody[]): Promise<Map<string, string>> {
+  const named = [...new Set(actions.flatMap((action) => (action.vehicleId === null ? [] : [action.vehicleId])))]
+  if (named.length === 0) return new Map()
+  const found = await tx
+    .select({ id: vehicle.id, projectId: vehicle.projectId })
+    .from(vehicle)
+    .where(and(eq(vehicle.companyId, companyId), inArray(vehicle.id, named)))
+  return new Map(found.map((one) => [one.id, one.projectId]))
+}
+
+/** A set's team, person, follow-up type and vehicle each the company's, the person not deactivated, and a plan in a route only of a kind a planned stop answers: every one that is not, at its action. */
+async function referenceIssues(tx: Tx, companyId: string, kind: TicketKind, actions: readonly TicketTypeActionBody[], vehicles: ReadonlyMap<string, string>): Promise<{ path: string; message: string }[]> {
   const named = (key: "teamId" | "userAccountId" | "followUpTypeId") => [...new Set(actions.flatMap((action) => (action[key] === null ? [] : [action[key]])))]
   const teams = await heldIds(tx, team, companyId, named("teamId"))
   const people = await heldIds(tx, userAccount, companyId, named("userAccountId"), isNull(userAccount.deactivatedAt))
@@ -155,6 +171,8 @@ async function referenceIssues(tx: Tx, companyId: string, actions: readonly Tick
     ...(action.teamId === null || teams.has(action.teamId) ? [] : [{ path: `actions.${index}.teamId`, message: NOT_A_TEAM }]),
     ...(action.userAccountId === null || people.has(action.userAccountId) ? [] : [{ path: `actions.${index}.userAccountId`, message: NOT_A_USER_ACCOUNT }]),
     ...(action.followUpTypeId === null || types.has(action.followUpTypeId) ? [] : [{ path: `actions.${index}.followUpTypeId`, message: NOT_A_TICKET_TYPE }]),
+    ...(action.vehicleId === null || vehicles.has(action.vehicleId) ? [] : [{ path: `actions.${index}.vehicleId`, message: NOT_A_COMPANY_VEHICLE }]),
+    ...(action.kind !== "plan-in-route" || plannedService(kind) !== undefined ? [] : [{ path: `actions.${index}.kind`, message: notPlannable(kind) }]),
   ])
 }
 
@@ -396,11 +414,11 @@ export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putTicketTypeActions",
         summary: "Replace a ticket type's automation",
         description:
-          "Replaces the type's whole automation with the one in the body (#546 of #544): actions, each on a trigger — `opened`, or reaching `in-progress`, `pending`, `on-hold`, `completed` or `rejected` — and run in the order the body names them among its trigger's. An action assigns a team (`teamId`) or a person (`userAccountId`), sets the priority (`priority`), moves the status (`command`, one of `start`, `wait`, `hold`, `complete` with its `resolution`, `reject`), sends a message from the ticket's project's template of `messageTemplateName` to `recipient` — the ticket's customer or the party of a role at its property — or opens a follow-up ticket of type `followUpTypeId`; each names what its kind needs and nothing else (400 at the member at fault), and a move to the status its trigger is is refused (400 at `actions.N.command`). A team, a person and a follow-up's type are this company's (400 at theirs), the person not deactivated. The actions run in the transaction of the change that fires them, as the system and held to neither the type's roles nor its required fields; one that cannot run — a team since retired, a person who does not work in the ticket's project, no active template of the name in its project, no one to write to — leaves a line saying why in the ticket's history and the rest run. A move fires its own status's actions and a follow-up its type's opening actions, a chain running five levels deep at most. The type's `updatedAt` moves.",
+          "Replaces the type's whole automation with the one in the body (#546 of #544): actions, each on a trigger — `opened`, or reaching `in-progress`, `pending`, `on-hold`, `completed` or `rejected` — and run in the order the body names them among its trigger's. An action assigns a team (`teamId`) or a person (`userAccountId`), sets the priority (`priority`), moves the status (`command`, one of `start`, `wait`, `hold`, `complete` with its `resolution`, `reject`), sends a message from the ticket's project's template of `messageTemplateName` to `recipient` — the ticket's customer or the party of a role at its property — opens a follow-up ticket of type `followUpTypeId`, or plans the ticket in a route (#546, part 2): the stop its kind is answered by that names nothing but its container — an overflow's emptying, a defect's repair, on a type of such a kind alone (400 at `actions.N.kind`) — on the next route of vehicle `vehicleId` that has not started, `daysAhead` days after the ticket's day at the earliest, booked to the ticket as `POST /routes/{id}/pickups` books one; each names what its kind needs and nothing else (400 at the member at fault), and a move to the status its trigger is is refused (400 at `actions.N.command`). A team, a person, a follow-up's type and a vehicle are this company's (400 at theirs), the person not deactivated. The actions run in the transaction of the change that fires them, as the system and held to neither the type's roles nor its required fields; one that cannot run — a team since retired, a person who does not work in the ticket's project, no active template of the name in its project, no one to write to, no route of the vehicle to plan in, a stop the office booked already — leaves a line saying why in the ticket's history and the rest run. A move fires its own status's actions and a follow-up its type's opening actions, a chain running five levels deep at most. The type's `updatedAt` moves.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The type with the automation it now has.", TicketType),
-          400: describeProblem("The path does not hold an id, or the body is missing `actions`, names more than the type holds or a member it does not own, gives an action a parameter its kind does not take or leaves out one it needs, moves a ticket to the status its trigger is, or names a team, a person or a ticket type that is not this company's — at the action at fault."),
+          400: describeProblem("The path does not hold an id, or the body is missing `actions`, names more than the type holds or a member it does not own, gives an action a parameter its kind does not take or leaves out one it needs, moves a ticket to the status its trigger is, names a team, a person, a ticket type or a vehicle that is not this company's, or plans in a route a type of a kind no stop naming its container answers — at the action at fault."),
           ...commonProblems("edit"),
           404: describeProblem("No ticket type with that id in this company."),
         },
@@ -420,14 +438,15 @@ export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .where(and(scope(principal), eq(ticketType.id, id)))
           .returning(columns)
         if (row === undefined) throw noSuchType(id)
-        const issues = await referenceIssues(tx, principal.companyId, actions)
+        const vehicles = await vehicleProjects(tx, principal.companyId, actions)
+        const issues = await referenceIssues(tx, principal.companyId, row.kind as TicketKind, actions, vehicles)
         if (issues.length > 0) throw invalidRequest("body", issues)
         await tx.delete(ticketTypeAction).where(and(eq(ticketTypeAction.companyId, principal.companyId), eq(ticketTypeAction.ticketTypeId, id)))
         const placed = new Map<string, number>()
         const rows = actions.map((action) => {
           const position = (placed.get(action.trigger) ?? 0) + 1
           placed.set(action.trigger, position)
-          return { ...action, id: newId(), companyId: principal.companyId, ticketTypeId: id, position }
+          return { ...action, id: newId(), companyId: principal.companyId, ticketTypeId: id, position, vehicleProjectId: action.vehicleId === null ? null : (vehicles.get(action.vehicleId) as string) }
         })
         if (rows.length > 0) await tx.insert(ticketTypeAction).values(rows)
         return c.json(await typeOf(tx, principal.companyId, row))

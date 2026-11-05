@@ -23,26 +23,43 @@
 // past it. A closed ticket keeps its team, assignee and priority, as the
 // office's commands keep them. The type's roles and required fields bind
 // people, never this.
-import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, triggerOf, type TicketActionParameters } from "@waste/domain/resolution/automation"
+//
+// A plan in a route (#546, part 2) books the stop its kind is answered by on
+// the chosen vehicle's next route that has not started, the given days
+// ahead at the earliest, written as the office's Add stop writes it and the
+// worker's fill-driven emptying does (commands/fill-emptying.ts), and booked
+// to the ticket through `bookTicket` (commands/ticket-stops.ts).
+import { routeLabel } from "@waste/contracts/execution"
+import { SERVICE_NOUNS } from "@waste/domain/execution/services"
+import { stopMismatch } from "@waste/domain/execution/ticket-stops"
+import type { OfficeStopService } from "@waste/domain/execution/vocabulary"
+import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, notPlannable, plannedService, triggerOf, type TicketActionParameters } from "@waste/domain/resolution/automation"
+import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import type { PropertyPartyRole } from "@waste/domain/registry/vocabulary"
 import { isClosedTicketStatus, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketSource, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, isNull, lte, max, or, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
 import { QueueMissing, type Send } from "../jobs"
 import { projectAccess, userAccount } from "../schema/access"
+import { container } from "../schema/containers"
 import { propertyParty } from "../schema/customers"
+import { pickup, route } from "../schema/execution"
+import { vehicle } from "../schema/fleet"
 import { messageTemplate } from "../schema/messaging"
 import { team, ticket, ticketType, ticketTypeAction } from "../schema/resolution"
 import { queueMessage } from "./messaging"
+import { placementStopOn } from "./fill-emptying"
+import { misfitOf, pickupFitStops, vehicleLabel } from "./fleet-fit"
 import { appendTicketEvent, BY_SLA, openTicket } from "./open-ticket"
 import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
 import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
-import { Refused } from "./shared"
+import { lockRow, Refused } from "./shared"
+import { bookTicket } from "./ticket-stops"
 
 /** How many more actions one change's chain may run: one count every level of it shares. */
 export type AutomationBudget = { left: number }
@@ -53,7 +70,7 @@ export type AutomationCause = { send: Send; by: string | null; depth?: number; b
 /** A run: the company, the cause, and the clock and the id minter the change writes with. */
 export type AutomationRun = AutomationCause & { companyId: string; newId: IdMinter; now: () => Date }
 
-type Action = { id: string; kind: TicketActionKind } & TicketActionParameters
+type Action = { id: string; kind: TicketActionKind; vehicleProjectId: string | null } & TicketActionParameters
 
 /** What an action did: its line, and whether it wrote its own history row carrying the line, as a move and an assignment do. */
 type Done = { said: string; recorded: boolean }
@@ -107,6 +124,9 @@ export async function runTicketAutomation(tx: Tx, run: AutomationRun, ticketId: 
       messageTemplateName: ticketTypeAction.messageTemplateName,
       recipient: ticketTypeAction.recipient,
       followUpTypeId: ticketTypeAction.followUpTypeId,
+      vehicleProjectId: ticketTypeAction.vehicleProjectId,
+      vehicleId: ticketTypeAction.vehicleId,
+      daysAhead: ticketTypeAction.daysAhead,
     })
     .from(ticketTypeAction)
     .where(and(eq(ticketTypeAction.companyId, run.companyId), eq(ticketTypeAction.ticketTypeId, first.ticketTypeId), eq(ticketTypeAction.trigger, trigger)))
@@ -158,6 +178,8 @@ export async function runTicketAutomation(tx: Tx, run: AutomationRun, ticketId: 
         return await sendMessage(tx, run, row, action.messageTemplateName as string, action.recipient as TicketMessageRecipient)
       case "open-follow-up":
         return await openFollowUp(tx, run, depth, row, action.followUpTypeId as string)
+      case "plan-in-route":
+        return await planInRoute(tx, run, row, { projectId: action.vehicleProjectId as string, id: action.vehicleId as string }, action.daysAhead as number, line)
     }
   }
 }
@@ -333,4 +355,102 @@ async function openFollowUp(tx: Tx, run: AutomationRun, depth: number, row: Tick
     automation: { send: run.send, by: run.by, depth: depth + 1, budget: run.budget },
   })
   return { said: `follow-up ${labelOf(opened)} (${type.name}) opened.`, recorded: false }
+}
+
+/** The routes a stop may still be added to: not started. */
+const NOT_STARTED = ["planned", "ready"] as const
+
+/** A service as a line names it, with its article. */
+const serviceWords = (service: OfficeStopService): string => `${/^[aeiou]/.test(SERVICE_NOUNS[service]) ? "an" : "a"} ${SERVICE_NOUNS[service]}`
+
+/**
+ * Plans the ticket in a route: the stop its kind is answered by that names
+ * nothing but its container — an overflow's emptying, a defect's repair — on
+ * the vehicle's next route that has not started, running no sooner than the
+ * days ahead after its project's today. The stop is the office's, `planned`,
+ * after the route's last position, at the container's placement in force on
+ * the route's service date, never the same work twice while it is planned,
+ * and only where the vehicle takes it; the route's `updatedAt` moves and no
+ * event is written, as Add stop's. The ticket is booked to it as Add stop
+ * books one, the booking's line the automation's. A ticket open, about a
+ * container, and answered by no stop still planned is what it takes.
+ */
+async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: { projectId: string; id: string }, daysAhead: number, line: (said: string) => string): Promise<Done> {
+  const kind = row.kind as TicketKind
+  const service = plannedService(kind)
+  if (service === undefined) throw new Refused(409, `not planned: ${notPlannable(kind).replace(/^A/, "a")}.`)
+  const [truck] = await tx
+    .select({ registration: vehicle.registration, callsign: vehicle.callsign })
+    .from(vehicle)
+    .where(and(eq(vehicle.companyId, run.companyId), eq(vehicle.id, planned.id)))
+    .limit(1)
+  const truckLabel = truck === undefined ? planned.id : vehicleLabel(truck)
+  if (planned.projectId !== row.projectId) throw new Refused(409, `not planned: vehicle ${truckLabel} works in another project.`)
+  if (isClosedTicketStatus(row.status as TicketStatus)) throw new Refused(409, `not planned: the ticket is ${row.status}, and a stop answers an open ticket.`)
+  if (row.containerId === null) throw new Refused(409, `not planned: the ticket names no container for ${serviceWords(service)}.`)
+  const containerId = row.containerId
+  if (row.bookedPickupId !== null) {
+    const [booked] = await tx
+      .select({ status: pickup.status, position: pickup.position, number: route.number })
+      .from(pickup)
+      .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+      .where(and(eq(pickup.companyId, run.companyId), eq(pickup.id, row.bookedPickupId)))
+      .limit(1)
+    if (booked?.status === "planned") throw new Refused(409, `not planned: stop ${booked.position} of route ${routeLabel(booked.number)} answers it already.`)
+  }
+
+  const scope = { companyId: run.companyId, projectId: row.projectId }
+  const from = addDays(await projectToday(tx, scope, run.now)(), daysAhead)
+  const [next] = await tx
+    .select({ id: route.id })
+    .from(route)
+    .where(and(eq(route.companyId, run.companyId), eq(route.projectId, row.projectId), eq(route.plannedVehicleId, planned.id), inArray(route.status, [...NOT_STARTED]), gte(route.operatingDate, from)))
+    .orderBy(asc(route.operatingDate), asc(route.id))
+    .limit(1)
+  if (next === undefined) throw new Refused(409, `not planned: vehicle ${truckLabel} has no route from ${from} that has not started.`)
+  await lockRow(tx, route, { companyId: run.companyId, id: next.id })
+  const [chosen] = await tx
+    .select({ status: route.status, number: route.number, serviceDate: route.serviceDate, operatingDate: route.operatingDate })
+    .from(route)
+    .where(and(eq(route.companyId, run.companyId), eq(route.id, next.id)))
+    .limit(1)
+  const label = routeLabel(chosen.number)
+  if (!(NOT_STARTED as readonly string[]).includes(chosen.status)) throw new Refused(409, `not planned: route ${label} has started.`)
+
+  const [bin] = await tx
+    .select({ label: container.label })
+    .from(container)
+    .where(and(eq(container.companyId, run.companyId), eq(container.id, containerId)))
+    .limit(1)
+  const place = await placementStopOn(tx, scope, containerId, chosen.serviceDate)
+  if (place === undefined) throw new Refused(409, `not planned: container ${bin?.label ?? containerId} is placed nowhere on ${chosen.serviceDate}, route ${label}'s service date.`)
+  if (stopMismatch({ containerId, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId }, { service, containerId, ...place }) !== undefined) {
+    throw new Refused(409, `not planned: on ${chosen.serviceDate} container ${bin?.label ?? containerId} stands at another place than the ticket's.`)
+  }
+  // The same work booked once: an office stop of the container for the service, planned on the route, is someone's already.
+  const [booked] = await tx
+    .select({ id: pickup.id })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, run.companyId), eq(pickup.routeId, next.id), eq(pickup.containerId, containerId), eq(pickup.origin, "office"), eq(pickup.service, service), eq(pickup.status, "planned")))
+    .limit(1)
+  if (booked !== undefined) throw new Refused(409, `not planned: route ${label} has a planned ${SERVICE_NOUNS[service]} of container ${bin?.label ?? containerId} the office added already.`)
+
+  const [last] = await tx
+    .select({ position: max(pickup.position) })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, run.companyId), eq(pickup.routeId, next.id)))
+  const [stop] = await tx
+    .insert(pickup)
+    .values({ id: run.newId(), ...scope, routeId: next.id, position: (last?.position ?? 0) + 1, origin: "office", service, status: "planned", containerId, ...place, note: null })
+    .returning({ id: pickup.id, position: pickup.position })
+  // The action's savepoint takes the stop back where the vehicle cannot take it.
+  const misfit = await misfitOf(tx, run.companyId, planned.id, await pickupFitStops(tx, run.companyId, [stop.id]))
+  if (misfit !== undefined) throw new Refused(409, `not planned: ${misfit.replace(/^[A-Z]/, (first) => first.toLowerCase())}${misfit.endsWith(".") ? "" : "."}`)
+  await tx
+    .update(route)
+    .set({ updatedAt: sql`now()` })
+    .where(and(eq(route.companyId, run.companyId), eq(route.id, next.id)))
+  const said = `planned as stop ${stop.position} of route ${label}, ${serviceWords(service)} on ${chosen.operatingDate}.`
+  await bookTicket(tx, run.companyId, row, { pickupId: stop.id, routeId: next.id }, { body: line(said), recordedBy: null }, run.newId)
+  return { said, recorded: true }
 }

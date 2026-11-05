@@ -49,7 +49,7 @@ describe("the Resolution vocabulary's own rules", () => {
 
   test("a type's automation runs on opening or a status a command leads to, gives every command but reopen, and writes to the ticket's customer or a party role (#546 of #544)", () => {
     assert.deepEqual([...vocabulary.TICKET_ACTION_TRIGGERS], ["opened", ...vocabulary.TICKET_STATUSES.filter((status) => status !== "open")])
-    assert.deepEqual([...vocabulary.TICKET_ACTION_KINDS], ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up"])
+    assert.deepEqual([...vocabulary.TICKET_ACTION_KINDS], ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up", "plan-in-route"])
     assert.deepEqual([...vocabulary.TICKET_ACTION_COMMANDS], ["start", "wait", "hold", "complete", "reject"])
     assert.deepEqual([...vocabulary.TICKET_MESSAGE_RECIPIENTS], ["ticket-customer", ...PROPERTY_PARTY_ROLES], "the Registry's party roles by the same tokens")
   })
