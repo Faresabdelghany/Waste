@@ -237,11 +237,11 @@ _Avoid_: Contractor, customer, project
 ## Planning and execution
 
 **Collection Calendar**:
-The holidays and validity period that determine which planned service dates are valid, maintained per year for one Project; a Route Scheme reads its Project's calendars, never picks one. The working week (the Project's weekend) is a Project attribute, not a calendar field. Customer- or service-scoped calendars are a flagged future capability, not part of the current model (D22).
+The validity period that determines which planned service dates are valid, maintained per year for one Project; a Route Scheme reads its Project's calendars, never picks one. The holidays are its Project's Holiday list's (since 2026-11-05), no longer the calendar's. The working week (the Project's weekend) is a Project attribute, not a calendar field. Customer- or service-scoped calendars are a flagged future capability, not part of the current model (D22).
 _Avoid_: Route scheme, route, deviation list, collection deviation (removed 2026-09-03 — holiday and non-working dates are skipped, never moved)
 
 **Holiday list**:
-The named set of holidays a Project rests on — one per Project, named on the Project (`Danish public holidays`), dated and named per year on the Project's Collection Calendars, maintained in Settings › Operations › Holiday lists. A Project without one rests on its weekend only. A holiday policy on a Route Scheme decides what a collection on a listed date does.
+The Company's named set of holidays for one country (`Danish public holidays`, DK) — one per country, its dated, named holidays across every year — that a Project rests on by naming it; several Projects in one country share one list. Maintained in Settings › Operations › Holiday lists: a table of the lists, each opening into a table of its holidays. A Project without one rests on its weekend only. A holiday policy on a Route Scheme decides what a collection on a listed date does. Since 2026-11-05 the holidays are the list's, not the Collection Calendars'.
 _Avoid_: Holiday calendar, holiday picker, calendar (for the list itself)
 
 **Route Scheme**:

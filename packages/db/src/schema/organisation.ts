@@ -58,12 +58,12 @@ import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary
 import { RETENTION_DAYS_BOUNDS } from "@waste/domain/privacy/retention"
 import { GPS_PURPOSES } from "@waste/domain/privacy/vocabulary"
 import { sql } from "drizzle-orm"
-import { boolean, check, integer, text } from "drizzle-orm/pg-core"
+import { boolean, check, date, integer, text, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { oneOf, subsetOf } from "./checks"
 import { id, tenant, timestamps } from "./columns"
-import { companyReference, tenantKey, tenantUnique, uniqueOn } from "./references"
+import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
 
 /** A company's status: onboarding until its first project runs. */
@@ -116,6 +116,49 @@ export const company = wms.table(
   ],
 )
 
+/**
+ * A Holiday List (Settings › Operations › Holiday lists, 2026-11-05): the
+ * company's own named set of holidays for one country, which every Project
+ * that rests on it names (`project.holiday_list`). Its country is ISO 3166-1
+ * alpha-2, once per company, as is its name; the Project's reference reaches
+ * the list by name, so a rename cascades to every project on it.
+ */
+export const holidayList = wms.table(
+  "holiday_list",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    /** ISO 3166-1 alpha-2 (`DK`); once per company. */
+    country: text().notNull(),
+    /** What a person reads and a project names (`Danish public holidays`); once per company. */
+    name: text().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantUnique(t, t.country),
+    tenantUnique(t, t.name),
+    tenantKey(t),
+    check(tableObjectName(t.id.table, "country_shape", "holidayList"), sql`${t.country} ~ '^[A-Z]{2}$'`),
+  ],
+)
+
+/** One day of a Holiday List, with the name a person gave it; null where nobody named it. The set is replaced whole with `PUT /holiday-lists/:id/holidays`. */
+export const holidayListHoliday = wms.table(
+  "holiday_list_holiday",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    holidayListId: uuid().notNull(),
+    /** The holiday, a calendar day. */
+    day: date().notNull(),
+    /** What the day is called (`Grundlovsdag`); null where nobody named it. */
+    name: text(),
+  },
+  (t) => [companyReference(t, company), tenantReference(t, [t.holidayListId], holidayList), tenantUnique(t, t.holidayListId, t.day)],
+)
+
 export const project = wms.table(
   "project",
   {
@@ -137,7 +180,7 @@ export const project = wms.table(
       .array()
       .notNull()
       .default(sql.raw(`'{${DEFAULT_WEEKEND.join(",")}}'`)),
-    /** The name of the holiday list its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
+    /** The name of the company's Holiday List it rests on (`Danish public holidays`), a key into `holiday_list` that follows a rename; null is no list, and then the project rests on its weekend only. */
     holidayList: text(),
     /**
      * The name the project publishes itself under on the public door
@@ -182,6 +225,8 @@ export const project = wms.table(
     companyReference(t, company),
     tenantUnique(t, t.name),
     tenantKey(t),
+    tenantReference(t, [t.holidayList], holidayList, [holidayList.name]).onUpdate("cascade"),
+    tenantIndex(t, t.holidayList),
     oneOf(t.status, PROJECT_STATUSES),
     subsetOf(t.weekend, SERVICE_DAYS),
     // A weekend leaves a working day: `subsetOf` holds the days to the seven,

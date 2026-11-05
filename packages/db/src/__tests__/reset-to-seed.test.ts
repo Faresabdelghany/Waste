@@ -76,7 +76,7 @@ type Snapshot = Record<string, Record<string, unknown>[]>
 
 const STAMPS = ["created_at", "updated_at", "recorded_at"] as const
 /** What the reset keeps (the Logins decision of #142, as the PR states it): Organisation & Access, what a person signs in with and is. */
-const KEPT = new Set(["company", "project", "service_provider", "role", "role_grant", "user_account", "project_access", "service_provider_access"])
+const KEPT = new Set(["company", "project", "service_provider", "role", "role_grant", "user_account", "project_access", "service_provider_access", "holiday_list"])
 /** The seed's hand-spelled id bucket (seed/ids.ts): a row outside it was minted by the database. */
 const SEEDED_ID = /^01a0d2a4-a280-7/
 
@@ -297,7 +297,7 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     await fresh?.drop()
   })
 
-  test("sweeps every table but Organisation & Access's eight, each before every table it references, as the database's own keys say", async () => {
+  test("sweeps every table but Organisation & Access's eight and the Holiday Lists a kept project names, each before every table it references, as the database's own keys say", async () => {
     const tables = await owner.sql<{ name: string }[]>`
       select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'wms' and c.relkind in ('r', 'p')`
     const swept = SWEPT_TABLES.map(getTableName)

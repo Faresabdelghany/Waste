@@ -87,6 +87,7 @@ import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/planning-areas"
 
 import { create, get, listAll, patch, put } from "../client"
+import { holidayListAdapter } from "./holiday-lists"
 import {
   fixtureNamed,
   hasPrefix,
@@ -601,11 +602,16 @@ export const planningAreasModule: ServerModule = {
   readsTheDay: true,
 }
 
-/** Settings → Collection calendars, and what the wizard and generation read a project's holidays from. */
+/**
+ * Settings → Collection calendars and Holiday lists, and what the wizard and
+ * generation read a project's holidays from: the per-year calendars, and the
+ * company's Holiday Lists beside them (holiday-lists.ts), the grant both are
+ * read under.
+ */
 export const collectionCalendarsModule: ServerModule = {
   workspaceId: COLLECTION_CALENDARS_MODULE.workspaceId,
   moduleId: COLLECTION_CALENDARS_MODULE.moduleId,
-  resources: [collectionCalendarAdapter],
+  resources: [collectionCalendarAdapter, holidayListAdapter],
 }
 
 export type { Client }

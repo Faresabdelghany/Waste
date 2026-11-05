@@ -243,6 +243,9 @@ const cairoFixtureRecordIds = [
 ] as const
 
 const companyWideFixtureRecordIds = [
+  // The company's Holiday Lists (2026-11-05), one per country, which the projects name.
+  "holiday-list-danish",
+  "holiday-list-egyptian",
   "product-res-240",
   "product-card-660",
   "product-glass-igloo",
@@ -2340,6 +2343,56 @@ const plan: WorkspaceDefinition = {
             validFrom: "2027-01-01",
             validTo: "2027-12-31",
             timezone: "Africa/Cairo",
+          },
+        },
+        // The company's Holiday Lists (Settings › Holiday lists, 2026-11-05):
+        // one per country, holding every day its projects' calendars above
+        // hold, which a project rests on by naming it. The seed's lists.
+        {
+          ...record(
+            "holiday-list-danish",
+            "Danish public holidays",
+            "DK · 1 project",
+            "Active",
+            "Operations Admin",
+            "—",
+            "3 days ago",
+            "The company's Danish holiday list, which Copenhagen Central rests on.",
+            { Country: "DK", Holidays: "22", Projects: "1" },
+            ["1 project", "22 holidays"],
+            "Project configuration",
+            "3 days",
+          ),
+          recordKind: "Holiday List",
+          submittedValues: {
+            listName: "Danish public holidays",
+            country: "DK",
+            holidayDates:
+              "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26, 2027-01-01, 2027-03-25, 2027-03-26, 2027-03-28, 2027-03-29, 2027-05-06, 2027-05-16, 2027-05-17, 2027-06-05, 2027-12-25, 2027-12-26",
+            projectCount: "1",
+          },
+        },
+        {
+          ...record(
+            "holiday-list-egyptian",
+            "Egyptian public holidays",
+            "EG · 1 project",
+            "Active",
+            "Operations Admin",
+            "—",
+            "3 days ago",
+            "The company's Egyptian holiday list, which Cairo Operations rests on.",
+            { Country: "EG", Holidays: "9", Projects: "1" },
+            ["1 project", "9 holidays"],
+            "Project configuration",
+            "3 days",
+          ),
+          recordKind: "Holiday List",
+          submittedValues: {
+            listName: "Egyptian public holidays",
+            country: "EG",
+            holidayDates: "2026-10-06, 2027-01-07, 2027-01-25, 2027-03-08, 2027-03-09, 2027-04-25, 2027-05-01, 2027-06-30, 2027-07-23",
+            projectCount: "1",
           },
         },
       ],
@@ -5904,21 +5957,25 @@ const configure: WorkspaceDefinition = {
         "Company and project context are visible before high-impact actions.",
       ],
       records: [
-        record(
-          "company-kystbyen-dk",
-          "Kystbyen Renovation A/S",
-          "Company · tenant",
-          "Active",
-          "Company Admin",
-          "18 feature entitlements",
-          "Today",
-          "Tenant organization containing five independently permissioned operating projects.",
-          { CVR: "12345678", Currency: "DKK", Timezone: "Europe/Copenhagen", Subscription: "Enterprise" },
-          ["5 projects", "84 users", "18 entitlements", "3 API clients"],
-          "Organization settings",
-          "Today",
-          ["Suspended", "Archive"],
-        ),
+        {
+          ...record(
+            "company-kystbyen-dk",
+            "Kystbyen Renovation A/S",
+            "Company · tenant",
+            "Active",
+            "Company Admin",
+            "18 feature entitlements",
+            "Today",
+            "Tenant organization containing five independently permissioned operating projects.",
+            { CVR: "12345678", Currency: "DKK", Timezone: "Europe/Copenhagen", Subscription: "Enterprise" },
+            ["5 projects", "84 users", "18 entitlements", "3 API clients"],
+            "Organization settings",
+            "Today",
+            ["Suspended", "Archive"],
+          ),
+          // The company's country, as the API's company carries it: the Holiday lists pane offers its list first.
+          submittedValues: { country: "DK" },
+        },
         // The working week and the holiday list are project attributes
         // (round 3): `weekend` holds the weekdays the project rests on,
         // `holidayList` names its list (absent = none); both are read by

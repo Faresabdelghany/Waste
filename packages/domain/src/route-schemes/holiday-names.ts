@@ -92,19 +92,37 @@ export function egyptianHolidayName(iso: string): string | undefined {
 
 export type HolidayNameLookup = (iso: string) => string | undefined
 
-const HOLIDAY_NAME_LOOKUPS: Readonly<Record<string, HolidayNameLookup>> = {
-  "Danish public holidays": danishHolidayName,
-  "Egyptian public holidays": egyptianHolidayName,
-}
+/** A list this module knows: its usual name, the country it is of (ISO 3166-1 alpha-2), and how it names its dates. */
+type KnownHolidayList = { name: string; country: string; names: HolidayNameLookup }
+
+const KNOWN_HOLIDAY_LISTS: readonly KnownHolidayList[] = [
+  { name: "Danish public holidays", country: "DK", names: danishHolidayName },
+  { name: "Egyptian public holidays", country: "EG", names: egyptianHolidayName },
+]
 
 /** The list names this module can name dates for — what the Holiday lists pane offers first. */
-export const KNOWN_HOLIDAY_LIST_NAMES: readonly string[] = Object.keys(HOLIDAY_NAME_LOOKUPS)
+export const KNOWN_HOLIDAY_LIST_NAMES: readonly string[] = KNOWN_HOLIDAY_LISTS.map((list) => list.name)
+
+/** The country a known list's name is of (`Danish public holidays` → `DK`), or undefined for a name this module does not know. */
+export function knownHolidayListCountry(listName: string): string | undefined {
+  return KNOWN_HOLIDAY_LISTS.find((list) => list.name === listName)?.country
+}
+
+/** The usual name of a country's known list (`DK` → `Danish public holidays`), or undefined for a country this module does not know. */
+export function knownHolidayListName(country: string): string | undefined {
+  return KNOWN_HOLIDAY_LISTS.find((list) => list.country === country)?.name
+}
 
 const noNames: HolidayNameLookup = () => undefined
 
 /** The name lookup for a project's holiday list; an unknown list names nothing. */
 export function holidayNamesFor(listName: string | undefined): HolidayNameLookup {
-  return (listName && HOLIDAY_NAME_LOOKUPS[listName]) || noNames
+  return KNOWN_HOLIDAY_LISTS.find((list) => list.name === listName)?.names ?? noNames
+}
+
+/** The name lookup for a country's holidays (`DK`, `EG`); a country this module does not know names nothing. */
+export function holidayNamesForCountry(country: string | undefined): HolidayNameLookup {
+  return KNOWN_HOLIDAY_LISTS.find((list) => list.country === country)?.names ?? noNames
 }
 
 /** A lookup that answers the carried names first and falls back to another. */

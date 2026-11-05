@@ -70,7 +70,7 @@ import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
 import { importRun, importRunRow } from "../schema/imports"
-import { company, project, serviceProvider } from "../schema/organisation"
+import { company, holidayList, holidayListHoliday, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeField, ticketTypePermission } from "../schema/resolution"
@@ -333,6 +333,12 @@ export const TANKS_AUDITED: readonly Audited[] = [{ table: tankInstallation, mod
 /** A transfer station's haul-out (M17 of #293): the Outbound Loads, under Route Studio › Weights beside the Unloads; the material adjustments are a ledger. */
 export const HAUL_OUT_AUDITED: readonly Audited[] = [{ table: outboundLoad, module: "route-studio.weights" }]
 
+/** The company's Holiday Lists (Settings › Operations › Holiday lists): a list by country and its days, a set its list is replaced through, under the calendars' grant. */
+export const HOLIDAY_LISTS_AUDITED: readonly Audited[] = [
+  { table: holidayList, module: "configure.calendars" },
+  { table: holidayListHoliday, module: "configure.calendars", parent: setOf(holidayList, holidayListHoliday.holidayListId) },
+]
+
 /** The Ticket Types (#545 of #544): the company's types of case, with their custom fields and who may give each status command, sets replaced whole with their type; their migration writes these triggers. */
 export const TICKET_TYPES_AUDITED: readonly Audited[] = [
   { table: ticketType, module: "configure.templates" },
@@ -340,7 +346,7 @@ export const TICKET_TYPES_AUDITED: readonly Audited[] = [
   { table: ticketTypePermission, module: "configure.templates", parent: setOf(ticketType, ticketTypePermission.ticketTypeId) },
 ]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

@@ -33,7 +33,7 @@ import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
 import { route } from "../schema/execution"
 import { generationMatch } from "../schema/generation"
-import { project } from "../schema/organisation"
+import { holidayList, holidayListHoliday, project } from "../schema/organisation"
 import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { sortingGuideItem } from "../schema/sorting-guide"
 
@@ -244,9 +244,32 @@ export const SEASONS_DOOR: readonly PublicDoorTable[] = [
  */
 export const BRANDING_DOOR: readonly PublicDoorTable[] = [{ table: project, columns: [project.brandColor, project.logoUrl, project.accessibilityStatementUrl], rows: null }]
 
+/** A list some published project of the company rests on. */
+const ofListOfPublishedProject = (list: string, nameColumn: string) =>
+  `exists (select 1 from "wms"."project" "published" where "published"."company_id" = ${list}.${quoted("company_id")} and "published"."holiday_list" = ${nameColumn} and "published"."public_slug" is not null)`
+
+/**
+ * What the company's Holiday Lists (2026-11-05) open to the collection days
+ * and the public map: the days, and their names, of a list a published
+ * project rests on — the list's name and country, which the project names
+ * it by, and nothing of a list no published project names.
+ */
+export const HOLIDAY_LISTS_DOOR: readonly PublicDoorTable[] = [
+  {
+    table: holidayList,
+    columns: [holidayList.id, holidayList.companyId, holidayList.country, holidayList.name],
+    rows: `${IN_COMPANY} and ${ofListOfPublishedProject(quoted("holiday_list"), `${quoted("holiday_list")}.${quoted("name")}`)}`,
+  },
+  {
+    table: holidayListHoliday,
+    columns: [holidayListHoliday.companyId, holidayListHoliday.holidayListId, holidayListHoliday.day, holidayListHoliday.name],
+    rows: `${IN_COMPANY} and exists (select 1 from "wms"."holiday_list" "list" where "list"."company_id" = ${quoted("holiday_list_holiday")}.${quoted("company_id")} and "list"."id" = ${quoted("holiday_list_holiday")}.${quoted("holiday_list_id")} and ${ofListOfPublishedProject('"list"', '"list"."name"')})`,
+  },
+]
+
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR, ...HOLIDAY_LISTS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -311,3 +334,6 @@ export const seasonsDoorStatements = (): string[] => [...publicGrantStatements(S
 
 /** What the branding's migration carries for the door, below its columns: the grant alone, the project keeping 0017's policy. */
 export const brandingDoorStatements = (): string[] => publicGrantStatements(BRANDING_DOOR)
+
+/** What the Holiday Lists' migration carries for the door, below the tables' own statements: the grants, then the policies. */
+export const holidayListsDoorStatements = (): string[] => [...publicGrantStatements(HOLIDAY_LISTS_DOOR), ...publicPolicyStatements(HOLIDAY_LISTS_DOOR)]

@@ -70,13 +70,18 @@ import * as schema from "./schema"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "./schema/access"
 import { auditEvent } from "./schema/audit"
 import { outboxEvent } from "./schema/execution"
-import { company, project, serviceProvider } from "./schema/organisation"
+import { company, holidayList, project, serviceProvider } from "./schema/organisation"
 import { applyDemo, DEMO_IDS } from "./seed/demo"
 import { DEMO_COMPANY_ID } from "./seed/ids"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
-/** Organisation & Access's eight tables, which the reset keeps: what makes a person able to sign in and be who they are. */
-export const KEPT_TABLES: readonly PgTable[] = [company, project, serviceProvider, role, roleGrant, userAccount, projectAccess, serviceProviderAccess]
+/**
+ * Organisation & Access's eight tables, which the reset keeps: what makes a
+ * person able to sign in and be who they are; and the company's Holiday
+ * Lists, which a kept project names by key. A list's days are swept, and the
+ * seed writes its own back.
+ */
+export const KEPT_TABLES: readonly PgTable[] = [company, project, serviceProvider, role, roleGrant, userAccount, projectAccess, serviceProviderAccess, holidayList]
 
 /** The names of the tables a table's foreign keys point at, itself left out. */
 function parentsOf(table: PgTable): Set<string> {

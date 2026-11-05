@@ -61,6 +61,7 @@ import {
   type CollectionCalendarLookups,
 } from "@/lib/data/collection-calendars"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { calendarRowSummary } from "@waste/domain/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
@@ -98,7 +99,8 @@ export function CollectionCalendarsSettings() {
   // The pane's own module and the projects it names: on the Pilot, the API's
   // rows once they are here and nothing before (Issue #175).
   const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, calendarsModule.records)
-  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record))
+  // The module holds the company's Holiday Lists too (holiday-lists-settings.tsx); this pane lists the per-year calendars alone.
+  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record) && !isHolidayListRecord(record))
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
   const projectRecords = organisation.records.filter(
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),

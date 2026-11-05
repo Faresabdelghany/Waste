@@ -140,6 +140,8 @@ const CONFIGURATION_COUNTS = {
   vehicleTypeConsumptions: 4,
   decommissionReasons: 8,
   ticketTypes: 12,
+  holidayLists: 2,
+  holidayListHolidays: 31,
 }
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
@@ -214,6 +216,8 @@ describe("the demo seed's fixed ids", () => {
       vehicleTypeConsumption: 0x02d,
       decommissionReason: 0x02e,
       ticketType: 0x02f,
+      holidayList: 0x030,
+      holidayListHoliday: 0x031,
     })
     assert.equal(demoId("routeScheme", 1), "01a0d2a4-a280-701a-8000-000000000001")
   })

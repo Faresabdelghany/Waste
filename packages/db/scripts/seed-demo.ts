@@ -51,6 +51,8 @@ const configuration = [
   count(counts.priceListRows, "price row"),
   count(counts.contaminantCodes, "contaminant code"),
   count(counts.decommissionReasons, "decommission reason"),
+  count(counts.holidayLists, "holiday list"),
+  count(counts.holidayListHolidays, "listed holiday"),
   count(counts.fuelEmissionFactors, "emission factor"),
   count(counts.ticketTypes, "ticket type"),
 ].join(", ")

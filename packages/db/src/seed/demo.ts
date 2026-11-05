@@ -95,6 +95,7 @@ import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } fro
 import { applyDecommissionReasons, DECOMMISSION_REASON_IDS, DECOMMISSION_REASONS_COUNTS, type DecommissionReasonsCounts } from "./decommission-reasons"
 import { applyPickupExceptions, PICKUP_EXCEPTIONS_COUNTS, PICKUP_EXCEPTIONS_IDS, type PickupExceptionsCounts } from "./pickup-exceptions"
 import { applyResources, RESOURCES_COUNTS, RESOURCES_IDS, type ResourcesCounts } from "./resources"
+import { applyHolidayLists, HOLIDAY_LIST_IDS, HOLIDAY_LISTS_COUNTS, type HolidayListsCounts } from "./holiday-lists"
 import { applyTicketTypes, TICKET_TYPE_IDS, TICKET_TYPES_COUNTS, type TicketTypesCounts } from "./ticket-types"
 import { upsertOwned } from "./upsert"
 
@@ -133,6 +134,7 @@ export const DEMO_IDS = {
   resources: RESOURCES_IDS,
   pickupExceptions: PICKUP_EXCEPTIONS_IDS,
   decommissionReasons: DECOMMISSION_REASON_IDS,
+  holidayLists: HOLIDAY_LIST_IDS,
   emissions: EMISSIONS_IDS,
   ticketTypes: TICKET_TYPE_IDS,
   planning: PLANNING_IDS,
@@ -302,6 +304,7 @@ export type DemoSeedCounts = {
   FinanceCounts &
   PickupExceptionsCounts &
   DecommissionReasonsCounts &
+  HolidayListsCounts &
   EmissionsCounts &
   TicketTypesCounts
 
@@ -326,6 +329,7 @@ const COUNTS: DemoSeedCounts = {
   ...FINANCE_COUNTS,
   ...PICKUP_EXCEPTIONS_COUNTS,
   ...DECOMMISSION_REASONS_COUNTS,
+  ...HOLIDAY_LISTS_COUNTS,
   ...EMISSIONS_COUNTS,
   ...TICKET_TYPES_COUNTS,
 }
@@ -364,6 +368,8 @@ export async function applyDemo(tx: Tx): Promise<number> {
   }
 
   changed += await upsertOwned(tx, company, [COMPANY], COMPANY_COLUMNS)
+  // The Holiday Lists before the projects, whose list name is a key into them.
+  changed += await applyHolidayLists(tx)
   changed += await upsertOwned(tx, project, PROJECTS, PROJECT_COLUMNS)
   changed += await upsertOwned(tx, serviceProvider, SERVICE_PROVIDERS, SERVICE_PROVIDER_COLUMNS)
   changed += await upsertOwned(tx, role, ROLES, ROLE_COLUMNS)

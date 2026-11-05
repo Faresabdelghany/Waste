@@ -6,15 +6,15 @@ import { AddressMatches, PublicCollectionDays } from "@waste/contracts/public"
 import { createDb, type Database } from "@waste/db/client"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
-import { project } from "@waste/db/schema/organisation"
+import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { Allowance, FeedAllowance } from "../auth/public-door"
@@ -114,7 +114,8 @@ describe("the collection days by address on the public door", { skip: database.s
       await tx.insert(generationMatch).values({ companyId, projectId: copenhagen, collectionGroupId: ids.residualGroup, generationRunId: ids.run, ruleSignature: "test", containerIds: [ids.residualBin] })
       // Thursday 15 October is a holiday: the skip policy leaves it out.
       await tx.insert(collectionCalendar).values({ id: ids.calendar, companyId, projectId: copenhagen, validFrom: "2026-01-01", name: `Holidays ${testId().slice(-6)}` })
-      await tx.insert(collectionCalendarHoliday).values({ companyId, projectId: copenhagen, collectionCalendarId: ids.calendar, day: "2026-10-15", name: "Testdag" })
+      // The day is on the company's list the project rests on (2026-11-05), not on the calendar.
+      await tx.insert(holidayListHoliday).values({ companyId, holidayListId: (await tx.select({ id: holidayList.id }).from(holidayList).where(and(eq(holidayList.companyId, companyId), eq(holidayList.name, "Danish public holidays"))))[0].id, day: "2026-10-15", name: "Testdag" })
       // The office held Monday 12 October's residual route on Tuesday the 13th.
       await tx.insert(route).values({ id: ids.heldRoute, companyId, projectId: copenhagen, routeSchemeId: ids.scheme, collectionGroupId: ids.residualGroup, serviceDate: "2026-10-12", operatingDate: "2026-10-13", number: Number(String(Date.now()).slice(-6)), status: "planned", heldAt: NOW })
     })

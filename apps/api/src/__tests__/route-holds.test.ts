@@ -399,19 +399,18 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
   })
 
   // A change of holiday inputs releases the held routes it re-decides (#226,
-  // `holidayReleases` in the domain): the calendar's holidays, written or
-  // replaced, the scheme's policy, and the project's weekend or whether it has
-  // a list. The tests run in order: the first makes Copenhagen's 2027
-  // calendar, the rest replace its 2026 one's holidays, and the block gives the project a holiday list for the block and take it
-  // away after. Mondays 12 Oct to 2 Nov 2026 carry the holidays; a held route the
-  // office moved stands on the Tuesday after.
+  // `holidayReleases` in the domain): the days of the holiday list the
+  // project rests on, replaced, the scheme's policy, and the project's weekend
+  // or whether it has a list. The block makes the company a holiday list of
+  // its own, puts Copenhagen on it for the block and takes it away after; the
+  // tests run in order, each replacing the list's days. Mondays 12 Oct to 2
+  // Nov 2026 carry the holidays; a held route the office moved stands on the
+  // Tuesday after.
   describe("a change of holiday inputs (#226)", () => {
-    /** Copenhagen's 2026 calendar, and the holidays the fixtures gave it, which every set below keeps. */
-    let calendarId: string
-    let kept: { day: string; name: string | null }[]
+    /** The block's holiday list, which Copenhagen rests on while the block runs. */
+    let listId: string
     const patchProject = async (values: unknown) => await ok(await olivia(`/projects/${a.projects.copenhagen.id}`, { method: "PATCH", body: values }))
-    const putHolidays = async (days: string[]) =>
-      await ok(await olivia(`/collection-calendars/${calendarId}/holidays`, { method: "PUT", body: { holidays: [...kept, ...days.map((day) => ({ day, name: "Test Day" }))] } }))
+    const putHolidays = async (days: string[]) => await ok(await olivia(`/holiday-lists/${listId}/holidays`, { method: "PUT", body: { holidays: days.map((day) => ({ day, name: "Test Day" })) } }))
     /** A scheme of the policy given, its one group on Mondays. */
     const schemeOf = async (name: string, holidayPolicy: string) => {
       const made = await schemeWith(name, ["Round 1"])
@@ -425,29 +424,24 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     }
 
     before(async () => {
-      const page = (await ok(await olivia(`/collection-calendars?projectId=${a.projects.copenhagen.id}&validOn=2026-10-12`))) as { items: { id: string; holidays: { day: string; name: string | null }[] }[] }
-      assert.equal(page.items.length, 1)
-      calendarId = page.items[0].id
-      kept = page.items[0].holidays
+      const response = await olivia("/holiday-lists", { method: "POST", body: { country: "SE", name: "Test holidays" } })
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      listId = ((await response.json()) as { id: string }).id
       await patchProject({ holidayList: "Test holidays" })
     })
     after(async () => {
       await patchProject({ holidayList: null, weekend: ["saturday", "sunday"] })
     })
 
-    test("a calendar created with holidays releases the held route on one under shift-next; the route on a plain day keeps its hold", async () => {
+    test("a list given a holiday releases the held route on it under shift-next; the route on a plain day keeps its hold", async () => {
       const { scheme, group } = await schemeOf("Holiday Create Mondays", "shift-next")
       const [onHoliday, plain] = await Promise.all(["2027-01-04", "2027-01-11"].map((day) => routeOn(scheme, group, day)))
       await hold(onHoliday, plain)
-      const response = await olivia("/collection-calendars", {
-        method: "POST",
-        body: { projectId: a.projects.copenhagen.id, name: "Copenhagen Central 2027", validFrom: "2027-01-01", validTo: "2028-01-01", holidays: [{ day: "2027-01-04", name: "Test Day" }] },
-      })
-      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      await putHolidays(["2027-01-04"])
       assert.deepEqual(await holds(scheme.id), { [onHoliday]: false, [plain]: true }, "Monday 4 Jan moves to Tuesday with its neighbours; the 11th is untouched")
     })
 
-    test("a calendar's holidays replaced release the held routes they re-decide, each under its own scheme's policy: not one the scheme collects on, and not one the office moved off the new holiday", async () => {
+    test("a list's holidays replaced release the held routes they re-decide, each under its own scheme's policy: not one the scheme collects on, and not one the office moved off the new holiday", async () => {
       const shifted = await schemeOf("Holiday Put Mondays", "shift-next")
       const collected = await schemeOf("Holiday Collect Mondays", "collect")
       const onHoliday = await routeOn(shifted.scheme, shifted.group, MONDAYS[1])
@@ -492,8 +486,11 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
       await movedTo(lands, "2026-11-03")
       await hold(plain)
 
-      await patchProject({ holidayList: "Renamed holidays" })
+      await ok(await olivia(`/holiday-lists/${listId}`, { method: "PATCH", body: { name: "Renamed holidays" } }))
       assert.deepEqual(await holds(scheme.id), { [lands]: true, [plain]: true }, "a rename changes no day")
+      const renamed = (await ok(await olivia(`/projects/${a.projects.copenhagen.id}`))) as { holidayList: string | null }
+      assert.equal(renamed.holidayList, "Renamed holidays", "the rename follows to the project resting on the list")
+      await ok(await olivia(`/holiday-lists/${listId}`, { method: "PATCH", body: { name: "Test holidays" } }))
       await patchProject({ weekend: ["saturday", "sunday", "tuesday"] })
       assert.deepEqual(await holds(scheme.id), { [lands]: false, [plain]: true }, "the 2nd's shift lands on Wednesday now, the route held on Tuesday goes with it")
 
