@@ -41,7 +41,7 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
-import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent, ticketSla, ticketType } from "@waste/db/schema/resolution"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
@@ -398,6 +398,8 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // The default ticket types the first tickets were given (#545 of #544), after the tickets that name them.
+    await tx.delete(ticketType).where(eq(ticketType.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

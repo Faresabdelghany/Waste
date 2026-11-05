@@ -6,6 +6,8 @@ import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
+import { newId } from "@waste/db/ids"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { company } from "@waste/db/schema/organisation"
 import { ticket } from "@waste/db/schema/resolution"
@@ -153,6 +155,7 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
         projectId,
         number,
         kind: "other",
+        ticketTypeId: await defaultTicketTypeOf(tx, tenant.companyId, "other", newId),
         source: "office",
         subject: `Ticket ${number}`,
         description: "Seeded through tx: an alert needs only the row.",

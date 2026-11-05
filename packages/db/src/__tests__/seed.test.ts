@@ -139,6 +139,7 @@ const CONFIGURATION_COUNTS = {
   fuelEmissionFactors: 3,
   vehicleTypeConsumptions: 4,
   decommissionReasons: 8,
+  ticketTypes: 12,
 }
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
@@ -212,6 +213,7 @@ describe("the demo seed's fixed ids", () => {
       fuelEmissionFactor: 0x02c,
       vehicleTypeConsumption: 0x02d,
       decommissionReason: 0x02e,
+      ticketType: 0x02f,
     })
     assert.equal(demoId("routeScheme", 1), "01a0d2a4-a280-701a-8000-000000000001")
   })
@@ -261,6 +263,9 @@ describe("the demo seed's fixed ids", () => {
     const reasons = Object.values(DEMO_IDS.decommissionReasons)
     assert.equal(reasons.length, CONFIGURATION_COUNTS.decommissionReasons)
     for (const [ordinal, id] of reasons.entries()) assert.equal(id, demoId("decommissionReason", ordinal + 1), "the decommission reasons count from 1 in the domain's order")
+    const types = Object.values(DEMO_IDS.ticketTypes)
+    assert.equal(types.length, CONFIGURATION_COUNTS.ticketTypes)
+    for (const [ordinal, id] of types.entries()) assert.equal(id, demoId("ticketType", ordinal + 1), "the default ticket types count from 1 in the kinds' order")
   })
 
   test("the Registry ids are keyed by the prototype's record ids, its agreement numbers and its memberships", () => {

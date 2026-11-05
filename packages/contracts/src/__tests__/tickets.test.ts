@@ -59,6 +59,8 @@ const ticket = {
   number: 8831,
   label: "T-8831",
   kind: "missed-collection",
+  ticketTypeId: THIRD,
+  fieldValues: {},
   status: "open",
   priority: "high",
   source: "office",
@@ -142,6 +144,10 @@ describe("Ticket", () => {
     assert.deepEqual(Ticket.parse(booked), booked, "the stop the office booked to answer it (O3c of #290)")
     const { bookedRouteId: _route, bookedPickupId: _pickup, ...unbooked } = ticket
     assert.deepEqual(Ticket.parse(unbooked), ticket, "an event the outbox took before O3c names no booking, and reads as none")
+    const typed = { ...ticket, fieldValues: { "requested-date": "2026-10-09", bags: 2 } }
+    assert.deepEqual(Ticket.parse(typed), typed, "its type and its fields' values (#545 of #544)")
+    const { ticketTypeId: _type, fieldValues: _values, ...beforeTypes } = ticket
+    assert.deepEqual(Ticket.parse(beforeTypes), { ...ticket, ticketTypeId: null }, "an event the outbox took before the types names none, and reads as no type and no values")
     assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 
@@ -180,10 +186,10 @@ describe("TicketCreate", () => {
   const body = { projectId: OTHER, subject: "Call the customer back", description: "About the container request", kind: "internal-task" }
 
   test("takes the case's own words and kind, defaulting the priority to none, the source to office and answering from the record, and may name what it is about, the assignee and an alert", () => {
-    assert.deepEqual(TicketCreate.parse(body), { ...body, priority: "none", source: "office", answerFromRecord: true })
-    const whole = { ...body, priority: "high", source: "phone", occurredAt: WHEN, dueAt: "2026-10-07T12:00:00.000Z", assigneeUserAccountId: THIRD, links: { routeId: OTHER, pickupId: THIRD, customerId: ID }, alertId: OTHER, answerFromRecord: false }
+    assert.deepEqual(TicketCreate.parse(body), { ...body, fieldValues: {}, priority: "none", source: "office", answerFromRecord: true })
+    const whole = { ...body, ticketTypeId: ID, fieldValues: { bags: 2 }, priority: "high", source: "phone", occurredAt: WHEN, dueAt: "2026-10-07T12:00:00.000Z", assigneeUserAccountId: THIRD, links: { routeId: OTHER, pickupId: THIRD, customerId: ID }, alertId: OTHER, answerFromRecord: false }
     assert.deepEqual(TicketCreate.parse(whole), whole)
-    assert.deepEqual(TicketCreate.parse({ ...body, dueAt: null, assigneeUserAccountId: null, links: {} }), { ...body, priority: "none", source: "office", dueAt: null, assigneeUserAccountId: null, links: {}, answerFromRecord: true })
+    assert.deepEqual(TicketCreate.parse({ ...body, dueAt: null, assigneeUserAccountId: null, links: {} }), { ...body, fieldValues: {}, priority: "none", source: "office", dueAt: null, assigneeUserAccountId: null, links: {}, answerFromRecord: true })
   })
 
   test("refuses what the server owns by name: the id and the stamps, the number, the status, the closing, the creator and the event", () => {

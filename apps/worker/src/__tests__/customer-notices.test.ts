@@ -13,6 +13,8 @@ import { after, before, describe, test } from "node:test"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
+import { newId } from "@waste/db/ids"
 import type { Send } from "@waste/db/jobs"
 import { alertColumns, alertOf, eventColumns, eventOf, ticketColumns, ticketOf } from "@waste/db/commands/resolution-rows"
 import { customer, property } from "@waste/db/schema/customers"
@@ -226,10 +228,10 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
   let ticketNumber = 900
   const openTicket = async (customerId: string | null) => {
     ticketNumber += 1
-    const [row] = await withCompany(pool.db, tenant.companyId, (tx) =>
+    const [row] = await withCompany(pool.db, tenant.companyId, async (tx) =>
       tx
         .insert(ticket)
-        .values({ companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, number: ticketNumber, kind: "missed-collection", source: "phone", subject: "Bin not emptied", description: "Not emptied on Monday.", occurredAt: NOON, createdBy: tenant.users.olivia.id, customerId })
+        .values({ companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, number: ticketNumber, kind: "missed-collection", ticketTypeId: await defaultTicketTypeOf(tx, tenant.companyId, "missed-collection", newId), source: "phone", subject: "Bin not emptied", description: "Not emptied on Monday.", occurredAt: NOON, createdBy: tenant.users.olivia.id, customerId })
         .returning(ticketColumns),
     )
     return ticketOf(row)

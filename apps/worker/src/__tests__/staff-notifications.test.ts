@@ -11,6 +11,8 @@ import { after, before, describe, test } from "node:test"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
+import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
+import { newId } from "@waste/db/ids"
 import { alertColumns, alertOf, ticketColumns, ticketOf } from "@waste/db/commands/resolution-rows"
 import type { Send } from "@waste/db/jobs"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
@@ -118,10 +120,10 @@ describe("the staff notices", { skip: api.skip || owner.skip }, () => {
   let ticketNumber = 40
   const assigned = async (assigneeUserAccountId: string) => {
     ticketNumber += 1
-    const [row] = await withCompany(pool.db, tenant.companyId, (tx) =>
+    const [row] = await withCompany(pool.db, tenant.companyId, async (tx) =>
       tx
         .insert(ticket)
-        .values({ companyId: tenant.companyId, projectId: tenant.projectId, number: ticketNumber, kind: "other", source: "office", priority: "high", subject: "Lid broken at Parkvej 18", description: "The lid hangs by one hinge.", occurredAt: at("08:00"), createdBy: tenant.officeUserId, assigneeUserAccountId })
+        .values({ companyId: tenant.companyId, projectId: tenant.projectId, number: ticketNumber, kind: "other", ticketTypeId: await defaultTicketTypeOf(tx, tenant.companyId, "other", newId), source: "office", priority: "high", subject: "Lid broken at Parkvej 18", description: "The lid hangs by one hinge.", occurredAt: at("08:00"), createdBy: tenant.officeUserId, assigneeUserAccountId })
         .returning(ticketColumns),
     )
     return ticketOf(row)

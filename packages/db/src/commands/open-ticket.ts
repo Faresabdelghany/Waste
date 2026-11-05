@@ -25,7 +25,10 @@
 // the project's default team for its kind (`ticket_team_default`, O30 of
 // #290, row 7.20), while that team is active, and with none otherwise: the
 // office's create when its body names none, and every ticket the consumer, a
-// work order or a weighbridge deviation opens.
+// work order or a weighbridge deviation opens. A draft that names no Ticket
+// Type is of its kind's default type (#545 of #544, `defaultTicketTypeOf`),
+// which is every ticket an event opens; the office's create names the type it
+// judged, with the fields' values it held to it.
 //
 // `appendTicketEvent` is the allocation's `appendEvent` rule (#101): every
 // write to the ticket's row is followed by one `ticket_event` in the same
@@ -39,6 +42,7 @@
 // the callers compose every row themselves, so a row that disagrees with its
 // kind is a bug in a route or a job and thrown as one, never left for
 // `ticket_event_kind_shape` to answer as a 500 naming a constraint.
+import type { TicketFieldValues } from "@waste/contracts/ticket-types"
 import type { Ticket, TicketLinks } from "@waste/contracts/tickets"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import { dueBySla, slaTargetFor } from "@waste/domain/resolution/sla"
@@ -52,6 +56,7 @@ import { linkAlert } from "./alert-links"
 import { emit } from "./outbox"
 import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-rows"
 import { nextNumber } from "./shared"
+import { defaultTicketTypeOf } from "./ticket-types"
 
 /** A draft's due date that is the project's SLA target of the ticket's kind and priority, from when its issue or request happened. */
 export const BY_SLA = "sla"
@@ -60,6 +65,10 @@ export const BY_SLA = "sla"
 export type TicketDraft = {
   projectId: string
   kind: TicketKind
+  /** A type of the kind, the caller having judged it; absent, the kind's default type. */
+  ticketTypeId?: string
+  /** The type's fields' values, the caller having held them to the type; absent, none. */
+  fieldValues?: TicketFieldValues
   priority: TicketPriority
   source: TicketSource
   subject: string
@@ -150,6 +159,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   const { companyId, draft, createdBy, sourceEventId } = input
   const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, draft) : draft.dueAt
   const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, draft) : draft.teamId
+  const ticketTypeId = draft.ticketTypeId ?? (await defaultTicketTypeOf(tx, companyId, draft.kind, input.newId))
   const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
     .insert(ticket)
@@ -159,6 +169,8 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       projectId: draft.projectId,
       number,
       kind: draft.kind,
+      ticketTypeId,
+      fieldValues: draft.fieldValues ?? {},
       status: "open",
       priority: draft.priority,
       source: draft.source,
