@@ -189,19 +189,20 @@ export function SchemeRuleEditor({
           {fractionOptions.map((fraction) => {
             const isOn = rule.fractions.includes(fraction)
             return (
-              <button
+              <Button
                 key={fraction}
                 type="button"
+                variant="ghost"
                 onClick={() => toggleFraction(fraction)}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  "h-auto gap-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   isOn
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50",
+                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:hover:bg-primary"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-background hover:text-muted-foreground dark:hover:bg-background",
                 )}
               >
                 {fraction}
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -831,19 +832,20 @@ function CollectionGroupSpoke({
             {days.map((day) => {
               const isOn = group.days.includes(day)
               return (
-                <button
+                <Button
                   key={day}
                   type="button"
+                  variant="ghost"
                   onClick={() => toggleDay(day)}
                   className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    "h-auto gap-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                     isOn
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-muted-foreground hover:border-primary/50",
+                      ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:hover:bg-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-background hover:text-muted-foreground dark:hover:bg-background",
                   )}
                 >
                   {SERVICE_DAY_SHORT_LABELS[day]}
-                </button>
+                </Button>
               )
             })}
           </div>

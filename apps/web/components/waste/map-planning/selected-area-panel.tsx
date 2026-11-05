@@ -381,12 +381,13 @@ export function SelectedAreaPanel({
                     const highlighted = point.containerIds.some((id) => highlightedContainerIds.has(id))
                     return (
                       <li key={point.id}>
-                        <button
+                        <Button
+                          variant="ghost"
                           type="button"
                           data-container-row={point.id}
                           data-highlighted={highlighted ? "true" : undefined}
-                          className={cn(
-                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          className={cn("justify-start whitespace-normal text-[length:inherit] font-normal shrink h-auto transition-none cursor-default hover:text-inherit",
+                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-accent/60",
                             highlighted && "bg-accent",
                           )}
                           onMouseEnter={() => onHoverContainers(point.containerIds)}
@@ -409,7 +410,7 @@ export function SelectedAreaPanel({
                           <span className="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
                             {point.fractions.join(" · ")}
                           </span>
-                        </button>
+                        </Button>
                       </li>
                     )
                   })}

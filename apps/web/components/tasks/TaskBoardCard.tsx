@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { format } from "date-fns"
 import { CaretDown, FolderSimple, CalendarBlank, Tag as TagIcon } from "@phosphor-icons/react/dist/ssr"
 
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -130,14 +131,15 @@ export function TaskBoardCard({ task, variant = "default", onToggle, onOpen, onC
         {/* Type chip with inline tag selector */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
+            <Button
+              variant="ghost"
               type="button"
-              className="bg-background border border-border rounded-md px-2 py-1 flex items-center gap-1 text-xs text-muted-foreground hover:bg-background/70"
+              className={cn("justify-start whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-2 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background border border-border rounded-md px-2 py-1 flex items-center gap-1 text-xs text-muted-foreground hover:bg-background/70 dark:hover:bg-background/70 hover:text-muted-foreground")}
             >
-              <TagIcon className="h-3 w-3" />
+              <TagIcon className="size-3" />
               <span>{typeText}</span>
-              <CaretDown className="h-3 w-3 opacity-60" />
-            </button>
+              <CaretDown className="size-3 opacity-60" />
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-[120px]">
             <DropdownMenuItem onClick={() => onChangeTag?.(undefined)}>

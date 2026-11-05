@@ -1818,14 +1818,15 @@ export function SettingsWorkspace({
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-sidebar sm:flex-row">
       <aside className="flex max-h-[44dvh] w-full shrink-0 flex-col px-3 py-3 sm:max-h-none sm:min-h-0 sm:w-64 sm:px-4 sm:py-4">
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => router.push(returnTo)}
-          className="mb-4 flex h-8 w-fit cursor-pointer items-center gap-1.5 rounded-full bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:text-sidebar-foreground"
+          className="mb-4 flex h-8 w-fit cursor-pointer items-center gap-1.5 rounded-full bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent has-[>svg]:px-3"
         >
-          <CaretLeft className="h-3.5 w-3.5" />
+          <CaretLeft className="size-3.5" />
           Back to app
-        </button>
+        </Button>
 
         <div className="relative mb-4">
           <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/55" />
@@ -1852,19 +1853,20 @@ export function SettingsWorkspace({
                   const isActive = item.id === activeItemId
                   const Icon = item.icon
                   return (
-                    <button
+                    <Button
                       key={item.id}
                       type="button"
+                      variant="ghost"
                       onClick={() => selectPane(item.id)}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-xs font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        "flex h-7 cursor-pointer items-center justify-start gap-2 rounded-md px-2.5 text-left text-xs font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-sidebar-accent has-[>svg]:px-2.5",
                         isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
                       )}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="truncate">{item.label}</span>
-                    </button>
+                    </Button>
                   )
                 })}
               </div>

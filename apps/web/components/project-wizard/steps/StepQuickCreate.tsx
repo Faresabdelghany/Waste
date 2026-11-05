@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input"
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -248,13 +249,13 @@ export function StepQuickCreate({
         {/* Title Input */}
         <div className="flex flex-col gap-2 w-full shrink-0 mt-2">
           <div className="flex gap-1 h-10 items-center w-full">
-            <input
+            <Input
               id="quick-create-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Route title"
-              className="w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
+              className="h-auto min-w-auto rounded-none shadow-none focus-visible:ring-0 dark:bg-transparent md:text-xl w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
               autoComplete="off"
             />
           </div>
@@ -289,7 +290,7 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors hover:bg-muted dark:hover:bg-muted")}>
                 <div className="relative rounded-full size-4 overflow-hidden">
                   {assignee.avatar ? (
                     <img
@@ -306,7 +307,7 @@ export function StepQuickCreate({
                 <span className="font-medium text-foreground text-sm leading-5">
                   {assignee.name}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -315,14 +316,14 @@ export function StepQuickCreate({
             date={startDate}
             onSelect={setStartDate}
             trigger={
-              <button className="bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors hover:bg-muted dark:hover:bg-muted")}>
                 <CalendarBlank className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {startDate
                     ? `Start: ${format(startDate, "dd/MM/yyyy")}`
                     : "Start Date"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -342,19 +343,20 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button
-                className={cn(
+              <Button
+                variant="ghost"
+                className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                   "flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border transition-colors",
                   client
-                    ? "bg-muted"
-                    : "bg-background hover:bg-accent",
+                    ? "bg-muted hover:bg-muted dark:hover:bg-muted"
+                    : "bg-background hover:bg-accent dark:hover:bg-accent",
                 )}
               >
                 <UserCircle className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {client ? client.name : "Customer"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -372,10 +374,11 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button
-                className={cn(
+              <Button
+                variant="ghost"
+                className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                   "flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border transition-colors",
-                  "bg-background hover:bg-accent",
+                  "bg-background hover:bg-accent dark:hover:bg-accent",
                 )}
               >
                 <Wrapper>
@@ -401,7 +404,7 @@ export function StepQuickCreate({
                 <span className="font-medium text-foreground text-sm leading-5">
                   {status.label}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -418,14 +421,14 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
                 <List className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {sprintType
                     ? sprintType.label
                     : "Route Type"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -434,14 +437,14 @@ export function StepQuickCreate({
             date={targetDate}
             onSelect={setTargetDate}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
                 <CalendarBlank className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {targetDate
                     ? format(targetDate, "dd/MM/yyyy")
                     : "Target"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -458,14 +461,14 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
                 <Rows className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {workstream
                     ? workstream.label
                     : "Waste Fraction"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -482,12 +485,12 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
                 <ChartBar className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {priority ? priority.label : "Priority"}
                 </span>
-              </button>
+              </Button>
             }
           />
 
@@ -508,7 +511,7 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+              <Button variant="ghost" className={cn("justify-start whitespace-normal text-[length:inherit] font-normal cursor-default shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors dark:hover:bg-accent")}>
                 <Wrapper>
                   <g
                     clipPath="url(#clip0_13_2458)"
@@ -529,7 +532,7 @@ export function StepQuickCreate({
                 <span className="font-medium text-foreground text-sm leading-5">
                   {selectedTag ? selectedTag.label : "Tag"}
                 </span>
-              </button>
+              </Button>
             }
           />
         </div>
@@ -537,22 +540,23 @@ export function StepQuickCreate({
         {/* Footer */}
         <div className="flex items-center justify-between mt-auto w-full pt-4 shrink-0">
           <div className="flex items-center">
-            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer">
+            <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer dark:hover:bg-accent")}>
               <Paperclip className="size-4 text-muted-foreground" />
-            </button>
-            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer">
+            </Button>
+            <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer dark:hover:bg-accent")}>
               <Microphone className="size-4 text-muted-foreground" />
-            </button>
+            </Button>
           </div>
 
-          <button
+          <Button
+            variant="ghost"
             onClick={onCreate}
-            className="bg-primary hover:bg-primary/90 flex gap-3 h-10 items-center justify-center px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            className={cn("whitespace-normal text-[length:inherit] font-normal shrink has-[>svg]:px-4 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "bg-primary hover:bg-primary/90 flex gap-3 h-10 items-center justify-center px-4 py-2 rounded-lg transition-colors cursor-pointer dark:hover:bg-primary/90")}
           >
             <span className="font-medium text-primary-foreground text-sm leading-5">
               Create Route
             </span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

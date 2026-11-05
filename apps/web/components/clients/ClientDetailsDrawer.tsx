@@ -203,9 +203,10 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
               <p className="text-xs text-muted-foreground">No projects linked to this client yet.</p>
             ) : (
               <div className="relative flex-1">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
-                  className="absolute left-0 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer"
+                  className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "absolute left-0 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer dark:hover:bg-accent")}
                   disabled={!canPrev}
                   onClick={() => {
                     if (!projectsRowRef.current || !canPrev) return
@@ -215,8 +216,8 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                     setProjectOffset((prev) => Math.max(0, prev - 1))
                   }}
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
+                  <ChevronLeft className="size-4" />
+                </Button>
                 <div
                   ref={projectsRowRef}
                   className="flex gap-3 overflow-x-auto scroll-smooth pb-1 no-scrollbar"
@@ -239,9 +240,10 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                     </Link>
                   ))}
                 </div>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
-                  className="absolute right-0 top-1/2 flex h-8 w-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer"
+                  className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "absolute right-0 top-1/2 flex h-8 w-8 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow disabled:opacity-40 disabled:pointer-events-none disabled:bg-background cursor-pointer dark:hover:bg-accent")}
                   disabled={!canNext}
                   onClick={() => {
                     if (!projectsRowRef.current || !canNext) return
@@ -251,36 +253,38 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                     setProjectOffset((prev) => (prev < totalPages - 1 ? prev + 1 : prev))
                   }}
                 >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+                  <ChevronRight className="size-4" />
+                </Button>
               </div>
             )}
 
-            <button
+            <Button
+              variant="ghost"
               type="button"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted cursor-pointer"
+              className={cn("whitespace-normal font-normal transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted cursor-pointer dark:hover:bg-muted hover:text-muted-foreground")}
               onClick={() => setIsProjectWizardOpen(true)}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               <span>Add Project</span>
-            </button>
+            </Button>
           </div>
 
           {client.notes && (
             <div className="space-y-2 pt-1">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="flex w-full items-center justify-between cursor-pointer hover:text-foreground"
+                className={cn("gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex w-full items-center justify-between cursor-pointer hover:text-foreground")}
                 onClick={() => setNotesOpen((open) => !open)}
               >
                 <p className="text-sm font-medium text-foreground">Notes</p>
                 <ChevronDown
                   className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                    "size-3.5 text-muted-foreground transition-transform",
                     notesOpen && "rotate-180",
                   )}
                 />
-              </button>
+              </Button>
               {notesOpen && (
                 <p className="text-sm text-foreground whitespace-pre-line">
                   {client.notes}
@@ -292,19 +296,20 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
           <div className="h-px w-full bg-border/80" />
 
           <div className="space-y-3 pt-1">
-            <button
+            <Button
+              variant="ghost"
               type="button"
-              className="flex w-full items-center justify-between cursor-pointer hover:text-foreground"
+              className={cn("gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex w-full items-center justify-between cursor-pointer hover:text-foreground")}
               onClick={() => setSharedOpen((open) => !open)}
             >
               <p className="text-sm font-medium text-foreground">Shared file</p>
               <ChevronDown
                 className={cn(
-                  "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                  "size-3.5 text-muted-foreground transition-transform",
                   sharedOpen && "rotate-180",
                 )}
               />
-            </button>
+            </Button>
             {sharedOpen && (
               <div className="grid gap-3 sm:grid-cols-2">
                 {sharedFiles.map((file) => (

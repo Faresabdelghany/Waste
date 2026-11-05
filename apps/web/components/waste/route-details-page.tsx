@@ -1031,9 +1031,10 @@ function OverviewTab({
                 rightPanel !== "map" && "bg-muted/20",
               )}
             >
-              <button
+              <Button
                 type="button"
-                className="flex items-center gap-2 text-left"
+                variant="ghost"
+                className="flex h-auto items-center justify-start gap-2 rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-0"
                 onClick={() => setRightPanel("map")}
                 aria-expanded={rightPanel === "map"}
               >
@@ -1044,7 +1045,7 @@ function OverviewTab({
                 )}
                 <MapTrifold className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold">Map</h2>
-              </button>
+              </Button>
               {rightPanel === "map" && (
                 <div className="flex items-center gap-1.5">
                   <Button
@@ -1073,10 +1074,11 @@ function OverviewTab({
               </div>
             )}
 
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={cn(
-                "flex min-h-14 w-full items-center gap-2 border-b border-border px-4 py-3 text-left",
+                "flex h-auto min-h-14 w-full items-center justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-4",
                 rightPanel !== "information" && "border-t",
               )}
               onClick={() => setRightPanel("information")}
@@ -1088,7 +1090,7 @@ function OverviewTab({
                 <CaretRight className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="text-sm font-semibold">Route information</span>
-            </button>
+            </Button>
 
             {rightPanel === "information" && (
               <RouteInformation

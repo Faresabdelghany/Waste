@@ -140,13 +140,14 @@ function MetricCard({ title, value, description, icon, tooltip, tone = "neutral"
           <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground")}
                 aria-label={`Info about ${title}`}
               >
-                <Info className="h-3.5 w-3.5" />
-              </button>
+                <Info className="size-3.5" />
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[220px] text-xs">
               {tooltip}
@@ -238,28 +239,30 @@ function PerformanceFilterPopover({
         <div className="grid grid-cols-[220px_minmax(0,1fr)]">
           <div className="border-r border-border/40 p-3">
             <div className="space-y-1">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setActive("project")}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
                   active === "project" && "bg-accent",
                 )}
               >
                 <span>Route</span>
                 <span className="text-xs text-muted-foreground">{projects.length}</span>
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setActive("member")}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent dark:hover:bg-accent",
                   active === "member" && "bg-accent",
                 )}
               >
                 <span>Members</span>
                 <span className="text-xs text-muted-foreground">{availableMembers.length}</span>
-              </button>
+              </Button>
             </div>
           </div>
           <div className="p-3">
@@ -267,32 +270,34 @@ function PerformanceFilterPopover({
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route</p>
                 <div className="mt-2 space-y-1">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setTempProjectId("all")}
-                    className={cn(
+                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempProjectId === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                      tempProjectId === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                     )}
                   >
                     <span>All routes</span>
-                    {tempProjectId === "all" && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                  </button>
+                    {tempProjectId === "all" && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                  </Button>
                   {projects.map((project) => (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={project.id}
                       type="button"
                       onClick={() => setTempProjectId(project.id)}
-                      className={cn(
+                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
                         tempProjectId === project.id
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:bg-accent",
+                          ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground"
+                          : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                       )}
                     >
                       <span className="truncate">{project.name}</span>
-                      {tempProjectId === project.id && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                    </button>
+                      {tempProjectId === project.id && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                    </Button>
                   ))}
                 </div>
               </>
@@ -301,30 +306,32 @@ function PerformanceFilterPopover({
               <>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Member</p>
                 <div className="mt-2 space-y-1">
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
                     onClick={() => setTempMember("all")}
-                    className={cn(
+                    className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                      tempMember === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                      tempMember === "all" ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                     )}
                   >
                     <span>All members</span>
-                    {tempMember === "all" && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                  </button>
+                    {tempMember === "all" && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                  </Button>
                   {availableMembers.map((member) => (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={member}
                       type="button"
                       onClick={() => setTempMember(member)}
-                      className={cn(
+                      className={cn("gap-0 whitespace-normal font-normal cursor-default transition-none h-auto shrink has-[>svg]:px-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
                         "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                        tempMember === member ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
+                        tempMember === member ? "bg-accent text-foreground hover:bg-accent dark:hover:bg-accent hover:text-foreground" : "text-muted-foreground hover:bg-accent dark:hover:bg-accent hover:text-muted-foreground",
                       )}
                     >
                       <span className="truncate">{member}</span>
-                      {tempMember === member && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
-                    </button>
+                      {tempMember === member && <CheckCircle className="size-4 text-primary" weight="fill" />}
+                    </Button>
                   ))}
                 </div>
               </>

@@ -1,8 +1,10 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import type { Project } from "@/lib/data/projects"
 import { ProjectCard } from "@/components/project-card"
 import { Plus, FolderOpen } from "@phosphor-icons/react/dist/ssr"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
 type ProjectCardsViewProps = {
@@ -29,13 +31,14 @@ export function ProjectCardsView({ projects, loading = false, onCreateProject }:
           </div>
           <h3 className="mb-2 text-lg font-semibold text-foreground">No routes yet</h3>
           <p className="mb-6 text-sm text-muted-foreground">Create your first route to get started</p>
-          <button
-            className="rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
+          <Button
+            variant="ghost"
+            className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal font-normal h-auto shrink has-[>svg]:px-4 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-accent transition-colors cursor-pointer dark:hover:bg-accent")}
             onClick={onCreateProject}
           >
-            <Plus className="mr-2 inline h-4 w-4" />
+            <Plus className="mr-2 inline size-4" />
             Create new route
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

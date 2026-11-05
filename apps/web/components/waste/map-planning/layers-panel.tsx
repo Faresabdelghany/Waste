@@ -303,23 +303,25 @@ export function LayersPanel({
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-medium text-muted-foreground">Planning areas</p>
             <div className="flex items-center gap-1 text-xs">
-              <button
+              <Button
+                variant="link"
                 type="button"
-                className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
                 onClick={onShowAllAreas}
                 disabled={drawable.length === 0 || enabled === drawable.length}
               >
                 Show all
-              </button>
+              </Button>
               <span className="text-muted-foreground">·</span>
-              <button
+              <Button
+                variant="link"
                 type="button"
-                className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 transition-none cursor-default underline-offset-auto text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
                 onClick={onHideAllAreas}
                 disabled={enabled === 0}
               >
                 Hide all
-              </button>
+              </Button>
             </div>
           </div>
           {areas.length === 0 ? (

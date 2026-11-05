@@ -1,5 +1,6 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
@@ -297,43 +298,45 @@ export function ClientsContent() {
                       />
                     </TableHead>
                     <TableHead className="w-[26%] text-xs font-medium text-muted-foreground">
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
-                        className="flex items-center gap-1 hover:text-foreground"
+                        className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center gap-1 hover:text-foreground")}
                         onClick={() => toggleSort("name")}
                       >
                         <span>Customer</span>
                         {sortKey === "name" ? (
                           sortDirection === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
+                            <ArrowUp className="size-3" />
                           ) : (
-                            <ArrowDown className="h-3 w-3" />
+                            <ArrowDown className="size-3" />
                           )
                         ) : (
-                          <CaretUpDown className="h-3 w-3" />
+                          <CaretUpDown className="size-3" />
                         )}
-                      </button>
+                      </Button>
                     </TableHead>
                     <TableHead className="w-[24%] text-xs font-medium text-muted-foreground">Company</TableHead>
                     <TableHead className="w-[16%] text-xs font-medium text-muted-foreground">Industry</TableHead>
                     <TableHead className="w-[12%] text-xs font-medium text-muted-foreground">Status</TableHead>
                     <TableHead className="w-[14%] text-xs font-medium text-muted-foreground text-right">
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex items-center gap-1 hover:text-foreground")}
                         onClick={() => toggleSort("projects")}
                       >
                         <span>Routes</span>
                         {sortKey === "projects" ? (
                           sortDirection === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
+                            <ArrowUp className="size-3" />
                           ) : (
-                            <ArrowDown className="h-3 w-3" />
+                            <ArrowDown className="size-3" />
                           )
                         ) : (
-                          <CaretUpDown className="h-3 w-3" />
+                          <CaretUpDown className="size-3" />
                         )}
-                      </button>
+                      </Button>
                     </TableHead>
                     <TableHead className="w-[40px]" />
                   </TableRow>

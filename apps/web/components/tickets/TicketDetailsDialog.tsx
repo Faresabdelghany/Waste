@@ -733,14 +733,15 @@ function FixtureTicketDetailsDialog({
                         <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className="max-w-44 truncate">{attachment.name}</span>
                         <span className="text-muted-foreground">{formatFileSize(attachment.size)}</span>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
                           aria-label={`Remove ${attachment.name}`}
-                          className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          className="h-auto gap-0 rounded-sm p-0.5 font-normal text-muted-foreground hover:bg-accent hover:text-foreground has-[>svg]:px-0.5"
                           onClick={() => removeAttachment(attachment)}
                         >
-                          <X className="h-3 w-3" />
-                        </button>
+                          <X className="size-3" />
+                        </Button>
                       </span>
                     ))}
                   </div>
@@ -838,18 +839,19 @@ function FixtureTicketDetailsDialog({
                       >
                         <div className="grid grid-cols-6 gap-1">
                           {quickEmojis.map((emoji) => (
-                            <button
+                            <Button
                               key={emoji}
                               type="button"
+                              variant="ghost"
                               aria-label={`Insert ${emoji}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-base hover:bg-accent"
+                              className="flex h-8 w-8 items-center justify-center gap-0 rounded-md p-0 text-base font-normal hover:bg-accent"
                               onClick={() => {
                                 insertAtSelection(`${emoji} `)
                                 setEmojiMenuOpen(false)
                               }}
                             >
                               {emoji}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </PopoverContent>
@@ -1207,13 +1209,14 @@ function EditableInformationRow({
       <span className="pl-0.5 text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             aria-label={`Change ${label}`}
-            className="flex min-h-8 min-w-0 items-center justify-end gap-1.5 rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
+            className="flex h-auto min-h-8 min-w-0 items-center justify-end gap-1.5 whitespace-normal rounded-md px-2 py-1.5 text-right font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-[state=open]:bg-accent"
           >
             <span className="min-w-0 flex-1 truncate">{renderValue?.() ?? value}</span>
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="end"

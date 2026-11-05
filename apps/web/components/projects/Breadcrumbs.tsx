@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { CaretRight } from "@phosphor-icons/react/dist/ssr"
 
@@ -21,13 +23,14 @@ export function Breadcrumbs({ items }: BreadcrumbsProps) {
             {item.label}
           </Link>
         ) : item.onClick && !isLast ? (
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={item.onClick}
-            className="hover:text-foreground transition-colors"
+            className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "hover:text-foreground transition-colors")}
           >
             {item.label}
-          </button>
+          </Button>
         ) : (
           <span className={isLast ? "text-foreground" : ""}>{item.label}</span>
         )

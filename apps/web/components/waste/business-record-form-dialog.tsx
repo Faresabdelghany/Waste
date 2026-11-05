@@ -326,7 +326,8 @@ function FileUploadField({
             >
               <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="flex-1 truncate">{name}</span>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
                 aria-label={`Remove ${name}`}
                 onClick={() =>
@@ -336,10 +337,10 @@ function FileUploadField({
                       .join(", "),
                   )
                 }
-                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-block whitespace-normal text-[length:inherit] font-normal shrink h-auto has-[>svg]:px-0.5 cursor-default hover:bg-transparent dark:hover:bg-transparent rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
               >
-                <X className="h-3.5 w-3.5" />
-              </button>
+                <X className="size-3.5" />
+              </Button>
             </li>
           ))}
         </ul>

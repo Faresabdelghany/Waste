@@ -80,18 +80,19 @@ export function PlaybackBar({
         <div className="ml-auto flex items-center gap-1">
           <div role="group" aria-label="Playback speed" className="flex items-center rounded-md border border-border p-0.5">
             {PLAYBACK_SPEEDS.map((option) => (
-              <button
+              <Button
+                variant="ghost"
                 key={option}
                 type="button"
                 aria-pressed={option === speed}
                 onClick={() => onSpeedChange(option)}
-                className={cn(
+                className={cn("inline-block whitespace-normal shrink h-auto transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent",
                   "rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground hover:text-foreground",
-                  option === speed && "bg-primary text-primary-foreground hover:text-primary-foreground",
+                  option === speed && "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary",
                 )}
               >
                 {option}×
-              </button>
+              </Button>
             ))}
           </div>
           <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close playback" onClick={onClose}>

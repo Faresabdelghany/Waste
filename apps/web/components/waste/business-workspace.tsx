@@ -5284,13 +5284,14 @@ export function BusinessWorkspace({
               <h1 className="text-lg font-semibold tracking-tight">{activeModule.title}</h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <Button
+                    variant="ghost"
                     type="button"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-block whitespace-normal rounded-none text-[length:inherit] font-normal shrink h-auto p-0 has-[>svg]:px-0 transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent text-muted-foreground hover:text-foreground"
                     aria-label={`About ${activeModule.title}`}
                   >
-                    <Info className="h-4 w-4" />
-                  </button>
+                    <Info className="size-4" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm text-xs">
                   <p>{activeModule.description}</p>
@@ -5649,7 +5650,8 @@ export function BusinessWorkspace({
                                     onClick={(event) => event.stopPropagation()}
                                     onKeyDown={(event) => event.stopPropagation()}
                                   >
-                                    <button
+                                    <Button
+                                      variant="ghost"
                                       type="button"
                                       aria-pressed={isRouteStarred(record.id)}
                                       aria-label={
@@ -5657,7 +5659,7 @@ export function BusinessWorkspace({
                                           ? `Remove ${record.name} from Active Routes`
                                           : `Add ${record.name} to Active Routes`
                                       }
-                                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
+                                      className="gap-0 whitespace-normal text-[length:inherit] font-normal shrink p-0 has-[>svg]:px-0 transition-none hover:text-inherit flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted dark:hover:bg-muted"
                                       onClick={() => toggleRouteStarred(record.id)}
                                     >
                                       <Star
@@ -5665,13 +5667,13 @@ export function BusinessWorkspace({
                                           isRouteStarred(record.id) ? "fill" : "regular"
                                         }
                                         className={cn(
-                                          "h-4 w-4",
+                                          "size-4",
                                           isRouteStarred(record.id)
                                             ? "text-warning"
                                             : "text-muted-foreground/60 hover:text-foreground",
                                         )}
                                       />
-                                    </button>
+                                    </Button>
                                   </TableCell>
                                 )}
                                 <TableCell

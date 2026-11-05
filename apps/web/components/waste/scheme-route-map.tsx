@@ -8,6 +8,7 @@
 // routes renders one neutral pin. All days / per-day filter on top. Rendered
 // by the Guided Setup wizard's Route map step.
 
+import { Button } from "@/components/ui/button"
 import { useState } from "react"
 
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
@@ -84,28 +85,30 @@ export function SchemeRouteMap({
     <div className="space-y-3">
       {days.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setFocusDay("all")}
-            className={cn(
+            className={cn("inline-block whitespace-normal shrink h-auto cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               focusDay === "all"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted",
+                ? "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted",
             )}
           >
             All days
-          </button>
+          </Button>
           {days.map((day) => (
-            <button
+            <Button
+              variant="ghost"
               key={day}
               type="button"
               onClick={() => setFocusDay(day)}
-              className={cn(
+              className={cn("justify-start whitespace-normal shrink h-auto cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent",
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 focusDay === day
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted",
+                  ? "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted",
               )}
             >
               <span
@@ -113,7 +116,7 @@ export function SchemeRouteMap({
                 style={{ backgroundColor: SCHEME_DAY_COLORS[day] }}
               />
               {SERVICE_DAY_SHORT_LABELS[day]}
-            </button>
+            </Button>
           ))}
         </div>
       )}

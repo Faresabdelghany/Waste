@@ -841,10 +841,11 @@ export function MapPlanningView({
               <ul className="max-h-64 space-y-0.5 overflow-y-auto">
                 {clusterList.cluster.points.map((point) => (
                   <li key={point.id}>
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent",
+                      className={cn("justify-start whitespace-normal font-normal shrink h-auto transition-none cursor-default hover:text-inherit",
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent dark:hover:bg-accent",
                         point.containerIds.some((id) => highlightedIds.has(id)) && "bg-accent",
                       )}
                       onMouseEnter={() => hoverContainers(point.containerIds)}
@@ -864,7 +865,7 @@ export function MapPlanningView({
                       <span className="truncate text-muted-foreground">
                         {point.fractions.join(" · ")}
                       </span>
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

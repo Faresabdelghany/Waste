@@ -154,13 +154,14 @@ function KpiItem({
           <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground")}
                 aria-label={`About ${label}`}
               >
-                <Info className="h-3.5 w-3.5" />
-              </button>
+                <Info className="size-3.5" />
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-60 text-xs">
               {helper}
@@ -213,17 +214,18 @@ function SortButton({
   onSort: (key: SortKey) => void
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       onClick={() => onSort(sortKey)}
-      className={cn(
+      className={cn("justify-start rounded-none text-[length:inherit] cursor-default h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
         "inline-flex items-center gap-1 whitespace-nowrap font-medium transition-colors hover:text-foreground",
         activeKey === sortKey ? "text-foreground" : "text-muted-foreground",
       )}
     >
       {label}
-      <CaretUpDown className="h-3 w-3" />
-    </button>
+      <CaretUpDown className="size-3" />
+    </Button>
   )
 }
 
@@ -719,13 +721,14 @@ export function PerformanceControlRoom({
                 <h2 className="text-sm font-semibold text-foreground">Tickets needing attention</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Highest operational impact</p>
               </div>
-              <button
+              <Button
+                variant="link"
                 type="button"
                 onClick={() => router.push(ticketsBasePath)}
-                className="text-[11px] font-medium text-primary hover:underline"
+                className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal rounded-none cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 underline-offset-auto", "text-[11px] font-medium text-primary hover:underline")}
               >
                 View all
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] gap-2 border-b border-border/70 px-4 py-2 text-[10px] font-medium text-muted-foreground">
               <span>Ticket</span>
@@ -831,24 +834,25 @@ export function PerformanceControlRoom({
                           )}
                         >
                           <td className="px-4 py-2">
-                            <button
+                            <Button
+                              variant="ghost"
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 // eslint-disable-next-line react-hooks/refs -- runs on click; focusRoute reads the ref inside requestAnimationFrame, never during render
                                 openRoute(row.id)
                               }}
-                              className="flex min-w-0 items-center gap-2 text-left"
+                              className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex min-w-0 items-center gap-2 text-left")}
                             >
                               <span
-                                className="h-2 w-2 shrink-0 rounded-full border-2 border-current bg-transparent"
+                                className="size-2 shrink-0 rounded-full border-2 border-current bg-transparent"
                                 style={{ color: getStatusColor(row.status) }}
                               />
                               <span className="min-w-0">
                                 <span className="block font-medium text-foreground">{row.id}</span>
                                 <span className="block max-w-36 truncate text-[10px] text-muted-foreground">{row.name}</span>
                               </span>
-                            </button>
+                            </Button>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.area}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.serviceType}</td>
@@ -876,17 +880,18 @@ export function PerformanceControlRoom({
                           </td>
                           {showTrend && <td className="px-3 py-2"><TrendSparkline row={row} /></td>}
                           <td className="px-2 py-2">
-                            <button
+                            <Button
+                              variant="ghost"
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 openRoute(row.id)
                               }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                              className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent")}
                               aria-label={`View ${row.id}`}
                             >
-                              <CaretRight className="h-3.5 w-3.5" />
-                            </button>
+                              <CaretRight className="size-3.5" />
+                            </Button>
                           </td>
                         </tr>
                       )

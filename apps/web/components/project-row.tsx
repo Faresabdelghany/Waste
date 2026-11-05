@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { TimelineBar } from "@/components/timeline-bar"
 import { CaretDown, CaretRight, Folder, ChartBar } from "@phosphor-icons/react/dist/ssr"
@@ -24,13 +25,13 @@ export function ProjectRow({ project, isExpanded, onToggle, dates, cellWidth }: 
       <div className="group flex cursor-pointer hover:bg-accent/30 transition-colors" onClick={onToggle}>
         {/* Project Info */}
         <div className="w-[280px] lg:w-[320px] shrink-0 flex items-center gap-2 px-4 py-3 bg-background sticky left-0 z-10 border-r border-border/40 border-l">
-          <button className="p-0.5 rounded hover:bg-accent">
+          <Button variant="ghost" className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none h-auto shrink has-[>svg]:p-0.5 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "p-0.5 rounded hover:bg-accent dark:hover:bg-accent")}>
             {isExpanded ? (
-              <CaretDown className="h-4 w-4 text-muted-foreground" />
+              <CaretDown className="size-4 text-muted-foreground" />
             ) : (
-              <CaretRight className="h-4 w-4 text-muted-foreground" />
+              <CaretRight className="size-4 text-muted-foreground" />
             )}
-          </button>
+          </Button>
           <Folder className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm truncate">{project.name}</span>
           <span className="ml-1 text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5 shrink-0">

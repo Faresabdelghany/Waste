@@ -719,26 +719,27 @@ function OptionRow({ label, value, shown, options, disabled, onPick }: { label: 
       <span className="text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label={`Change ${label}`} variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {shown}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-56 p-1">
           <div role="listbox" aria-label={label}>
             {options.map((option) => (
-              <button
+              <Button
                 key={option.value}
                 type="button"
+                variant="ghost"
                 role="option"
                 aria-selected={option.value === value}
-                className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent", option.value === value && "font-semibold")}
+                className={cn("flex h-auto w-full items-center justify-start gap-0 whitespace-normal rounded-sm px-2 py-1.5 text-left text-sm font-normal hover:bg-accent", option.value === value && "font-semibold")}
                 onClick={() => {
                   setOpen(false)
                   if (option.value !== value) onPick(option.value)
                 }}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </PopoverContent>
@@ -754,26 +755,27 @@ function PickRow({ label, value, tokens, disabled, onPick }: { label: string; va
       <span className="text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label={`Change ${label}`} variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {statusLabel(value)}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-56 p-1">
           <div role="listbox" aria-label={label}>
             {tokens.map((token) => (
-              <button
+              <Button
                 key={token}
                 type="button"
+                variant="ghost"
                 role="option"
                 aria-selected={token === value}
-                className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent", token === value && "font-semibold")}
+                className={cn("flex h-auto w-full items-center justify-start gap-0 whitespace-normal rounded-sm px-2 py-1.5 text-left text-sm font-normal hover:bg-accent", token === value && "font-semibold")}
                 onClick={() => {
                   setOpen(false)
                   if (token !== value) onPick(token)
                 }}
               >
                 {statusLabel(token)}
-              </button>
+              </Button>
             ))}
           </div>
         </PopoverContent>
@@ -797,9 +799,9 @@ function DueRow({ value, shown, disabled, onSave }: { value: string; shown: stri
         }}
       >
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label="Change Due" className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label="Change Due" variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {shown}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-72 space-y-2 p-3">
           <Input type="datetime-local" aria-label="Due" value={draft} onChange={(event) => setDraft(event.target.value)} />

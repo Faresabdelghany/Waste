@@ -542,14 +542,15 @@ export function BusinessRecordDayTimeline({
           <div className="w-44 shrink-0 border-r border-border/60 pr-2">
             <div className="h-8" />
             {scheduled.map(({ record }) => (
-              <button
+              <Button
+                variant="ghost"
                 key={record.id}
                 type="button"
-                className="flex h-10 w-full items-center rounded-md px-1 text-left hover:bg-muted/60"
+                className="justify-start gap-0 whitespace-normal text-[length:inherit] font-normal shrink py-0 transition-none cursor-default hover:text-inherit flex h-10 w-full items-center rounded-md px-1 text-left hover:bg-muted/60 dark:hover:bg-muted/60"
                 onClick={() => onOpenRecord(record)}
               >
                 <span className="truncate text-sm text-foreground">{record.name}</span>
-              </button>
+              </Button>
             ))}
           </div>
           <div className="relative flex-1 overflow-hidden">
@@ -604,10 +605,11 @@ export function BusinessRecordDayTimeline({
           <p className="text-xs font-medium text-muted-foreground">No time window</p>
           <div className="mt-2 space-y-1">
             {unscheduled.map((record) => (
-              <button
+              <Button
+                variant="ghost"
                 key={record.id}
                 type="button"
-                className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/60"
+                className="whitespace-normal text-[length:inherit] font-normal shrink h-auto has-[>svg]:px-2 transition-none cursor-default hover:text-inherit flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/60 dark:hover:bg-muted/60"
                 onClick={() => onOpenRecord(record)}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -615,7 +617,7 @@ export function BusinessRecordDayTimeline({
                   <RecordStatusBadge status={record.status} />
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">{record.value}</span>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

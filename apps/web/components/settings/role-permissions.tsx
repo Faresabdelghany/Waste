@@ -480,18 +480,19 @@ export function RolePermissionsMatrix({
               {visibleSections.map(({ section }) => {
                 const isActive = section.id === activeSectionId
                 return (
-                  <button
+                  <Button
                     key={section.id}
                     type="button"
+                    variant="ghost"
                     onClick={() => goToSection(section.id)}
                     aria-current={isActive ? "true" : undefined}
                     className={cn(
-                      "flex h-7 cursor-pointer items-center rounded-md px-2.5 text-left text-xs font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "flex h-7 cursor-pointer items-center justify-start gap-0 rounded-md px-2.5 text-left text-xs font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted",
                       isActive && "bg-muted font-medium text-foreground",
                     )}
                   >
                     <span className="truncate">{section.label}</span>
-                  </button>
+                  </Button>
                 )
               })}
               {visibleSections.length === 0 && (

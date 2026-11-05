@@ -181,9 +181,10 @@ export function SavedSelectionsMenu({ shape, filters, window, onLoad }: SavedSel
                       }}
                     />
                   ) : (
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
-                      className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="inline-block whitespace-normal text-[length:inherit] font-normal shrink h-auto transition-none cursor-default hover:bg-transparent hover:text-inherit dark:hover:bg-transparent min-w-0 flex-1 rounded-md px-1 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => load(entry)}
                     >
                       <span className="block truncate font-medium">{entry.name}</span>
@@ -191,7 +192,7 @@ export function SavedSelectionsMenu({ shape, filters, window, onLoad }: SavedSel
                         {describe(entry.shape, entry.filters, entry.window)}
                         {entry.createdAt ? ` · ${formatShortDate(entry.createdAt.slice(0, 10))}` : ""}
                       </span>
-                    </button>
+                    </Button>
                   )}
                   <Button
                     variant="ghost"

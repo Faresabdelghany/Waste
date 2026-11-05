@@ -119,13 +119,14 @@ function SectionTitle({
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
               type="button"
-              className="text-muted-foreground transition-colors hover:text-foreground"
+              variant="ghost"
+              className="h-auto gap-0 rounded-none p-0 font-normal text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground dark:hover:bg-transparent has-[>svg]:px-0"
               aria-label={`About ${title}`}
             >
               <Info className="h-4 w-4" />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent className="max-w-sm text-xs">
             {description}
