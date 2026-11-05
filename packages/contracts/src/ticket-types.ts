@@ -57,8 +57,15 @@ export type TicketFieldValue = z.infer<typeof TicketFieldValue>
 export const TicketFieldValues = z.record(TicketFieldKey, TicketFieldValue)
 export type TicketFieldValues = z.infer<typeof TicketFieldValues>
 
-/** A patch's values, merged into the stored ones: a value replaces one, null clears it, a key not named stays. */
-export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable())
+/** What a body naming more values than a type has fields is told. */
+export const AT_MOST_FIELDS = `A body names at most ${TICKET_TYPE_FIELDS_MAX} values: a type holds no more fields`
+const atMostFields = (values: object): boolean => Object.keys(values).length <= TICKET_TYPE_FIELDS_MAX
+
+/** A create's values: as many as a type has fields at most, so a body is judged in bounded time. */
+export const TicketFieldValuesBody = TicketFieldValues.refine(atMostFields, AT_MOST_FIELDS)
+
+/** A patch's values, merged into the stored ones: a value replaces one, null clears it, a key not named stays; as many as a type has fields at most, beside as many clears. */
+export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable()).refine((values) => Object.keys(values).length <= 2 * TICKET_TYPE_FIELDS_MAX, AT_MOST_FIELDS)
 export type TicketFieldValuesPatch = z.infer<typeof TicketFieldValuesPatch>
 
 /** One custom field of a type, in its place in the type's list. */

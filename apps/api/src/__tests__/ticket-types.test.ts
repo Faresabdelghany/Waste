@@ -19,7 +19,7 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { createApp } from "../app"
 import { retiredTicketType } from "../routes/statuses"
 import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
-import { NOT_A_ROLE } from "../routes/ticket-types"
+import { NOT_A_ROLE, retiredDefault } from "../routes/ticket-types"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -86,7 +86,7 @@ describe("ticket types", { skip: database.skip || owner.skip }, () => {
   })
 
   describe("the types", () => {
-    test("a company starts with a default type per kind, named after the kind, with no fields and no permissions", async () => {
+    test("lists a company's default type per kind, named after the kind, with no fields and no permissions (provisioning and the migration giving them are the database suite's)", async () => {
       const types = (await ok(await olivia("/ticket-types?limit=200"), TypePage)).items.filter((type) => type.isDefault)
       assert.deepEqual(types.map((type) => [type.kind, type.name]).sort(), TICKET_KINDS.map((kind) => [kind, DEFAULT_TICKET_TYPE_NAMES[kind]]).sort())
       assert.ok(types.every((type) => type.status === "active" && type.fields.length === 0 && type.permissions.length === 0))
@@ -115,6 +115,8 @@ describe("ticket types", { skip: database.skip || owner.skip }, () => {
       assert.equal((await ok(await olivia(`/ticket-types/${before.id}`), TicketType)).isDefault, false, "the default that was")
       assert.equal((await refused(await olivia(`/ticket-types/${made.id}`, { method: "PATCH", body: { status: "inactive" } }), 409)).detail, DEFAULT_TYPE_OFFERED)
       await refused(await olivia(`/ticket-types/${made.id}`, { method: "PATCH", body: { isDefault: false } }), 400)
+      const retired = await newType("Retired overflow", "overflow", { status: "inactive" })
+      assert.equal((await refused(await olivia(`/ticket-types/${retired.id}`, { method: "PATCH", body: { isDefault: true } }), 409)).detail, retiredDefault("Retired overflow"))
       const back = await ok(await olivia(`/ticket-types/${before.id}`, { method: "PATCH", body: { isDefault: true } }), TicketType)
       assert.equal(back.isDefault, true)
       assert.equal((await ok(await olivia(`/ticket-types/${made.id}`), TicketType)).isDefault, false)
@@ -152,8 +154,10 @@ describe("ticket types", { skip: database.skip || owner.skip }, () => {
     test("the history of a type, its fields and its permissions is read under the templates' grant", async () => {
       const type = await newType("Audited type")
       await putFields(olivia, type.id, [{ key: "note", label: "Note", input: "text" }])
+      await putPermissions(olivia, type.id, [{ command: "reject", roleIds: [a.roles.administrator.id] }])
       const history = AuditPage.parse(await (await olivia(`/audit-events?table=ticket_type&rowId=${type.id}`)).json()).items
       assert.ok(history.some((event) => event.table === "ticket_type_field" && event.action === "insert"), "a field's row is a set of its type")
+      assert.ok(history.some((event) => event.table === "ticket_type_permission" && event.action === "insert"), "a permission's row is a set of its type")
     })
 
     test("another company's type is no type here; the people working tickets read the types and keep none", async () => {
@@ -237,6 +241,17 @@ describe("ticket types", { skip: database.skip || owner.skip }, () => {
       await ok(await agent(`/tickets/${ticket.id}`, { method: "PATCH", body: { fieldValues: { decision: "Granted" } } }), Ticket)
       const completed = await ok(await olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "answered", note: "Decided" } }), Ticket)
       assert.equal(completed.status, "completed")
+    })
+
+    test("a value its field no longer takes is no value: a ticket moved to a type where the key means another thing is short of it at its completion", async () => {
+      const typed = await newType("Sack order", "other")
+      await ok(await putFields(olivia, typed.id, [{ key: "sacks", label: "Sacks", input: "text" }]), TicketType)
+      const counted = await newType("Sack count", "other")
+      await ok(await putFields(olivia, counted.id, [{ key: "sacks", label: "Sacks", input: "number", requirement: "to-complete" }]), TicketType)
+      const ticket = await opened({ ticketTypeId: typed.id, fieldValues: { sacks: "two" } })
+      await ok(await olivia(`/tickets/${ticket.id}`, { method: "PATCH", body: { ticketTypeId: counted.id } }), Ticket)
+      const short = await refused(await olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "serviced", note: "Delivered" } }), 409)
+      assert.equal(short.detail, `Ticket ${ticket.label} needs Sacks before it is completed`)
     })
   })
 })
