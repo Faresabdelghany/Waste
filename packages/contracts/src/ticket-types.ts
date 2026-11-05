@@ -29,7 +29,7 @@ import * as z from "zod"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { TicketKind, TicketPriority, TicketResolution } from "./resolution"
-import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 /** The most roles a command's permission names: a form's list, not an import. */
@@ -118,6 +118,10 @@ export const TicketTypeAction = z.object({
   messageTemplateName: Label.nullable(),
   recipient: TicketMessageRecipient.nullable(),
   followUpTypeId: Id.nullable(),
+  /** The vehicle whose next route a plan in a route books the ticket's stop on. */
+  vehicleId: Id.nullable(),
+  /** How many days after the project's today, as the action runs, that route runs at the earliest. */
+  daysAhead: NonNegativeInt.nullable(),
 })
 export type TicketTypeAction = z.infer<typeof TicketTypeAction>
 
@@ -223,6 +227,8 @@ export const TicketTypeActionBody = z.strictObject({
   messageTemplateName: Label.nullable().default(null),
   recipient: TicketMessageRecipient.nullable().default(null),
   followUpTypeId: Id.nullable().default(null),
+  vehicleId: Id.nullable().default(null),
+  daysAhead: NonNegativeInt.nullable().default(null),
 })
 export type TicketTypeActionBody = z.infer<typeof TicketTypeActionBody>
 

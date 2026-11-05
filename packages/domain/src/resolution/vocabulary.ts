@@ -103,7 +103,7 @@ export const TICKET_FIELD_REQUIREMENTS = ["optional", "to-open", "to-complete"] 
 /** When a Ticket Type's actions run (#546 of #544): a ticket of it opened, or reaching one of the statuses a command leads to. */
 export const TICKET_ACTION_TRIGGERS = ["opened", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
 /** What one of a type's actions does: hands the ticket to a team or a person, sets its priority, moves its status, sends a message from a template, or opens a follow-up ticket. */
-export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up"] as const
+export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up", "plan-in-route"] as const
 /** The status commands an action may give: every one but reopening, which undoes a close an automation should not second-guess. */
 export const TICKET_ACTION_COMMANDS = ["start", "wait", "hold", "complete", "reject"] as const
 /** Who a message an action sends goes to: the customer the ticket names, or the customer in a role at its property. */

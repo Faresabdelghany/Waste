@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
+import { PLAN_DAYS_AHEAD_MAX, TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
 
 import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
 import { Ticket, TicketCreate, TicketListQuery, TicketPatch, TYPE_OR_KIND } from "../tickets"
@@ -22,7 +22,7 @@ describe("TicketType", () => {
       isDefault: false,
       fields: [{ key: "requested-date", label: "Requested date", helpText: null, input: "date", choices: [], requirement: "to-open" }],
       permissions: [{ command: "complete", roleIds: [OTHER] }],
-      actions: [{ trigger: "opened", kind: "assign-team", teamId: OTHER, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null }],
+      actions: [{ trigger: "opened", kind: "assign-team", teamId: OTHER, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null }],
       createdAt: STAMP,
       updatedAt: STAMP,
     }
@@ -70,7 +70,7 @@ describe("TicketTypePermissionsSet", () => {
 describe("TicketTypeActionsSet (#546 of #544)", () => {
   test("an action leaves out what its kind does not take", () => {
     assert.deepEqual(TicketTypeActionsSet.parse({ actions: [{ trigger: "completed", kind: "send-message", messageTemplateName: "Container delivered", recipient: "owner" }] }), {
-      actions: [{ trigger: "completed", kind: "send-message", teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: "Container delivered", recipient: "owner", followUpTypeId: null }],
+      actions: [{ trigger: "completed", kind: "send-message", teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: "Container delivered", recipient: "owner", followUpTypeId: null, vehicleId: null, daysAhead: null }],
     })
     assert.equal(TicketTypeActionsSet.safeParse({ actions: [] }).success, true, "a type with no automation")
   })
@@ -83,6 +83,13 @@ describe("TicketTypeActionsSet (#546 of #544)", () => {
     assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "set-status", command: "reopen" }] }).success, false, "reopen is no action's: open is no trigger")
     assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "open", kind: "set-priority", priority: "high" }] }).success, false)
     assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "send-message", messageTemplateName: "Hello", recipient: "neighbour" }] }).success, false)
+  })
+
+  test("a plan in a route names a vehicle and how many days ahead, within the domain's days (#546, part 2)", () => {
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: ID, daysAhead: 1 }] }).success, true)
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: ID }] })), [{ path: "actions.0.daysAhead", message: "An action to plan it in a route names how many days ahead" }])
+    assert.deepEqual(refusal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: ID, daysAhead: PLAN_DAYS_AHEAD_MAX + 1 }] })), [{ path: "actions.0.daysAhead", message: `Plan from 0 to ${PLAN_DAYS_AHEAD_MAX} days ahead` }])
+    assert.equal(TicketTypeActionsSet.safeParse({ actions: [{ trigger: "opened", kind: "plan-in-route", vehicleId: ID, daysAhead: 1.5 }] }).success, false)
   })
 
   test("holds a type's actions to the domain's cap", () => {

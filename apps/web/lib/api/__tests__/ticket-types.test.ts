@@ -2,23 +2,30 @@
 // types and the tickets' Type picker read it, its create, its edit — its own
 // fields patched, its fields and its permissions each replaced through their
 // own route — and a ticket's type and values on the record, in the create and
-// in the patch. Every body is held against the contracts' own zod schemas.
+// in the patch; and a type's automation (#546 of #544), carried by web id
+// and replaced through its own route where it changed, and what the
+// Automation tab offers each trigger. Every body is held against the
+// contracts' own zod schemas.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Project } from "@waste/contracts/organisation"
-import { TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "@waste/contracts/ticket-types"
+import { TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction } from "@waste/contracts/ticket-types"
 import { TicketCreate, TicketPatch, type Ticket } from "@waste/contracts/tickets"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { createTicketRecord, ticketFormFor, updateTicketRecord } from "../../data/tickets"
 import {
+  actionKindsFor,
+  actionsIssue,
   createTicketTypeRecord,
   editFieldsForm,
+  newAction,
   fieldValuesAfterEdit,
   fieldValuesFromForm,
   formValuesOfFields,
   ticketTypeFormFields,
+  typeActionsOf,
   typeFieldFormId,
   typeFieldsOf,
   typePermissionsOf,
@@ -110,6 +117,60 @@ describe("a ticket type", () => {
     )
     assert.deepEqual(bodyOf(calls[2]), { permissions: [{ command: "reject", roleIds: [handlerId] }] })
     assert.equal(outcome.kind, "updated")
+  })
+})
+
+describe("a ticket type's automation (#546 of #544)", () => {
+  const teamId = "01a0d2a4-a280-7050-8000-000000000001"
+  const vehicleId = "01a0d2a4-a280-7051-8000-000000000001"
+  const NONE = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null }
+  const wire: TicketTypeAction[] = [
+    { ...NONE, trigger: "opened", kind: "assign-team", teamId },
+    { ...NONE, trigger: "opened", kind: "plan-in-route", vehicleId, daysAhead: 2 },
+    { ...NONE, trigger: "completed", kind: "open-follow-up", followUpTypeId: bulkyId },
+  ]
+  const automated = ticketTypeAdapter.toRecord({ ...bulky, actions: wire }, context)
+
+  test("a type carries its actions with every team, follow-up type and vehicle by its web id, and counts them", () => {
+    assert.deepEqual(
+      typeActionsOf(automated).map((action) => [action.kind, action.teamId, action.vehicleId, action.followUpTypeId]),
+      [
+        ["assign-team", `team-${teamId}`, null, null],
+        ["plan-in-route", null, `vehicle-${vehicleId}`, null],
+        ["open-follow-up", null, null, `ticket-type-${bulkyId}`],
+      ],
+    )
+    assert.equal(automated.facts.Automation, "3 actions")
+    assert.equal(bulkyRecord.facts.Automation, "None")
+  })
+
+  test("an edit of the actions alone replaces them through their own route, every reference by its server id", async () => {
+    const edited = updatedTicketTypeRecord(automated, { name: bulky.name, description: "", status: "Active", isDefault: false, fields: bulky.fields, permissions: typePermissionsOf(automated), actions: typeActionsOf(automated).slice(1) })
+    const body = ticketTypeAdapter.toPatchBody?.(automated, edited, context) as { actions: unknown }
+    assert.deepEqual(body, { actions: wire.slice(1) })
+    assert.ok(TicketTypeActionsSet.safeParse({ actions: body.actions }).success)
+
+    const { fetch, calls } = scripted([() => json({ ...bulky, actions: wire.slice(1) })])
+    const automatedState = loaded({ records: [automated], serverIds: new Map([[automated.id, bulkyId]]) }, 1)
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, automatedState, edited, { fixtures: [], state: new Map([...baseState, ["configure.templates", automatedState]]), now: NOW })
+    assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PUT", `http://api.test/ticket-types/${bulkyId}/actions`]])
+    assert.equal(outcome.kind, "updated")
+  })
+
+  test("a trigger that closes the ticket offers a message or a follow-up alone; a plan in a route is offered where a stop naming the ticket's container answers the kind", () => {
+    assert.deepEqual(actionKindsFor("completed", "overflow"), ["send-message", "open-follow-up"])
+    assert.deepEqual(actionKindsFor("rejected", "overflow"), ["send-message", "open-follow-up"])
+    assert.ok(actionKindsFor("opened", "overflow").includes("plan-in-route"))
+    assert.ok(!actionKindsFor("opened", "container-request").includes("plan-in-route"), "a delivery names more than the container")
+    assert.ok(!actionKindsFor("opened", "complaint").includes("plan-in-route"))
+    for (const kind of actionKindsFor("opened", "overflow")) assert.equal(newAction("opened", kind).kind, kind)
+  })
+
+  test("the tab's actions are held to the domain's rules before the request, each told by its trigger and its place", () => {
+    assert.equal(actionsIssue([newAction("opened", "set-priority"), newAction("opened", "assign-team")]), "On opening, action 2: An action to assign to a team names a team.")
+    assert.equal(actionsIssue([newAction("in-progress", "set-status")]), undefined, "a start's sensible default: complete it, serviced")
+    assert.equal(actionsIssue([{ ...newAction("on-hold", "set-status"), command: "hold", resolution: null }]), "On reaching on hold, action 1: A ticket reaching on hold is on hold already; move it to another status.")
+    assert.equal(actionsIssue(wire), undefined)
   })
 })
 
