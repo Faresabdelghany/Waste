@@ -34,14 +34,14 @@ export function ProjectHeader({ project, onEditProject, actions }: ProjectHeader
           <div className="flex items-center gap-2">
             <Badge
               variant="secondary"
-              className="bg-blue-100 text-blue-700 border-none flex items-center gap-1 dark:bg-blue-500/15 dark:text-blue-50"
+              className="bg-info/10 text-info-foreground border-none flex items-center gap-1"
             >
               <Star className="h-3 w-3" />
               Active
             </Badge>
             <Badge
               variant="outline"
-              className="flex items-center gap-1 text-orange-800 bg-orange-100 border-none dark:text-orange-100 dark:bg-orange-500/15"
+              className="flex items-center gap-1 text-warning-foreground bg-warning/10 border-none"
             >
               <User className="h-3 w-3" />
               Assigned to me

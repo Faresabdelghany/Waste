@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 export function LoadMeter({ estimate }: { estimate: RouteEstimate }) {
   const tone =
-    estimate.pct > 100 ? "bg-red-500" : estimate.pct >= 90 ? "bg-amber-500" : "bg-emerald-500"
+    estimate.pct > 100 ? "bg-destructive" : estimate.pct >= 90 ? "bg-warning" : "bg-success"
   return (
     <div className="min-w-32">
       <div className="flex items-center justify-between text-sm tabular-nums">
@@ -19,9 +19,9 @@ export function LoadMeter({ estimate }: { estimate: RouteEstimate }) {
         <span
           className={cn(
             estimate.pct > 100
-              ? "text-red-600"
+              ? "text-destructive-foreground"
               : estimate.pct >= 90
-                ? "text-amber-800"
+                ? "text-warning-foreground"
                 : "text-muted-foreground",
           )}
         >

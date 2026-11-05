@@ -69,7 +69,7 @@ export function StepIntent({ selected, onSelect }: StepIntentProps) {
               <div
                 className={cn(
                   "ml-2 flex h-4 w-4 items-center justify-center rounded-full border border-input bg-background",
-                  isActive && "border-teal-600 bg-teal-600 text-primary-foreground"
+                  isActive && "border-success bg-success text-primary-foreground"
                 )}
               >
                 {isActive && <Check className="h-3 w-3" />}

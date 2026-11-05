@@ -653,7 +653,7 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
         {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
         {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
         {duplicate !== undefined && (
-          <p className="text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="possible-duplicate">
+          <p className="text-sm font-medium text-warning-foreground" data-testid="possible-duplicate">
             Possible duplicate of {duplicate}: the weighbridge and the driver recorded the same route and fraction. Reject one before you approve.
           </p>
         )}

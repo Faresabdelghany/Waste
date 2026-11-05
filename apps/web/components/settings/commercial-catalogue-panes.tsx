@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import { ArrowSquareOut, PencilSimple, Percent, Plus } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
@@ -33,7 +34,7 @@ import { AssetPanelShell, AssetToolbar, EmptyRow, RecordsSection, defaultAssetVi
 import { useApiClient, useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/waste/commands/use-command-support"
@@ -45,7 +46,6 @@ import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
-import { cn } from "@/lib/utils"
 
 const fixturesOf = (moduleId: string) => businessWorkspaces.commercial.modules.find((module) => module.id === moduleId)?.records ?? []
 
@@ -174,9 +174,9 @@ export function ProductsOnApiPane() {
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{product.submittedValues?.vatPercent === undefined ? "Not set" : `${product.submittedValues.vatPercent}%`}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{product.facts["Invoice code"] ?? "—"}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusClasses(product.status))}>
+                      <StatusBadge tone={recordStatusTone(product.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                         {product.status}
-                      </Badge>
+                      </StatusBadge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       <Button variant="ghost" size="icon" className="h-8 w-8" disabled={saving || !pickers.readyFor(PRODUCT_FORM)} onClick={() => setEditing({ schema: productEditForm(product), values: productFormValues(product), record: product })} aria-label={`Edit ${product.name}`}>
@@ -345,9 +345,9 @@ export function PriceListsPane() {
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{usage.get(list.id) ?? 0}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{`${String(values.validFrom ?? "—")} – ${typeof values.validTo === "string" && values.validTo !== "" ? values.validTo : "open"}`}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusClasses(list.status))}>
+                        <StatusBadge tone={recordStatusTone(list.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {list.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
                         {/* An ended list has no price to index: the bulk index is offered while it runs or before it starts, as a price's own is (#281). */}

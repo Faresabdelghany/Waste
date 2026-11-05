@@ -44,7 +44,7 @@ export function TimelineBar({ startDate, endDate, dates, cellWidth, label, progr
     }
     switch (status) {
       case "done":
-        return "bg-teal-500/15 border-teal-500/40 text-teal-600"
+        return "bg-success/15 border-success/40 text-success"
       case "in-progress":
         return "bg-primary/15 border-primary/40 text-primary"
       default:

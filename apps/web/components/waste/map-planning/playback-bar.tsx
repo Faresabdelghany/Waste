@@ -15,7 +15,7 @@ import { formatDelay, stopDelay } from "@/lib/map-planning/playback"
 import type { AreaRoute } from "@waste/domain/map-planning/routes"
 import { cn } from "@/lib/utils"
 
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 export type PlaybackSpeed = 1 | 2 | 4
 export const PLAYBACK_SPEEDS: readonly PlaybackSpeed[] = [1, 2, 4]
@@ -71,7 +71,7 @@ export function PlaybackBar({
       <div className="flex items-center gap-2">
         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: route.color }} aria-hidden />
         <span className="truncate font-semibold">{route.name}</span>
-        <StatusBadge status={route.status} />
+        <MapStatusBadge status={route.status} />
         <span className="truncate text-xs text-muted-foreground">
           {route.date ? formatShortDate(route.date) : "Undated"}
           {route.vehicle ? ` · ${route.vehicle}` : ""}
@@ -80,18 +80,19 @@ export function PlaybackBar({
         <div className="ml-auto flex items-center gap-1">
           <div role="group" aria-label="Playback speed" className="flex items-center rounded-md border border-border p-0.5">
             {PLAYBACK_SPEEDS.map((option) => (
-              <button
+              <Button
+                variant="ghost"
                 key={option}
                 type="button"
                 aria-pressed={option === speed}
                 onClick={() => onSpeedChange(option)}
-                className={cn(
+                className={cn("inline-block whitespace-normal shrink h-auto transition-none cursor-default hover:bg-transparent dark:hover:bg-transparent",
                   "rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground hover:text-foreground",
-                  option === speed && "bg-primary text-primary-foreground hover:text-primary-foreground",
+                  option === speed && "bg-primary text-primary-foreground hover:text-primary-foreground hover:bg-primary dark:hover:bg-primary",
                 )}
               >
                 {option}×
-              </button>
+              </Button>
             ))}
           </div>
           <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close playback" onClick={onClose}>
@@ -138,8 +139,8 @@ export function PlaybackBar({
             <span
               className={cn(
                 "ml-auto shrink-0 tabular-nums text-muted-foreground",
-                delay !== null && delay > 0 && "text-amber-600 dark:text-amber-400",
-                delay !== null && delay < 0 && "text-emerald-600 dark:text-emerald-400",
+                delay !== null && delay > 0 && "text-warning-foreground",
+                delay !== null && delay < 0 && "text-success",
               )}
               data-testid="playback-times"
             >

@@ -138,9 +138,15 @@ export const answerOf = (page: Page, method: string, path: string) =>
 export const toasts = (page: Page) => page.getByRole("region", { name: "Notifications alt+T" })
 
 /** The route's details on the Pilot: the generic details with the route's commands, once the routes module reads the API. */
+/** A route's own page on the Pilot: the region named for the route, which holds its commands, its stops and its facts. */
+export const routePage = (page: Page, route: Pick<Route, "label">): Locator => page.getByRole("region", { name: route.label, exact: true })
+
+/** A route's stops, one table row each, in the order they will be visited. */
+export const stopRows = (details: Locator): Locator => details.getByTestId("route-stops").locator("tbody tr")
+
 export async function openRoute(page: Page, route: Pick<Route, "id" | "label">) {
   await page.goto(`/route-studio?module=routes&record=route-${route.id}`)
-  const details = page.getByRole("dialog", { name: route.label })
+  const details = routePage(page, route)
   await expect(details.getByTestId("route-commands").getByRole("button", { name: "Dispatch" })).toBeEnabled({ timeout: 30_000 })
   return details
 }

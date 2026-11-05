@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import type { ClientStatus } from "@/lib/data/clients"
 
 function statusLabel(status: ClientStatus): string {
@@ -9,33 +9,17 @@ function statusLabel(status: ClientStatus): string {
     return "Archived"
 }
 
+function clientStatusTone(status: ClientStatus): StatusTone {
+    if (status === "active") return "success"
+    if (status === "on_hold") return "warning"
+    if (status === "completed") return "info"
+    return "neutral"
+}
+
 export function ClientStatusBadge({ status }: { status: ClientStatus }) {
-    const label = statusLabel(status)
-
-    let badgeClasses = "border-transparent bg-muted text-muted-foreground"
-    let dotClasses = "bg-foreground"
-
-    if (status === "active") {
-        badgeClasses = "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
-        dotClasses = "bg-teal-600 dark:bg-teal-300"
-    } else if (status === "on_hold") {
-        badgeClasses = "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100"
-        dotClasses = "bg-amber-600 dark:bg-amber-300"
-    } else if (status === "completed") {
-        badgeClasses = "bg-blue-50 text-blue-700 border-transparent dark:bg-blue-500/15 dark:text-blue-100"
-        dotClasses = "bg-blue-600 dark:bg-blue-300"
-    } else if (status === "archived") {
-        badgeClasses = "border-transparent bg-muted text-muted-foreground"
-        dotClasses = "bg-muted-foreground"
-    }
-
     return (
-        <Badge
-            variant="outline"
-            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium capitalize ${badgeClasses}`}
-        >
-            <span className={`h-1.5 w-1.5 rounded-full ${dotClasses}`} />
-            {label}
-        </Badge>
+        <StatusBadge tone={clientStatusTone(status)} dot className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium capitalize">
+            {statusLabel(status)}
+        </StatusBadge>
     )
 }

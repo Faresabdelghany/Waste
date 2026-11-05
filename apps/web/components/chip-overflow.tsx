@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { FilterChip } from "@/components/filter-chip"
 import { cn } from "@/lib/utils"
@@ -45,9 +46,9 @@ export function ChipOverflow<K extends string = string>({
       {hidden.length > 0 && (
         <Popover>
           <PopoverTrigger asChild>
-            <button className="flex h-8 items-center rounded-full border border-border/60 bg-background px-3 text-sm text-muted-foreground hover:bg-accent">
+            <Button variant="ghost" className="justify-start gap-0 whitespace-normal font-normal shrink py-0 transition-none cursor-default flex h-8 items-center rounded-full border border-border/60 bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:text-muted-foreground dark:hover:bg-accent">
               +{hidden.length} more
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-64 p-2 rounded-xl">
             <div className="flex max-h-64 flex-col gap-2 overflow-auto pr-1">

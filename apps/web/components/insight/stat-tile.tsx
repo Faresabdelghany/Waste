@@ -16,8 +16,8 @@ import type { Change } from "@/lib/insight/dashboard"
 import { cn } from "@/lib/utils"
 
 const TONE: Record<Change["tone"], string> = {
-  positive: "text-emerald-600 dark:text-emerald-400",
-  negative: "text-rose-600 dark:text-rose-400",
+  positive: "text-success",
+  negative: "text-destructive-foreground",
   neutral: "text-muted-foreground",
 }
 

@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useEffect, useState, type FormEvent } from "react"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr"
 
 import { useApiSession } from "@/components/waste/api-session-store"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"

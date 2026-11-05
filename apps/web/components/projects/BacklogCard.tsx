@@ -14,13 +14,13 @@ type BacklogCardProps = {
 }
 
 function statusStyles(status: BacklogSummary["statusLabel"]) {
-  if (status === "Active") return "bg-blue-100 text-blue-700 border-none dark:bg-blue-500/15 dark:text-blue-100"
+  if (status === "Active") return "bg-info/10 text-info-foreground border-none"
   if (status === "Backlog")
-    return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-100 dark:border-orange-500/30"
+    return "bg-warning/10 text-warning-foreground border-warning/30"
   if (status === "Planned")
     return "border-border bg-muted text-muted-foreground"
-  if (status === "Completed") return "bg-blue-50 text-blue-700 border-none dark:bg-blue-500/15 dark:text-blue-100"
-  if (status === "Cancelled") return "bg-rose-50 text-rose-700 border-none dark:bg-rose-500/15 dark:text-rose-100"
+  if (status === "Completed") return "bg-info/10 text-info-foreground border-none"
+  if (status === "Cancelled") return "bg-destructive/10 text-destructive-foreground border-none"
   return "border-border bg-muted text-muted-foreground"
 }
 

@@ -28,6 +28,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -141,16 +142,16 @@ type Visibility = keyof typeof COMPOSER
 const OFFICE_THREADS: readonly Visibility[] = ["internal", "customer"]
 const PROVIDER_THREADS: readonly Visibility[] = ["service-provider"]
 
-function statusClasses(status: string): string {
-  if (/completed/i.test(status)) return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-  if (/progress|open/i.test(status)) return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-200"
-  return "border-border bg-muted/60 text-muted-foreground"
+function ticketStatusTone(status: string): StatusTone {
+  if (/completed/i.test(status)) return "success"
+  if (/progress|open/i.test(status)) return "info"
+  return "neutral"
 }
 
-function priorityClasses(priority: string): string {
-  if (/critical|high/i.test(priority)) return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-200"
-  if (/medium/i.test(priority)) return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-200"
-  return "border-border bg-muted/60 text-muted-foreground"
+function ticketPriorityTone(priority: string): StatusTone {
+  if (/critical|high/i.test(priority)) return "destructive"
+  if (/medium/i.test(priority)) return "warning"
+  return "neutral"
 }
 
 type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" } | { kind: "sub-ticket" }
@@ -298,9 +299,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <DialogTitle className="truncate text-lg font-semibold">{live.name}</DialogTitle>
-                    <Badge variant="outline" className={cn("rounded-full text-[11px]", statusClasses(live.status))}>
+                    <StatusBadge outlined tone={ticketStatusTone(live.status)} className="rounded-full text-[11px]">
                       {live.status}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                   <DialogDescription className="mt-0.5 truncate text-xs sm:text-sm">
                     {label} · {live.facts.Project} · Updated {live.updated.toLowerCase()}
@@ -324,9 +325,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     <Badge variant="outline" className="rounded-full font-normal">
                       {live.facts.Kind}
                     </Badge>
-                    <Badge variant="outline" className={cn("rounded-full font-normal", priorityClasses(live.facts.Priority ?? ""))}>
+                    <StatusBadge outlined tone={ticketPriorityTone(live.facts.Priority ?? "")} className="rounded-full font-normal">
                       {live.facts.Priority} priority
-                    </Badge>
+                    </StatusBadge>
                     <Badge variant="outline" className="rounded-full font-normal">
                       Opened via {live.facts["Opened via"]}
                     </Badge>
@@ -352,8 +353,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 
             <footer className="border-t border-border/60 bg-background px-4 py-3 sm:px-7 sm:py-4">
               <div className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border bg-background shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/15">
-                <div className={cn("flex items-center gap-2 border-b px-3 py-2", visibility === "internal" ? "border-amber-500/20 bg-amber-500/5" : "border-blue-500/20 bg-blue-500/5")}>
-                  {visibility === "internal" ? <LockKey className="h-4 w-4 shrink-0 text-amber-600" /> : <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />}
+                <div className={cn("flex items-center gap-2 border-b px-3 py-2", visibility === "internal" ? "border-warning/20 bg-warning/5" : "border-info/20 bg-info/5")}>
+                  {visibility === "internal" ? <LockKey className="h-4 w-4 shrink-0 text-warning-foreground" /> : <ChatCircleText className="h-4 w-4 shrink-0 text-info" />}
                   <div className="flex gap-1" role="radiogroup" aria-label="Who reads it">
                     {threads.map((mode) => (
                       <Button key={mode} type="button" role="radio" aria-checked={visibility === mode} size="sm" variant={visibility === mode ? "secondary" : "ghost"} className="h-7 text-xs" onClick={() => setVisibility(mode)}>
@@ -555,8 +556,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                         </ul>
                       )}
                       {objects.problem !== null && <p className="text-xs text-muted-foreground">The photos are not shown: {objects.problem}</p>}
-                      <figure className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
-                        <figcaption className="text-[11px] font-medium text-blue-700 dark:text-blue-200">The reply quoting the record</figcaption>
+                      <figure className="rounded-lg border border-info/20 bg-info/5 px-3 py-2">
+                        <figcaption className="text-[11px] font-medium text-info-foreground">The reply quoting the record</figcaption>
                         <blockquote className="mt-1 text-sm leading-6" data-testid="ticket-evidence-reply">
                           {evidence.reply}
                         </blockquote>
@@ -639,8 +640,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 /** One row of the history: what it is, who and when, and what it said. A comment shows who may read it. */
 /** How the history shows a comment of each thread: the office's internal note, the customer's, and the one the office and the route's provider share (#291 C24). */
 const COMMENT_THREADS = {
-  internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-amber-600", badgeClass: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200" },
-  customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-blue-600", badgeClass: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" },
+  internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-warning-foreground", badgeClass: "border-warning/30 bg-warning/10 text-warning-foreground" },
+  customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-info", badgeClass: "border-info/30 bg-info/10 text-info-foreground" },
   "service-provider": { title: "Service provider thread", badge: "Service provider", Icon: Truck, iconClass: "text-violet-600", badgeClass: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200" },
 } as const
 
@@ -662,7 +663,7 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
   const thread = COMMENT_THREADS[threadOf(event.visibility)]
   return (
     <li className="relative flex gap-3 pb-4" data-kind={event.kind}>
-      <span className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background", event.kind === "status-changed" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-600")}>
+      <span className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background", event.kind === "status-changed" && "border-success/30 bg-success/10 text-success")}>
         {isComment ? (
           <thread.Icon className={cn("h-4 w-4", thread.iconClass)} />
         ) : event.kind === "status-changed" ? (
@@ -718,26 +719,27 @@ function OptionRow({ label, value, shown, options, disabled, onPick }: { label: 
       <span className="text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label={`Change ${label}`} variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {shown}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-56 p-1">
           <div role="listbox" aria-label={label}>
             {options.map((option) => (
-              <button
+              <Button
                 key={option.value}
                 type="button"
+                variant="ghost"
                 role="option"
                 aria-selected={option.value === value}
-                className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent", option.value === value && "font-semibold")}
+                className={cn("flex h-auto w-full items-center justify-start gap-0 whitespace-normal rounded-sm px-2 py-1.5 text-left text-sm font-normal hover:bg-accent", option.value === value && "font-semibold")}
                 onClick={() => {
                   setOpen(false)
                   if (option.value !== value) onPick(option.value)
                 }}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </PopoverContent>
@@ -753,26 +755,27 @@ function PickRow({ label, value, tokens, disabled, onPick }: { label: string; va
       <span className="text-muted-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label={`Change ${label}`} variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {statusLabel(value)}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-56 p-1">
           <div role="listbox" aria-label={label}>
             {tokens.map((token) => (
-              <button
+              <Button
                 key={token}
                 type="button"
+                variant="ghost"
                 role="option"
                 aria-selected={token === value}
-                className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent", token === value && "font-semibold")}
+                className={cn("flex h-auto w-full items-center justify-start gap-0 whitespace-normal rounded-sm px-2 py-1.5 text-left text-sm font-normal hover:bg-accent", token === value && "font-semibold")}
                 onClick={() => {
                   setOpen(false)
                   if (token !== value) onPick(token)
                 }}
               >
                 {statusLabel(token)}
-              </button>
+              </Button>
             ))}
           </div>
         </PopoverContent>
@@ -796,9 +799,9 @@ function DueRow({ value, shown, disabled, onSave }: { value: string; shown: stri
         }}
       >
         <PopoverTrigger asChild>
-          <button type="button" disabled={disabled} aria-label="Change Due" className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+          <Button type="button" disabled={disabled} aria-label="Change Due" variant="ghost" className="h-auto min-h-8 justify-end whitespace-normal rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
             {shown}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-72 space-y-2 p-3">
           <Input type="datetime-local" aria-label="Due" value={draft} onChange={(event) => setDraft(event.target.value)} />

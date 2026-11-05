@@ -233,18 +233,18 @@ function CollapsibleSection({
     return (
         <Collapsible open={open} onOpenChange={onOpenChange}>
             <CollapsibleTrigger asChild>
-                <button className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <Button variant="ghost" className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default h-auto shrink has-[>svg]:p-3 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/50 transition-colors dark:hover:bg-muted/50")}>
                     <div className="flex items-center gap-2">
                         {icon}
                         <span className="font-medium">{title}</span>
                     </div>
                     <CaretDown
                         className={cn(
-                            "h-4 w-4 text-muted-foreground transition-transform",
+                            "size-4 text-muted-foreground transition-transform",
                             open && "rotate-180"
                         )}
                     />
-                </button>
+                </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="px-3 pb-3">
                 {children}

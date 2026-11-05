@@ -2,7 +2,7 @@ import type { APIRequestContext, Page } from "@playwright/test"
 
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, schemeWithRoutes, type ApiRoute } from "./routes-support"
+import { answerOf, routePage, schemeWithRoutes, type ApiRoute } from "./routes-support"
 import { listAll, projectNamed } from "./tester"
 
 // The service-provider workspace on the Pilot (#291 C24): Lars Mikkelsen,
@@ -83,7 +83,7 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
 
     // The route NordRen runs that day is among the API's, and its details offer the provider's crew commands alone.
     await page.goto(`/service-provider-workspace/routes?module=routes&record=route-${route.id}`)
-    const details = page.getByRole("dialog", { name: route.label })
+    const details = routePage(page, route)
     const commands = details.getByTestId("route-commands")
     await expect(commands.getByRole("button", { name: "Dispatch" })).toBeEnabled({ timeout: 30_000 })
     await expect(commands.getByRole("button", { name: "Assign" })).toBeVisible()

@@ -31,10 +31,10 @@ import { CHANNEL_LABELS } from "@/lib/data/message-templates"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 
 const STATUS_TONES: Readonly<Record<string, string>> = {
-  sent: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
+  sent: "border-success/30 bg-success/10 text-success-foreground",
   queued: "",
   failed: "border-destructive/30 bg-destructive/10 text-destructive",
-  withheld: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200",
+  withheld: "border-warning/30 bg-warning/10 text-warning-foreground",
 }
 
 /** A customer's newest messages, and the dialog that sends one. */

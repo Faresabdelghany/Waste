@@ -23,6 +23,7 @@ import {
   type AssetView,
 } from "@/components/settings/asset-management-settings"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -45,7 +46,7 @@ import {
   useModuleRecords,
   whenSaved,
 } from "@/components/waste/business-record-store"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -69,7 +70,6 @@ import {
 } from "@/lib/data/planning-areas"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
-import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"
 
@@ -305,15 +305,9 @@ export function PlanningAreasSettings() {
                       {row.coverage}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          statusClasses(row.status),
-                        )}
-                      >
+                      <StatusBadge tone={recordStatusTone(row.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                         {row.status}
-                      </Badge>
+                      </StatusBadge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       {configured && (

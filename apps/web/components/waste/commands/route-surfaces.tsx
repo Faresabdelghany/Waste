@@ -35,6 +35,11 @@ import { ArrowDown, ArrowSquareOut, ArrowUp } from "@phosphor-icons/react/dist/s
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PageActions } from "@/components/page-layout"
+import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
+import { recordStatusTone } from "@/components/waste/business-record-views"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -443,7 +448,22 @@ const NO_BOOKINGS: readonly BusinessRecord[] = []
 /** The grant a route's messages are written under (O24 of #290): the routes' own. */
 const ROUTE_MESSAGES_MODULE_KEY = "route-studio.routes"
 
+/** A route's details in the side panel: its facts above, these commands and reads under them. */
 export function RouteCommandsSurface({ record }: RowSurfaceProps) {
+  return <RouteSurface record={record} layout="sheet" />
+}
+
+/**
+ * A route's own page on the Pilot (`RouteDetailsOnApi`): the commands in a
+ * compact bar, the stops as a table first, then its Plans, sessions, messages
+ * and the device's log, with `aside` — the route's facts and History — beside
+ * them; `menu` is the record's own actions, at the end of the bar.
+ */
+export function RouteSurfacePage({ record, aside, menu }: RowSurfaceProps & { aside: ReactNode; menu?: ReactNode }) {
+  return <RouteSurface record={record} layout="page" aside={aside} menu={menu} />
+}
+
+function RouteSurface({ record, layout, aside, menu }: RowSurfaceProps & { layout: "sheet" | "page"; aside?: ReactNode; menu?: ReactNode }) {
   const pickers = useRelationPickers()
   const { me } = useApiSession()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
@@ -499,92 +519,78 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
     if (pickup.propertyId !== null) return propertyName(pickup.propertyId)
     return pickup.sharedCollectionPointId === null ? "A stop with no place" : pointName(pickup.sharedCollectionPointId)
   }
+  // What the page's Note column says of a stop: why it was not collected, and where it came from.
+  const stopNote = (pickup: Pickup) =>
+    [pickup.reason === null ? null : pickupReasonLabel(pickup.reason), pickup.movedFromPickupId != null ? "Moved here" : pickup.origin === "office" ? "Added by the office" : null].filter(Boolean).join(" · ")
   const stopLine = (pickup: Pickup & { sequence?: number }) =>
     `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
 
-  return (
-    <section className="space-y-4" data-testid="route-commands">
-      <h3 className="text-sm font-semibold">Route commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
-      <div className="flex flex-wrap gap-2">
-        {offered(ASSIGN_ROUTE) && (
-          <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS.assign)} onClick={() => openForm("assign")}>
-            Assign
-          </Button>
-        )}
-        {offered(DISPATCH_ROUTE) && (
-          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => run(DISPATCH_ROUTE)}>
-            Dispatch
-          </Button>
-        )}
-        {offered(RESCHEDULE_ROUTE) && (
-          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("reschedule")}>
-            Reschedule
-          </Button>
-        )}
-        {/* A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226). */}
-        {offered(RELEASE_HOLD) && isHeldRoute(record) && record.submittedValues?.status === "planned" && (
-          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => run(RELEASE_HOLD)}>
-            Release hold
-          </Button>
-        )}
-        {/* A stop of the office's own goes onto a route that has not started (#111). */}
-        {offered(ADD_STOP) && TAKES_A_STOP.has(status) && (
-          <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"])} onClick={() => openForm("add-stop")}>
-            Add stop
-          </Button>
-        )}
-        {/* Open stops onto another route, a new one of the day, or another route's taken in (O23 of #290), on a route that has not started. */}
-        {offered(MOVE_STOPS) && TAKES_A_STOP.has(status) && (
-          <Button variant="outline" size="sm" disabled={!sendable || openStops.length === 0} onClick={() => setOpen({ kind: "stops", mode: "move" })}>
-            Move stops
-          </Button>
-        )}
-        {offered(SPLIT_ROUTE) && TAKES_A_STOP.has(status) && (
-          <Button variant="outline" size="sm" disabled={!sendable || openStops.length < 2} onClick={() => setOpen({ kind: "stops", mode: "split" })}>
-            Split route
-          </Button>
-        )}
-        {offered(MERGE_ROUTE) && TAKES_A_STOP.has(status) && (
-          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => setOpen({ kind: "stops", mode: "merge" })}>
-            Merge route
-          </Button>
-        )}
-        {offered(REORDER_ROUTE) && (
-          <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
-            Reorder stops
-          </Button>
-        )}
-        {/* A Plan over the open stops, on a route that has not started (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */}
-        {offered(OPTIMISE_ROUTE) && TAKES_A_STOP.has(status) && (
-          <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length === 0} onClick={() => run(OPTIMISE_ROUTE)}>
-            Optimise
-          </Button>
-        )}
-        {offered(CANCEL_ROUTE) && (
-          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("cancel")}>
-            Cancel route
-          </Button>
-        )}
-      </div>
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-muted-foreground">Stops, in the order they will be visited</h4>
-        <ReadRows
-          read={{ rows: detail?.pickups ?? null, problem: reads.problem }}
-          label="Reading the route's stops…"
-          empty={record.facts.Origin === undefined ? "No stop: generation matched no container for this route." : "No stop yet: add the route's stops."}
-          testId="route-stops"
-          line={(pickup) => (
-            <span className="flex items-center justify-between gap-2">
-              <span>{stopLine(pickup)}</span>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => openPickup(webIdOf("pickup", pickup.id))}>
-                Open stop
-                <ArrowSquareOut className="h-3.5 w-3.5" />
-              </Button>
-            </span>
-          )}
-        />
-      </div>
+  const commandButtons = (
+    <>
+      {offered(ASSIGN_ROUTE) && (
+        <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS.assign)} onClick={() => openForm("assign")}>
+          Assign
+        </Button>
+      )}
+      {offered(DISPATCH_ROUTE) && (
+        <Button variant={layout === "page" ? "default" : "outline"} size="sm" disabled={!sendable} onClick={() => run(DISPATCH_ROUTE)}>
+          Dispatch
+        </Button>
+      )}
+      {offered(RESCHEDULE_ROUTE) && (
+        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("reschedule")}>
+          Reschedule
+        </Button>
+      )}
+      {/* A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226). */}
+      {offered(RELEASE_HOLD) && isHeldRoute(record) && record.submittedValues?.status === "planned" && (
+        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => run(RELEASE_HOLD)}>
+          Release hold
+        </Button>
+      )}
+      {/* A stop of the office's own goes onto a route that has not started (#111). */}
+      {offered(ADD_STOP) && TAKES_A_STOP.has(status) && (
+        <Button variant="outline" size="sm" disabled={!sendable || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"])} onClick={() => openForm("add-stop")}>
+          Add stop
+        </Button>
+      )}
+      {/* Open stops onto another route, a new one of the day, or another route's taken in (O23 of #290), on a route that has not started. */}
+      {offered(MOVE_STOPS) && TAKES_A_STOP.has(status) && (
+        <Button variant="outline" size="sm" disabled={!sendable || openStops.length === 0} onClick={() => setOpen({ kind: "stops", mode: "move" })}>
+          Move stops
+        </Button>
+      )}
+      {offered(SPLIT_ROUTE) && TAKES_A_STOP.has(status) && (
+        <Button variant="outline" size="sm" disabled={!sendable || openStops.length < 2} onClick={() => setOpen({ kind: "stops", mode: "split" })}>
+          Split route
+        </Button>
+      )}
+      {offered(MERGE_ROUTE) && TAKES_A_STOP.has(status) && (
+        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => setOpen({ kind: "stops", mode: "merge" })}>
+          Merge route
+        </Button>
+      )}
+      {offered(REORDER_ROUTE) && (
+        <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
+          Reorder stops
+        </Button>
+      )}
+      {/* A Plan over the open stops, on a route that has not started (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */}
+      {offered(OPTIMISE_ROUTE) && TAKES_A_STOP.has(status) && (
+        <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length === 0} onClick={() => run(OPTIMISE_ROUTE)}>
+          Optimise
+        </Button>
+      )}
+      {offered(CANCEL_ROUTE) && (
+        <Button variant="outline" size="sm" disabled={!sendable} onClick={() => openForm("cancel")}>
+          Cancel route
+        </Button>
+      )}
+    </>
+  )
+  const stopsEmpty = record.facts.Origin === undefined ? "No stop: generation matched no container for this route." : "No stop yet: add the route's stops."
+  const reads_ = (
+    <>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Plans</h4>
         <ReadRows
@@ -610,6 +616,10 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           line={(receipt) => `${shownOn(receipt.occurredAt, timezone)} · ${statusLabel(receipt.kind)} · ${statusLabel(receipt.outcome)}${receipt.problem?.detail ? ` · ${receipt.problem.detail}` : ""}`}
         />
       </div>
+    </>
+  )
+  const dialogs = (
+    <>
       {open?.kind === "form" && (
         <BusinessRecordFormDialog
           schema={ROUTE_COMMAND_FORMS[open.name]}
@@ -643,6 +653,111 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           onSave={(order) => run(REORDER_ROUTE, { pickupIds: order.map((id) => webIdOf("pickup", id)) })}
         />
       )}
+    </>
+  )
+
+  if (layout === "page") {
+    const stops = detail?.pickups
+    return (
+      <>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            {stops === undefined ? "Reading the route's stops…" : `${stops.length} ${stops.length === 1 ? "stop" : "stops"} · ${openStops.length} open`}
+          </p>
+          <div data-testid="route-commands">
+            <PageActions>
+              {commandButtons}
+              {menu}
+            </PageActions>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="mx-auto grid max-w-[1500px] gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 space-y-4">
+              {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+              <section className="overflow-hidden rounded-xl border border-border/60" aria-labelledby="route-stops-heading">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+                  <h3 id="route-stops-heading" className="text-sm font-semibold">Stops</h3>
+                  <p className="text-xs text-muted-foreground">In the order they will be visited</p>
+                </div>
+                {reads.problem !== null ? (
+                  <p className="px-4 py-6 text-sm text-destructive">{reads.problem}</p>
+                ) : stops === undefined ? (
+                  <p className="px-4 py-6 text-sm text-muted-foreground">{"Reading the route's stops…"}</p>
+                ) : stops.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-muted-foreground">{stopsEmpty}</p>
+                ) : (
+                  <Table data-testid="route-stops">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-12 pl-4">#</TableHead>
+                        <TableHead>Stop</TableHead>
+                        <TableHead>Service</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Note</TableHead>
+                        <TableHead className="w-12 pr-4">
+                          <span className="sr-only">Open</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stops.map((pickup) => (
+                        <TableRow key={pickup.id}>
+                          <TableCell className="pl-4 tabular-nums text-muted-foreground">{pickup.sequence ?? pickup.position}</TableCell>
+                          <TableCell className="font-medium">{stopName(pickup)}</TableCell>
+                          <TableCell className="text-muted-foreground">{PICKUP_SERVICE_LABELS[pickup.service]}</TableCell>
+                          <TableCell>
+                            <StatusBadge tone={recordStatusTone(statusLabel(pickup.status))} className="rounded-full text-[11px]">
+                              {statusLabel(pickup.status)}
+                            </StatusBadge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{stopNote(pickup)}</TableCell>
+                          <TableCell className="pr-4 text-right">
+                            <Button variant="ghost" size="icon-sm" aria-label="Open stop" onClick={() => openPickup(webIdOf("pickup", pickup.id))}>
+                              <ArrowSquareOut className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </section>
+              <div className="space-y-6 rounded-xl border border-border/60 p-4">{reads_}</div>
+            </div>
+            <aside className="min-w-0 space-y-4">{aside}</aside>
+          </div>
+        </div>
+        {dialogs}
+      </>
+    )
+  }
+
+  return (
+    <section className="space-y-4" data-testid="route-commands">
+      <h3 className="text-sm font-semibold">Route commands</h3>
+      {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+      <div className="flex flex-wrap gap-2">{commandButtons}</div>
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Stops, in the order they will be visited</h4>
+        <ReadRows
+          read={{ rows: detail?.pickups ?? null, problem: reads.problem }}
+          label="Reading the route's stops…"
+          empty={stopsEmpty}
+          testId="route-stops"
+          line={(pickup) => (
+            <span className="flex items-center justify-between gap-2">
+              <span>{stopLine(pickup)}</span>
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => openPickup(webIdOf("pickup", pickup.id))}>
+                Open stop
+                <ArrowSquareOut className="h-3.5 w-3.5" />
+              </Button>
+            </span>
+          )}
+        />
+      </div>
+      {reads_}
+      {dialogs}
     </section>
   )
 }

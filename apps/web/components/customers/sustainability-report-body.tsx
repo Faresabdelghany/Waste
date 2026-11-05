@@ -22,7 +22,7 @@ export function SustainabilityReportBody({ report }: { report: SustainabilityRep
       </dl>
       {totals.unmeasured !== null && <p className="text-xs text-muted-foreground">{totals.unmeasured}</p>}
       {warnings.length > 0 && (
-        <ul className="space-y-1 rounded-md border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200 print:border-black print:bg-white print:text-black" data-testid="sustainability-warnings">
+        <ul className="space-y-1 rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning-foreground print:border-black print:bg-white print:text-black" data-testid="sustainability-warnings">
           {warnings.map((warning) => (
             <li key={warning.key}>{warning.sentence}</li>
           ))}

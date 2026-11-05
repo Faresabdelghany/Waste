@@ -5,6 +5,7 @@ import { Paperclip, UploadSimple, X } from "@phosphor-icons/react/dist/ssr"
 
 import type { ProjectFile, QuickLink, User } from "@/lib/data/project-details"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { QuickCreateModalLayout } from "@/components/QuickCreateModalLayout"
 import { ProjectDescriptionEditor } from "@/components/project-wizard/ProjectDescriptionEditor"
 import { UploadAssetFilesModal } from "@/components/projects/UploadAssetFilesModal"
@@ -140,13 +141,13 @@ export function AddFileModal({ open, onOpenChange, currentUser, onCreate }: AddF
                 <div className="flex items-center justify-between gap-2 w-full shrink-0 mt-1">
                     <div className="flex flex-col gap-2 flex-1">
                         <div className="flex gap-1 h-10 items-center w-full">
-                            <input
+                            <Input
                                 id="asset-title"
                                 type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Asset title"
-                                className="w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
+                                className="h-auto min-w-auto rounded-none shadow-none focus-visible:ring-0 dark:bg-transparent md:text-xl w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
                                 autoComplete="off"
                             />
                         </div>
@@ -172,13 +173,13 @@ export function AddFileModal({ open, onOpenChange, currentUser, onCreate }: AddF
                 />
 
                 <div className="flex items-center gap-2 mt-2">
-                    <input
+                    <Input
                         id="asset-link"
                         type="url"
                         value={link}
                         onChange={(e) => setLink(e.target.value)}
                         placeholder="Paste a link (Figma, Drive, or any URL)"
-                        className="w-full text-md leading-6 text-foreground placeholder:text-muted-foreground outline-none bg-transparent border-none p-0"
+                        className="h-auto min-w-auto rounded-none shadow-none focus-visible:ring-0 dark:bg-transparent text-[length:inherit] md:text-[length:inherit] w-full leading-6 text-foreground placeholder:text-muted-foreground outline-none bg-transparent border-none p-0"
                         autoComplete="off"
                     />
                 </div>

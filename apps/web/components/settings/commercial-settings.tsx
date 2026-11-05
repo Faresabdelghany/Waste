@@ -36,12 +36,12 @@ import {
   Plus,
 } from "@phosphor-icons/react/dist/ssr"
 
-import { cn } from "@/lib/utils"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -55,7 +55,7 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
@@ -538,15 +538,9 @@ function ProductsPane() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(product.status),
-                          )}
-                        >
+                        <StatusBadge tone={recordStatusTone(product.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {product.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
                         <Button

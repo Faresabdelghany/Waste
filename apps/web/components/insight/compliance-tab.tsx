@@ -135,7 +135,7 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
             <ul className="divide-y divide-border/70">
               {warnings.map((warning, index) => (
                 <li key={`${warning.kind}-${index}`} className="flex items-start gap-2 px-4 py-2.5 text-xs text-foreground">
-                  <WarningCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                  <WarningCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-foreground" aria-hidden />
                   <span>{warning.sentence}</span>
                 </li>
               ))}
@@ -172,7 +172,7 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
                       <TableCell>{row.municipality}</TableCell>
                       <TableCell>{row.unloadingStationName}</TableCell>
                       <TableCell>{row.wasteFractionName}</TableCell>
-                      <TableCell className="font-mono">{row.wasteCode ?? <span className="font-sans text-amber-700 dark:text-amber-400">None</span>}</TableCell>
+                      <TableCell className="font-mono">{row.wasteCode ?? <span className="font-sans text-warning-foreground">None</span>}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{countOf(row.netKg)}</TableCell>
                       <TableCell className="text-right tabular-nums">{countOf(row.unloads)}</TableCell>
                     </TableRow>

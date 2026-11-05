@@ -111,7 +111,7 @@ function SchemeEditPolicyQuestion({
                 <span className="block text-xs leading-5 text-muted-foreground">
                   {option.description}
                 </span>
-                {unavailable && <span className="block text-xs leading-5 text-amber-700 dark:text-amber-300">{option.unavailable}</span>}
+                {unavailable && <span className="block text-xs leading-5 text-warning-foreground">{option.unavailable}</span>}
               </span>
             </Label>
           )

@@ -36,6 +36,7 @@ import {
 } from "@waste/domain/route-schemes/generation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -223,27 +224,27 @@ function generatedRouteStops(
   return stops
 }
 
-function routeStatusClasses(status: string) {
+function routeStatusTone(status: string): StatusTone {
   if (/active|completed|ready/i.test(status)) {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "success"
   }
   if (/attention|delayed|unassigned/i.test(status)) {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "warning"
   }
-  return "border-border bg-muted/50 text-muted-foreground"
+  return "neutral"
 }
 
-function stopStatusClasses(status: RouteStop["status"]) {
+function stopStatusTone(status: RouteStop["status"]): StatusTone {
   if (status === "Completed") {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "success"
   }
   if (status === "Attention") {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "warning"
   }
   if (status === "Next") {
-    return "border-primary/25 bg-primary/10 text-primary"
+    return "primary"
   }
-  return "border-border bg-muted/40 text-muted-foreground"
+  return "neutral"
 }
 
 function routeReference(record: BusinessRecord) {
@@ -498,15 +499,9 @@ function RouteInformation({
         </div>
         <div className="text-right">
           <p className="text-xs text-muted-foreground">Route status</p>
-          <Badge
-            variant="outline"
-            className={cn(
-              "mt-1 rounded-full text-[11px]",
-              routeStatusClasses(status),
-            )}
-          >
+          <StatusBadge outlined tone={routeStatusTone(status)} className="mt-1 rounded-full text-[11px]">
             {status}
-          </Badge>
+          </StatusBadge>
         </div>
       </div>
 
@@ -977,15 +972,9 @@ function OverviewTab({
                             {stop.service}
                           </TableCell>
                           <TableCell className="py-3">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                stopStatusClasses(stop.status),
-                              )}
-                            >
+                            <StatusBadge outlined tone={stopStatusTone(stop.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                               {stop.status}
-                            </Badge>
+                            </StatusBadge>
                           </TableCell>
                           <TableCell className="py-3 text-right">
                             <DropdownMenu>
@@ -1042,9 +1031,10 @@ function OverviewTab({
                 rightPanel !== "map" && "bg-muted/20",
               )}
             >
-              <button
+              <Button
                 type="button"
-                className="flex items-center gap-2 text-left"
+                variant="ghost"
+                className="flex h-auto items-center justify-start gap-2 rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-0"
                 onClick={() => setRightPanel("map")}
                 aria-expanded={rightPanel === "map"}
               >
@@ -1055,7 +1045,7 @@ function OverviewTab({
                 )}
                 <MapTrifold className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold">Map</h2>
-              </button>
+              </Button>
               {rightPanel === "map" && (
                 <div className="flex items-center gap-1.5">
                   <Button
@@ -1084,10 +1074,11 @@ function OverviewTab({
               </div>
             )}
 
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className={cn(
-                "flex min-h-14 w-full items-center gap-2 border-b border-border px-4 py-3 text-left",
+                "flex h-auto min-h-14 w-full items-center justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-left font-normal hover:bg-transparent hover:text-current dark:hover:bg-transparent has-[>svg]:px-4",
                 rightPanel !== "information" && "border-t",
               )}
               onClick={() => setRightPanel("information")}
@@ -1099,7 +1090,7 @@ function OverviewTab({
                 <CaretRight className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="text-sm font-semibold">Route information</span>
-            </button>
+            </Button>
 
             {rightPanel === "information" && (
               <RouteInformation
@@ -1216,15 +1207,9 @@ function TicketsTab({
                         </Badge>
                       </TableCell>
                       <TableCell className="py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            routeStatusClasses(ticketRecord.status),
-                          )}
-                        >
+                        <StatusBadge outlined tone={routeStatusTone(ticketRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {ticketRecord.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="py-3 text-sm">
                         {ticketRecord.value}
@@ -1330,15 +1315,9 @@ function SessionsTab({
                         </p>
                       </TableCell>
                       <TableCell className="py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            routeStatusClasses(session.status),
-                          )}
-                        >
+                        <StatusBadge outlined tone={routeStatusTone(session.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {session.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="py-3 text-sm text-muted-foreground">
                         {session.owner}
@@ -1427,15 +1406,9 @@ export function RouteDetailsPage({
                 { label: record.name },
               ]}
             />
-            <Badge
-              variant="outline"
-              className={cn(
-                "rounded-full text-[11px]",
-                routeStatusClasses(record.status),
-              )}
-            >
+            <StatusBadge outlined tone={routeStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
-            </Badge>
+            </StatusBadge>
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {record.context} · {routeDate(record)}

@@ -3,7 +3,7 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test"
 import { addDays, dayIn, dispatchedRouteFor, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { chainLanded, expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, openRoute, pick, routeRead, schemeWithRoutes, toasts, type ApiRoute } from "./routes-support"
+import { answerOf, openRoute, pick, routePage, routeRead, schemeWithRoutes, stopRows, toasts, type ApiRoute } from "./routes-support"
 import { listAll, projectNamed, type Project } from "./tester"
 
 // The office's own routes and stops on the API (Issue #111, its web half).
@@ -83,13 +83,13 @@ test("New route makes the office's own route on a project's day with no scheme; 
   await expect(toasts(page)).toContainText("Route created")
 
   // The route made opens in its details: the office's own, a fact rather than a scheme's placeholder, its note under its own name, with no stop yet.
-  const details = page.getByRole("dialog", { name: route.label })
+  const details = routePage(page, route)
   await expect(details).toContainText("OriginMade by the office")
   await expect(details).toContainText(`Note${note}`)
   await expect(details).not.toContainText("Deviation")
   await expect(details).toContainText("Mads Jensen")
   await expect(details).toContainText("No stop yet: add the route's stops.")
-  const stops = details.getByTestId("route-stops")
+  const stops = stopRows(details)
 
   const commands = details.getByTestId("route-commands")
   const addStop = commands.getByRole("button", { name: "Add stop" })
@@ -105,8 +105,8 @@ test("New route makes the office's own route on a project's day with no scheme; 
   expect(added.request().postDataJSON()).toEqual({ propertyId: property.id, wasteFractionId: residual.id, note: "Three sofas by the gate" })
   await expect(dialog).toBeHidden()
   await expect(toasts(page)).toContainText(`A stop was added to ${route.label}`)
-  await expect(stops.locator("li")).toHaveCount(1)
-  await expect(stops.locator("li").first()).toContainText(`1. ${property.name} · Planned · added by the office`)
+  await expect(stops).toHaveCount(1)
+  for (const cell of ["1", property.name, "Planned", "Added by the office"]) await expect(stops.first()).toContainText(cell)
 
   const [dispatched] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/dispatch`), commands.getByRole("button", { name: "Dispatch" }).click()])
   expect(dispatched.status()).toBe(200)
@@ -175,7 +175,7 @@ test("a stop the office adds at a container to a generated route stands through 
     wasteFractionId: placement.wasteFractionId,
     position: Math.max(0, ...before.pickups.map((pickup) => pickup.position)) + 1,
   })
-  await expect(details.getByTestId("route-stops")).toContainText(`${container.label} · Planned · added by the office`)
+  for (const cell of ["Planned", "Added by the office"]) await expect(stopRows(details).filter({ hasText: container.label })).toContainText(cell)
 
   // The scheme is generated again over the route's day: the route is refreshed in place, and the office's stop stands as it was added.
   await generate(api, scheme.id, { from: route.serviceDate, to: route.serviceDate })
@@ -191,7 +191,7 @@ test("a stop the office adds at a container to a generated route stands through 
 
   // Read again, the details still name it the office's.
   const again = await openRoute(page, route)
-  await expect(again.getByTestId("route-stops")).toContainText(`${container.label} · Planned · added by the office`)
+  for (const cell of ["Planned", "Added by the office"]) await expect(stopRows(again).filter({ hasText: container.label })).toContainText(cell)
 })
 
 test("a ticket's re-collection names the stop the office added for it: complete · recollected picks the route, then its stop", async ({ api, page }) => {

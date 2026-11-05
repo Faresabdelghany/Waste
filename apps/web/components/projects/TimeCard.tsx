@@ -28,7 +28,7 @@ export function TimeCard({ time }: TimeCardProps) {
             <span>Days remaining</span>
             <span>{time.daysRemainingLabel}</span>
           </div>
-          <Progress className="mt-3 h-1.5 bg-accent [&>div]:bg-gradient-to-r [&>div]:from-blue-200 [&>div]:to-blue-800" value={time.progressPercent} />
+          <Progress className="mt-3 h-1.5 bg-accent [&>div]:bg-gradient-to-r [&>div]:from-info/30 [&>div]:to-info" value={time.progressPercent} />
         </div>
       </div>
     </div>

@@ -164,17 +164,17 @@ function UserRowActions({
 function statusClassName(status: string) {
   const normalized = status.toLowerCase()
   if (normalized === "active") {
-    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "border-success/20 bg-success/10 text-success-foreground"
   }
   if (normalized === "invited") {
-    return "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+    return "border-info/20 bg-info/10 text-info-foreground"
   }
   if (
     normalized.includes("review") ||
     normalized.includes("issue") ||
     normalized.includes("restricted")
   ) {
-    return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "border-warning/20 bg-warning/10 text-warning-foreground"
   }
   return "border-border bg-muted text-muted-foreground"
 }
@@ -436,13 +436,14 @@ function PanelShell({
               <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <Button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground"
+                    variant="ghost"
+                    className="h-auto gap-0 rounded-none p-0 font-normal text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground dark:hover:bg-transparent has-[>svg]:px-0"
                     aria-label={`About ${title}`}
                   >
                     <Info className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm text-xs">
                   {description}

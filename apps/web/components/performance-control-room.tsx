@@ -31,6 +31,7 @@ import {
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -104,21 +105,21 @@ type PerformanceControlRoomProps = {
 
 const numberFormatter = new Intl.NumberFormat("en-US")
 
-function getStatusClasses(status: RouteHealthStatus) {
-  if (status === "At risk") return "border-rose-500/20 bg-rose-500/10 text-rose-500"
-  if (status === "Monitor") return "border-amber-500/20 bg-amber-500/10 text-amber-500"
-  return "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+function routeHealthTone(status: RouteHealthStatus): StatusTone {
+  if (status === "At risk") return "destructive"
+  if (status === "Monitor") return "warning"
+  return "success"
 }
 
 function getStatusColor(status: RouteHealthStatus) {
-  if (status === "At risk") return "var(--color-rose-500)"
-  if (status === "Monitor") return "var(--color-amber-500)"
-  return "var(--color-emerald-500)"
+  if (status === "At risk") return "var(--color-destructive-foreground)"
+  if (status === "Monitor") return "var(--color-warning)"
+  return "var(--color-success)"
 }
 
 function getImpactColor(impact: TicketImpact) {
-  if (impact === "High") return "var(--color-rose-500)"
-  if (impact === "Medium") return "var(--color-amber-500)"
+  if (impact === "High") return "var(--color-destructive-foreground)"
+  if (impact === "Medium") return "var(--color-warning)"
   return "var(--muted-foreground)"
 }
 
@@ -141,10 +142,10 @@ function KpiItem({
 }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-500"
+      ? "text-success"
       : tone === "negative"
-        ? "text-rose-500"
-        : "text-amber-500"
+        ? "text-destructive-foreground"
+        : "text-warning"
 
   return (
     <div className="relative min-w-0 px-4 py-4 xl:px-5">
@@ -153,13 +154,14 @@ function KpiItem({
           <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground")}
                 aria-label={`About ${label}`}
               >
-                <Info className="h-3.5 w-3.5" />
-              </button>
+                <Info className="size-3.5" />
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-60 text-xs">
               {helper}
@@ -212,17 +214,18 @@ function SortButton({
   onSort: (key: SortKey) => void
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       onClick={() => onSort(sortKey)}
-      className={cn(
+      className={cn("justify-start rounded-none text-[length:inherit] cursor-default h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]",
         "inline-flex items-center gap-1 whitespace-nowrap font-medium transition-colors hover:text-foreground",
         activeKey === sortKey ? "text-foreground" : "text-muted-foreground",
       )}
     >
       {label}
-      <CaretUpDown className="h-3 w-3" />
-    </button>
+      <CaretUpDown className="size-3" />
+    </Button>
   )
 }
 
@@ -601,7 +604,7 @@ export function PerformanceControlRoom({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
               <span>Fresh 2 min ago</span>
               <span aria-hidden>·</span>
               <span>{format(rangeStart, "MMM d")} – {format(PERFORMANCE_REFERENCE_DATE, "MMM d, yyyy")}</span>
@@ -718,13 +721,14 @@ export function PerformanceControlRoom({
                 <h2 className="text-sm font-semibold text-foreground">Tickets needing attention</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Highest operational impact</p>
               </div>
-              <button
+              <Button
+                variant="link"
                 type="button"
                 onClick={() => router.push(ticketsBasePath)}
-                className="text-[11px] font-medium text-primary hover:underline"
+                className={cn("inline-block items-stretch justify-start gap-0 whitespace-normal rounded-none cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 underline-offset-auto", "text-[11px] font-medium text-primary hover:underline")}
               >
                 View all
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] gap-2 border-b border-border/70 px-4 py-2 text-[10px] font-medium text-muted-foreground">
               <span>Ticket</span>
@@ -759,9 +763,9 @@ export function PerformanceControlRoom({
                     className={cn(
                       "h-5 w-fit rounded px-1.5 text-[10px] font-medium",
                       ticket.impact === "High"
-                        ? "border-rose-500/20 bg-rose-500/10 text-rose-500"
+                        ? "border-destructive/20 bg-destructive/10 text-destructive-foreground"
                         : ticket.impact === "Medium"
-                          ? "border-amber-500/20 bg-amber-500/10 text-amber-500"
+                          ? "border-warning/20 bg-warning/10 text-warning"
                           : "border-border bg-muted text-muted-foreground",
                     )}
                   >
@@ -830,28 +834,29 @@ export function PerformanceControlRoom({
                           )}
                         >
                           <td className="px-4 py-2">
-                            <button
+                            <Button
+                              variant="ghost"
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 // eslint-disable-next-line react-hooks/refs -- runs on click; focusRoute reads the ref inside requestAnimationFrame, never during render
                                 openRoute(row.id)
                               }}
-                              className="flex min-w-0 items-center gap-2 text-left"
+                              className={cn("justify-start whitespace-normal rounded-none text-[length:inherit] font-normal cursor-default transition-none h-auto shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "flex min-w-0 items-center gap-2 text-left")}
                             >
                               <span
-                                className="h-2 w-2 shrink-0 rounded-full border-2 border-current bg-transparent"
+                                className="size-2 shrink-0 rounded-full border-2 border-current bg-transparent"
                                 style={{ color: getStatusColor(row.status) }}
                               />
                               <span className="min-w-0">
                                 <span className="block font-medium text-foreground">{row.id}</span>
                                 <span className="block max-w-36 truncate text-[10px] text-muted-foreground">{row.name}</span>
                               </span>
-                            </button>
+                            </Button>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.area}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{row.serviceType}</td>
-                          <td className={cn("px-3 py-2 font-medium", row.onTimePercent < 70 ? "text-rose-500" : row.onTimePercent < 85 ? "text-amber-500" : "text-emerald-500")}>
+                          <td className={cn("px-3 py-2 font-medium", row.onTimePercent < 70 ? "text-destructive-foreground" : row.onTimePercent < 85 ? "text-warning" : "text-success")}>
                             {row.onTimePercent}%
                           </td>
                           <td className="px-3 py-2">
@@ -860,32 +865,33 @@ export function PerformanceControlRoom({
                             <span className="ml-1 text-[10px] text-muted-foreground">({completion}%)</span>
                           </td>
                           {showProof && (
-                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-rose-500" : proof < 92 ? "text-amber-500" : "text-emerald-500")}>
+                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-destructive-foreground" : proof < 92 ? "text-warning" : "text-success")}>
                               {proof}%
                             </td>
                           )}
                           {showExceptions && <td className="px-3 py-2 text-foreground">{row.exceptions}</td>}
-                          <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-rose-500" : row.slaPercent < 85 ? "text-amber-500" : "text-emerald-500")}>
+                          <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-destructive-foreground" : row.slaPercent < 85 ? "text-warning" : "text-success")}>
                             {row.slaPercent}%
                           </td>
                           <td className="px-3 py-2">
-                            <Badge variant="outline" className={cn("h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium", getStatusClasses(row.status))}>
+                            <StatusBadge outlined tone={routeHealthTone(row.status)} className="h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium">
                               {row.status}
-                            </Badge>
+                            </StatusBadge>
                           </td>
                           {showTrend && <td className="px-3 py-2"><TrendSparkline row={row} /></td>}
                           <td className="px-2 py-2">
-                            <button
+                            <Button
+                              variant="ghost"
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 openRoute(row.id)
                               }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                              className={cn("gap-0 whitespace-normal text-[length:inherit] font-normal cursor-default transition-none shrink p-0 has-[>svg]:px-0 hover:bg-transparent dark:hover:bg-transparent hover:text-[color:inherit]", "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent")}
                               aria-label={`View ${row.id}`}
                             >
-                              <CaretRight className="h-3.5 w-3.5" />
-                            </button>
+                              <CaretRight className="size-3.5" />
+                            </Button>
                           </td>
                         </tr>
                       )

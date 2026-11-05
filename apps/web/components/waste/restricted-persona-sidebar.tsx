@@ -298,7 +298,7 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
           <SidebarGroup>
             <SidebarGroupLabel>Access scope</SidebarGroupLabel>
             <div className="mx-2 flex items-start gap-2.5 border-y border-sidebar-border py-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" weight="fill" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" weight="fill" />
               <p className="text-xs leading-5 text-sidebar-foreground/60">{definition.accessLabel}</p>
             </div>
           </SidebarGroup>

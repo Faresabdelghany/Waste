@@ -80,7 +80,7 @@ export function WarehouseStockSurface({ record }: RowSurfaceProps) {
             <span className="flex items-center gap-2 text-muted-foreground">
               {stockLine(balance)}
               {balance.belowMinimum && (
-                <Badge variant="outline" className="rounded-full border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200">
+                <Badge variant="outline" className="rounded-full border-warning/30 bg-warning/10 text-warning-foreground">
                   Below minimum
                 </Badge>
               )}
