@@ -127,7 +127,7 @@ test("Release hold hands a route the office moved back to its scheme, and the ge
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Hand back"))
   const [route] = routes
   const details = await openRoute(page, route)
-  await routeMenu(details, "Actions").click()
+  await routeMenu(details).click()
   await expect(page.getByRole("menuitem", { name: "Release hold" })).toHaveCount(0)
   await page.keyboard.press("Escape")
 
@@ -146,7 +146,7 @@ test("Release hold hands a route the office moved back to its scheme, and the ge
   expect(((await released.json()) as { heldAt: string | null }).heldAt).toBeNull()
   await expect(toasts(page)).toContainText(`${route.label} handed back to its scheme`)
   await expect(toasts(page)).toContainText("The next generation run brings back the scheme's day, start and assignment.")
-  await routeMenu(details, "Actions").click()
+  await routeMenu(details).click()
   await expect(page.getByRole("menuitem", { name: "Release hold" })).toHaveCount(0)
   await page.keyboard.press("Escape")
 
@@ -308,7 +308,7 @@ test("a Dispatcher, who views neither the organisation nor the depots, sees the 
     const details = routePage(page, route)
     await expect(details).toContainText("Copenhagen Central")
     // The depots are not the Dispatcher's to view: Assign does not wait for them.
-    await expect(routeMenu(details, "Actions")).toBeVisible({ timeout: 30_000 })
+    await expect(routeMenu(details)).toBeVisible({ timeout: 30_000 })
     const assign = await routeCommand(page, details, "Assign")
     await expect(assign).toBeEnabled({ timeout: 30_000 })
     await assign.click()

@@ -99,7 +99,7 @@ test("Optimise from a route's details asks for a Plan; once the worker has measu
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Optimise"), 7, { depot: "Nordhavn Depot" })
   const route = routes.find((candidate) => candidate.progress.total >= 2) ?? routes[0]
   const details = await openRoute(page, route)
-  await expect(routeMenu(details, "Stop actions")).toBeVisible({ timeout: 30_000 })
+  await expect(routeMenu(details)).toBeVisible({ timeout: 30_000 })
   const optimise = await routeCommand(page, details, "Optimise")
   await expect(optimise).toBeEnabled({ timeout: 30_000 })
   const [asked] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/optimise`), optimise.click()])

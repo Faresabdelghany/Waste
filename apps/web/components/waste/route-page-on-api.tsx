@@ -18,9 +18,9 @@ const NO_TICKETS: readonly BusinessRecord[] = []
 
 /**
  * A route's own page on the Pilot, laid out as fixture mode's
- * `RouteDetailsPage`: its name and status in the top bar, Dispatch and its
- * Actions beside the tabs, the stops with the Map and Route information beside
- * them, then its tickets, sessions, Plans, messages and activity — every one
+ * `RouteDetailsPage`: its name and status in the top bar, the stops headed by
+ * Dispatch and one Actions menu, the Map and Route information beside them,
+ * then its tickets, sessions, Plans, messages and activity — every one
  * read from the API through its command surface (`RouteSurfacePage`).
  */
 export function RouteDetailsOnApi({
@@ -35,7 +35,7 @@ export function RouteDetailsOnApi({
   onBack: () => void
   /** The route's History, the API's audit log of the row. */
   history?: ReactNode
-  /** The record's own actions (Delete, …), after Actions. */
+  /** The record's own actions (Delete, …), after the Actions menu. */
   menu?: ReactNode
 }) {
   // The tickets about this route: a ticket names its route by the route's web id (`TICKET_LINKS`).

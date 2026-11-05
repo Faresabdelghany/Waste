@@ -92,7 +92,7 @@ test("New route makes the office's own route on a project's day with no scheme; 
   const stops = stopRows(details)
 
   const commands = details.getByTestId("route-commands")
-  await expect(routeMenu(details, "Stop actions")).toBeVisible({ timeout: 30_000 })
+  await expect(routeMenu(details)).toBeVisible({ timeout: 30_000 })
   const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()

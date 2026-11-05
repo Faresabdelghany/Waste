@@ -86,12 +86,11 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
     const details = routePage(page, route)
     const commands = details.getByTestId("route-commands")
     await expect(commands.getByRole("button", { name: "Dispatch" })).toBeEnabled({ timeout: 30_000 })
-    // Dispatch and Assign alone: the stops offer it no command, so no stop Action menu stands.
-    await routeMenu(details, "Actions").click()
+    // Dispatch and Assign alone: the Actions menu offers the provider none of the office's commands.
+    await routeMenu(details).click()
     await expect(page.getByRole("menuitem", { name: "Assign" })).toBeVisible()
-    for (const office of ["Reschedule", "Cancel route"]) await expect(page.getByRole("menuitem", { name: office })).toHaveCount(0)
+    for (const office of ["Reschedule", "Reorder stops", "Optimise", "Cancel route", "Add stop"]) await expect(page.getByRole("menuitem", { name: office })).toHaveCount(0)
     await page.keyboard.press("Escape")
-    await expect(routeMenu(details, "Stop actions")).toHaveCount(0)
     await page.keyboard.press("Escape")
 
     // The fleet is NordRen's own, read from the API; its forms name master data a provider does not read, so it offers no create.

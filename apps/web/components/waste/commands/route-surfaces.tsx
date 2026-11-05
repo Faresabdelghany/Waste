@@ -30,12 +30,12 @@
 // them to a new route of its day, and Merge route takes in every open stop of
 // another route and cancels it as merged; the other route is one
 // `routesToJoin` offers, and the API judges each stop where it goes.
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowSquareOut, ArrowUp, CaretDown, CaretRight, Funnel, MagnifyingGlass, MapTrifold, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RouteMapPanel } from "@/components/waste/route-map-panel"
 import { cn } from "@/lib/utils"
@@ -459,10 +459,10 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
 
 /**
  * A route's own page on the Pilot (`RouteDetailsOnApi`), laid out as fixture
- * mode's `RouteDetailsPage`: Dispatch and the route's other commands under
- * Actions beside the tabs; Overview's stops table with its search, Filters and
- * the stop commands under Action, the Map and the route's information beside
- * it; then the route's tickets, sessions, Plans, messages and activity.
+ * mode's `RouteDetailsPage`: Overview's stops table with its search and
+ * Filters, headed by Dispatch and one Actions menu of every other command, the
+ * Map and the route's information beside it; then the route's tickets,
+ * sessions, Plans, messages and activity.
  */
 export function RouteSurfacePage({
   record,
@@ -483,7 +483,7 @@ export function RouteSurfacePage({
   return <RouteSurface record={record} layout="page" page={{ information, tickets, history, menu }} />
 }
 
-/** A route command as a surface offers it: a button in the side panel; on the page, Dispatch, an Actions item, or a stop command under Action. */
+/** A route command as a surface offers it: a button in the side panel; on the page, Dispatch, or an item of the Actions menu grouped by `place`. */
 type RouteCommandEntry = { name: string; place: "primary" | "route" | "stops"; offered: boolean; disabled: boolean; select: () => void }
 
 /** The stop statuses Filters narrows the stops to: the ones not collected. */
@@ -639,8 +639,12 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   if (layout === "page" && page !== undefined) {
     const stops = detail?.pickups
     const dispatch = commands.find((command) => command.place === "primary")
-    const routeMenu = commands.filter((command) => command.place === "route")
-    const stopMenu = commands.filter((command) => command.place === "stops")
+    // One Actions menu holds every command but Dispatch: the route's own, then the stops', Cancel route last.
+    const menuGroups = [
+      commands.filter((command) => command.place === "route" && command.name !== "Cancel route"),
+      commands.filter((command) => command.place === "stops"),
+      commands.filter((command) => command.name === "Cancel route"),
+    ].filter((group) => group.length > 0)
     const query = stopSearch.trim().toLowerCase()
     const shownStops = (stops ?? []).filter(
       (pickup) =>
@@ -670,33 +674,6 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
               ))}
             </TabsList>
           </div>
-          <div data-testid="route-commands">
-            <PageActions>
-              {dispatch && (
-                <Button size="sm" disabled={dispatch.disabled} onClick={dispatch.select}>
-                  <PaperPlaneTilt className="h-4 w-4" weight="fill" />
-                  {dispatch.name}
-                </Button>
-              )}
-              {routeMenu.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Actions
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-52">
-                    {routeMenu.map((command) => (
-                      <DropdownMenuItem key={command.name} disabled={command.disabled} onSelect={command.select} className={cn(command.name === "Cancel route" && "text-destructive focus:text-destructive")}>
-                        {command.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {page.menu}
-            </PageActions>
-          </div>
         </div>
         {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
 
@@ -724,28 +701,47 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
                   <Funnel className="h-4 w-4" />
                   Filters
                 </Button>
-                {stopMenu.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" aria-label="Stop actions">
-                        Action
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-56">
-                      {stopMenu.map((command) => (
-                        <DropdownMenuItem key={command.name} disabled={command.disabled} onSelect={command.select}>
-                          {command.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
               </div>
 
               <div className="p-3 sm:p-4">
                 <div className="max-w-full overflow-hidden rounded-xl border border-border">
-                  <div className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-                    {stops === undefined ? "Reading the route's stops…" : attentionOnly || query !== "" ? `${shownStops.length} of ${stops.length} stops` : `${stops.length} ${stops.length === 1 ? "stop" : "stops"} · ${openStops.length} open`}
+                  {/* The route's commands head its stops, as a module's actions head its table: Dispatch, then one Actions menu. */}
+                  <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      {stops === undefined ? "Reading the route's stops…" : attentionOnly || query !== "" ? `${shownStops.length} of ${stops.length} stops` : `${stops.length} ${stops.length === 1 ? "stop" : "stops"} · ${openStops.length} open`}
+                    </p>
+                    <div data-testid="route-commands">
+                      <PageActions>
+                        {dispatch && (
+                          <Button size="sm" disabled={dispatch.disabled} onClick={dispatch.select}>
+                            <PaperPlaneTilt className="h-4 w-4" weight="fill" />
+                            {dispatch.name}
+                          </Button>
+                        )}
+                        {menuGroups.length > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm">
+                                Actions
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-52">
+                              {menuGroups.map((group, index) => (
+                                <Fragment key={group[0].name}>
+                                  {index > 0 && <DropdownMenuSeparator />}
+                                  {group.map((command) => (
+                                    <DropdownMenuItem key={command.name} disabled={command.disabled} onSelect={command.select} className={cn(command.name === "Cancel route" && "text-destructive focus:text-destructive")}>
+                                      {command.name}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </Fragment>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                        {page.menu}
+                      </PageActions>
+                    </div>
                   </div>
                   {reads.problem !== null ? (
                     <p className="px-4 py-10 text-center text-sm text-destructive">{reads.problem}</p>
