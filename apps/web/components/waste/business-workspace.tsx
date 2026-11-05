@@ -478,11 +478,13 @@ function configuredCommercialFormSchema(
 
 function WorkspaceQuerySync({
   workspace,
+  landingModuleId,
   onModuleChange,
   onRecordOpen,
   resolveRecord,
 }: {
   workspace: WorkspaceDefinition
+  landingModuleId: string
   onModuleChange: (moduleId: string) => void
   onRecordOpen: (record: BusinessRecord | null) => void
   resolveRecord: (moduleId: string, recordId: string) => BusinessRecord | null
@@ -508,16 +510,21 @@ function WorkspaceQuerySync({
         : undefined
 
     if (requestedModule) onModuleChange(requestedModule.id)
+    // A bare address — the sidebar's link — is the workspace's landing. The
+    // page stays mounted across client navigations, so without this a record
+    // opened before leaving would still be shown on coming back.
+    else if (!requestedModuleId && !requestedRecordId) onModuleChange(landingModuleId)
 
     if (requestedRecordId) {
       const requestedRecord = requestedModule
         ? resolveRecord(requestedModule.id, requestedRecordId)
         : null
       onRecordOpen(requestedRecord ?? null)
-    } else if (requestedModuleId) {
+    } else {
       onRecordOpen(null)
     }
   }, [
+    landingModuleId,
     onModuleChange,
     onRecordOpen,
     resolveRecord,
@@ -1184,11 +1191,11 @@ export function BusinessWorkspace({
       (roleAccess[`${workspace.id}.${module.id}`] ?? []).includes("view"),
     )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
-  const [activeModuleId, setActiveModuleId] = useState(
-    workspace.modules.some((module) => module.id === initialModuleId)
-      ? initialModuleId!
-      : workspace.modules[0].id,
-  )
+  // The module a bare address opens on: the page's own, else the workspace's first.
+  const landingModuleId = workspace.modules.some((module) => module.id === initialModuleId)
+    ? initialModuleId!
+    : workspace.modules[0].id
+  const [activeModuleId, setActiveModuleId] = useState(landingModuleId)
   const [query, setQuery] = useState("")
   // A module opens on its list's filters on the Pilot (the registry's `list`), applied when it becomes active and only then.
   const [businessFilters, setBusinessFilters] = useState<BusinessFilters>(() =>
@@ -5968,6 +5975,7 @@ export function BusinessWorkspace({
       <Suspense fallback={null}>
         <WorkspaceQuerySync
           workspace={workspace}
+          landingModuleId={landingModuleId}
           onModuleChange={syncModuleFromQuery}
           onRecordOpen={setSelectedRecord}
           resolveRecord={resolveWorkspaceRecord}
