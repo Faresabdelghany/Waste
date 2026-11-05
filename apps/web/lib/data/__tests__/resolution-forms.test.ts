@@ -72,6 +72,8 @@ describe("New ticket", () => {
     projectId: projectRecord.id,
     subject: "Overflowing glass bank",
     description: "Glass above the rim",
+    // The picker's None (#545 of #544): no type, so the kind's default type.
+    ticketTypeId: NO_ONE,
     kind: "overflow",
     priority: "high",
     source: "email",

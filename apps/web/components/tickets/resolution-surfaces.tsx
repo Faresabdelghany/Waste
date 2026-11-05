@@ -28,7 +28,7 @@ import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/data/pro
 import { createTicketRecord, TICKET_FORM } from "@/lib/data/tickets"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
-import { useResolutionPickers } from "./resolution-pickers"
+import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
 
 /**
  * A create dialog of Resolution's: the form, the write through the record
@@ -104,6 +104,8 @@ function CreateButton({ label, module, schema, children }: { label: string; modu
 export function NewTicketSurface({ label }: PrimarySurfaceProps) {
   const provider = useIsProviderAccount()
   const routes = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
+  // The office's form, with the company's types' fields (#545 of #544).
+  const ticketForm = useTicketForm()
   if (provider) {
     return (
       <CreateButton label={label} module={TICKETS_MODULE} schema={PROVIDER_TICKET_FORM}>
@@ -113,7 +115,7 @@ export function NewTicketSurface({ label }: PrimarySurfaceProps) {
   }
   return (
     <CreateButton label={label} module={TICKETS_MODULE} schema={TICKET_FORM}>
-      {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketOpened} />}
+      {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={ticketForm} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketOpened} />}
     </CreateButton>
   )
 }
@@ -150,6 +152,7 @@ type AlertOpen = { kind: "command"; name: AlertCommandWithForm } | { kind: "tick
 export function AlertCommandsSurface({ record }: RowSurfaceProps) {
   const { refreshRecord } = useBusinessRecordStore()
   const pickers = useResolutionPickers()
+  const ticketForm = useTicketForm()
   const moduleReady = useModuleReady(ALERTS_MODULE)
   const ticketsReady = useModuleReady(TICKETS_MODULE)
   const { busy, run: send } = useCommandRunner(ALERTS_MODULE, record.id)
@@ -212,7 +215,7 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
       {open?.kind === "ticket" && (
         <ResolutionCreateDialog
           module={TICKETS_MODULE}
-          schema={TICKET_FORM}
+          schema={ticketForm}
           pickers={pickers}
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}

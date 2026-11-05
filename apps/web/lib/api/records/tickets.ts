@@ -19,7 +19,12 @@
 // (`ticketTransition`, @waste/domain/resolution/transitions, says which a
 // status takes), so the adapter lists no `statuses` and a patch carries the
 // case's own fields — subject, description, kind, priority, due — and never a
-// status, the assignee, the source or the links the consumer set. A comment
+// status, the assignee, the source or the links the consumer set. Since #545
+// of #544 a ticket names its Ticket Type, whose fields' values ride on the
+// record as JSON (`TICKET_FIELD_VALUES_KEY`): a create names the picked type
+// and the values its form holds for it, or the kind alone for the kind's
+// default type, and a patch moves the type and sends the values an edit
+// changed, a cleared one as null. A comment
 // is appended to the history and changes nothing of the row: an action
 // answering the event (`commentOnTicket`), not a command. A reply with the
 // stop's record (M6 of #293) is a command, since it may complete the case:
@@ -41,6 +46,7 @@ import { isAgreementRecord } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
 import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
+import { fieldValuesFromForm, TICKET_TYPE_PREFIX } from "@/lib/data/ticket-types"
 
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -52,6 +58,7 @@ import { pickupAdapter } from "./pickups"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { productAdapter } from "./pricing"
 import { isTicketTeamRecord } from "./ticket-teams"
+import { isTicketTypeRecord } from "./ticket-types"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
 import { routeAdapter } from "./routes"
@@ -83,6 +90,9 @@ const CONTEXT_LINKS: ReadonlyArray<keyof TicketLinks> = ["customerId", "property
 
 /** The submitted value a ticket record carries its assignee's server id under, for the list's "Mine" (`/me`'s account). */
 export const ASSIGNEE_ACCOUNT_KEY = "assigneeAccountId"
+
+/** The submitted value a ticket record carries its type's fields' values under (#545 of #544): the wire's object as JSON, which an edit of the fields replaces and the patch reads the change of. */
+export const TICKET_FIELD_VALUES_KEY = "fieldValuesJson"
 
 /** The ticket's commands, by the names the dialog sends: `assign` and the machine's six. */
 export const ASSIGN_TICKET = "assign"
@@ -139,6 +149,8 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   const facts: Record<string, string> = {
     [TICKET_NUMBER_FACT]: ticket.label,
     Kind: statusLabel(ticket.kind),
+    // Its type (#545 of #544), by name once the types are loaded; none on an event the outbox took before them.
+    ...(ticket.ticketTypeId === null ? {} : { Type: nameVia(context, TICKET_TYPE_PREFIX, ticket.ticketTypeId) }),
     Priority: statusLabel(ticket.priority),
     Assignee: assignee ?? "Unassigned",
     // The team it waits with (O30 of #290), by name once the teams are loaded; the list's Team category reads it.
@@ -181,6 +193,8 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
       subject: ticket.subject,
       description: ticket.description,
       kind: ticket.kind,
+      ticketTypeId: ticket.ticketTypeId === null ? "" : webIdVia(context, TICKET_TYPE_PREFIX, ticket.ticketTypeId),
+      [TICKET_FIELD_VALUES_KEY]: JSON.stringify(ticket.fieldValues),
       priority: ticket.priority,
       source: ticket.source,
       status: ticket.status,
@@ -272,8 +286,11 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   if (subject === undefined) return refusal("subject", "A ticket needs a subject")
   const description = typed(record, "description")
   if (description === undefined) return refusal("description", "Say what the case is about")
-  const kind = tokenIn(record, "kind", TICKET_KINDS, KIND_SENTENCE)
-  if (kind === undefined) return refusal("kind", "Pick the kind of case")
+  // Its type (#545 of #544), whose kind it takes and whose fields' values it carries; or, with none picked, its kind's default type.
+  const type = ticketTypeOf(record, context)
+  if (isLocalRefusal(type)) return type
+  const kind = type === undefined ? tokenIn(record, "kind", TICKET_KINDS, KIND_SENTENCE) : undefined
+  if (type === undefined && kind === undefined) return refusal("kind", "Pick the type or the kind of case")
   if (isLocalRefusal(kind)) return kind
   const priority = tokenIn(record, "priority", TICKET_PRIORITIES, PRIORITY_SENTENCE)
   if (isLocalRefusal(priority)) return priority
@@ -305,7 +322,7 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
     projectId,
     subject,
     description,
-    kind,
+    ...(type === undefined ? { kind } : { ticketTypeId: type.serverId, fieldValues: fieldValuesFromForm(type.record, record.submittedValues ?? {}) }),
     ...(priority === undefined ? {} : { priority }),
     ...(source === undefined ? {} : { source }),
     ...(occurredAt === undefined ? {} : { occurredAt }),
@@ -318,6 +335,37 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
     // The API answers a missed collection its stop's record answers unless told not to (M6 of #293): only the opt-out goes out.
     ...(record.submittedValues?.answerFromRecord === false ? { answerFromRecord: false } : {}),
   }
+}
+
+/** The ticket type a form names (#545 of #544), with its record for its fields: undefined for blank or the picker's None, a refusal for a type the API does not hold. */
+function ticketTypeOf(record: BusinessRecord, context: MappingContext): { serverId: string; record: BusinessRecord } | undefined | LocalRefusal {
+  const webId = typed(record, "ticketTypeId")
+  if (webId === undefined || webId === NO_ONE) return undefined
+  const serverId = referencedServerId(webId, TICKET_TYPE_PREFIX, context, { owns: isTicketTypeRecord })
+  const type = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
+  return serverId === undefined || type === undefined ? refusal("ticketTypeId", "Pick a ticket type the API holds") : { serverId, record: type }
+}
+
+/** The values a ticket's record carries (#545 of #544): the wire's object, kept as JSON. */
+export function ticketFieldValuesOf(record: Pick<BusinessRecord, "submittedValues">): Record<string, unknown> {
+  const json = record.submittedValues?.[TICKET_FIELD_VALUES_KEY]
+  if (typeof json !== "string" || json === "") return {}
+  try {
+    const parsed: unknown = JSON.parse(json)
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** What an edit changed of the values: each value set where it moved, null where it was cleared; null for no change. */
+function fieldValuesPatch(before: BusinessRecord, after: BusinessRecord): Record<string, unknown> | null {
+  const was = ticketFieldValuesOf(before)
+  const is = ticketFieldValuesOf(after)
+  const patch: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(is)) if (JSON.stringify(value) !== JSON.stringify(was[key])) patch[key] = value
+  for (const key of Object.keys(was)) if (!Object.hasOwn(is, key)) patch[key] = null
+  return Object.keys(patch).length === 0 ? null : patch
 }
 
 /** The team a form names: undefined for blank, null for the picker's None, the team's server id, or a refusal for a team the API does not hold. */
@@ -349,16 +397,27 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
   if (isLocalRefusal(due)) return due
   const team = teamOf(typed(after, "teamId"), context)
   if (isLocalRefusal(team)) return team
-  return patchOf(before, after, (record) => ({
-    subject: typed(record, "subject"),
-    description: typed(record, "description"),
-    kind: typed(record, "kind") === undefined ? undefined : statusToken(typed(record, "kind") as string),
-    priority: typed(record, "priority") === undefined ? undefined : statusToken(typed(record, "priority") as string),
-    // A cleared due is null, which clears it; the instant is compared, not the spelling.
-    dueAt: typed(record, "dueAt") === undefined ? null : instantOn(typed(record, "dueAt") as string, timezone),
-    // Handed to another team, or to none with the picker's None; refused above where the team is not one the API holds.
-    teamId: teamRead(record, context),
-  }))
+  const type = ticketTypeOf(after, context)
+  if (isLocalRefusal(type)) return type
+  const fields = patchOf(before, after, (record) => {
+    const named = ticketTypeOf(record, context)
+    return {
+      subject: typed(record, "subject"),
+      description: typed(record, "description"),
+      kind: typed(record, "kind") === undefined ? undefined : statusToken(typed(record, "kind") as string),
+      // Moved to another type, its kind following (#545 of #544); refused above where the type is not one the API holds.
+      ticketTypeId: named === undefined || isLocalRefusal(named) ? undefined : named.serverId,
+      priority: typed(record, "priority") === undefined ? undefined : statusToken(typed(record, "priority") as string),
+      // A cleared due is null, which clears it; the instant is compared, not the spelling.
+      dueAt: typed(record, "dueAt") === undefined ? null : instantOn(typed(record, "dueAt") as string, timezone),
+      // Handed to another team, or to none with the picker's None; refused above where the team is not one the API holds.
+      teamId: teamRead(record, context),
+    }
+  })
+  // The values the edit moved, merged by the API into the ones the ticket holds.
+  const fieldValues = fieldValuesPatch(before, after)
+  if (fields === null && fieldValues === null) return null
+  return { ...(fields ?? {}), ...(fieldValues === null ? {} : { fieldValues }) }
 }
 
 // ---------------------------------------------------------------------------

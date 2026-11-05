@@ -58,7 +58,7 @@ const withTeams: MappingContext = { ...context, resolve: resolverOver(state) }
 describe("a ticket team", () => {
   test("is a record of Tickets & communication on the Pilot, loaded before the tickets that name it", () => {
     assert.ok(isServerBacked("configure", "templates"))
-    assert.deepEqual(ticketTeamsModule.resources.map((adapter) => adapter.prefix), ["team"])
+    assert.deepEqual(ticketTeamsModule.resources.map((adapter) => adapter.prefix), ["team", "ticket-type"], "the ticket types share the module (#545 of #544)")
     assert.ok(SERVER_MODULE_KEYS.indexOf("configure.templates") < SERVER_MODULE_KEYS.indexOf("operate.tickets"))
     assert.ok(SERVER_MODULE_KEYS.indexOf("configure.access") < SERVER_MODULE_KEYS.indexOf("configure.templates"))
   })
