@@ -5,6 +5,7 @@ import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
 import { TICKET_OBJECT_KEY_SHAPE } from "@waste/contracts/resolution"
+import { TicketType } from "@waste/contracts/ticket-types"
 import { Ticket, TicketDetail, TicketEvent, TicketEvidence } from "@waste/contracts/tickets"
 import { type Database, type Tx } from "@waste/db/client"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
@@ -129,6 +130,19 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(judged.status, "open", "an outcome the office corrected answers no case by itself")
       const review = (await (await olivia(`/tickets/${judged.id}/evidence`)).json()) as TicketEvidence
       assert.deepEqual([review.stop?.corrected, review.stop?.answeredByRecord, review.stop?.reply], [true, false, "Our office reviewed the collection at 11:00 on Monday 5 October and recorded that the bin was not put out for collection."])
+    })
+
+    test("the record answers a missed collection whatever its type asks of a person: the type's roles and fields bind the office's completion, not the system's answer (#545 of #544)", async () => {
+      const made = await olivia("/ticket-types", { method: "POST", body: { name: "Missed collection, claimed", kind: "missed-collection" } })
+      assert.equal(made.status, 201, JSON.stringify(await made.clone().json()))
+      const type = TicketType.parse(await made.json())
+      await olivia(`/ticket-types/${type.id}/fields`, { method: "PUT", body: { fields: [{ key: "claim", label: "Claim", input: "choice", choices: ["Upheld", "Dismissed"], requirement: "to-complete" }] } })
+      await olivia(`/ticket-types/${type.id}/permissions`, { method: "PUT", body: { permissions: [{ command: "complete", roleIds: [a.roles.viewer.id] }] } })
+      const answered = await opened({ ticketTypeId: type.id, links: stop(1) })
+      assert.deepEqual([answered.ticketTypeId, answered.status, answered.resolution], [type.id, "completed", "answered"], "neither the role nor the empty claim holds back the record's answer")
+      const judged = await opened({ ticketTypeId: type.id, answerFromRecord: false, links: stop(1) })
+      const byHand = await refused(await olivia(`/tickets/${judged.id}/complete`, { method: "POST", body: { resolution: "answered", note: "Answered by phone" } }), 403)
+      assert.equal(byHand.detail, "Only Viewer may complete a ticket of type Missed collection, claimed", "the office's own completion is held to the type")
     })
 
     test("replies with the record and the office's note in one step, completing the case only when asked, and answers 201 with the history and no Location", async () => {

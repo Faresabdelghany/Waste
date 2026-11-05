@@ -58,6 +58,9 @@ type Row = Pick<typeof ticketType.$inferSelect, keyof typeof columns>
 const NAME_TAKEN = "ticket_type_name_key"
 const nameTaken = (name: string) => `This company already has a ticket type called ${JSON.stringify(name)}`
 
+/** What making a retired type its kind's default is told. */
+export const retiredDefault = (name: string) => `The ticket type ${JSON.stringify(name)} is retired; make it active to make it its kind's default`
+
 /** What a permission naming a role of another company, or none, is told. */
 export const NOT_A_ROLE = "Not a role of this company"
 
@@ -242,8 +245,8 @@ export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (current === undefined) throw noSuchType(id)
         const status = patch.status ?? current.status
         const isDefault = patch.isDefault ?? current.isDefault
-        // A default is offered: the database's `ticket_type_default_shape`, as the sentence a person reads.
-        if (isDefault && status !== "active") throw problem(409, { detail: DEFAULT_TYPE_OFFERED })
+        // A default is offered: the database's `ticket_type_default_shape`, as the sentence a person reads — retiring the default, or making a retired type one.
+        if (isDefault && status !== "active") throw problem(409, { detail: current.isDefault ? DEFAULT_TYPE_OFFERED : retiredDefault(current.name) })
         if (patch.isDefault === true && !current.isDefault) await unmakeDefaults(tx, principal.companyId, current.kind, current.id)
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>

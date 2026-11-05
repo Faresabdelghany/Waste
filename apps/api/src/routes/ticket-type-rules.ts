@@ -21,14 +21,16 @@
 //
 // A status command is a person's in the office: the type may name the roles
 // that may give it, and another role is refused (403, naming them); a
-// completion short of a field the type requires to complete is refused (409,
-// naming them), the ticket's own state refusing. Neither binds the system's
-// work — a stop servicing its ticket, the stop's record answering a missed
-// collection — which never comes through here.
+// completion short of a field the type requires to complete — or holding a
+// value its field no longer takes — is refused (409, naming them), the
+// ticket's own state refusing. Neither binds the system's work — a stop
+// servicing its ticket, the stop's record answering a missed collection —
+// which never comes through here: a driver's completion is never held back by
+// the office's paperwork.
 import { ticketTypeRules, defaultTicketTypeOf, type TicketTypeRules } from "@waste/db/commands/ticket-types"
 import type { Tx } from "@waste/db/client"
 import { role } from "@waste/db/schema/access"
-import { fieldRequiredToOpen, fieldValuesIssue, mayGive, missingFields, needsBeforeCompleting, onlyRolesMay, typeOfAnotherKind, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
+import { fieldRequiredToOpen, fieldValuesIssues, mayGive, missingFields, needsBeforeCompleting, onlyRolesMay, typeOfAnotherKind, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketKind } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
@@ -88,23 +90,18 @@ export function refuseRetiredType(type: { rules: TicketTypeRules; named: boolean
   if (type.named) refuseRetiredTicketType(type.rules.status, type.rules.name)
 }
 
-/** A body's values against the type, at `fieldValues.<key>`: each key a field it holds and each value one the field takes; a null clears a value, whatever its key. */
+/** A body's values against the type, at `fieldValues.<key>`: each key a field it holds and each value one the field takes, one issue per key in one pass; a null clears a value, whatever its key. The contracts bound how many a body names. */
 export function valueIssues(rules: TicketTypeRules, values: Readonly<Record<string, unknown>> | undefined): Issue[] {
   if (values === undefined) return []
   const given = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== null))
-  const issues: Issue[] = []
-  // One issue per key: the domain answers the first, and the rest are asked again without it.
-  let left = given
-  for (let issue = fieldValuesIssue(rules.fields, left, rules.name); issue !== undefined; issue = fieldValuesIssue(rules.fields, left, rules.name)) {
-    issues.push({ path: `fieldValues.${issue.key}`, message: issue.message })
-    left = Object.fromEntries(Object.entries(left).filter(([key]) => key !== issue?.key))
-  }
-  return issues
+  return fieldValuesIssues(rules.fields, given, rules.name).map((issue) => ({ path: `fieldValues.${issue.key}`, message: issue.message }))
 }
 
-/** The fields the type requires to open that a create leaves empty, each at `fieldValues.<key>`. */
+/** The fields the type requires to open that a create leaves empty, each at `fieldValues.<key>`; a value the field does not take is `valueIssues`' to tell. */
 export function openingIssues(rules: TicketTypeRules, values: TicketFieldValues): Issue[] {
-  return missingFields(rules.fields, values, "open").map((field) => ({ path: `fieldValues.${field.key}`, message: fieldRequiredToOpen(field.label, rules.name) }))
+  return missingFields(rules.fields, values, "open")
+    .filter((field) => !Object.hasOwn(values, field.key))
+    .map((field) => ({ path: `fieldValues.${field.key}`, message: fieldRequiredToOpen(field.label, rules.name) }))
 }
 
 /** A person's status command on a ticket of the type: their role named for it, or none named for it at all; else 403, naming the roles that may. */

@@ -11,7 +11,7 @@ import {
   fieldRequiredToOpen,
   fieldSetIssue,
   fieldValueIssue,
-  fieldValuesIssue,
+  fieldValuesIssues,
   mayGive,
   mergedFieldValues,
   missingFields,
@@ -88,11 +88,17 @@ describe("what a value of a field must be", () => {
     assert.match(fieldValueIssue(decision, "Maybe") ?? "", /Granted, Refused/)
   })
 
-  test("a set of values names only the type's fields, each with a value it takes", () => {
+  test("a set of values names only the type's fields, each with a value it takes: every key at fault, once, in one pass", () => {
     const fields = [field("note"), field("bags", { input: "number" })]
-    assert.equal(fieldValuesIssue(fields, { note: "Gate", bags: 2 }, "Bulky waste"), undefined)
-    assert.deepEqual(fieldValuesIssue(fields, { colour: "red" }, "Bulky waste"), { key: "colour", message: "Bulky waste has no field colour" })
-    assert.equal(fieldValuesIssue(fields, { bags: "two" }, "Bulky waste")?.key, "bags")
+    assert.deepEqual(fieldValuesIssues(fields, { note: "Gate", bags: 2 }, "Bulky waste"), [])
+    assert.deepEqual(fieldValuesIssues(fields, { colour: "red", bags: "two", note: "Gate" }, "Bulky waste"), [
+      { key: "colour", message: "Bulky waste has no field colour" },
+      { key: "bags", message: "bags takes a number" },
+    ])
+    const many = Object.fromEntries(Array.from({ length: 5000 }, (_, index) => [`key-${index}`, "x"]))
+    const started = Date.now()
+    assert.equal(fieldValuesIssues(fields, many, "Bulky waste").length, 5000)
+    assert.ok(Date.now() - started < 1000, "linear in the keys a body names")
   })
 })
 
@@ -110,6 +116,11 @@ describe("the fields a ticket still needs", () => {
     assert.deepEqual(missingFields(fields, {}, "open").map((entry) => entry.key), ["requested"])
     assert.deepEqual(missingFields(fields, {}, "complete").map((entry) => entry.key), ["requested", "decision"])
     assert.deepEqual(missingFields(fields, { requested: "2026-11-05", decision: "Granted" }, "complete"), [])
+  })
+
+  test("a value the field no longer takes — from another type, or from before the field changed — is no value of it", () => {
+    assert.deepEqual(missingFields(fields, { requested: "next week", decision: "Granted" }, "complete").map((entry) => entry.key), ["requested"])
+    assert.deepEqual(missingFields(fields, { requested: "2026-11-05", decision: "Maybe" }, "complete").map((entry) => entry.key), ["decision"])
   })
 
   test("an opening short of one is told at the field, and a type of another kind than the body's is told so", () => {

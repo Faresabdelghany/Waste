@@ -470,7 +470,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         const at = now()
         const occurredAt = body.occurredAt === undefined ? at : new Date(body.occurredAt)
-        // The 400s in body order: the type and its fields' values, the clock, the assignee, the links; then the type's 409 and the team's 400 and its 409; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
+        // The 400s in body order: the type and its fields' values, the clock, the assignee, the links; then the team's 400 and its 409, then the type's 409; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
         const type = await typeToOpen(tx, principal.companyId, body)
         const fieldIssues = [...valueIssues(type.rules, body.fieldValues), ...openingIssues(type.rules, body.fieldValues)]
         if (fieldIssues.length > 0) throw invalidRequest("body", fieldIssues)
@@ -478,8 +478,9 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await requireAccountInProject(tx, scope, body.assigneeUserAccountId)
         const links = linksAfter(NO_LINKS, body.links)
         await requireLinks(tx, scope, links, namedIn(body.links))
-        refuseRetiredType(type)
         if (body.teamId != null) await requireTeam(tx, principal.companyId, body.teamId)
+        // The type's 409 after the team's 400.
+        refuseRetiredType(type)
         const kind = type.rules.kind
         const { answered } = await openTicket(tx, {
           companyId: principal.companyId,
@@ -579,9 +580,10 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         if (fieldIssues.length > 0) throw invalidRequest("body", fieldIssues)
         const links = linksAfter(linksOf(current), body.links)
         await requireLinks(tx, scope, links, namedIn(body.links), current.id)
-        refuseRetiredType(type)
         // A team the ticket already waits with is no new reference; any other is held, its status included.
         if (body.teamId != null && body.teamId !== current.teamId) await requireTeam(tx, principal.companyId, body.teamId)
+        // The type's 409 after the team's 400.
+        refuseRetiredType(type)
         const [row] = await tx
           .update(ticket)
           .set({
@@ -858,13 +860,13 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "replyToTicketWithEvidence",
         summary: "Reply to the customer with the stop's record",
         description:
-          "One step: a customer-visible `comment` whose body is the reply `GET /tickets/{id}/evidence` writes, the body's `note` after it, and with `complete` the case completed `answered` in the same transaction — the `status-changed` row, `closedAt` and the `ticket-completed` event, as `complete` writes them. Under the ticket's row lock. A ticket about no stop is refused (409, `This ticket names no stop, so no record answers it`); with `complete`, a completed or rejected ticket is refused as `complete` refuses it, while the reply alone is taken on a closed ticket, as a comment is. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. Answers 201 with the ticket's history, and no `Location`, like a comment.",
+          "One step: a customer-visible `comment` whose body is the reply `GET /tickets/{id}/evidence` writes, the body's `note` after it, and with `complete` the case completed `answered` in the same transaction — the `status-changed` row, `closedAt` and the `ticket-completed` event, as `complete` writes them. Under the ticket's row lock. A ticket about no stop is refused (409, `This ticket names no stop, so no record answers it`); with `complete`, a completed or rejected ticket is refused as `complete` refuses it, while the reply alone is taken on a closed ticket, as a comment is. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. Answers 201 with the ticket's history, and no `Location`, like a comment. With `complete`, the completion is a person's command held to the ticket's type (#545 of #544): where the type names the roles that may complete it, a caller of another role is refused (403, naming them), and a ticket short of a field its type requires is refused (409, `Ticket T-8831 needs Decision before it is completed`).",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The ticket with its history, the reply its last comment.", TicketDetail),
           400: describeProblem("The path does not hold an id, or the body names a member the command does not take."),
-          ...commandProblems("edit"),
-          409: describeProblem("The ticket names no stop, or `complete` was asked of a completed or rejected ticket."),
+          ...statusCommandProblems(),
+          409: describeProblem("The ticket names no stop, or, with `complete`, it is completed or rejected already or leaves a field its type requires empty."),
         },
       }),
       guard,

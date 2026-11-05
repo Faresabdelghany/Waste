@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
+import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
 import { Ticket, TicketCreate, TicketListQuery, TicketPatch, TYPE_OR_KIND } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -107,6 +107,13 @@ describe("a ticket's type and its values", () => {
     assert.equal(TicketCreate.parse({ ...base, kind: "other" }).kind, "other")
     assert.deepEqual(TicketCreate.parse({ ...base, kind: "other" }).fieldValues, {})
     assert.deepEqual(refusal(TicketCreate.safeParse(base)), [{ path: "ticketTypeId", message: TYPE_OR_KIND }])
+  })
+
+  test("a body names as many values as a type may have fields, so it is judged in bounded time", () => {
+    const base = { projectId: OTHER, subject: "Sofa", description: "Collect a sofa", kind: "other" }
+    const many = Object.fromEntries(Array.from({ length: 31 }, (_, index) => [`key-${index}`, "x"]))
+    assert.deepEqual(refusal(TicketCreate.safeParse({ ...base, fieldValues: many })), [{ path: "fieldValues", message: AT_MOST_FIELDS }])
+    assert.equal(TicketPatch.safeParse({ fieldValues: Object.fromEntries(Array.from({ length: 61 }, (_, index) => [`key-${index}`, null])) }).success, false)
   })
 
   test("a patch moves the type and merges values, null clearing one; the list filters by type", () => {

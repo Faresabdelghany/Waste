@@ -57,7 +57,7 @@ import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./
 import { ticketLabel, TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
 import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { TicketFieldValues, TicketFieldValuesPatch } from "./ticket-types"
+import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
 /** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
 export const TicketLinks = z.object({
@@ -229,7 +229,7 @@ export const TicketCreate = z
     /** A type of the company that is offered (#545 of #544); absent, the kind's default type. */
     ticketTypeId: Id.optional(),
     /** The type's custom fields' values, by key, each one the field takes; the fields the type requires to open included. */
-    fieldValues: TicketFieldValues.default({}).describe("None when absent."),
+    fieldValues: TicketFieldValuesBody.default({}).describe("None when absent."),
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
     /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b). */
     source: TicketSource.exclude(["driver-app", "dispatch", "service-provider"])
