@@ -32,7 +32,7 @@ import type { SelectionStatistics } from "@waste/domain/map-planning/statistics"
 import { count } from "@waste/domain/text"
 import { cn } from "@/lib/utils"
 
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 export type SelectedAreaPanelProps = {
   shape: SelectionShape | null
@@ -273,7 +273,7 @@ export function SelectedAreaPanel({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate font-medium">{area.name}</span>
-                          <StatusBadge status={area.status} />
+                          <MapStatusBadge status={area.status} />
                         </div>
                         <p className="truncate text-xs text-muted-foreground">
                           {area.serviceProvider} · {area.services}
@@ -338,7 +338,7 @@ export function SelectedAreaPanel({
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1 truncate font-medium">{route.name}</span>
-                      <StatusBadge status={route.status} />
+                      <MapStatusBadge status={route.status} />
                       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                         {route.date
                           ? formatShortDate(route.date)

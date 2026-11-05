@@ -11,9 +11,8 @@ import type {
   WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
-import { cn } from "@/lib/utils"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
@@ -31,22 +30,22 @@ import {
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-function statusClasses(status: string) {
+function providerStatusTone(status: string): StatusTone {
   // "Deactive"/"Inactive" contain the "active" substring, so they must be
   // classified before the positive match below.
   if (/deactive|inactive|deactivated|disabled/i.test(status)) {
-    return "border-border bg-muted/50 text-muted-foreground"
+    return "neutral"
   }
   if (/active|completed|approved/i.test(status)) {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "success"
   }
   if (/expiring|review|pending|upcoming/i.test(status)) {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "warning"
   }
   if (/terminated|expired|suspended|issue/i.test(status)) {
-    return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+    return "destructive"
   }
-  return "border-border bg-muted/50 text-muted-foreground"
+  return "neutral"
 }
 
 function InformationItem({
@@ -218,15 +217,9 @@ function RelatedRecordsTable({
                         <span className="line-clamp-2">{relatedRecord.context}</span>
                       </TableCell>
                       <TableCell className="py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(relatedRecord.status),
-                          )}
-                        >
+                        <StatusBadge tone={providerStatusTone(relatedRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {relatedRecord.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="py-3 text-sm">
                         {relatedRecord.value}
@@ -301,15 +294,9 @@ export function ServiceProviderDetailsPage({
                 { label: record.name },
               ]}
             />
-            <Badge
-              variant="outline"
-              className={cn(
-                "rounded-full text-[11px]",
-                statusClasses(record.status),
-              )}
-            >
+            <StatusBadge tone={providerStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
-            </Badge>
+            </StatusBadge>
           </div>
         </PageTopBar>
       </header>

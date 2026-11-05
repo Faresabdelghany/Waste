@@ -30,7 +30,7 @@ import {
   type Project,
   type UpdateCompanyInput,
 } from "@/components/settings/organization-store"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -82,32 +82,25 @@ import {
   FIXTURE_COMPANY_ID,
   fixtureRecordScopeById,
 } from "@/lib/data/business-modules"
-import { cn } from "@/lib/utils"
 
-function statusClasses(status: string) {
+function projectStatusTone(status: string): StatusTone {
   if (/active|completed|approved/i.test(status)) {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    return "success"
   }
   if (/onboarding|invited|pending|upcoming/i.test(status)) {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    return "warning"
   }
   if (/suspended|archived|issue/i.test(status)) {
-    return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+    return "destructive"
   }
-  return "border-border bg-muted/50 text-muted-foreground"
+  return "neutral"
 }
 
-function StatusBadge({ status }: { status: string }) {
+function ProjectStatusBadge({ status }: { status: string }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-        statusClasses(status),
-      )}
-    >
+    <StatusBadge tone={projectStatusTone(status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
       {status}
-    </Badge>
+    </StatusBadge>
   )
 }
 
@@ -570,7 +563,7 @@ function CompanyList({
                         {company.registrationNumber || "Not provided"}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={company.status} />
+                        <ProjectStatusBadge status={company.status} />
                       </TableCell>
                       <TableCell className="min-w-[120px] text-sm">
                         {companyProjects.length}
@@ -786,7 +779,7 @@ function ProjectsTable({
                       {project.kind}
                     </TableCell>
                     <TableCell className="py-3">
-                      <StatusBadge status={project.status} />
+                      <ProjectStatusBadge status={project.status} />
                     </TableCell>
                     <TableCell className="py-3 text-sm text-muted-foreground">
                       {project.language}
@@ -874,7 +867,7 @@ function CompanyDetails({
                 <p className="truncate text-base font-medium text-foreground">
                   {company.name}
                 </p>
-                <StatusBadge status={company.status} />
+                <ProjectStatusBadge status={company.status} />
               </div>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">
                 {company.legalName}

@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { containerWeightSource } from "@/lib/data/asset-catalogue"
 import { getWorkspaceDefinition } from "@/lib/data/business-modules"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -376,19 +377,11 @@ export function EmptyRow({ colSpan, message, hint = "Try a different search or s
   )
 }
 
-export function StatusBadge({ active }: { active: boolean }) {
+function ActiveBadge({ active }: { active: boolean }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "rounded-full text-[11px]",
-        active
-          ? "border-transparent bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-100"
-          : "border-transparent bg-muted text-muted-foreground",
-      )}
-    >
+    <StatusBadge tone={active ? "success" : "neutral"} className="rounded-full text-[11px]">
       {active ? "Active" : "Inactive"}
-    </Badge>
+    </StatusBadge>
   )
 }
 
@@ -648,7 +641,7 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
                   </TableCell>
                   <TableCell>{item.loadingMethod || "—"}</TableCell>
                   <TableCell>
-                    <StatusBadge active={item.lifecycleStatus === "Active"} />
+                    <ActiveBadge active={item.lifecycleStatus === "Active"} />
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
@@ -954,7 +947,7 @@ function WasteFractionsPanel({ tabs }: { tabs: ReactNode }) {
                 <TableCell><div className="flex items-center gap-3"><span className="h-3 w-3 rounded-full border" style={{ backgroundColor: item.color }} /><div><p className="font-medium">{item.name}</p>{view.showDetails && <p className="text-xs text-muted-foreground">{item.wasteType}</p>}</div></div></TableCell>
                 <TableCell><p>{item.ewcCode || "No EWC code"}</p><p className="text-xs text-muted-foreground">{item.rdCode || "No R/D code"}{item.hazardous ? " · Hazardous" : ""}</p></TableCell>
                 <TableCell>{item.recyclingPercent}% recycling</TableCell>
-                <TableCell><StatusBadge active={item.status === "Active"} /></TableCell>
+                <TableCell><ActiveBadge active={item.status === "Active"} /></TableCell>
                 <TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)} aria-label={`Edit ${item.name}`}><PencilSimple className="h-4 w-4" /></Button></TableCell>
               </TableRow>
             ))}
@@ -1092,7 +1085,7 @@ function SparePartsPanel({ tabs }: { tabs: ReactNode }) {
                     <TableCell><Badge variant="outline">{partTypeName(item)}</Badge></TableCell>
                     <TableCell>{type?.name ?? "Not assigned"}{item.additionalContainerTypeIds.length > 0 && <p className="text-xs text-muted-foreground">+{item.additionalContainerTypeIds.length} compatible</p>}</TableCell>
                     <TableCell>{item.sku || "—"}</TableCell>
-                    <TableCell><StatusBadge active={item.active} /></TableCell>
+                    <TableCell><ActiveBadge active={item.active} /></TableCell>
                     <TableCell>
                       <div className="flex">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button>
@@ -1162,7 +1155,7 @@ function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
     description="Groupings for spare parts used in pickers and reporting. Deactivated types stay on existing spare parts."
     action={<div className="flex max-w-lg gap-2"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-8 w-48 text-sm" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></div>}
     toolbar={<AssetToolbar searchPlaceholder="Search part types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.partTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.partTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
 }
 
 function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
@@ -1186,7 +1179,7 @@ function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
     description="Appliances that can be registered on a property alongside containers."
     action={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, description: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New appliance</Button>}
     toolbar={<AssetToolbar searchPlaceholder="Search property equipment" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
 }
 
 function SimpleEquipmentDialog({ value, onClose }: { value: PropertyEquipment | null; onClose: () => void }) {

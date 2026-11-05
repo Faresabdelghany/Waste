@@ -97,7 +97,7 @@ import { MapToolbar } from "./map-toolbar"
 import { SavedSelectionsMenu } from "./saved-selections-menu"
 import type { DrawTool, PlanningMapApi } from "./planning-map"
 import { SelectedAreaPanel } from "./selected-area-panel"
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 const PlanningMap = dynamic(
   () => import("./planning-map").then((module) => module.PlanningMap),
@@ -775,7 +775,7 @@ export function MapPlanningView({
                     {routeCard.route.timeWindow ? ` · ${routeCard.route.timeWindow}` : ""}
                   </p>
                 </div>
-                <StatusBadge status={routeCard.route.status} />
+                <MapStatusBadge status={routeCard.route.status} />
               </div>
               <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-muted-foreground">Vehicle</dt>

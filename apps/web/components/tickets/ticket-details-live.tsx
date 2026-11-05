@@ -28,6 +28,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -141,16 +142,16 @@ type Visibility = keyof typeof COMPOSER
 const OFFICE_THREADS: readonly Visibility[] = ["internal", "customer"]
 const PROVIDER_THREADS: readonly Visibility[] = ["service-provider"]
 
-function statusClasses(status: string): string {
-  if (/completed/i.test(status)) return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-  if (/progress|open/i.test(status)) return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-200"
-  return "border-border bg-muted/60 text-muted-foreground"
+function ticketStatusTone(status: string): StatusTone {
+  if (/completed/i.test(status)) return "success"
+  if (/progress|open/i.test(status)) return "info"
+  return "neutral"
 }
 
-function priorityClasses(priority: string): string {
-  if (/critical|high/i.test(priority)) return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-200"
-  if (/medium/i.test(priority)) return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-200"
-  return "border-border bg-muted/60 text-muted-foreground"
+function ticketPriorityTone(priority: string): StatusTone {
+  if (/critical|high/i.test(priority)) return "destructive"
+  if (/medium/i.test(priority)) return "warning"
+  return "neutral"
 }
 
 type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" } | { kind: "sub-ticket" }
@@ -298,9 +299,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <DialogTitle className="truncate text-lg font-semibold">{live.name}</DialogTitle>
-                    <Badge variant="outline" className={cn("rounded-full text-[11px]", statusClasses(live.status))}>
+                    <StatusBadge tone={ticketStatusTone(live.status)} className="rounded-full text-[11px]">
                       {live.status}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                   <DialogDescription className="mt-0.5 truncate text-xs sm:text-sm">
                     {label} · {live.facts.Project} · Updated {live.updated.toLowerCase()}
@@ -324,9 +325,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     <Badge variant="outline" className="rounded-full font-normal">
                       {live.facts.Kind}
                     </Badge>
-                    <Badge variant="outline" className={cn("rounded-full font-normal", priorityClasses(live.facts.Priority ?? ""))}>
+                    <StatusBadge tone={ticketPriorityTone(live.facts.Priority ?? "")} className="rounded-full font-normal">
                       {live.facts.Priority} priority
-                    </Badge>
+                    </StatusBadge>
                     <Badge variant="outline" className="rounded-full font-normal">
                       Opened via {live.facts["Opened via"]}
                     </Badge>

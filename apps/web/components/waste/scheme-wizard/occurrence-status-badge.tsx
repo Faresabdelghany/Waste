@@ -5,23 +5,24 @@
 // simulation so a status reads the same wherever a row appears.
 
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { shiftedNote, type Occurrence } from "@waste/domain/route-schemes/occurrences"
 
 export function OccurrenceStatusBadge({ row }: { row: Occurrence }) {
   if (row.status === "planned") return <Badge variant="secondary">Planned</Badge>
   if (row.status === "shifted") {
     return (
-      <Badge variant="secondary" className="bg-amber-50 text-amber-800">
+      <StatusBadge tone="warning" className="border-transparent">
         Shifted {shiftedNote(row)}
-      </Badge>
+      </StatusBadge>
     )
   }
   if (row.status === "skipped") {
     return <Badge variant="muted">Skipped · {row.note}</Badge>
   }
   return (
-    <Badge variant="secondary" className="bg-amber-50 text-amber-800">
+    <StatusBadge tone="warning" className="border-transparent">
       Holiday · {row.note}
-    </Badge>
+    </StatusBadge>
   )
 }

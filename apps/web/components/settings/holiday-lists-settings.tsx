@@ -25,6 +25,7 @@ import { toast } from "sonner"
 
 import { AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -44,7 +45,7 @@ import {
   useModuleRecords,
   whenSaved,
 } from "@/components/waste/business-record-store"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -536,12 +537,9 @@ function YearHolidays({
           <span className="text-xs text-muted-foreground">
             {calendar ? formatValidity(calendar.validFrom, calendar.validTo) : "—"}
           </span>
-          <Badge
-            variant="outline"
-            className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusClasses(record.status))}
-          >
+          <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
             {record.status}
-          </Badge>
+          </StatusBadge>
         </div>
         <span className="text-xs text-muted-foreground">{count(entries.length, "holiday")}</span>
       </div>

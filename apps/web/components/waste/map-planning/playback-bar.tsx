@@ -15,7 +15,7 @@ import { formatDelay, stopDelay } from "@/lib/map-planning/playback"
 import type { AreaRoute } from "@waste/domain/map-planning/routes"
 import { cn } from "@/lib/utils"
 
-import { StatusBadge } from "./status-badge"
+import { MapStatusBadge } from "./status-badge"
 
 export type PlaybackSpeed = 1 | 2 | 4
 export const PLAYBACK_SPEEDS: readonly PlaybackSpeed[] = [1, 2, 4]
@@ -71,7 +71,7 @@ export function PlaybackBar({
       <div className="flex items-center gap-2">
         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: route.color }} aria-hidden />
         <span className="truncate font-semibold">{route.name}</span>
-        <StatusBadge status={route.status} />
+        <MapStatusBadge status={route.status} />
         <span className="truncate text-xs text-muted-foreground">
           {route.date ? formatShortDate(route.date) : "Undated"}
           {route.vehicle ? ` · ${route.vehicle}` : ""}

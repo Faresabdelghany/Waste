@@ -172,6 +172,7 @@ import { createModuleSync } from "@/lib/url/module-sync"
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -254,7 +255,7 @@ import {
   BusinessRecordDayTimeline,
   RecordActionsMenu,
   recordProgress,
-  statusClasses,
+  recordStatusTone,
   type RecordExtraAction,
 } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
@@ -5361,15 +5362,9 @@ export function BusinessWorkspace({
                         .filter(Boolean)
                         .join(" · ")}
                       titleSuffix={
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(record.status),
-                          )}
-                        >
+                        <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {record.status}
-                        </Badge>
+                        </StatusBadge>
                       }
                       meta={viewOptions.showUpdated ? (
                         <span className="hidden text-muted-foreground sm:inline">{record.updated}</span>
@@ -5546,15 +5541,9 @@ export function BusinessWorkspace({
                                 >
                                   <div className="flex items-center gap-2">
                                     {viewOptions.groupBy === "status" ? (
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                          statusClasses(group.label),
-                                        )}
-                                      >
+                                      <StatusBadge tone={recordStatusTone(group.label)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                                         {group.label}
-                                      </Badge>
+                                      </StatusBadge>
                                     ) : (
                                       <span className="text-xs font-semibold text-foreground">
                                         {group.label}
@@ -5605,15 +5594,9 @@ export function BusinessWorkspace({
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                      statusClasses(record.status),
-                                    )}
-                                  >
+                                  <StatusBadge tone={recordStatusTone(record.status)} className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium">
                                     {record.status}
-                                  </Badge>
+                                  </StatusBadge>
                                 </TableCell>
                                 {viewOptions.showContainerType && (
                                   <TableCell className="min-w-[190px] text-sm text-muted-foreground">
@@ -5773,15 +5756,9 @@ export function BusinessWorkspace({
                                 )}
                                 <TableCell>
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                        statusClasses(record.status),
-                                      )}
-                                    >
+                                    <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                                       {record.status}
-                                    </Badge>
+                                    </StatusBadge>
                                     <SchemeAttentionBadge
                                       warnings={schemeRowsById.get(record.id)?.attention}
                                     />
@@ -6069,12 +6046,9 @@ function RecordDetailsDialog({
           <>
             <SheetHeader className="border-b border-border px-5 py-4 pr-12 text-left">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn("rounded-full text-[11px]", statusClasses(record.status))}
-                >
+                <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
                   {record.status}
-                </Badge>
+                </StatusBadge>
                 <SchemeAttentionBadge warnings={attention} />
                 {key !== undefined && (
                   <Badge variant="outline" className="rounded-full text-[11px] font-normal">
@@ -6109,12 +6083,9 @@ function RecordDetailsDialog({
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>
                 {offLifecycle && (
-                  <Badge
-                    variant="outline"
-                    className={cn("rounded-full text-[11px]", statusClasses(record.status))}
-                  >
+                  <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
                     Current status · {record.status}
-                  </Badge>
+                  </StatusBadge>
                 )}
                 {!(onApi && offLifecycle) && (
                   <div className="flex flex-wrap items-center gap-2">

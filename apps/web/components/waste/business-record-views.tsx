@@ -18,7 +18,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, statusToneClasses, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -30,7 +30,7 @@ import {
 import { ProgressCircle } from "@/components/progress-circle"
 import { cn } from "@/lib/utils"
 
-export function statusClasses(status: string): string {
+export function recordStatusTone(status: string): StatusTone {
   const normalized = status.toLowerCase()
 
   // "deactive" must be checked before the "active" substring match below.
@@ -41,7 +41,7 @@ export function statusClasses(status: string): string {
     normalized.includes("disabled") ||
     normalized.includes("unavailable")
   ) {
-    return "border-transparent bg-muted text-muted-foreground"
+    return "neutral"
   }
 
   if (
@@ -55,7 +55,7 @@ export function statusClasses(status: string): string {
     normalized === "issued" ||
     normalized.includes("open")
   ) {
-    return "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
+    return "success"
   }
 
   if (
@@ -67,7 +67,7 @@ export function statusClasses(status: string): string {
     normalized.includes("expired") ||
     /\bissues?\b/.test(normalized)
   ) {
-    return "bg-rose-50 text-rose-700 border-transparent dark:bg-rose-500/15 dark:text-rose-100"
+    return "destructive"
   }
 
   if (
@@ -83,10 +83,10 @@ export function statusClasses(status: string): string {
     normalized.includes("partial") ||
     normalized.includes("attention")
   ) {
-    return "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100"
+    return "warning"
   }
 
-  return "border-transparent bg-muted text-muted-foreground"
+  return "neutral"
 }
 
 export function recordProgress(record: BusinessRecord): number | null {
@@ -102,15 +102,9 @@ export function recordProgress(record: BusinessRecord): number | null {
 
 function RecordStatusBadge({ status }: { status: string }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-        statusClasses(status),
-      )}
-    >
+    <StatusBadge tone={recordStatusTone(status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
       {status}
-    </Badge>
+    </StatusBadge>
   )
 }
 
@@ -587,7 +581,7 @@ export function BusinessRecordDayTimeline({
                     aria-label={`Open ${record.name}`}
                     className={cn(
                       "absolute top-1/2 h-6 -translate-y-1/2 cursor-pointer overflow-hidden rounded-full border px-2 text-left text-[11px] font-medium whitespace-nowrap",
-                      statusClasses(record.status),
+                      statusToneClasses[recordStatusTone(record.status)],
                     )}
                     style={{ left: `${left}%`, width: `${width}%` }}
                     onClick={() => onOpenRecord(record)}

@@ -26,6 +26,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -239,24 +240,24 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function priorityClasses(priority: string): string {
+function ticketPriorityTone(priority: string): StatusTone {
   if (/critical|high/i.test(priority)) {
-    return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-200"
+    return "destructive"
   }
   if (/medium/i.test(priority)) {
-    return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+    return "warning"
   }
-  return "border-border bg-muted/60 text-muted-foreground"
+  return "neutral"
 }
 
-function statusClasses(status: string): string {
+function ticketStatusTone(status: string): StatusTone {
   if (/completed|resolved/i.test(status)) {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+    return "success"
   }
   if (/progress|open/i.test(status)) {
-    return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-200"
+    return "info"
   }
-  return "border-border bg-muted/60 text-muted-foreground"
+  return "neutral"
 }
 
 function withCurrentOption(
@@ -548,12 +549,9 @@ function FixtureTicketDetailsDialog({
                     <DialogTitle className="truncate text-lg font-semibold">
                       {record.name}
                     </DialogTitle>
-                    <Badge
-                      variant="outline"
-                      className={cn("rounded-full text-[11px]", statusClasses(information.status))}
-                    >
+                    <StatusBadge tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                       {information.status}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                   <DialogDescription className="mt-0.5 truncate text-xs sm:text-sm">
                     {[readableKey(record.id), information.context, `Updated ${informationActivities.length > 0 ? "now" : record.updated.toLowerCase()}`].filter(Boolean).join(" · ")}
@@ -589,12 +587,9 @@ function FixtureTicketDetailsDialog({
                         <Badge variant="outline" className="rounded-full font-normal">
                           {information.type}
                         </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn("rounded-full font-normal", priorityClasses(information.priority))}
-                        >
+                        <StatusBadge tone={ticketPriorityTone(information.priority)} className="rounded-full font-normal">
                           {information.priority} priority
-                        </Badge>
+                        </StatusBadge>
                       </div>
                     </div>
                   </div>
@@ -1002,12 +997,9 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(statusOptions, information.status)}
                         onValueChange={(value) => updateInformation("status", "Status", value)}
                         renderValue={() => (
-                          <Badge
-                            variant="outline"
-                            className={cn("rounded-full text-[11px]", statusClasses(information.status))}
-                          >
+                          <StatusBadge tone={ticketStatusTone(information.status)} className="rounded-full text-[11px]">
                             {information.status}
-                          </Badge>
+                          </StatusBadge>
                         )}
                       />
                       <EditableInformationRow
@@ -1016,12 +1008,9 @@ function FixtureTicketDetailsDialog({
                         options={withCurrentOption(priorityOptions, information.priority)}
                         onValueChange={(value) => updateInformation("priority", "Priority", value)}
                         renderValue={() => (
-                          <Badge
-                            variant="outline"
-                            className={cn("rounded-full text-[11px]", priorityClasses(information.priority))}
-                          >
+                          <StatusBadge tone={ticketPriorityTone(information.priority)} className="rounded-full text-[11px]">
                             {information.priority}
-                          </Badge>
+                          </StatusBadge>
                         )}
                       />
                       <EditableInformationRow

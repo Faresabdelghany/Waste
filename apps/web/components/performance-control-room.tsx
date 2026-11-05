@@ -31,6 +31,7 @@ import {
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -104,10 +105,10 @@ type PerformanceControlRoomProps = {
 
 const numberFormatter = new Intl.NumberFormat("en-US")
 
-function getStatusClasses(status: RouteHealthStatus) {
-  if (status === "At risk") return "border-rose-500/20 bg-rose-500/10 text-rose-500"
-  if (status === "Monitor") return "border-amber-500/20 bg-amber-500/10 text-amber-500"
-  return "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+function routeHealthTone(status: RouteHealthStatus): StatusTone {
+  if (status === "At risk") return "destructive"
+  if (status === "Monitor") return "warning"
+  return "success"
 }
 
 function getStatusColor(status: RouteHealthStatus) {
@@ -869,9 +870,9 @@ export function PerformanceControlRoom({
                             {row.slaPercent}%
                           </td>
                           <td className="px-3 py-2">
-                            <Badge variant="outline" className={cn("h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium", getStatusClasses(row.status))}>
+                            <StatusBadge tone={routeHealthTone(row.status)} className="h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-medium">
                               {row.status}
-                            </Badge>
+                            </StatusBadge>
                           </td>
                           {showTrend && <td className="px-3 py-2"><TrendSparkline row={row} /></td>}
                           <td className="px-2 py-2">

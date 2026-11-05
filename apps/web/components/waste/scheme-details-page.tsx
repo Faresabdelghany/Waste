@@ -91,6 +91,7 @@ import {
 import { stringValue } from "@waste/domain/route-schemes/validation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -133,7 +134,7 @@ import {
 } from "@/components/waste/scheme-generation"
 import {
   NoMatchingRecords,
-  statusClasses,
+  recordStatusTone,
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
@@ -373,15 +374,9 @@ export function SchemeDetailsPage({
                 { label: record.name },
               ]}
             />
-            <Badge
-              variant="outline"
-              className={cn(
-                "rounded-full text-[11px]",
-                statusClasses(record.status),
-              )}
-            >
+            <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full text-[11px]">
               {record.status}
-            </Badge>
+            </StatusBadge>
             <SchemeAttentionBadge warnings={attention} />
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -1116,15 +1111,9 @@ function SchemeRoutesTab({
                             {route.name}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                statusClasses(route.status),
-                              )}
-                            >
+                            <StatusBadge tone={recordStatusTone(route.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                               {route.status}
-                            </Badge>
+                            </StatusBadge>
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                             {route.facts.Stops ?? "0"}
@@ -1307,15 +1296,9 @@ function SchemeStopsTab({
                         {schemeStopContainerType(pickup) ?? "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(pickup.status),
-                          )}
-                        >
+                        <StatusBadge tone={recordStatusTone(pickup.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                           {pickup.status}
-                        </Badge>
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="min-w-[130px] text-sm text-muted-foreground">
                         {pickup.facts["Waste fraction"] ?? "—"}

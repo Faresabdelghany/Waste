@@ -13,7 +13,7 @@ import { ArrowSquareOut, PencilSimple, Plus } from "@phosphor-icons/react/dist/s
 import { toast } from "sonner"
 
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
-import { statusClasses } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/waste/business-record-views"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
@@ -36,7 +36,6 @@ import {
   sortingGuideRecordOf,
   type SortingGuideItemForm,
 } from "@/lib/data/sorting-guide"
-import { cn } from "@/lib/utils"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
@@ -142,9 +141,9 @@ export function SortingGuideSettings() {
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.facts.Fraction}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{record.value || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusClasses(record.status))}>
+                      <StatusBadge tone={recordStatusTone(record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
                         {record.status}
-                      </Badge>
+                      </StatusBadge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${record.name}`} onClick={() => setEditing({ record, form: sortingGuideFormOf(record, project?.id ?? "") })}>
