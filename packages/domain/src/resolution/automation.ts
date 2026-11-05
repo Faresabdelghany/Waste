@@ -17,8 +17,8 @@
 //
 // Planning a ticket in a route books the stop its kind is answered by
 // (@waste/domain/execution/ticket-stops) on the next route of a chosen
-// vehicle that has not started, a given number of days ahead at the
-// earliest: an overflow's emptying or a defect's repair, at the ticket's
+// vehicle that has not started, a given number of days after the project's
+// today as the action runs at the earliest: an overflow's emptying or a defect's repair, at the ticket's
 // container (`plannedService`). A delivery or a swap names a subscription,
 // a warehouse and a container besides, which a ticket does not carry, so
 // those the office books by hand.
@@ -64,7 +64,7 @@ export type TicketActionParameters = {
   followUpTypeId: string | null
   /** The vehicle whose next route a ticket is planned in. */
   vehicleId: string | null
-  /** How many days after the ticket's day that route runs at the earliest. */
+  /** How many days after the project's today, as the action runs, that route runs at the earliest. */
   daysAhead: number | null
 }
 

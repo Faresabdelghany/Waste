@@ -51,6 +51,7 @@ import { pickup, route } from "../schema/execution"
 import { vehicle } from "../schema/fleet"
 import { messageTemplate } from "../schema/messaging"
 import { team, ticket, ticketType, ticketTypeAction } from "../schema/resolution"
+import { LOCK_NOT_AVAILABLE, sqlstate } from "../sqlstate"
 import { queueMessage } from "./messaging"
 import { placementStopOn } from "./fill-emptying"
 import { misfitOf, pickupFitStops, vehicleLabel } from "./fleet-fit"
@@ -58,7 +59,7 @@ import { appendTicketEvent, BY_SLA, openTicket } from "./open-ticket"
 import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
 import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
-import { lockRow, Refused } from "./shared"
+import { Refused } from "./shared"
 import { bookTicket } from "./ticket-stops"
 
 /** How many more actions one change's chain may run: one count every level of it shares. */
@@ -367,7 +368,11 @@ const serviceWords = (service: OfficeStopService): string => `${/^[aeiou]/.test(
  * Plans the ticket in a route: the stop its kind is answered by that names
  * nothing but its container — an overflow's emptying, a defect's repair — on
  * the vehicle's next route that has not started, running no sooner than the
- * days ahead after its project's today. The stop is the office's, `planned`,
+ * days ahead after its project's today as the action runs. The route is
+ * locked without waiting — the office's Add stop locks a route before the
+ * ticket it books, and this runs under the ticket's lock, so a route someone
+ * holds is a line, never a deadlock — and judged again under the lock: still
+ * the vehicle's, still that late, not started. The stop is the office's, `planned`,
  * after the route's last position, at the container's placement in force on
  * the route's service date, never the same work twice while it is planned,
  * and only where the vehicle takes it; the route's `updatedAt` moves and no
@@ -408,14 +413,22 @@ async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: 
     .orderBy(asc(route.operatingDate), asc(route.id))
     .limit(1)
   if (next === undefined) throw new Refused(409, `not planned: vehicle ${truckLabel} has no route from ${from} that has not started.`)
-  await lockRow(tx, route, { companyId: run.companyId, id: next.id })
-  const [chosen] = await tx
-    .select({ status: route.status, number: route.number, serviceDate: route.serviceDate, operatingDate: route.operatingDate })
-    .from(route)
-    .where(and(eq(route.companyId, run.companyId), eq(route.id, next.id)))
-    .limit(1)
+  let chosen: { status: string; number: number; serviceDate: string; operatingDate: string; plannedVehicleId: string | null }
+  try {
+    ;[chosen] = await tx
+      .select({ status: route.status, number: route.number, serviceDate: route.serviceDate, operatingDate: route.operatingDate, plannedVehicleId: route.plannedVehicleId })
+      .from(route)
+      .where(and(eq(route.companyId, run.companyId), eq(route.id, next.id)))
+      .limit(1)
+      .for("no key update", { noWait: true })
+  } catch (error) {
+    if (sqlstate(error)?.code !== LOCK_NOT_AVAILABLE) throw error
+    throw new Refused(409, "not planned: the vehicle's next route is being changed by someone else; plan it by hand.")
+  }
   const label = routeLabel(chosen.number)
   if (!(NOT_STARTED as readonly string[]).includes(chosen.status)) throw new Refused(409, `not planned: route ${label} has started.`)
+  // Judged again under the lock: a route given another vehicle or moved earlier meanwhile is not this vehicle's next one any more.
+  if (chosen.plannedVehicleId !== planned.id || chosen.operatingDate < from) throw new Refused(409, `not planned: route ${label} changed while it was chosen; plan it by hand.`)
 
   const [bin] = await tx
     .select({ label: container.label })
@@ -445,7 +458,8 @@ async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: 
     .returning({ id: pickup.id, position: pickup.position })
   // The action's savepoint takes the stop back where the vehicle cannot take it.
   const misfit = await misfitOf(tx, run.companyId, planned.id, await pickupFitStops(tx, run.companyId, [stop.id]))
-  if (misfit !== undefined) throw new Refused(409, `not planned: ${misfit.replace(/^[A-Z]/, (first) => first.toLowerCase())}${misfit.endsWith(".") ? "" : "."}`)
+  // The sentence opens with the vehicle's label, kept as written.
+  if (misfit !== undefined) throw new Refused(409, `not planned: ${misfit}${misfit.endsWith(".") ? "" : "."}`)
   await tx
     .update(route)
     .set({ updatedAt: sql`now()` })

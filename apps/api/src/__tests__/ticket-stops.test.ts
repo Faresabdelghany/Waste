@@ -58,6 +58,8 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
   let ex: ExecutionFixtures
   let olivia: Call
   let mads: Call
+  /** On a custom role in Copenhagen alone, given the templates' edit: keeps types without working the harbour. */
+  let viewer: Call
   let warehouseId: string
   let subscriptionId: string
   let bin = 40
@@ -124,7 +126,10 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
     a = await seedTenant(pool)
     fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
     ex = await seedExecution(pool, a, fleet)
-    await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: "operate.driver-app", actions: ["view", "edit"] }])
+    await grantRole(pool, a.companyId, a.roles.viewer.id, [
+      { moduleKey: "operate.driver-app", actions: ["view", "edit"] },
+      { moduleKey: "configure.templates", actions: ["view", "edit"] },
+    ])
     warehouseId = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "TS-1")
     subscriptionId = testId()
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
@@ -139,6 +144,7 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
     const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOON })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     mads = callingAs(app, keys, ex.logins.mads, a.companyId)
+    viewer = callingAs(app, keys, a.users.viewer, a.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -323,6 +329,16 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       )
       assert.equal(far.bookedPickupId, null)
       assert.match((await lines(far.id))[0] ?? "", /not planned: vehicle .+ has no route from 2026-11-14 that has not started\.$/)
+    })
+
+    test("a plan in a route names a vehicle of a project the caller works in, or one the type's actions name already", async () => {
+      const harbour = [{ trigger: "opened", kind: "plan-in-route", vehicleId: fleet.vehicles.harborTruck.id, daysAhead: 1 }]
+      const kept = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Overflow, harbour", kind: "overflow" } }), TicketType)
+      assert.equal((await olivia(`/ticket-types/${kept.id}/actions`, { method: "PUT", body: { actions: harbour } })).status, 200, "the office of every project names the harbour's truck")
+      assert.equal((await viewer(`/ticket-types/${kept.id}/actions`, { method: "PUT", body: { actions: harbour } })).status, 200, "a set restated whole keeps the vehicle it named")
+      const fresh = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Overflow, harbour too", kind: "overflow" } }), TicketType)
+      const problem = await refused(await viewer(`/ticket-types/${fresh.id}/actions`, { method: "PUT", body: { actions: harbour } }), 400)
+      assert.deepEqual(problem.errors?.map((error) => [error.path, error.message]), [["actions.0.vehicleId", NOT_A_COMPANY_VEHICLE]], "a vehicle of a project the caller does not work in is one it cannot name")
     })
 
     test("a plan in a route names a vehicle of the company, on a type of a kind a stop naming its container answers", async () => {

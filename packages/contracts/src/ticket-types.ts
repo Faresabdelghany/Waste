@@ -120,7 +120,7 @@ export const TicketTypeAction = z.object({
   followUpTypeId: Id.nullable(),
   /** The vehicle whose next route a plan in a route books the ticket's stop on. */
   vehicleId: Id.nullable(),
-  /** How many days after the ticket's day that route runs at the earliest. */
+  /** How many days after the project's today, as the action runs, that route runs at the earliest. */
   daysAhead: NonNegativeInt.nullable(),
 })
 export type TicketTypeAction = z.infer<typeof TicketTypeAction>
