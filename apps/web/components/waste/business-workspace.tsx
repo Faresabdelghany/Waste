@@ -169,7 +169,7 @@ import {
 import type { TimelineTask } from "@/lib/data/project-details"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -4897,10 +4897,9 @@ export function BusinessWorkspace({
   if (!hasRoleViewableModules) {
     return (
       <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
+        <PageTopBar>
           <Breadcrumbs items={[{ label: workspaceLabel ?? workspace.label }]} />
-        </header>
+        </PageTopBar>
         <div className="flex flex-1 items-center justify-center p-8">
           <div className="max-w-sm text-center">
             <p className="text-sm font-medium">No permitted modules</p>
@@ -4913,6 +4912,89 @@ export function BusinessWorkspace({
       </div>
     )
   }
+
+  // A module's own actions sit in its table's header, never in the top bar,
+  // which is kept for the app-wide items (components/page-layout.tsx).
+  const moduleActions =
+    isContainersAssetsView || showExportAction || primary !== null ? (
+      <PageActions>
+        {isContainersAssetsView && (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings?pane=asset-management&from=%2Fresources%3Fmodule%3Dcontainers">
+              <Gear className="h-4 w-4" />
+              <span className="hidden sm:inline">Asset settings</span>
+            </Link>
+          </Button>
+        )}
+        {showExportAction && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // The rows the table shows under the search, the filters and the scope, every page of them, by the columns it draws (#292).
+              const rows = exportShownRows(
+                filteredRecords,
+                {
+                  view: isContainersAssetsView ? "containers" : isRoutesView ? "routes" : isServiceProviderUsersView ? "provider-users" : isCalendarsView ? "calendars" : isSchemesView ? "schemes" : "records",
+                  rich: isRichRecordView,
+                  entityLabel: activeModule.entityLabel,
+                  contextLabel: activeModule.contextLabel,
+                  valueLabel: activeModule.valueLabel,
+                  options: viewOptions,
+                  staticColumns: activeStaticColumns,
+                  factColumns: activeFactColumns,
+                  projectScopeOf: (record) => projectScopeLabel(record.projectIds ?? [], projectRecords),
+                  calendarRowOf: (record) => calendarRowsById.get(record.id),
+                  schemeRowOf: (record) => schemeRowsById.get(record.id),
+                },
+                { workspace: workspaceLabel ?? workspace.label, module: activeModule.label, day: todayIso() },
+              )
+              toast.success(`Exported ${rows} ${rows === 1 ? "row" : "rows"}`, { description: `${activeModule.title} · the rows and columns shown` })
+            }}
+          >
+            <DownloadSimple className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+        )}
+        {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
+        {primary === "form" && formSchema && (
+          isPriceEngineProducts ? (
+            <Button
+              size="sm"
+              onClick={() =>
+                setRelatedCreateTarget({
+                  workspaceId: "commercial",
+                  moduleId: "price-rows",
+                  initialValues: {},
+                })
+              }
+            >
+              <Plus className="h-4 w-4" weight="bold" />
+              <span className="hidden sm:inline">Add price</span>
+              <span className="sm:hidden">Action</span>
+            </Button>
+          ) : isRouteCreateFlow ? (
+            <RouteCreateEntry
+              submitLabel={formSchema.submitLabel}
+              onQuickCreate={() => setIsCreateOpen(true)}
+              onGuidedCreate={handleGuidedRouteCreate}
+            />
+          ) : isSchemeCreateFlow ? (
+            <SchemeCreateEntry
+              submitLabel={formSchema.submitLabel}
+              onQuickCreate={() => setIsCreateOpen(true)}
+              onGuidedCreate={handleGuidedSchemeCreate}
+            />
+          ) : (
+            <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4" weight="bold" />
+              <span className="hidden sm:inline">{formSchema.submitLabel}</span>
+              <span className="sm:hidden">Action</span>
+            </Button>
+          )
+        )}
+      </PageActions>
+    ) : null
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
@@ -4978,109 +5060,28 @@ export function BusinessWorkspace({
       {/* What a switched module does on its own while it is shown (the registry's `whileShown`): mounted with the module's view, whatever the toolbar offers. */}
       {WhileShown ? <WhileShown /> : null}
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3 min-w-0">
-            <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <div className="min-w-0">
-              <Breadcrumbs
-                items={
-                  workspace.modules.length > 1 &&
-                  activeModule.label !== (workspaceLabel ?? workspace.label)
-                    ? [
-                        {
-                          label: workspaceLabel ?? workspace.label,
-                          onClick: () =>
-                            handleModuleChange(workspace.modules[0].id),
-                        },
-                        { label: activeModule.label },
-                      ]
-                    : [{ label: workspaceLabel ?? workspace.label }]
-                }
-              />
-            </div>
-          </div>
-          {(isContainersAssetsView ||
-            showExportAction ||
-            primary !== null) && (
-            <div className="flex items-center gap-2">
-              {isContainersAssetsView && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/settings?pane=asset-management&from=%2Fresources%3Fmodule%3Dcontainers">
-                    <Gear className="h-4 w-4" />
-                    <span className="hidden sm:inline">Asset settings</span>
-                  </Link>
-                </Button>
-              )}
-              {showExportAction && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // The rows the table shows under the search, the filters and the scope, every page of them, by the columns it draws (#292).
-                    const rows = exportShownRows(
-                      filteredRecords,
-                      {
-                        view: isContainersAssetsView ? "containers" : isRoutesView ? "routes" : isServiceProviderUsersView ? "provider-users" : isCalendarsView ? "calendars" : isSchemesView ? "schemes" : "records",
-                        rich: isRichRecordView,
-                        entityLabel: activeModule.entityLabel,
-                        contextLabel: activeModule.contextLabel,
-                        valueLabel: activeModule.valueLabel,
-                        options: viewOptions,
-                        staticColumns: activeStaticColumns,
-                        factColumns: activeFactColumns,
-                        projectScopeOf: (record) => projectScopeLabel(record.projectIds ?? [], projectRecords),
-                        calendarRowOf: (record) => calendarRowsById.get(record.id),
-                        schemeRowOf: (record) => schemeRowsById.get(record.id),
-                      },
-                      { workspace: workspaceLabel ?? workspace.label, module: activeModule.label, day: todayIso() },
-                    )
-                    toast.success(`Exported ${rows} ${rows === 1 ? "row" : "rows"}`, { description: `${activeModule.title} · the rows and columns shown` })
-                  }}
-                >
-                  <DownloadSimple className="h-4 w-4" />
-                  <span className="hidden sm:inline">Export</span>
-                </Button>
-              )}
-              {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
-              {primary === "form" && formSchema && (
-                isPriceEngineProducts ? (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setRelatedCreateTarget({
-                        workspaceId: "commercial",
-                        moduleId: "price-rows",
-                        initialValues: {},
-                      })
-                    }
-                  >
-                    <Plus className="h-4 w-4" weight="bold" />
-                    <span className="hidden sm:inline">Add price</span>
-                    <span className="sm:hidden">Action</span>
-                  </Button>
-                ) : isRouteCreateFlow ? (
-                  <RouteCreateEntry
-                    submitLabel={formSchema.submitLabel}
-                    onQuickCreate={() => setIsCreateOpen(true)}
-                    onGuidedCreate={handleGuidedRouteCreate}
-                  />
-                ) : isSchemeCreateFlow ? (
-                  <SchemeCreateEntry
-                    submitLabel={formSchema.submitLabel}
-                    onQuickCreate={() => setIsCreateOpen(true)}
-                    onGuidedCreate={handleGuidedSchemeCreate}
-                  />
-                ) : (
-                  <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-                    <Plus className="h-4 w-4" weight="bold" />
-                    <span className="hidden sm:inline">{formSchema.submitLabel}</span>
-                    <span className="sm:hidden">Action</span>
-                  </Button>
-                )
-              )}
-            </div>
-          )}
-        </div>
+        <PageTopBar>
+          <Breadcrumbs
+            items={
+              workspace.modules.length > 1 &&
+              activeModule.label !== (workspaceLabel ?? workspace.label)
+                ? [
+                    {
+                      label: workspaceLabel ?? workspace.label,
+                      onClick: () =>
+                        handleModuleChange(workspace.modules[0].id),
+                    },
+                    { label: activeModule.label },
+                  ]
+                : [{ label: workspaceLabel ?? workspace.label }]
+            }
+          />
+        </PageTopBar>
+
+        {/* The map has no table to head, so its actions get a bar of their own under the top bar. */}
+        {isMapPlanningView && moduleActions && (
+          <div className="flex justify-end border-b border-border/40 px-4 py-2">{moduleActions}</div>
+        )}
 
         {!isMapPlanningView && (
         <div className="flex flex-col gap-3 px-4 py-3">
@@ -5291,13 +5292,14 @@ export function BusinessWorkspace({
           </section>
 
           <section className="overflow-hidden rounded-xl border border-border/60">
-            <div className="border-b border-border px-4 py-2">
+            <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
               <p className="text-xs text-muted-foreground">
                 {filteredRecords.length === visibleScopedRecords.length
                   ? `${filteredRecords.length} records`
                   : `${filteredRecords.length} of ${visibleScopedRecords.length} records`}
                 {fixedScopeLabel ? ` · ${fixedScopeLabel}` : ""}
               </p>
+              {moduleActions}
             </div>
 
             {isFleetPlanningView ? (

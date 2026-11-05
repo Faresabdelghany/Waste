@@ -28,7 +28,7 @@ import {
   YAxis,
 } from "recharts"
 
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -511,19 +511,10 @@ export function PerformanceControlRoom({
   return (
     <div className="m-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sidebar bg-background">
       <header className="shrink-0 border-b border-border/70">
-        <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border/70 px-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
-            <div className="min-w-0">
-              <Breadcrumbs items={[{ label: breadcrumbLabel }]} />
-              <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="h-8 gap-2 bg-transparent" onClick={exportCsv}>
-            <DownloadSimple className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </Button>
-        </div>
+        <PageTopBar>
+          <Breadcrumbs items={[{ label: breadcrumbLabel }]} />
+          <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>
+        </PageTopBar>
 
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
@@ -608,11 +599,19 @@ export function PerformanceControlRoom({
               </PopoverContent>
             </Popover>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>Fresh 2 min ago</span>
-            <span aria-hidden>·</span>
-            <span>{format(rangeStart, "MMM d")} – {format(PERFORMANCE_REFERENCE_DATE, "MMM d, yyyy")}</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span>Fresh 2 min ago</span>
+              <span aria-hidden>·</span>
+              <span>{format(rangeStart, "MMM d")} – {format(PERFORMANCE_REFERENCE_DATE, "MMM d, yyyy")}</span>
+            </div>
+            <PageActions>
+              <Button variant="outline" size="sm" className="bg-transparent" onClick={exportCsv}>
+                <DownloadSimple className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+            </PageActions>
           </div>
         </div>
       </header>

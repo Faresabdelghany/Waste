@@ -29,7 +29,7 @@ import {
 } from "@/components/tasks/task-helpers"
 import { TaskRowBase } from "@/components/tasks/TaskRowBase"
 import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -232,22 +232,9 @@ export function MyTasksPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <Breadcrumbs items={[{ label: "Tickets" }]} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => openCreateTask()}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Ticket
-            </Button>
-          </div>
-        </div>
+        <PageTopBar>
+          <Breadcrumbs items={[{ label: "Tickets" }]} />
+        </PageTopBar>
 
         <div className="flex items-center justify-between px-4 pb-3 pt-3">
           <div className="flex items-center gap-2">
@@ -266,6 +253,12 @@ export function MyTasksPage() {
             />
           </div>
           <div className="flex items-center gap-2">
+            <PageActions>
+              <Button size="sm" onClick={() => openCreateTask()}>
+                <Plus className="h-4 w-4" />
+                New Ticket
+              </Button>
+            </PageActions>
             <ViewOptionsPopover options={viewOptions} onChange={setViewOptions} allowedViewTypes={["list", "board"]} />
             <div className="relative">
               <div className="relative">

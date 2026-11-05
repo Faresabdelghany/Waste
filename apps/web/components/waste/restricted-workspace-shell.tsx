@@ -31,6 +31,10 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import type { RoleAccessMap } from "@/lib/data/role-permissions"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
+import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
+import { ShellIdentityProvider, type ShellIdentity } from "@/components/top-bar/shell-identity"
+import { PageTopBar } from "@/components/page-layout"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 
 type RestrictedWorkspacePage = {
   id: string
@@ -182,11 +186,20 @@ type WorkspaceScope = {
   onApi: boolean
 }
 
+// The top bar's account menu and bell in a restricted shell: its persona in
+// fixture mode, no link to the office's Settings, and not the office's inbox.
+const RESTRICTED_SHELLS: Record<RestrictedPersona, ShellIdentity> = {
+  citizen: { fixture: CITIZEN_IDENTITY, offersSettings: false, readsInbox: false },
+  "service-provider": { fixture: SERVICE_PROVIDER_IDENTITY, offersSettings: false, readsInbox: false },
+}
+
 function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; children: ReactNode }) {
   return (
     <SidebarProvider>
       <RestrictedPersonaSidebar persona={persona} />
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset>
+        <ShellIdentityProvider identity={RESTRICTED_SHELLS[persona]}>{children}</ShellIdentityProvider>
+      </SidebarInset>
     </SidebarProvider>
   )
 }
@@ -197,6 +210,16 @@ function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; ch
  * failed said in the API's words, with Retry, rather than a placeholder that
  * waits on the session's next change.
  */
+// The top bar over the account's own notices, so its menu (and Sign out)
+// stays at hand while `/me` is read or names no provider.
+function AccountTopBar() {
+  return (
+    <PageTopBar>
+      <Breadcrumbs items={[{ label: "Service provider workspace" }]} />
+    </PageTopBar>
+  )
+}
+
 function ReadingAccount() {
   const { loadMe } = useApiSession()
   const [attempt, setAttempt] = useState(0)
@@ -236,6 +259,7 @@ export function RestrictedWorkspaceShell({
     if (me === null) {
       return (
         <RestrictedFrame persona={persona}>
+          <AccountTopBar />
           <ReadingAccount />
         </RestrictedFrame>
       )
@@ -243,6 +267,7 @@ export function RestrictedWorkspaceShell({
     if (provider === null) {
       return (
         <RestrictedFrame persona={persona}>
+          <AccountTopBar />
           <div className="space-y-3 p-6 text-sm">
             <p>{NOT_A_PROVIDER_ACCOUNT}</p>
             <Link href="/operate" className="font-medium underline underline-offset-4">
