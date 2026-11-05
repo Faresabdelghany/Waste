@@ -182,7 +182,7 @@ describe("a ticket", () => {
       Pickup: `pickup-${pickupId}`,
       Container: "BIN-82014",
     })
-    assert.ok(!("Type" in record.facts), "no configured type: the wire has none")
+    assert.ok(!("Type" in record.facts), "a ticket the outbox took before the types (#545 of #544) names none")
     assert.ok(!("Source" in record.facts), "the wire's source is no fixture's Source")
     assert.deepEqual(record.submittedValues, {
       projectId: projectRecord.id,
@@ -190,6 +190,8 @@ describe("a ticket", () => {
       subject: missed.subject,
       description: missed.description,
       kind: "missed-collection",
+      ticketTypeId: "",
+      fieldValuesJson: "{}",
       priority: "high",
       source: "driver-app",
       status: "open",
@@ -343,7 +345,7 @@ describe("the office's create", () => {
   test("is refused here, naming the field, before the API sees a body it would refuse", () => {
     const create = ticketAdapter.toCreateBody
     assert.deepEqual(create?.(minted({ ...typedValues, subject: " " }), context()), { path: "subject", message: "A ticket needs a subject" })
-    assert.deepEqual(create?.(minted({ ...typedValues, kind: "" }), context()), { path: "kind", message: "Pick the kind of case" })
+    assert.deepEqual(create?.(minted({ ...typedValues, kind: "" }), context()), { path: "kind", message: "Pick the type or the kind of case" })
     assert.deepEqual(create?.(minted({ ...typedValues, source: "driver-app" }), context()), { path: "source", message: "Pick where the case came from: office, phone, email, portal, import, integration" })
     assert.deepEqual(create?.(minted({ ...typedValues, routeId: "route-1042" }), context()), { path: "routeId", message: "Pick a route the API holds" })
     assert.deepEqual(create?.(minted({ ...typedValues, routeId: bin.id }), context()), { path: "routeId", message: "Pick a route the API holds" }, "a container's row is no route")

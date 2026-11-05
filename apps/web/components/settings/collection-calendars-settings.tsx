@@ -1,10 +1,12 @@
 "use client"
 
-// Settings › Operations › Collection calendars: the per-year holiday calendar
-// records of each project (moved from the Plan workspace 2026-09-16, when
-// Plan became Map Planning). Every table cell derives from the record's
-// typed values at render time (@waste/domain/route-schemes/calendar-list) — never
-// from stored display copies. Create and edit go through the shared form
+// Settings › Operations › Collection calendars: the per-year calendar records
+// of each project (moved from the Plan workspace 2026-09-16, when Plan became
+// Map Planning). A calendar carries no holidays (2026-11-05): a project's are
+// the days of the company's Holiday List it names (Settings › Holiday lists).
+// Every table cell derives from the record's typed values at render time
+// (@waste/domain/route-schemes/calendar-list) — never from stored display
+// copies. Create and edit go through the shared form
 // dialog with the module's own schema; the record shape is owned by
 // lib/data/collection-calendars.ts.
 
@@ -61,9 +63,9 @@ import {
   type CollectionCalendarLookups,
 } from "@/lib/data/collection-calendars"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { calendarRowSummary } from "@waste/domain/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
 
 const ACTOR_NAME = "Olivia Larsen"
 
@@ -82,7 +84,6 @@ export function CollectionCalendarsSettings() {
 
   const schema = collectionCalendarSchema()
   const calendarsModule = collectionCalendarsModule()
-  const today = todayIso()
 
   // Live records of any module (fixtures merged with stored records) — the
   // relation targets the form offers and the names the facts display.
@@ -98,7 +99,8 @@ export function CollectionCalendarsSettings() {
   // The pane's own module and the projects it names: on the Pilot, the API's
   // rows once they are here and nothing before (Issue #175).
   const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, calendarsModule.records)
-  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record))
+  // The module holds the company's Holiday Lists too (holiday-lists-settings.tsx); this pane lists the per-year calendars alone.
+  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record) && !isHolidayListRecord(record))
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
   const projectRecords = organisation.records.filter(
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
@@ -158,7 +160,7 @@ export function CollectionCalendarsSettings() {
       record,
       project: projectLabel(record),
       workingDays: workingWeek.weekend.length > 0 ? workingDaysLabel(workingWeek.weekend) : "All days",
-      ...calendarRowSummary(record, today),
+      ...calendarRowSummary(record),
     }
   })
   const statusOptions = Array.from(
@@ -250,22 +252,20 @@ export function CollectionCalendarsSettings() {
     >
       <RecordsSection shown={filtered.length} total={calendarRecords.length}>
         <div className="overflow-x-auto">
-          <Table className="min-w-[1080px]">
+          <Table className="min-w-[880px]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Working days</TableHead>
-                <TableHead>Holidays</TableHead>
                 <TableHead>Validity</TableHead>
-                <TableHead>Next holiday</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message={emptyMessage} hint={emptyHint} />
+                <EmptyRow colSpan={6} message={emptyMessage} hint={emptyHint} />
               ) : (
                 pageRows.map((row) => (
                   <TableRow key={row.record.id}>
@@ -282,13 +282,7 @@ export function CollectionCalendarsSettings() {
                       {row.workingDays}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {row.holidays}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                       {row.validity}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {row.nextHoliday}
                     </TableCell>
                     <TableCell>
                       <StatusBadge tone={recordStatusTone(row.record.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">

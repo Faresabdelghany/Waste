@@ -22,7 +22,7 @@ import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -89,11 +89,11 @@ import {
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { routeMessage } from "@waste/db/schema/route-messages"
 import { notificationPreference, notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
-import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { company, holidayList, holidayListHoliday, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { defaultTicketTypeRows } from "@waste/db/commands/ticket-types"
-import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
@@ -205,6 +205,11 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
       country: "DK",
       status: "active",
     })
+    // The company's two Holiday Lists (2026-11-05), empty: a project names a list by its name, a key into them.
+    await tx.insert(holidayList).values([
+      { companyId, country: "DK", name: "Danish public holidays" },
+      { companyId, country: "EG", name: "Egyptian public holidays" },
+    ])
     await tx.insert(project).values([
       { id: tenant.projects.copenhagen.id, companyId, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" },
       { id: tenant.projects.harbor.id, companyId, name: "Harbor Commercial", kind: "Business unit", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "onboarding" },
@@ -434,6 +439,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // A ticket type's actions (#546 of #544) name a team, a person and a type, so they go before all three.
+    await tx.delete(ticketTypeAction).where(eq(ticketTypeAction.companyId, companyId))
     // The ticket teams (O30 of #290): the defaults and the members name a team, and a ticket did, so the team goes after the tickets.
     await tx.delete(ticketTeamDefault).where(eq(ticketTeamDefault.companyId, companyId))
     await tx.delete(teamMember).where(eq(teamMember.companyId, companyId))
@@ -492,7 +499,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(preTripChecklistItem).where(eq(preTripChecklistItem.companyId, companyId))
     await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
-    await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
     await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
@@ -538,6 +544,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(role).where(eq(role.companyId, companyId))
     await tx.delete(serviceProvider).where(eq(serviceProvider.companyId, companyId))
     await tx.delete(project).where(eq(project.companyId, companyId))
+    await tx.delete(holidayListHoliday).where(eq(holidayListHoliday.companyId, companyId))
+    await tx.delete(holidayList).where(eq(holidayList.companyId, companyId))
     await tx.delete(company).where(eq(company.companyId, companyId))
   })
 }

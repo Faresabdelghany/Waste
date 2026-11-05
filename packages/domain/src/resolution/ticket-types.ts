@@ -121,16 +121,16 @@ export function fieldValueIssue(field: TicketFieldDefinition, value: unknown): s
 /** What a value under a key the type has no field for is told. */
 export const notAFieldOf = (typeName: string, key: string): string => `${typeName} has no field ${key}`
 
-/** The first key of the values that is no field of the type, or whose value the field does not take; undefined where every one is. */
-export function fieldValuesIssue(fields: readonly TicketFieldDefinition[], values: Readonly<Record<string, unknown>>, typeName: string): { key: string; message: string } | undefined {
+/** Every key of the values that is no field of the type, or whose value the field does not take, in the values' order: one pass, one issue per key. */
+export function fieldValuesIssues(fields: readonly TicketFieldDefinition[], values: Readonly<Record<string, unknown>>, typeName: string): { key: string; message: string }[] {
   const byKey = new Map(fields.map((entry) => [entry.key, entry]))
+  const issues: { key: string; message: string }[] = []
   for (const [key, value] of Object.entries(values)) {
     const definition = byKey.get(key)
-    if (definition === undefined) return { key, message: notAFieldOf(typeName, key) }
-    const issue = fieldValueIssue(definition, value)
-    if (issue !== undefined) return { key, message: issue }
+    const message = definition === undefined ? notAFieldOf(typeName, key) : fieldValueIssue(definition, value)
+    if (message !== undefined) issues.push({ key, message })
   }
-  return undefined
+  return issues
 }
 
 /** The values a patch leaves: a value replaces the stored one, null clears it, and a key the patch does not name stays. */
@@ -143,10 +143,15 @@ export function mergedFieldValues(stored: TicketFieldValues, patch: Readonly<Rec
   return merged
 }
 
-/** The fields a ticket still needs, in the type's order: to open, those required to open; to complete, those and the ones required to complete. */
+/**
+ * The fields a ticket still needs, in the type's order: to open, those
+ * required to open; to complete, those and the ones required to complete. A
+ * value the field no longer takes — held from another type, or from before
+ * the field changed — is no value of it.
+ */
 export function missingFields(fields: readonly TicketFieldDefinition[], values: TicketFieldValues, stage: "open" | "complete"): TicketFieldDefinition[] {
   const required: readonly TicketFieldRequirement[] = stage === "open" ? ["to-open"] : ["to-open", "to-complete"]
-  return fields.filter((entry) => required.includes(entry.requirement) && !Object.hasOwn(values, entry.key))
+  return fields.filter((entry) => required.includes(entry.requirement) && (!Object.hasOwn(values, entry.key) || fieldValueIssue(entry, values[entry.key]) !== undefined))
 }
 
 /** What an opening short of a field the type requires to open is told, at the field: "Fill in Requested date: a ticket of type Bulky waste collection is opened with it". */

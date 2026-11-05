@@ -69,6 +69,7 @@ import { MessageTemplatesSettings } from "@/components/settings/message-template
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { PreTripChecklistsSettings } from "@/components/settings/pre-trip-checklists-settings"
 import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
+import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
 import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
@@ -82,6 +83,7 @@ import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "@/lib/data/pre-trip-checklists"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
+import { TICKET_TYPES_SETTINGS_PANE_ID } from "@/lib/data/ticket-types"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -191,6 +193,8 @@ const settingsSections: Array<{
       { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
       // The ticket teams on the API (O30 of #290): offered with the adapter configured.
       { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
+      // The company's ticket types, their fields and status permissions on the API (#545 of #544): offered with the adapter configured.
+      { id: TICKET_TYPES_SETTINGS_PANE_ID, label: "Ticket types", icon: Ticket },
       // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
       // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
@@ -1377,7 +1381,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [HOLIDAY_LISTS_SETTINGS_PANE_ID]: {
     title: "Holiday lists",
     description:
-      "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
+      "The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend.",
     groups: [],
   },
   [EMISSION_FACTORS_SETTINGS_PANE_ID]: {
@@ -1403,6 +1407,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [TICKET_TEAMS_SETTINGS_PANE_ID]: {
     title: "Ticket teams",
     description: "The teams the company's tickets wait with, and each project's default team per kind.",
+    groups: [],
+  },
+  [TICKET_TYPES_SETTINGS_PANE_ID]: {
+    title: "Ticket types",
+    description: "The company's own types of case, each inside one kind, with the fields the office fills in and the roles that may move each status.",
     groups: [],
   },
   [FINANCE_ON_API_SETTINGS_PANE_ID]: {
@@ -1561,6 +1570,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ||
     paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
+    paneId === TICKET_TYPES_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
@@ -1988,6 +1998,8 @@ function SettingsPane({
         <PreTripChecklistsSettings />
       ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
         <TicketTeamsSettings />
+      ) : paneId === TICKET_TYPES_SETTINGS_PANE_ID ? (
+        <TicketTypesSettings />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (

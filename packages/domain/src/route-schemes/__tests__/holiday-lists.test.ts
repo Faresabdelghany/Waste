@@ -3,17 +3,8 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
 import { danishHolidayName, egyptianHolidayName, holidayNamesFor } from "../holiday-names"
-import {
-  calendarHolidayEntries,
-  calendarYear,
-  carryHolidaysToYear,
-  firstYearProposal,
-  holidayEntryIssue,
-  holidayEntryValues,
-  knownHolidaysOfYear,
-  latestHolidayCalendar,
-  nextYearProposal,
-} from "../holiday-lists"
+import { holidayListEntries } from "../holiday-list-records"
+import { carryHolidaysToYear, holidayEntryIssue, holidayEntryValues, knownHolidaysOfYear } from "../holiday-lists"
 
 function stub(id: string, name: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -34,9 +25,8 @@ function stub(id: string, name: string, extra: Partial<BusinessRecord> = {}): Bu
   }
 }
 
-// The fixture records of Copenhagen Central: 2026 as seeded (dates only), and
-// the 2027 dates the seed spells by hand — the ground truth for "Create next
-// year".
+// The Danish list's days of 2026 as seeded, and the 2027 days the seed spells
+// by hand — the ground truth for "Copy to 2027".
 const CPH_2026 =
   "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26"
 const CPH_2027 = [
@@ -53,54 +43,8 @@ const CPH_2027 = [
   "2027-12-26",
 ]
 
-const copenhagen2026 = stub("calendar-central", "Copenhagen Central 2026", {
-  projectIds: ["project-copenhagen"],
-  submittedValues: {
-    calendarName: "Copenhagen Central 2026",
-    holidayDates: CPH_2026,
-    validFrom: "2026-01-01",
-    validTo: "2026-12-31",
-  },
-})
-
-describe("calendarHolidayEntries — the dates a record carries, each with its name", () => {
-  test("a record without carried names is named through the list's lookup; an unknown date is unnamed", () => {
-    const entries = calendarHolidayEntries(
-      stub("c", "Cairo 2027", {
-        submittedValues: { holidayDates: "2027-03-08, 2027-01-07" },
-      }),
-      egyptianHolidayName,
-    )
-    assert.deepEqual(entries, [
-      { date: "2027-01-07", name: "Coptic Christmas" },
-      { date: "2027-03-08", name: "" },
-    ])
-  })
-
-  test("a name the record carries wins over the lookup", () => {
-    const entries = calendarHolidayEntries(
-      stub("c", "Cairo 2027", {
-        submittedValues: {
-          holidayDates: "2027-03-08, 2027-01-07",
-          holidayNames: JSON.stringify({
-            "2027-03-08": "Eid al-Fitr",
-            "2027-01-07": "Coptic Christmas (carried)",
-          }),
-        },
-      }),
-      egyptianHolidayName,
-    )
-    assert.deepEqual(entries, [
-      { date: "2027-01-07", name: "Coptic Christmas (carried)" },
-      { date: "2027-03-08", name: "Eid al-Fitr" },
-    ])
-  })
-
-  test("a record with no structured values has no entries", () => {
-    assert.deepEqual(calendarHolidayEntries(stub("c", "Display only"), danishHolidayName), [])
-    assert.deepEqual(calendarHolidayEntries(undefined, danishHolidayName), [])
-  })
-})
+/** The 2026 days as entries, named through the Danish lookup. */
+const copenhagen2026 = CPH_2026.split(", ").map((date) => ({ date, name: danishHolidayName(date) ?? "" }))
 
 describe("holidayEntryValues — what the editor writes back", () => {
   test("dates sorted and deduplicated in the record's own spelling; names only where one was given", () => {
@@ -129,23 +73,20 @@ describe("holidayEntryValues — what the editor writes back", () => {
     })
   })
 
-  test("the values round-trip through the entry reader", () => {
+  test("the values round-trip through a list record's entry reader", () => {
     const entries = [
       { date: "2027-01-01", name: "New Year's Day" },
       { date: "2027-03-08", name: "Eid al-Fitr" },
     ]
-    const record = stub("c", "Cairo 2027", { submittedValues: holidayEntryValues(entries) })
-    assert.deepEqual(calendarHolidayEntries(record, () => undefined), entries)
+    const { holidayDates, holidayNames } = holidayEntryValues(entries)
+    const record = stub("holiday-list-x", "A list", { recordKind: "Holiday List", submittedValues: { listName: "A list", holidayDates, holidayNames } })
+    assert.deepEqual(holidayListEntries(record), entries)
   })
 })
 
 describe("carryHolidaysToYear — next year's list from this year's", () => {
-  test("Copenhagen Central 2026 carried to 2027 is exactly the seeded 2027 record", () => {
-    const carried = carryHolidaysToYear(
-      calendarHolidayEntries(copenhagen2026, danishHolidayName),
-      2027,
-      danishHolidayName,
-    )
+  test("the Danish list's 2026 carried to 2027 is exactly the seeded 2027 days", () => {
+    const carried = carryHolidaysToYear(copenhagen2026, 2027, danishHolidayName)
     assert.deepEqual(
       carried.map((entry) => entry.date),
       CPH_2027,
@@ -213,73 +154,6 @@ describe("knownHolidaysOfYear — a first year from the list alone", () => {
 
   test("a list that names nothing gives an empty year", () => {
     assert.deepEqual(knownHolidaysOfYear(2027, holidayNamesFor("Somewhere else")), [])
-  })
-})
-
-describe("calendarYear and the proposals", () => {
-  test("the year is the validity start's, else the first holiday's, else none", () => {
-    assert.equal(calendarYear(copenhagen2026), 2026)
-    assert.equal(
-      calendarYear(
-        stub("c", "Dates only", { submittedValues: { holidayDates: "2027-12-25, 2027-01-01" } }),
-      ),
-      2027,
-    )
-    assert.equal(calendarYear(stub("c", "Display only")), undefined)
-  })
-
-  test("latestHolidayCalendar is the record of the latest year, a later start winning inside one year", () => {
-    const later = stub("cal-2027", "Copenhagen Central 2027", {
-      submittedValues: { holidayDates: "2027-01-01", validFrom: "2027-01-01", validTo: "2027-12-31" },
-    })
-    const autumn = stub("cal-2027-autumn", "Autumn 2027", {
-      submittedValues: { validFrom: "2027-09-01", validTo: "2027-12-31" },
-    })
-    assert.equal(latestHolidayCalendar([copenhagen2026, autumn, later])?.id, "cal-2027-autumn")
-    assert.equal(latestHolidayCalendar([copenhagen2026, later])?.id, "cal-2027")
-    assert.equal(latestHolidayCalendar([stub("c", "Display only")]), undefined)
-    assert.equal(latestHolidayCalendar([]), undefined)
-  })
-
-  test("nextYearProposal renames the record by year, covers the whole year and carries the holidays", () => {
-    const proposal = nextYearProposal(copenhagen2026, danishHolidayName)
-    assert.equal(proposal?.year, 2027)
-    assert.equal(proposal?.calendarName, "Copenhagen Central 2027")
-    assert.equal(proposal?.validFrom, "2027-01-01")
-    assert.equal(proposal?.validTo, "2027-12-31")
-    assert.deepEqual(proposal?.entries.map((entry) => entry.date), CPH_2027)
-  })
-
-  test("a partial year becomes a whole next year; a name without the year gets it appended", () => {
-    const cairo = stub("calendar-cairo-2026", "Cairo Operations", {
-      submittedValues: {
-        holidayDates: "2026-10-06",
-        validFrom: "2026-09-01",
-        validTo: "2026-12-31",
-      },
-    })
-    const proposal = nextYearProposal(cairo, egyptianHolidayName)
-    assert.equal(proposal?.calendarName, "Cairo Operations 2027")
-    assert.equal(proposal?.validFrom, "2027-01-01")
-    assert.equal(proposal?.validTo, "2027-12-31")
-    assert.deepEqual(proposal?.entries, [{ date: "2027-10-06", name: "Armed Forces Day" }])
-  })
-
-  test("a record with no year has no proposal", () => {
-    assert.equal(nextYearProposal(stub("c", "Display only"), danishHolidayName), null)
-  })
-
-  test("firstYearProposal names the record after the project and starts from what the list knows", () => {
-    const proposal = firstYearProposal("Aarhus", 2027, danishHolidayName)
-    assert.equal(proposal.year, 2027)
-    assert.equal(proposal.calendarName, "Aarhus 2027")
-    assert.equal(proposal.validFrom, "2027-01-01")
-    assert.equal(proposal.validTo, "2027-12-31")
-    assert.equal(proposal.entries.length, 13)
-    assert.deepEqual(
-      firstYearProposal("Harbor Commercial", 2027, holidayNamesFor(undefined)).entries,
-      [],
-    )
   })
 })
 

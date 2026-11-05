@@ -1,19 +1,14 @@
 // Derived presentation for the Collection Calendars list (issue #27).
 //
-// Pure data logic, following the lifecycle.ts seam: records plus an explicit
-// `today` in, row summaries out. Everything here derives from the structured
+// Pure data logic, following the lifecycle.ts seam: records in, row
+// summaries out. Everything here derives from the structured
 // `submittedValues` a calendar record carries (via calendarFromRecord) — never
 // from display facts, stored value strings, or the module's static metrics.
 
 import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT } from "../record-values"
 import { calendarFromRecord } from "./calendar"
-import {
-  addDays,
-  SERVICE_DAYS,
-  SERVICE_DAY_SHORT_LABELS,
-  type ServiceDay,
-} from "./recurrence"
+import { SERVICE_DAYS, SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "./recurrence"
 
 // Hand-rolled month labels (like SERVICE_DAY_SHORT_LABELS) rather than
 // Intl "en-GB", whose ICU-dependent "Sept" would disagree with the "Sep"
@@ -30,35 +25,6 @@ function dayMonth(iso: string): string {
 
 function dayMonthYear(iso: string): string {
   return `${dayMonth(iso)} ${iso.slice(0, 4)}`
-}
-
-/**
- * The next run of consecutive holiday dates starting at the first date on or
- * after `today` — "25–26 Dec" is one operational closure, not two holidays.
- */
-export function nextHolidaySpan(holidayDates: string[], today: string): string[] {
-  const upcoming = [...new Set(holidayDates)]
-    .sort()
-    .filter((date) => date >= today)
-  if (upcoming.length === 0) return []
-  const span = [upcoming[0]]
-  for (const date of upcoming.slice(1)) {
-    if (date !== addDays(span[span.length - 1], 1)) break
-    span.push(date)
-  }
-  return span
-}
-
-/** "25 Dec", "25–26 Dec", or "31 Dec – 1 Jan" for a consecutive span. */
-export function formatHolidaySpan(span: string[]): string {
-  if (span.length === 0) return EMPTY_FACT
-  const first = span[0]
-  const last = span[span.length - 1]
-  if (first === last) return dayMonth(first)
-  if (first.slice(0, 7) === last.slice(0, 7)) {
-    return `${first.slice(8).replace(/^0/, "")}–${dayMonth(last)}`
-  }
-  return `${dayMonth(first)} – ${dayMonth(last)}`
 }
 
 /** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise — any weekday set (service days, a weekend). */
@@ -92,46 +58,29 @@ export function formatValidity(validFrom: string, validTo: string): string {
 }
 
 export type CalendarRowSummary = {
-  holidays: string
   validity: string
-  nextHoliday: string
 }
 
-const EMPTY_ROW: CalendarRowSummary = {
-  holidays: EMPTY_FACT,
-  validity: EMPTY_FACT,
-  nextHoliday: EMPTY_FACT,
-}
+const EMPTY_ROW: CalendarRowSummary = { validity: EMPTY_FACT }
 
-/** The derived table cells for one calendar record (D28iii). */
-export function calendarRowSummary(
-  record: BusinessRecord | undefined | null,
-  today: string,
-): CalendarRowSummary {
+/** The derived table cells for one calendar record (D28iii); a calendar carries no holidays since 2026-11-05. */
+export function calendarRowSummary(record: BusinessRecord | undefined | null): CalendarRowSummary {
   const calendar = calendarFromRecord(record)
   if (!calendar) return EMPTY_ROW
-  return {
-    holidays: String(calendar.holidayDates.length),
-    validity: formatValidity(calendar.validFrom, calendar.validTo),
-    nextHoliday: formatHolidaySpan(nextHolidaySpan(calendar.holidayDates, today)),
-  }
+  return { validity: formatValidity(calendar.validFrom, calendar.validTo) }
 }
 
 /**
- * Display seam for the "Next holiday" value: replaces the stored value with
- * the derived one so no surface renders a stale display copy. Returns the
- * input unchanged when nothing is derivable (legacy display-only records) or
- * the value already matches, so unchanged records stay referentially stable
- * across re-renders.
+ * Display seam for a calendar's value, its validity: replaces the stored
+ * value with the derived one so no surface renders a stale display copy.
+ * Returns the input unchanged when nothing is derivable (legacy display-only
+ * records) or the value already matches, so unchanged records stay
+ * referentially stable across re-renders.
  */
-export function withDerivedCalendarValue(
-  record: BusinessRecord,
-  today: string,
-): BusinessRecord {
+export function withDerivedCalendarValue(record: BusinessRecord): BusinessRecord {
   const calendar = calendarFromRecord(record)
   if (!calendar) return record
-  const derived = formatHolidaySpan(nextHolidaySpan(calendar.holidayDates, today))
+  const derived = formatValidity(calendar.validFrom, calendar.validTo)
   if (record.value === derived) return record
   return { ...record, value: derived }
 }
-

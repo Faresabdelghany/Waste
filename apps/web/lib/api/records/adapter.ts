@@ -192,6 +192,12 @@ export type ServerModule = {
    * grant, whose rows the office reads in their own module.
    */
   providersOnly?: true
+  /**
+   * The other modules, by key, whose `view` the API reads it under too: the
+   * ticket teams and types, which the people working tickets pick from
+   * without keeping them (#545 of #544). A write is still its own grant's.
+   */
+  alsoViewedUnder?: readonly string[]
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */

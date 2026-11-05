@@ -24,6 +24,7 @@ import { inheritedPresentation, ofKind, patchOf, stampFacts, statusLabel, status
 import { userAdapter } from "./organisation"
 import { sameSet } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
+import { ticketTypeAdapter } from "./ticket-types"
 
 /** Whether a loaded row is a ticket team: its id, or — a row made this session — its kind. */
 export const isTicketTeamRecord = ofKind(TICKET_TEAM_PREFIX, ["Ticket team"])
@@ -123,9 +124,11 @@ export const ticketTeamAdapter: ResourceAdapter<Team> = {
   },
 }
 
-/** Settings › Operations › Ticket teams, and the module the tickets' Team picker reads: the company's teams. */
+/** Settings › Operations › Ticket teams and Ticket types (#545 of #544), and the module the tickets' Team and Type pickers read: the company's teams and its types, the API keeping both under `configure.templates`. */
 export const ticketTeamsModule: ServerModule = {
   workspaceId: TICKET_TEAMS_MODULE.workspaceId,
   moduleId: TICKET_TEAMS_MODULE.moduleId,
-  resources: [ticketTeamAdapter],
+  resources: [ticketTeamAdapter, ticketTypeAdapter],
+  // The people working tickets pick a team and a type, and fill in a type's fields: the API reads both under the tickets' grant too.
+  alsoViewedUnder: ["operate.tickets"],
 }

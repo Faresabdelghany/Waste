@@ -26,6 +26,7 @@ import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
+import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
 import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
@@ -35,7 +36,7 @@ import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
 import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
-import { ACCESS_MODULE, recollectionStopOptions, ticketStopOptions } from "@/lib/data/tickets"
+import { ACCESS_MODULE, recollectionStopOptions, ticketFormFor, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
@@ -58,6 +59,12 @@ const ticketOption = (record: BusinessRecord): BusinessFormOption => ({ value: r
 const inProject = (records: readonly BusinessRecord[], projectId: string | undefined) =>
   records.filter((record) => !isSoftDeleted(record) && (projectId === undefined || !record.projectIds?.length || record.projectIds.includes(projectId)))
 
+/** New ticket with the company's active types' fields (#545 of #544), read from the teams' module: each type's shown while it is the one picked. */
+export function useTicketForm(): BusinessFormSchema {
+  const types = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  return ticketFormFor(types.records.filter((record) => isTicketTypeRecord(record) && record.status === "Active"))
+}
+
 /** The Resolution dialogs' pickers: the command surfaces' own, and the rows a ticket and an alert name beside them. */
 export function useResolutionPickers(): RelationPickers {
   const base = useRelationPickers()
@@ -69,7 +76,7 @@ export function useResolutionPickers(): RelationPickers {
   const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, fixturesOf(TICKETS_MODULE))
   const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, fixturesOf(PICKUPS_MODULE))
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE))
-  // The ticket teams (O30 of #290): the API's alone, so no fixture stands in for one.
+  // The ticket teams (O30 of #290) and the ticket types (#545 of #544), one module: the API's alone, so no fixture stands in for one.
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
   // The modules a dialog waits on. Not the stops: the re-collection's stop is
   // optional and a recollected completion's alone, so a Complete answering
@@ -123,6 +130,9 @@ export function useResolutionPickers(): RelationPickers {
       // The team a new ticket waits with (O30 of #290): an active one, or None for no team; left blank, the project's default for the kind.
       case "teamId":
         return [{ value: NO_ONE, label: "None: no team" }, ...teams.records.filter((record) => isTicketTeamRecord(record) && record.status === "Active").map((record) => optionOf(record))]
+      // The company's type of case a new ticket is of (#545 of #544), an active one, the teams' module keeping both; or None, to pick a kind for its default type.
+      case "ticketTypeId":
+        return [{ value: NO_ONE, label: "None: pick a kind" }, ...teams.records.filter((record) => isTicketTypeRecord(record) && record.status === "Active").map((record) => optionOf(record, record.facts.Kind))]
       default:
         return undefined
     }

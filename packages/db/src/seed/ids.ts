@@ -34,8 +34,9 @@ const BUCKET = "01a0d2a4-a280-7"
  * Exceptions' contaminant codes and their fractions (M5 of #293) follow
  * Finance's, and the fleet's emission factors and its vehicle types'
  * consumption (M10 of #293) take 0x02c and 0x02d after them, the
- * decommission reasons (O30 of #290, row 9.6) 0x02e, and the default ticket
- * types (#545 of #544) 0x02f.
+ * decommission reasons (O30 of #290, row 9.6) 0x02e, the default ticket
+ * types (#545 of #544) 0x02f, and the Holiday Lists and their days 0x030
+ * and 0x031.
  */
 export const DEMO_KINDS = {
   company: 0x001,
@@ -62,7 +63,7 @@ export const DEMO_KINDS = {
   planningArea: 0x016,
   planningAreaBoundary: 0x017,
   collectionCalendar: 0x018,
-  collectionCalendarHoliday: 0x019,
+  // 0x019 was the calendars' holidays', retired with their table (2026-11-05) and never reused.
   routeScheme: 0x01a,
   collectionGroup: 0x01b,
   collectionGroupFraction: 0x01c,
@@ -85,6 +86,8 @@ export const DEMO_KINDS = {
   vehicleTypeConsumption: 0x02d,
   decommissionReason: 0x02e,
   ticketType: 0x02f,
+  holidayList: 0x030,
+  holidayListHoliday: 0x031,
 } as const
 
 export type DemoKind = keyof typeof DEMO_KINDS

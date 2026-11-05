@@ -20,7 +20,7 @@ import { migrateDatabase } from "../migrate"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { agreement, subscription } from "../schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
 import {
   customer,
@@ -84,7 +84,6 @@ const SEEDED_TABLES = [
   planningArea,
   planningAreaBoundary,
   collectionCalendar,
-  collectionCalendarHoliday,
   routeScheme,
   collectionGroup,
   collectionGroupFraction,
@@ -127,7 +126,6 @@ const CONFIGURATION_COUNTS = {
   planningAreas: 5,
   planningAreaBoundaries: 4,
   collectionCalendars: 5,
-  collectionCalendarHolidays: 31,
   routeSchemes: 2,
   collectionGroups: 2,
   collectionGroupFractions: 1,
@@ -140,6 +138,8 @@ const CONFIGURATION_COUNTS = {
   vehicleTypeConsumptions: 4,
   decommissionReasons: 8,
   ticketTypes: 12,
+  holidayLists: 2,
+  holidayListHolidays: 31,
 }
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
@@ -191,7 +191,6 @@ describe("the demo seed's fixed ids", () => {
       planningArea: 0x016,
       planningAreaBoundary: 0x017,
       collectionCalendar: 0x018,
-      collectionCalendarHoliday: 0x019,
       routeScheme: 0x01a,
       collectionGroup: 0x01b,
       collectionGroupFraction: 0x01c,
@@ -214,6 +213,8 @@ describe("the demo seed's fixed ids", () => {
       vehicleTypeConsumption: 0x02d,
       decommissionReason: 0x02e,
       ticketType: 0x02f,
+      holidayList: 0x030,
+      holidayListHoliday: 0x031,
     })
     assert.equal(demoId("routeScheme", 1), "01a0d2a4-a280-701a-8000-000000000001")
   })
@@ -221,7 +222,7 @@ describe("the demo seed's fixed ids", () => {
   test("the configuration's ids are keyed by the prototype's record ids, each in its table's kind, as many as the counts", () => {
     const { planning, resources, finance, pickupExceptions, emissions } = DEMO_IDS
     assert.ok(planning.routeSchemes["scheme-central-a"] && planning.collectionGroups["scheme-osterbro-b:default"] && planning.planningAreaBoundaries["area-harbor-1"])
-    assert.ok(planning.collectionCalendarHolidays["calendar-cairo-2027:2027-07-23"] && planning.collectionGroupContainers["scheme-osterbro-b:default:asset-seed-91007"])
+    assert.ok(planning.collectionCalendars["calendar-cairo-2027"] && planning.collectionGroupContainers["scheme-osterbro-b:default:asset-seed-91007"])
     assert.ok(resources.vehicleTypes["rear-loader"] && resources.containerTypeVehicleTypes["glass-crane:igloo-2500"] && resources.vehicleCompartmentFractions["vehicle-wh24:1:mixed"])
     assert.ok(resources.drivers["driver-mads"] && resources.depots["depot-nordhavn"] && resources.unloadingStationFractions["station-arc:residual"])
     assert.ok(finance.priceLists["price-list-harbor-2026"] && finance.priceListRows.copenhagen["price-row-res-osterbro"] && finance.priceListRows.harbor["price-row-glass-default"])
@@ -243,7 +244,6 @@ describe("the demo seed's fixed ids", () => {
       planningAreas: "planningArea",
       planningAreaBoundaries: "planningAreaBoundary",
       collectionCalendars: "collectionCalendar",
-      collectionCalendarHolidays: "collectionCalendarHoliday",
       routeSchemes: "routeScheme",
       collectionGroups: "collectionGroup",
       collectionGroupFractions: "collectionGroupFraction",

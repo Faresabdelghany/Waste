@@ -1445,12 +1445,11 @@ export function BusinessWorkspace({
         ),
       )
     }
-    // A calendar's "Next holiday" value is always derived from its structured
-    // holiday dates plus today (issue #27, D13) — stored display copies and
-    // form-submit placeholders are never rendered.
+    // A calendar's value is always derived from its structured validity
+    // (issue #27, D13; a calendar carries no holidays since 2026-11-05) —
+    // stored display copies and form-submit placeholders are never rendered.
     if (activeModule.id === "calendars") {
-      const today = todayIso()
-      records = records.map((record) => withDerivedCalendarValue(record, today))
+      records = records.map((record) => withDerivedCalendarValue(record))
     }
     // Service provider isolation covers user-created records too, which a static
     // fixture-id allowlist cannot. A module the API fences is the API's rows alone.
@@ -1784,8 +1783,8 @@ export function BusinessWorkspace({
   const isQueueView = moduleViewKind === "queue"
   const isTicketsView = activeModule.id === "tickets"
   const isRoutesView = activeModule.id === "routes"
-  // Collection Calendars list (issue #27, D28iii): artboard columns with
-  // Working days / Holidays / Validity / Next holiday derived per record.
+  // Collection Calendars list (issue #27, D28iii): the project and the
+  // validity, derived per record.
   const isCalendarsView = activeModule.id === "calendars"
   // Operators and service provider managers pin route days to their own sidebar's
   // Active Routes group from a star column on the routes table.
@@ -1872,14 +1871,10 @@ export function BusinessWorkspace({
     )
   }, [activeRecords, getRecords, isSchemesView])
   // Derived Collection Calendars presentation (issue #27, D28iii): the table's
-  // Holidays / Validity cells derive from each record's structured
-  // submittedValues (working days left the calendar for the project, round 3).
+  // Validity cell derives from each record's structured submittedValues.
   const calendarRowsById = useMemo(() => {
     if (!isCalendarsView) return new Map<string, CalendarRowSummary>()
-    const today = todayIso()
-    return new Map(
-      activeRecords.map((record) => [record.id, calendarRowSummary(record, today)]),
-    )
+    return new Map(activeRecords.map((record) => [record.id, calendarRowSummary(record)]))
   }, [activeRecords, isCalendarsView])
   const schemeExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined =>
@@ -2059,9 +2054,7 @@ export function BusinessWorkspace({
         activeFactColumns.length +
         1
       : 3 +
-        // Holidays / Validity on the calendars table (#27; working days
-        // left the calendar for the project, round 3).
-        (isCalendarsView ? 2 : 0) +
+        // The calendars' Validity stands in place of the value (#27).
         Number(viewOptions.showContext) +
         Number(viewOptions.showUpdated)
   const isFleetPlanningView =
@@ -2187,9 +2180,9 @@ export function BusinessWorkspace({
           record.projectIds?.length ? projectScopeLabel(record.projectIds, projectRecords) : "",
         )
       }
-      // Deep-linked calendars show the derived Next holiday too (issue #27).
+      // Deep-linked calendars show the derived validity too (issue #27).
       if (record && module.id === "calendars") {
-        record = withDerivedCalendarValue(record, todayIso())
+        record = withDerivedCalendarValue(record)
       }
       // Deep links cannot escape a service provider scope; the API's own fence holds a switched module's.
       if (
@@ -5489,12 +5482,7 @@ export function BusinessWorkspace({
                               )
                             )}
                             <TableHead>Status</TableHead>
-                            {isCalendarsView && (
-                              <>
-                                <TableHead>Holidays</TableHead>
-                                <TableHead>Validity</TableHead>
-                              </>
-                            )}
+                            {isCalendarsView && <TableHead>Validity</TableHead>}
                             {/* Schemes swap the generic value column (Demand)
                                 for the derived Recurrence / Waste fraction
                                 pair (issue #30, D15; round 3). */}
@@ -5504,7 +5492,7 @@ export function BusinessWorkspace({
                                 <TableHead>Waste fraction</TableHead>
                               </>
                             ) : (
-                              !isServiceProviderUsersView && (
+                              !isServiceProviderUsersView && !isCalendarsView && (
                                 <TableHead>{activeModule.valueLabel}</TableHead>
                               )
                             )}
@@ -5774,14 +5762,9 @@ export function BusinessWorkspace({
                                   </div>
                                 </TableCell>
                                 {isCalendarsView && (
-                                  <>
-                                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                                      {calendarRowsById.get(record.id)?.holidays ?? "—"}
-                                    </TableCell>
-                                    <TableCell className="min-w-[170px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {calendarRowsById.get(record.id)?.validity ?? "—"}
-                                    </TableCell>
-                                  </>
+                                  <TableCell className="min-w-[170px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {calendarRowsById.get(record.id)?.validity ?? "—"}
+                                  </TableCell>
                                 )}
                                 {isSchemesView ? (
                                   <>
@@ -5793,7 +5776,7 @@ export function BusinessWorkspace({
                                     </TableCell>
                                   </>
                                 ) : (
-                                  !isServiceProviderUsersView && (
+                                  !isServiceProviderUsersView && !isCalendarsView && (
                                     <TableCell className="min-w-[150px]">
                                       <RecordValue record={record} />
                                     </TableCell>

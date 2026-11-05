@@ -243,6 +243,9 @@ const cairoFixtureRecordIds = [
 ] as const
 
 const companyWideFixtureRecordIds = [
+  // The company's Holiday Lists (2026-11-05), one per country, which the projects name.
+  "holiday-list-danish",
+  "holiday-list-egyptian",
   "product-res-240",
   "product-card-660",
   "product-glass-igloo",
@@ -2181,12 +2184,12 @@ const plan: WorkspaceDefinition = {
       id: "calendars",
       label: "Collection Calendars",
       title: "Collection Calendars",
-      description: "Holidays and validity periods, maintained per project and year, that decide which planned service dates are valid.",
+      description: "Validity periods, maintained per project and year; a project's holidays are the days of the company's holiday list it names.",
       entityLabel: "Calendar",
       // Calendars are project-scoped (D22) — there is no customer or service
       // scoping in the model, so the list never claims one.
       contextLabel: "Project",
-      valueLabel: "Next holiday",
+      valueLabel: "Validity",
       primaryAction: "New calendar",
       // No KPI tiles above the calendars list; the table cells derive from
       // real calendar records at render time (issue #27) — see
@@ -2199,13 +2202,11 @@ const plan: WorkspaceDefinition = {
         "Time zone is display information; generation is day-granular.",
       ],
       records: [
-        // Fixture calendars carry the structured operational data the
-        // generation engine consumes — 11 Danish
-        // holidays of 2026 (the 10 statutory public holidays plus
-        // Grundlovsdag). The list's Holidays / Next holiday columns derive
-        // from these structured values at render time (issue #27, D28iii);
-        // the display facts below are legacy copies shown only in the
-        // record detail.
+        // Fixture calendars carry their structured validity, which the list's
+        // Validity column derives from at render time (issue #27, D28iii);
+        // the display facts below are legacy copies shown only in the record
+        // detail. A calendar carries no holidays (2026-11-05): the project's
+        // are the days of the Holiday List it names, below.
         {
           ...record(
             "calendar-central",
@@ -2216,8 +2217,8 @@ const plan: WorkspaceDefinition = {
             "25–26 Dec",
             "1 week ago",
             "Project collection calendar with the Danish holidays of 2026.",
-            { WeekStart: "Monday", Holidays: "11", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2026" },
-            ["38 route schemes", "1,602 properties", "11 holidays"],
+            { WeekStart: "Monday", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2026" },
+            ["38 route schemes", "1,602 properties"],
             "Project configuration",
             "1 week",
             ["Create next year", "Archive"],
@@ -2225,16 +2226,11 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Copenhagen Central 2026",
             weekStart: "monday",
-            holidayDates:
-              "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26",
             validFrom: "2026-01-01",
             validTo: "2026-12-31",
             timezone: "Europe/Copenhagen",
           },
         },
-        // The project's holiday list is maintained per year (holiday model
-        // 2026-09-16): the 2027 record carries the 11 Danish public holidays
-        // of 2027 so open-ended schemes see holidays across the year boundary.
         {
           ...record(
             "calendar-central-2027",
@@ -2245,8 +2241,8 @@ const plan: WorkspaceDefinition = {
             "1 Jan",
             "2 days ago",
             "Project collection calendar with the Danish holidays of 2027.",
-            { WeekStart: "Monday", Holidays: "11", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2027" },
-            ["38 route schemes", "1,602 properties", "11 holidays"],
+            { WeekStart: "Monday", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2027" },
+            ["38 route schemes", "1,602 properties"],
             "Project configuration",
             "2 days",
             ["Create next year", "Archive"],
@@ -2254,8 +2250,6 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Copenhagen Central 2027",
             weekStart: "monday",
-            holidayDates:
-              "2027-01-01, 2027-03-25, 2027-03-26, 2027-03-28, 2027-03-29, 2027-05-06, 2027-05-16, 2027-05-17, 2027-06-05, 2027-12-25, 2027-12-26",
             validFrom: "2027-01-01",
             validTo: "2027-12-31",
             timezone: "Europe/Copenhagen",
@@ -2273,7 +2267,7 @@ const plan: WorkspaceDefinition = {
             "Not published",
             "Yesterday",
             "Draft project calendar for Harbor Offices service, awaiting agreement activation.",
-            { WeekStart: "Monday", Holidays: "None scheduled", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
+            { WeekStart: "Monday", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
             ["Draft agreement AGR-2512", "6 properties", "1 route scheme draft"],
             "Draft agreement",
             "Yesterday",
@@ -2282,15 +2276,12 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Harbor Offices service calendar",
             weekStart: "monday",
-            holidayDates: "",
             validFrom: "2026-09-01",
             validTo: "2027-08-31",
             timezone: "Europe/Copenhagen",
           },
         },
-        // Cairo Operations keeps its own per-year lists (round 3): Egyptian
-        // public holidays. Eid dates follow the lunar calendar and are
-        // maintained by hand each year.
+        // Cairo Operations keeps its own per-year calendars (round 3).
         {
           ...record(
             "calendar-cairo-2026",
@@ -2301,7 +2292,7 @@ const plan: WorkspaceDefinition = {
             "6 Oct",
             "3 days ago",
             "Project collection calendar with the Egyptian public holidays of late 2026.",
-            { WeekStart: "Sunday", Holidays: "1", Timezone: "Africa/Cairo", Validity: "1 Sep – 31 Dec 2026" },
+            { WeekStart: "Sunday", Timezone: "Africa/Cairo", Validity: "1 Sep – 31 Dec 2026" },
             ["1 route scheme", "1 holiday"],
             "Project configuration",
             "3 days",
@@ -2310,7 +2301,6 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Cairo Operations 2026",
             weekStart: "sunday",
-            holidayDates: "2026-10-06",
             validFrom: "2026-09-01",
             validTo: "2026-12-31",
             timezone: "Africa/Cairo",
@@ -2326,8 +2316,8 @@ const plan: WorkspaceDefinition = {
             "7 Jan",
             "3 days ago",
             "Project collection calendar with the Egyptian public holidays of 2027.",
-            { WeekStart: "Sunday", Holidays: "8", Timezone: "Africa/Cairo", Validity: "1 Jan – 31 Dec 2027" },
-            ["1 route scheme", "8 holidays"],
+            { WeekStart: "Sunday", Timezone: "Africa/Cairo", Validity: "1 Jan – 31 Dec 2027" },
+            ["1 route scheme"],
             "Project configuration",
             "3 days",
             ["Create next year", "Archive"],
@@ -2335,11 +2325,60 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Cairo Operations 2027",
             weekStart: "sunday",
-            holidayDates:
-              "2027-01-07, 2027-01-25, 2027-03-08, 2027-03-09, 2027-04-25, 2027-05-01, 2027-06-30, 2027-07-23",
             validFrom: "2027-01-01",
             validTo: "2027-12-31",
             timezone: "Africa/Cairo",
+          },
+        },
+        // The company's Holiday Lists (Settings › Holiday lists, 2026-11-05):
+        // one per country, holding the days of its projects, which a project
+        // rests on by naming it. The seed's lists; Egypt's Eid dates follow
+        // the lunar calendar and are maintained by hand each year.
+        {
+          ...record(
+            "holiday-list-danish",
+            "Danish public holidays",
+            "DK · 1 project",
+            "Active",
+            "Operations Admin",
+            "—",
+            "3 days ago",
+            "The company's Danish holiday list, which Copenhagen Central rests on.",
+            { Country: "DK", Holidays: "22", Projects: "1" },
+            ["1 project", "22 holidays"],
+            "Project configuration",
+            "3 days",
+          ),
+          recordKind: "Holiday List",
+          submittedValues: {
+            listName: "Danish public holidays",
+            country: "DK",
+            holidayDates:
+              "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26, 2027-01-01, 2027-03-25, 2027-03-26, 2027-03-28, 2027-03-29, 2027-05-06, 2027-05-16, 2027-05-17, 2027-06-05, 2027-12-25, 2027-12-26",
+            projectCount: "1",
+          },
+        },
+        {
+          ...record(
+            "holiday-list-egyptian",
+            "Egyptian public holidays",
+            "EG · 1 project",
+            "Active",
+            "Operations Admin",
+            "—",
+            "3 days ago",
+            "The company's Egyptian holiday list, which Cairo Operations rests on.",
+            { Country: "EG", Holidays: "9", Projects: "1" },
+            ["1 project", "9 holidays"],
+            "Project configuration",
+            "3 days",
+          ),
+          recordKind: "Holiday List",
+          submittedValues: {
+            listName: "Egyptian public holidays",
+            country: "EG",
+            holidayDates: "2026-10-06, 2027-01-07, 2027-01-25, 2027-03-08, 2027-03-09, 2027-04-25, 2027-05-01, 2027-06-30, 2027-07-23",
+            projectCount: "1",
           },
         },
       ],
@@ -5904,21 +5943,25 @@ const configure: WorkspaceDefinition = {
         "Company and project context are visible before high-impact actions.",
       ],
       records: [
-        record(
-          "company-kystbyen-dk",
-          "Kystbyen Renovation A/S",
-          "Company · tenant",
-          "Active",
-          "Company Admin",
-          "18 feature entitlements",
-          "Today",
-          "Tenant organization containing five independently permissioned operating projects.",
-          { CVR: "12345678", Currency: "DKK", Timezone: "Europe/Copenhagen", Subscription: "Enterprise" },
-          ["5 projects", "84 users", "18 entitlements", "3 API clients"],
-          "Organization settings",
-          "Today",
-          ["Suspended", "Archive"],
-        ),
+        {
+          ...record(
+            "company-kystbyen-dk",
+            "Kystbyen Renovation A/S",
+            "Company · tenant",
+            "Active",
+            "Company Admin",
+            "18 feature entitlements",
+            "Today",
+            "Tenant organization containing five independently permissioned operating projects.",
+            { CVR: "12345678", Currency: "DKK", Timezone: "Europe/Copenhagen", Subscription: "Enterprise" },
+            ["5 projects", "84 users", "18 entitlements", "3 API clients"],
+            "Organization settings",
+            "Today",
+            ["Suspended", "Archive"],
+          ),
+          // The company's country, as the API's company carries it: the Holiday lists pane offers its list first.
+          submittedValues: { country: "DK" },
+        },
         // The working week and the holiday list are project attributes
         // (round 3): `weekend` holds the weekdays the project rests on,
         // `holidayList` names its list (absent = none); both are read by

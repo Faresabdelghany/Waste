@@ -83,7 +83,7 @@ import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule, type Route, type RouteDispatchResult } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
-import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { listHolidayRows } from "@waste/db/query/holidays"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
@@ -424,13 +424,7 @@ async function operatingDayOf(tx: Tx, scope: Scope, current: RouteRow, day: stri
     .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
     .limit(1)
   if (calendar === undefined) throw noSuchRoute(current.id)
-  const holidays =
-    calendar.holidayList === null
-      ? []
-      : await tx
-          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-          .from(collectionCalendarHoliday)
-          .where(and(eq(collectionCalendarHoliday.companyId, scope.companyId), eq(collectionCalendarHoliday.projectId, scope.projectId), eq(collectionCalendarHoliday.day, day)))
+  const holidays = await listHolidayRows(tx, scope.companyId, calendar.holidayList, { from: day, to: day })
   const [scheme] =
     current.routeSchemeId === null
       ? []

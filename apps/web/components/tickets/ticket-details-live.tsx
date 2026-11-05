@@ -61,6 +61,8 @@ import {
   REPLY_WITH_EVIDENCE,
   ticketDetail,
   ticketEvidence,
+  TICKET_FIELD_VALUES_KEY,
+  ticketFieldValuesOf,
   TICKET_LINKS,
   TICKET_MACHINE_COMMANDS,
   TICKET_NUMBER_FACT,
@@ -69,6 +71,8 @@ import {
   ticketOpened,
   type TicketCommandName,
 } from "@/lib/api/records/tickets"
+import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
+import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
@@ -76,6 +80,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
+import { editFieldsForm, fieldValuesAfterEdit, formValuesOfFields, shownFieldValue, typeFieldsOf } from "@/lib/data/ticket-types"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
 import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
@@ -83,7 +88,7 @@ import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/t
 import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
-import { useResolutionPickers } from "./resolution-pickers"
+import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
 import { ResolutionCreateDialog } from "./resolution-surfaces"
 
 const { workspaceId, moduleId } = TICKETS_MODULE
@@ -154,7 +159,7 @@ function ticketPriorityTone(priority: string): StatusTone {
   return "neutral"
 }
 
-type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" } | { kind: "sub-ticket" }
+type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "fields" } | { kind: "reply" } | { kind: "book" } | { kind: "sub-ticket" }
 
 export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessRecord; onClose: () => void }) {
   const state = useServerModuleState(workspaceId, moduleId)
@@ -171,7 +176,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [changes, setChanges] = useState(0)
   const reads = useRowHistory(workspaceId, moduleId, live, version + changes, readTicket)
   const userName = useServerNames(ACCESS_MODULE, "user")
+  // The teams and the ticket types (#545 of #544) are one module's records, told apart by kind.
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_TEAMS)
+  const ticketForm = useTicketForm()
   const aboutAStop = typeof live.submittedValues?.pickupId === "string" && live.submittedValues.pickupId !== ""
   const evidenceRead = useRowHistory(workspaceId, moduleId, live, `${version + changes}:${aboutAStop}`, aboutAStop ? readEvidence : NO_EVIDENCE)
   const evidence = evidenceRead.rows === null ? undefined : evidenceRead.rows[0]
@@ -200,6 +207,11 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const status = (value("status") || "open") as TicketStatus
   const label = live.facts[TICKET_NUMBER_FACT] ?? live.name
   const detail = reads.rows?.[0]
+  // The ticket's type and its fields' values (#545 of #544): the type as the teams' module holds it, once read.
+  const type = teams.records.find((candidate) => candidate.id === value("ticketTypeId") && isTicketTypeRecord(candidate))
+  const typeFields = type === undefined ? [] : typeFieldsOf(type)
+  const fieldValues = ticketFieldValuesOf(live)
+  const formerValues = Object.entries(fieldValues).filter(([key]) => !typeFields.some((field) => field.key === key))
   const offered = ready && !busy && !saving
   // A closed ticket's own fields are refused by the API until it is reopened: its edits are offered while it is open.
   const editable = offered && patches && isOpenTicketStatus(status)
@@ -412,6 +424,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <Row label="Number" value={label} />
                   <PickRow label="Priority" value={value("priority")} tokens={TICKET_PRIORITIES} disabled={!editable} onPick={(token) => save({ priority: token }, "Priority changed")} />
                   <PickRow label="Kind" value={value("kind")} tokens={TICKET_KINDS} disabled={!editable} onPick={(token) => save({ kind: token }, "Kind changed")} />
+                  {/* Its type (#545 of #544): moving it moves the kind; a kind picked above moves it to that kind's default. */}
+                  <OptionRow label="Type" value={value("ticketTypeId")} shown={live.facts.Type ?? "—"} options={typeOptions(teams.records, value("ticketTypeId"))} disabled={!editable || !teams.ready} onPick={(ticketTypeId) => save({ ticketTypeId }, "Type changed")} />
                   <DueRow value={value("dueAt")} shown={live.facts.Due ?? "None"} disabled={!editable} onSave={(dueAt) => save({ dueAt }, dueAt === "" ? "Due cleared" : "Due changed")} />
                   {/* What the due date reads as when the ticket was read (O4 of #290): overdue, on track, met or breached. */}
                   {live.facts[TICKET_SLA_FACT] !== undefined && <Row label="SLA" value={live.facts[TICKET_SLA_FACT]} />}
@@ -422,6 +436,28 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   {live.facts.Closed !== undefined && <Row label="Closed" value={live.facts.Closed} />}
                 </div>
               </section>
+
+              {(typeFields.length > 0 || formerValues.length > 0) && (
+                <section data-testid="ticket-fields">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fields</h3>
+                    {typeFields.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!editable} onClick={() => setOpen({ kind: "fields" })}>
+                        Edit fields
+                      </Button>
+                    )}
+                  </div>
+                  <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
+                    {typeFields.map((field) => (
+                      <Row key={field.key} label={field.label} value={shownFieldValue(fieldValues[field.key])} />
+                    ))}
+                    {/* A value of a field the type no longer has, or of the type it was before: read, never edited here. */}
+                    {formerValues.map(([key, held]) => (
+                      <Row key={key} label={key} value={`${shownFieldValue(held)} · not a field of the type`} />
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assignment</h3>
@@ -440,7 +476,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     label="Team"
                     value={value("teamId") || NO_ONE}
                     shown={live.facts.Team ?? "No team"}
-                    options={teamOptions(teams.records, value("teamId"))}
+                    options={teamOptions(teams.records.filter(isTicketTeamRecord), value("teamId"))}
                     disabled={!editable || !teams.ready}
                     onPick={(teamId) => save({ teamId }, teamId === NO_ONE ? "Team cleared" : "Ticket handed to the team")}
                   />
@@ -611,13 +647,23 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
       {open?.kind === "sub-ticket" && (
         <ResolutionCreateDialog
           module={TICKETS_MODULE}
-          schema={TICKET_FORM}
+          schema={ticketForm}
           pickers={pickers}
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
           initial={subTicketValues(live)}
           make={(values, now) => createTicketRecord(values, { now })}
           created={ticketOpened}
+        />
+      )}
+      {open?.kind === "fields" && type !== undefined && (
+        <BusinessRecordFormDialog
+          schema={editFieldsForm(type)}
+          open
+          onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+          onSubmit={(values) => save({ [TICKET_FIELD_VALUES_KEY]: JSON.stringify(fieldValuesAfterEdit(type, fieldValues, values)) }, "Fields saved")}
+          relationOptions={(field) => field.options ?? []}
+          initialValueOverrides={formValuesOfFields(type.id, fieldValues)}
         />
       )}
       {open?.kind === "reply" && (
@@ -704,6 +750,11 @@ function Row({ label, value, children }: { label: string; value: string; childre
 
 /** A field of a closed list, changed in place: the patch of that one field. */
 const NO_TEAMS: readonly BusinessRecord[] = []
+
+/** The types a ticket may be moved to (#545 of #544): the active ones, and the one it is of whatever its status, each with its kind. */
+function typeOptions(records: readonly BusinessRecord[], current: string): { value: string; label: string }[] {
+  return records.filter((record) => isTicketTypeRecord(record) && (record.status === "Active" || record.id === current)).map((record) => ({ value: record.id, label: `${record.name} · ${record.facts.Kind ?? ""}` }))
+}
 
 /** The teams a ticket may be handed to: None, the active ones, and the one it waits with whatever its status. */
 function teamOptions(records: readonly BusinessRecord[], current: string): { value: string; label: string }[] {

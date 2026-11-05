@@ -28,6 +28,7 @@ import { PRODUCTS_MODULE } from "./commercial"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 import { TICKET_TEAMS_MODULE } from "./ticket-teams"
+import { ticketTypeFormFields, TICKET_TYPES_MODULE } from "./ticket-types"
 
 /** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
 export const ACCESS_MODULE: ModuleLocation = { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId }
@@ -39,6 +40,18 @@ const project: BusinessFormField = { id: "projectId", label: "Project", type: "s
 const subject: BusinessFormField = { id: "subject", label: "Subject", type: "text", required: true }
 const description: BusinessFormField = { id: "description", label: "Description", type: "textarea", required: true, description: "What happened, or what is asked." }
 const kind: BusinessFormField = { id: "kind", label: "Kind", type: "select", required: true, options: tokenOptions(TICKET_KINDS) }
+/** No type picked: blank, or the picker's None (#545 of #544). */
+const UNTYPED = { fieldId: "ticketTypeId", oneOf: ["", NO_ONE] } as const
+/** The company's type of case (#545 of #544): its kind and its fields come with it. */
+const ticketType: BusinessFormField = {
+  id: "ticketTypeId",
+  label: "Type",
+  type: "select",
+  relation: TICKET_TYPES_MODULE,
+  description: "The company's type of case: its kind comes with it, and the form asks for its fields. None to pick a kind, which opens its default type.",
+}
+/** The kind, asked only while no type is picked: a ticket opened by kind alone is of the kind's default type. */
+const kindWithoutType: BusinessFormField = { ...kind, required: false, visibleWhen: UNTYPED, requiredWhen: UNTYPED }
 const priority: BusinessFormField = { id: "priority", label: "Priority", type: "select", defaultValue: "none", options: tokenOptions(TICKET_PRIORITIES) }
 /** Left blank on opening, the API takes the project's SLA for the kind and priority (O4 of #290). */
 const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "On the project's clock. Left blank, the project's SLA for the kind and priority sets it." }
@@ -71,7 +84,7 @@ export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
   { id: "parentTicketId", label: "Parent ticket", type: "select", relation: TICKETS_MODULE, description: "The case this one is part of; a ticket of the same project." },
 ]
 
-/** New ticket on the Pilot: `TicketCreate`, and nothing the wire has no home for — no team, type, SLA, attachment or create-time message. */
+/** New ticket on the Pilot: `TicketCreate`, and nothing the wire has no home for — no SLA, attachment or create-time message. The picked type's fields are `ticketFormFor`'s. */
 export const TICKET_FORM: BusinessFormSchema = {
   key: "operate.tickets",
   mode: "create",
@@ -82,7 +95,7 @@ export const TICKET_FORM: BusinessFormSchema = {
   nameField: "subject",
   execution: { kind: "create-record", completionMessage: "Ticket opened." },
   sections: [
-    { id: "case", title: "Case", fields: [project, subject, description, kind, priority] },
+    { id: "case", title: "Case", fields: [project, subject, description, ticketType, kindWithoutType, priority] },
     {
       id: "when",
       title: "Source and timing",
@@ -96,6 +109,14 @@ export const TICKET_FORM: BusinessFormSchema = {
     },
     { id: "links", title: "What it is about", fields: TICKET_LINK_FIELDS },
   ],
+}
+
+/** New ticket with the company's types' fields (#545 of #544): each type's shown while that type is picked, after the case. */
+export function ticketFormFor(types: readonly BusinessRecord[]): BusinessFormSchema {
+  const fields = ticketTypeFormFields(types)
+  if (fields.length === 0) return TICKET_FORM
+  const [caseSection, ...rest] = TICKET_FORM.sections
+  return { ...TICKET_FORM, sections: [caseSection, { id: "type-fields", title: "Type fields", description: "What the picked type asks for.", fields }, ...rest] }
 }
 
 /** Edit case: the case's own words; its kind, priority and due change in place in the details. */

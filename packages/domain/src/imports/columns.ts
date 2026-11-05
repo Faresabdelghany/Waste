@@ -137,8 +137,6 @@ export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]
     column("calendar", true, "The calendar's name, unique in the project; a calendar is matched on it", "Copenhagen 2027"),
     column("valid from", true, "The calendar's first day, YYYY-MM-DD", "2027-01-01"),
     column("valid to", false, "The first day it is no longer in force, YYYY-MM-DD; open when empty", "2028-01-01"),
-    column("day", false, "A holiday's day, YYYY-MM-DD, inside the calendar's period; a row without one writes the calendar alone", "2027-06-05"),
-    column("holiday", false, "The holiday's name", "Grundlovsdag"),
   ],
   "planning-areas": [
     column("code", true, "The area's code, unique in the project and set once; an area is matched on it", "CPH-N"),

@@ -45,7 +45,7 @@
 // so a run already reading the route keeps the office's day once more, and
 // the run after it moves it. No run is asked: the next run re-plans.
 import type { Tx } from "@waste/db/client"
-import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { listHolidayRows } from "@waste/db/query/holidays"
 import { route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
@@ -143,10 +143,7 @@ export async function releaseHolds(tx: Tx, principal: Principal, projectId: stri
 export async function projectCalendarOf(tx: Tx, companyId: string, projectId: string): Promise<SchemeCalendar> {
   const [row] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
   if (row === undefined || row.holidayList === null) return { weekend: (row?.weekend ?? []) as ServiceDay[], holidays: new Map() }
-  const days = await tx
-    .select({ day: collectionCalendarHoliday.day })
-    .from(collectionCalendarHoliday)
-    .where(and(eq(collectionCalendarHoliday.companyId, companyId), eq(collectionCalendarHoliday.projectId, projectId)))
+  const days = await listHolidayRows(tx, companyId, row.holidayList)
   return { weekend: row.weekend as ServiceDay[], holidays: new Map(days.map(({ day }) => [day, ""])) }
 }
 

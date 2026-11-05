@@ -53,8 +53,8 @@ export type ShownTable = {
   factColumns: readonly string[]
   /** A calendar's project scope as its context cell reads it. */
   projectScopeOf?: (record: BusinessRecord) => string
-  /** A calendar's derived Holidays and Validity. */
-  calendarRowOf?: (record: BusinessRecord) => { holidays: string; validity: string } | undefined
+  /** A calendar's derived Validity, which stands in place of its value. */
+  calendarRowOf?: (record: BusinessRecord) => { validity: string } | undefined
   /** A scheme's derived Recurrence and Waste fraction. */
   schemeRowOf?: (record: BusinessRecord) => { recurrence: string; wasteFraction: string } | undefined
 }
@@ -125,12 +125,8 @@ export function shownColumns(table: ShownTable): ExportColumn[] {
   }
   columns.push({ header: "Status", cell: (record) => record.status })
   if (table.view === "calendars") {
-    columns.push(
-      { header: "Holidays", cell: (record) => table.calendarRowOf?.(record)?.holidays ?? "—" },
-      { header: "Validity", cell: (record) => table.calendarRowOf?.(record)?.validity ?? "—" },
-    )
-  }
-  if (table.view === "schemes") {
+    columns.push({ header: "Validity", cell: (record) => table.calendarRowOf?.(record)?.validity ?? "—" })
+  } else if (table.view === "schemes") {
     columns.push(
       { header: "Recurrence", cell: (record) => table.schemeRowOf?.(record)?.recurrence ?? "—" },
       { header: "Waste fraction", cell: (record) => table.schemeRowOf?.(record)?.wasteFraction ?? "—" },

@@ -66,7 +66,6 @@ export const AUDITED_TABLES = [
   "planning_area",
   "planning_area_boundary",
   "collection_calendar",
-  "collection_calendar_holiday",
   "route_scheme",
   "collection_group",
   "collection_group_fraction",
@@ -142,6 +141,9 @@ export const AUDITED_TABLES = [
   "ticket_type",
   "ticket_type_field",
   "ticket_type_permission",
+  "holiday_list",
+  "holiday_list_holiday",
+  "ticket_type_action",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

@@ -42,6 +42,7 @@ import { defaultTicketTypeRows } from "../commands/ticket-types"
 import { alert, ticket, ticketBooking, ticketEvent, ticketType, ticketTypeField, ticketTypePermission } from "../schema/resolution"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { ticketBookingBackfill } from "../sql/ticket-booking"
+import { ticketTypesBackfill, ticketTypesRequired, ticketTypesSeed } from "../sql/ticket-types"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -658,6 +659,26 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await refuse({ fieldValues: ["a list"] }, "23514", /ticket_field_values_shape/, "values held by key")
       await tx.insert(ticket).values(opened({ fieldValues: { "requested-date": "2026-10-09", bags: 2 } }))
       await assert.rejects(tx.transaction((savepoint) => savepoint.update(ticket).set({ kind: "complaint" }).where(eq(ticket.id, a.spare))), refusedWith("23503", /ticket_ticket_type_id_kind_fk/), "the kind moves with the type and never without it")
+    }))
+
+  test("the migration's seed gives a company without types a default per kind, leaving one that has them, and its backfill gives every ticket its own company's default of its kind (#545 of #544)", () =>
+    seeded(async (tx) => {
+      // As before the types: the column nullable, the tickets of neither company typed, and company b without a type.
+      await tx.execute(sql`alter table "wms"."ticket" alter column "ticket_type_id" drop not null`)
+      // In SQL: the schema holds the column NOT NULL, as the migration leaves it.
+      await tx.execute(sql`update "wms"."ticket" set "ticket_type_id" = null`)
+      await tx.delete(ticketType).where(eq(ticketType.companyId, b.company))
+      await tx.execute(sql.raw(ticketTypesSeed()))
+      const types = await tx.select({ id: ticketType.id, companyId: ticketType.companyId, kind: ticketType.kind, isDefault: ticketType.isDefault }).from(ticketType)
+      assert.deepEqual(types.filter((type) => type.companyId === a.company).map((type) => type.id).sort(), TICKET_KINDS.map((kind) => typeOf(a.company, kind)).sort(), "a's own, untouched")
+      assert.deepEqual(types.filter((type) => type.companyId === b.company && type.isDefault).map((type) => type.kind).sort(), [...TICKET_KINDS].sort(), "b given a default per kind")
+      await tx.execute(sql.raw(ticketTypesBackfill()))
+      const tickets = await tx.select({ companyId: ticket.companyId, kind: ticket.kind, ticketTypeId: ticket.ticketTypeId }).from(ticket)
+      for (const row of tickets) {
+        const expected = types.find((type) => type.companyId === row.companyId && type.kind === row.kind && type.isDefault)
+        assert.equal(row.ticketTypeId, expected?.id, `a ${row.kind} of ${row.companyId}`)
+      }
+      await tx.execute(sql.raw(ticketTypesRequired()))
     }))
 
   test("a kind has one default type, and the default is offered (23505 ticket_type_default_kind_key, 23514 ticket_type_default_shape); a field offers choices exactly when it is a choice, each key and place once (#545 of #544)", () =>

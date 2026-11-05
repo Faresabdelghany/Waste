@@ -65,6 +65,7 @@
 import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
+import type { JobSender } from "@waste/db/jobs"
 import { placementStopOn } from "@waste/db/commands/fill-emptying"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
@@ -521,7 +522,7 @@ const commandProblems = (action: "view" | "edit") => ({
   ),
 })
 
-export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
       "/pickups",
@@ -738,9 +739,9 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           contaminantCodeId: tagged,
         })
         // A ledger work order's movements follow its completion (O3b of #290): a correction to completed makes them, one away from completed tells the office they stand.
-        await correctLedgerWork(tx, principal, row.id, { from: current.status as PickupStatus, to: transition.to }, at)
+        await correctLedgerWork(tx, principal, jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to }, at)
         // And so does the ticket a stop is booked to answer (O3c of #290): serviced by a correction to completed, told of one away from it.
-        await ticketHearsOfStop(tx, principal, row.id, { from: current.status, to: transition.to, note }, at)
+        await ticketHearsOfStop(tx, principal, jobs.send, row.id, { from: current.status, to: transition.to, note }, at)
         const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)

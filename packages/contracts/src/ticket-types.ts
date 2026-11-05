@@ -16,14 +16,19 @@
 // the type it names; here a value is one of the four shapes and a key is a
 // key. A patch's values are merged into the stored ones, null clearing one
 // (`TicketFieldValuesPatch`).
+//
+// A type's automation (#546 of #544) is its actions, each run on a trigger
+// in its place in that trigger's list (@waste/domain/resolution/automation),
+// replaced whole through `PUT /ticket-types/:id/actions` like the fields.
+import { actionIssue, TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
 import { fieldSetIssue, TICKET_FIELD_CHOICES_MAX, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, TICKET_TYPE_FIELDS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
-import { TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_TYPE_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_MESSAGE_RECIPIENTS, TICKET_TYPE_STATUSES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { TicketKind } from "./resolution"
+import { TicketKind, TicketPriority, TicketResolution } from "./resolution"
 import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
@@ -38,6 +43,20 @@ export type TicketFieldInput = z.infer<typeof TicketFieldInput>
 
 export const TicketFieldRequirement = z.enum(TICKET_FIELD_REQUIREMENTS)
 export type TicketFieldRequirement = z.infer<typeof TicketFieldRequirement>
+
+export const TicketActionTrigger = z.enum(TICKET_ACTION_TRIGGERS)
+export type TicketActionTrigger = z.infer<typeof TicketActionTrigger>
+
+export const TicketActionKind = z.enum(TICKET_ACTION_KINDS)
+export type TicketActionKind = z.infer<typeof TicketActionKind>
+
+/** A status an action moves a ticket to, by the command that leads there. */
+export const TicketActionCommand = z.enum(TICKET_ACTION_COMMANDS)
+export type TicketActionCommand = z.infer<typeof TicketActionCommand>
+
+/** Whom a message is written to: the ticket's customer, or the party of a role at its property. */
+export const TicketMessageRecipient = z.enum(TICKET_MESSAGE_RECIPIENTS)
+export type TicketMessageRecipient = z.infer<typeof TicketMessageRecipient>
 
 /** A status command a type may name roles for. */
 export const TicketCommand = z.enum(TICKET_COMMANDS)
@@ -57,8 +76,15 @@ export type TicketFieldValue = z.infer<typeof TicketFieldValue>
 export const TicketFieldValues = z.record(TicketFieldKey, TicketFieldValue)
 export type TicketFieldValues = z.infer<typeof TicketFieldValues>
 
-/** A patch's values, merged into the stored ones: a value replaces one, null clears it, a key not named stays. */
-export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable())
+/** What a body naming more values than a type has fields is told. */
+export const AT_MOST_FIELDS = `A body names at most ${TICKET_TYPE_FIELDS_MAX} values: a type holds no more fields`
+const atMostFields = (values: object): boolean => Object.keys(values).length <= TICKET_TYPE_FIELDS_MAX
+
+/** A create's values: as many as a type has fields at most, so a body is judged in bounded time. */
+export const TicketFieldValuesBody = TicketFieldValues.refine(atMostFields, AT_MOST_FIELDS)
+
+/** A patch's values, merged into the stored ones: a value replaces one, null clears it, a key not named stays; as many as a type has fields at most, beside as many clears. */
+export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable()).refine((values) => Object.keys(values).length <= 2 * TICKET_TYPE_FIELDS_MAX, AT_MOST_FIELDS)
 export type TicketFieldValuesPatch = z.infer<typeof TicketFieldValuesPatch>
 
 /** One custom field of a type, in its place in the type's list. */
@@ -78,6 +104,23 @@ export type TicketTypeField = z.infer<typeof TicketTypeField>
 export const TicketTypePermission = z.object({ command: TicketCommand, roleIds: z.array(Id) })
 export type TicketTypePermission = z.infer<typeof TicketTypePermission>
 
+/** One action of a type's automation, in its place in its trigger's list; a parameter its kind does not take is null. */
+export const TicketTypeAction = z.object({
+  trigger: TicketActionTrigger,
+  kind: TicketActionKind,
+  teamId: Id.nullable(),
+  userAccountId: Id.nullable(),
+  priority: TicketPriority.nullable(),
+  command: TicketActionCommand.nullable(),
+  /** With `complete` alone: what the ticket ends in. */
+  resolution: TicketResolution.nullable(),
+  /** A template of the ticket's project by this name. */
+  messageTemplateName: Label.nullable(),
+  recipient: TicketMessageRecipient.nullable(),
+  followUpTypeId: Id.nullable(),
+})
+export type TicketTypeAction = z.infer<typeof TicketTypeAction>
+
 export const TicketType = z.object({
   ...stamped,
   /** What a person reads; unique per company. */
@@ -92,6 +135,8 @@ export const TicketType = z.object({
   fields: z.array(TicketTypeField),
   /** The commands it names roles for, in the commands' order; a command left out is anyone's who works tickets. */
   permissions: z.array(TicketTypePermission),
+  /** Its automation: by trigger in the triggers' order, each trigger's actions in the order they run. */
+  actions: z.array(TicketTypeAction),
 })
 export type TicketType = z.infer<typeof TicketType>
 
@@ -165,6 +210,34 @@ export const TicketTypePermissionsSet = z
     }
   })
 export type TicketTypePermissionsSet = z.infer<typeof TicketTypePermissionsSet>
+
+/** One action as a set body names it: a parameter its kind does not take is left out. */
+export const TicketTypeActionBody = z.strictObject({
+  trigger: TicketActionTrigger,
+  kind: TicketActionKind,
+  teamId: Id.nullable().default(null),
+  userAccountId: Id.nullable().default(null),
+  priority: TicketPriority.nullable().default(null),
+  command: TicketActionCommand.nullable().default(null),
+  resolution: TicketResolution.nullable().default(null),
+  messageTemplateName: Label.nullable().default(null),
+  recipient: TicketMessageRecipient.nullable().default(null),
+  followUpTypeId: Id.nullable().default(null),
+})
+export type TicketTypeActionBody = z.infer<typeof TicketTypeActionBody>
+
+/** `PUT /ticket-types/:id/actions`: every action of every trigger, each trigger's in the order they run, each carrying what its kind needs and nothing else. */
+export const TicketTypeActionsSet = z
+  .strictObject({ actions: z.array(TicketTypeActionBody).max(TICKET_TYPE_ACTIONS_MAX) })
+  // zod 4 runs a check on a body whose actions failed: read the entries with care.
+  .superRefine((body, context) => {
+    for (const [index, action] of body.actions.entries()) {
+      if (action === undefined || !TicketTypeActionBody.safeParse(action).success) continue
+      const issue = actionIssue(action)
+      if (issue !== undefined) context.addIssue({ code: "custom", message: issue.message, path: ["actions", index, issue.path] })
+    }
+  })
+export type TicketTypeActionsSet = z.infer<typeof TicketTypeActionsSet>
 
 /** A page of types: every one of the company's, or one status's, or one kind's. */
 export const TicketTypeListQuery = PageRequest.extend({ status: TicketTypeStatus.optional(), kind: TicketKind.optional() })

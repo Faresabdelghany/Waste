@@ -32,6 +32,7 @@ import { pickup } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { validOn } from "@waste/db/query/valid-on"
+import type { Send } from "@waste/db/jobs"
 import { Refused } from "@waste/db/commands/shared"
 import { isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, type LedgerService } from "@waste/domain/execution/work-orders"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -151,9 +152,9 @@ async function ledgerStop(tx: Tx, companyId: string, pickupId: string): Promise<
  * office's internal task with the ledger's sentence where it refused them.
  * Nothing for a stop whose service moves nothing. `occurredAt` is the
  * completion's; `at` the request's clock, which the ledger holds the instant
- * to; `by` who completed it.
+ * to; `by` who completed it; `send` what the task's automation queues with.
  */
-export async function recordLedgerWork(tx: Tx, actor: Principal, pickupId: string, occurredAt: string, at: Date, by: CompletedBy): Promise<void> {
+export async function recordLedgerWork(tx: Tx, actor: Principal, send: Send, pickupId: string, occurredAt: string, at: Date, by: CompletedBy): Promise<void> {
   const work = await ledgerStop(tx, actor.companyId, pickupId)
   if (work === undefined) return
   // The driver acts on the route's project: the ledger's fences read the principal's projects.
@@ -168,7 +169,7 @@ export async function recordLedgerWork(tx: Tx, actor: Principal, pickupId: strin
     const sentence = sentenceOf(error)
     if (sentence === undefined) throw error
     const words = ledgerNotRecorded({ ...(await workFacts(tx, actor.companyId, work)), by, completedAt: timeIn(completed, work.timezone), sentence })
-    await openLedgerTask(tx, actor, work, words, SOURCE_OF[by], at)
+    await openLedgerTask(tx, actor, send, work, words, SOURCE_OF[by], at)
   }
 }
 
@@ -178,16 +179,16 @@ export async function recordLedgerWork(tx: Tx, actor: Principal, pickupId: strin
  * the correction; from completed to a miss, the office's task saying the
  * movements stand. Nothing for a stop whose service moves nothing.
  */
-export async function correctLedgerWork(tx: Tx, office: Principal, pickupId: string, outcome: { from: PickupStatus; to: PickupStatus }, at: Date): Promise<void> {
+export async function correctLedgerWork(tx: Tx, office: Principal, send: Send, pickupId: string, outcome: { from: PickupStatus; to: PickupStatus }, at: Date): Promise<void> {
   if (outcome.to === "completed" && outcome.from !== "completed") {
-    await recordLedgerWork(tx, office, pickupId, at.toISOString(), at, "office")
+    await recordLedgerWork(tx, office, send, pickupId, at.toISOString(), at, "office")
     return
   }
   if (outcome.from !== "completed" || (outcome.to !== "skipped" && outcome.to !== "failed")) return
   const work = await ledgerStop(tx, office.companyId, pickupId)
   if (work === undefined) return
   const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, office.companyId, work)), outcome: outcome.to, correctedAt: timeIn(at, work.timezone) })
-  await openLedgerTask(tx, office, work, words, "dispatch", at)
+  await openLedgerTask(tx, office, send, work, words, "dispatch", at)
 }
 
 /** The work as a ticket names it: its containers by label and its place by address. */
@@ -205,7 +206,7 @@ async function workFacts(tx: Tx, companyId: string, stop: CompletedStop & { serv
 }
 
 /** The office's task about a ledger work order: about the stop, its route, its container and its place. */
-async function openLedgerTask(tx: Tx, actor: Principal, stop: CompletedStop, words: { kind: "internal-task"; priority: "high"; subject: string; description: string }, source: "driver-app" | "dispatch", at: Date): Promise<void> {
+async function openLedgerTask(tx: Tx, actor: Principal, send: Send, stop: CompletedStop, words: { kind: "internal-task"; priority: "high"; subject: string; description: string }, source: "driver-app" | "dispatch", at: Date): Promise<void> {
   const { companyId } = actor
   await openTicket(tx, {
     companyId,
@@ -233,6 +234,7 @@ async function openLedgerTask(tx: Tx, actor: Principal, stop: CompletedStop, wor
       alertId: null,
     },
     createdBy: actor.user.id,
+    automation: { send, by: actor.user.id },
     sourceEventId: null,
     newId,
     now: () => at,

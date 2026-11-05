@@ -9,7 +9,8 @@
 // seven and a scheme's to at least one, the two shape checks and PostGIS's
 // ring validity refuse what they should, the project's working week defaults
 // and is checked, and the fence shows the API role exactly its company's rows
-// in each of the nine. Every test runs as the owner in a transaction that is
+// in each of the eight still standing (the ninth, the calendars' holidays,
+// was dropped on 2026-11-05: calendar-holidays-dropped.test.ts). Every test runs as the owner in a transaction that is
 // rolled back, so nothing needs cleaning up.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
@@ -23,10 +24,10 @@ import { createDb, type Database, type Tx } from "../client"
 import { migrateDatabase } from "../migrate"
 import { API_ROLE } from "../roles"
 import { containerType, wasteFraction } from "../schema/catalogue"
-import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { collectionCalendar } from "../schema/collection-calendars"
 import { container } from "../schema/containers"
 import { vehicleType } from "../schema/fleet-types"
-import { company, project, serviceProvider } from "../schema/organisation"
+import { company, holidayList, project, serviceProvider } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { triggersOf } from "../sql/audit-trail"
@@ -47,7 +48,6 @@ const ids = (n: "a" | "b") => ({
   planningArea: `018f7c2f-${n}000-7000-8000-000000000007`,
   boundary: `018f7c2f-${n}000-7000-8000-000000000008`,
   calendar: `018f7c2f-${n}000-7000-8000-000000000009`,
-  holiday: `018f7c2f-${n}000-7000-8000-00000000000a`,
   scheme: `018f7c2f-${n}000-7000-8000-00000000000b`,
   ruleGroup: `018f7c2f-${n}000-7000-8000-00000000000c`,
   manualGroup: `018f7c2f-${n}000-7000-8000-00000000000d`,
@@ -101,7 +101,6 @@ const tables: Record<string, PgTable> = {
   planningArea,
   planningAreaBoundary,
   collectionCalendar,
-  collectionCalendarHoliday,
   routeScheme,
   collectionGroup,
   collectionGroupFraction,
@@ -113,6 +112,11 @@ const tables: Record<string, PgTable> = {
 async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   const own = ids(n)
   await tx.insert(company).values({ id: own.company, companyId: own.company, name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `1000000${n}`, country: "DK", status: "active" })
+  // The company's lists the projects name (2026-11-05): a project's list name is a key into them.
+  await tx.insert(holidayList).values([
+    { companyId: own.company, country: "DK", name: "Danish public holidays" },
+    { companyId: own.company, country: "EG", name: "Egyptian public holidays" },
+  ])
   await tx.insert(project).values({
     id: own.project,
     companyId: own.company,
@@ -133,7 +137,6 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(planningArea).values({ id: own.planningArea, companyId: own.company, projectId: own.project, code: "OP-CEN-01", name: "Central", purpose: "route-planning" })
   await tx.insert(planningAreaBoundary).values({ id: own.boundary, companyId: own.company, projectId: own.project, validFrom: OPENED, planningAreaId: own.planningArea, boundary: SQUARE })
   await tx.insert(collectionCalendar).values({ id: own.calendar, companyId: own.company, projectId: own.project, validFrom: OPENED, validTo: "2027-01-01", name: "Copenhagen Central 2026" })
-  await tx.insert(collectionCalendarHoliday).values({ id: own.holiday, companyId: own.company, projectId: own.project, collectionCalendarId: own.calendar, day: "2026-06-05", name: "Grundlovsdag" })
   await tx.insert(routeScheme).values({
     id: own.scheme,
     companyId: own.company,
@@ -205,10 +208,12 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
       return fn(tx)
     })
 
-  test("0006 created the nine tables in wms, each fenced (row-level security enabled and forced, one policy for the API role) and with its updated_at trigger", async () => {
+  test("0006 created the nine tables in wms, the eight still standing each fenced (row-level security enabled and forced, one policy for the API role) and with its updated_at trigger", async () => {
     // The API role's policies alone: the public door's own (0018) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
-    assert.equal(names.length, 9)
+    assert.equal(names.length, 8)
+    const [{ dropped }] = await owner.sql<{ dropped: string | null }[]>`select to_regclass('wms.collection_calendar_holiday')::text as dropped`
+    assert.equal(dropped, null, "the calendars' holidays are dropped")
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
         (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname and 'wms_api' = any (p.roles)) as policies,
@@ -272,7 +277,7 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
       },
     )
 
-  test("under withCompany as the API role, each of the nine tables shows the company's rows and nothing of another company's", async () => {
+  test("under withCompany as the API role, each of the eight tables shows the company's rows and nothing of another company's", async () => {
     const seenByA = await asCompany(a.company, async (tx) => ({
       counts: await counts(tx),
       schemes: (await tx.select({ id: routeScheme.id }).from(routeScheme)).map((row) => row.id),
@@ -372,14 +377,8 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
         tx.transaction((savepoint) => savepoint.insert(collectionCalendar).values(calendar("Copenhagen Central 2026, second half", "2026-07-01", null))),
         refusedWith("23P01", /collection_calendar_no_overlap/),
       )
-      // Next year's record starts the day this year's ends, and a holiday goes on the record whose period it falls in.
+      // Next year's record starts the day this year's ends.
       await tx.insert(collectionCalendar).values(calendar("Copenhagen Central 2027", "2027-01-01", "2028-01-01"))
-      await tx.insert(collectionCalendarHoliday).values({ id: a.other, companyId: a.company, projectId: a.project, collectionCalendarId: a.spare, day: "2027-06-05", name: "Grundlovsdag" })
-      // The same day twice on one calendar is one holiday (23505).
-      await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(collectionCalendarHoliday).values({ id: a.third, companyId: a.company, projectId: a.project, collectionCalendarId: a.calendar, day: "2026-06-05" })),
-        refusedWith("23505", /collection_calendar_holiday_collection_calendar_id_day_key/),
-      )
     }))
 
   test("a boundary that is not a valid polygon is refused (23514 planning_area_boundary_boundary_valid): a ring that crosses itself, and one off the map", () =>

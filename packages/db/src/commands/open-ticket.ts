@@ -10,7 +10,10 @@
 //
 // `openTicket` is the number from the company's counter, the `ticket` row,
 // the `created` event, `alert.ticket_id` where an alert was named, the
-// `ticket-opened` outbox event — in that order, in the caller's transaction.
+// `ticket-opened` outbox event, `ticket-assigned` where the draft names an
+// assignee, then the type's opening actions (#546 of #544,
+// commands/ticket-automation.ts), the row read back as they leave it — in
+// that order, in the caller's transaction.
 // It takes `tx`, a company, the draft, `createdBy`, `sourceEventId`, an id
 // minter and a clock, and never a Principal, a Context or a Job. The number
 // is `nextNumber` (commands/shared.ts), one `update … returning` under the
@@ -56,6 +59,7 @@ import { linkAlert } from "./alert-links"
 import { emit } from "./outbox"
 import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-rows"
 import { nextNumber } from "./shared"
+import { runTicketAutomation, type AutomationCause } from "./ticket-automation"
 import { defaultTicketTypeOf } from "./ticket-types"
 
 /** A draft's due date that is the project's SLA target of the ticket's kind and priority, from when its issue or request happened. */
@@ -96,6 +100,8 @@ export type OpenTicketInput = {
   newId: IdMinter
   /** The instant the ticket is opened: the `ticket-opened` event's `occurredAt`. */
   now: () => Date
+  /** What its type's actions on opening run with (#546 of #544): the job sender a message is queued through, who set it going, how deep in a chain. Every opener names it, so no ticket skips its type's actions. */
+  automation: AutomationCause
 }
 
 /** The ticket the caller is appending to: the three ids every history row carries. */
@@ -149,13 +155,14 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
 
 /**
  * Opens a ticket: the counter, the row, the `created` event, the alert's
- * link where one was named, the `ticket-opened` event — in the caller's
- * transaction, so a refusal anywhere (a resolved alert, a key the database
- * refuses) leaves nothing behind, the counter's step included. Answers the
- * row and the `Ticket` as the outbox carried it, which is what the route
- * answers too.
+ * link where one was named, the `ticket-opened` event, then its type's
+ * actions on opening (#546 of #544) — in the caller's transaction, so a
+ * refusal anywhere (a resolved alert, a key the database refuses) leaves
+ * nothing behind, the counter's step included. Answers the row and the
+ * `Ticket` as the actions left them, which is what the route answers, and
+ * the `Ticket` as the outbox carried it on opening.
  */
-export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket }> {
+export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket; opened: Ticket }> {
   const { companyId, draft, createdBy, sourceEventId } = input
   const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, draft) : draft.dueAt
   const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, draft) : draft.teamId
@@ -195,9 +202,18 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
     input.newId,
   )
   if (draft.alertId !== null) await linkAlert(tx, { companyId, projectId: row.projectId }, draft.alertId, row.id)
-  const answered = ticketOf(row)
-  await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-opened", payload: answered, projectId: row.projectId, occurredAt: input.now() })
-  return { row, answered }
+  const opened = ticketOf(row)
+  await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-opened", payload: opened, projectId: row.projectId, occurredAt: input.now() })
+  // The draft's assignee hears of it as it opened, before any action of its type hands it on (O16 of #290).
+  if (row.assigneeUserAccountId !== null) await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-assigned", payload: opened, projectId: row.projectId, occurredAt: input.now() })
+  // Its type's actions on opening (#546 of #544), after the news of its opening; the ticket is answered as they leave it.
+  await runTicketAutomation(tx, { ...input.automation, companyId, newId: input.newId, now: input.now }, row.id, "opened")
+  const [latest] = await tx
+    .select(ticketColumns)
+    .from(ticket)
+    .where(and(eq(ticket.companyId, companyId), eq(ticket.id, row.id)))
+    .limit(1)
+  return { row: latest, answered: ticketOf(latest), opened }
 }
 
 /** The due date the project's SLA gives a ticket of the draft's kind and priority, from when it happened: its kind's target, else every kind's; null where neither is set. */

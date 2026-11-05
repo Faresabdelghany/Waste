@@ -51,6 +51,12 @@ const createTable = (name: string, lines: string[]): string => [`CREATE TABLE "w
 /** What 0005 added to the schema after 0002 had been applied: 0002 begins with the generated statements less these, 0005 with exactly these. */
 const ADDED_IN_0005 = [index("user_account", "user_account_email_idx", "email")]
 
+/** What the Holiday Lists' migration added to the project (2026-11-05): its list name became a key into the company's lists, which holiday-lists-rendering.test.ts pins in that file. */
+const ADDED_WITH_HOLIDAY_LISTS = [
+  'ALTER TABLE "wms"."project" ADD CONSTRAINT "project_holiday_list_fk" FOREIGN KEY ("company_id","holiday_list") REFERENCES "wms"."holiday_list"("company_id","name") ON DELETE no action ON UPDATE cascade;',
+  index("project", "project_holiday_list_idx", "company_id", "holiday_list"),
+]
+
 const STATUS = "in ('active', 'onboarding')"
 /** The days a project may rest on, as 0006's check spells them (Issue #97). */
 const WEEKEND = "<@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
@@ -210,6 +216,7 @@ const expected = [
     '\tCONSTRAINT "service_provider_access_user_account_id_service_provider_id_key" UNIQUE("company_id","user_account_id","service_provider_id")',
   ]),
   foreignKey("project", "project_company_id_fk", ["company_id"], "company", ["id"]),
+  ADDED_WITH_HOLIDAY_LISTS[0],
   foreignKey("service_provider", "service_provider_company_id_fk", ["company_id"], "company", ["id"]),
   foreignKey("role", "role_company_id_fk", ["company_id"], "company", ["id"]),
   foreignKey("user_account", "user_account_role_id_fk", ["company_id", "role_id"], "role", ["company_id", "id"]),
@@ -224,6 +231,7 @@ const expected = [
     "user_account",
     ["company_id", "id", "service_provider_id"],
   ),
+  ADDED_WITH_HOLIDAY_LISTS[1],
   ...ADDED_IN_0005,
   `CREATE UNIQUE INDEX "user_account_primary_administrator_idx" ON "wms"."user_account" USING btree ("company_id") WHERE ${ref("user_account", "primary_administrator")};`,
   index("user_account", "user_account_role_id_idx", "company_id", "role_id"),
@@ -243,7 +251,7 @@ describe("the Organisation & Access tables as drizzle-kit writes them", () => {
     // table a later file altered spelled as it was then: an applied file is
     // never edited.
     const generated = (await statementsFor(tables))
-      .filter((statement) => !ADDED_IN_0005.includes(statement))
+      .filter((statement) => !ADDED_IN_0005.includes(statement) && !ADDED_WITH_HOLIDAY_LISTS.includes(statement))
       .map((statement) => CHANGED_LATER.get(statement) ?? statement)
       .map(normalised)
       .sort()

@@ -701,6 +701,27 @@
       "when": 1793897654220,
       "tag": "0099_ticket_types",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793902123253,
+      "tag": "0100_holiday_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793906444180,
+      "tag": "0101_calendar_holidays_dropped",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793908602189,
+      "tag": "0102_ticket_automation",
+      "breakpoints": true
     }
   ]
 }

@@ -106,6 +106,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
         sourceEventId: null,
         newId: testId,
         now: () => at("05:00"),
+        automation: { send: async () => null, by: null },
       }),
     )
     return row.id
