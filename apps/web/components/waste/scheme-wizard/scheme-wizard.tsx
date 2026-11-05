@@ -9,7 +9,7 @@
 // onCreate, which owns record creation.
 
 import { useCallback, useMemo, useState } from "react"
-import { Check, ChevronLeft, ChevronRight } from "lucide-react"
+import { CaretLeft, CaretRight, Check } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -189,20 +189,20 @@ export function SchemeWizard({
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">
             {step === 1 ? (
               <Button variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
-                <ChevronLeft /> Cancel
+                <CaretLeft /> Cancel
               </Button>
             ) : (
               <Button variant="outline" className="rounded-xl" onClick={back}>
-                <ChevronLeft /> Back
+                <CaretLeft /> Back
               </Button>
             )}
             {step < 5 ? (
               <Button className="rounded-xl" disabled={!canNext} onClick={next}>
-                Next <ChevronRight />
+                Next <CaretRight />
               </Button>
             ) : (
               <Button className="rounded-xl" onClick={() => onCreate(data)}>
-                Create route scheme <ChevronRight />
+                Create route scheme <CaretRight />
               </Button>
             )}
           </footer>

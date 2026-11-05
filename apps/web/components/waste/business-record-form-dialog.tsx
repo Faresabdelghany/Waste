@@ -1,14 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  ArrowLeft,
-  CheckCircle,
-  Paperclip,
-  UploadSimple,
-  X,
-} from "@phosphor-icons/react/dist/ssr"
-import { ChevronDown } from "lucide-react"
+import { ArrowLeft, CaretDown, CheckCircle, Paperclip, UploadSimple, X } from "@phosphor-icons/react/dist/ssr"
 
 import type {
   BusinessFieldCondition,
@@ -241,7 +234,7 @@ function MultiSelectField({
                 ? field.placeholder ?? `Select ${field.label.toLowerCase()}`
                 : "No permitted options"}
           </span>
-          <ChevronDown className="size-4 shrink-0 opacity-50" />
+          <CaretDown className="size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent

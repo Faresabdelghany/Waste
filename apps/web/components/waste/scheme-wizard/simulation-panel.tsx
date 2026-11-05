@@ -15,7 +15,7 @@
 // the wizard can hold — Apply refuses otherwise, and says why.
 
 import { useMemo, useState } from "react"
-import { ArrowRight, FlaskConical } from "lucide-react"
+import { ArrowRight, Flask } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -168,7 +168,7 @@ export function SimulationPanel({
           onClick={() => setOpen(true)}
           disabled={!model.occurrenceInput}
         >
-          <FlaskConical /> Simulate next {countValue} occurrences
+          <Flask /> Simulate next {countValue} occurrences
         </Button>
       </div>
     )

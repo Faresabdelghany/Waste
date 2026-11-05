@@ -2,19 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import {
-  X,
-  Folder,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  Plus,
-  FileText,
-  Building2,
-  Briefcase,
-  MapPin,
-  Globe2,
-} from "lucide-react"
+import { Briefcase, Buildings, CaretDown, CaretLeft, CaretRight, FileText, Folder, Globe, MapPin, Plus, X } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -75,7 +63,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
       id: "company",
       label: "Company",
       value: client.name,
-      icon: Building2,
+      icon: Buildings,
     },
     {
       id: "industry",
@@ -93,7 +81,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
       id: "website",
       label: "Website",
       value: client.website,
-      icon: Globe2,
+      icon: Globe,
     },
   ] as const
 
@@ -216,7 +204,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                     setProjectOffset((prev) => Math.max(0, prev - 1))
                   }}
                 >
-                  <ChevronLeft className="size-4" />
+                  <CaretLeft className="size-4" />
                 </Button>
                 <div
                   ref={projectsRowRef}
@@ -253,7 +241,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                     setProjectOffset((prev) => (prev < totalPages - 1 ? prev + 1 : prev))
                   }}
                 >
-                  <ChevronRight className="size-4" />
+                  <CaretRight className="size-4" />
                 </Button>
               </div>
             )}
@@ -278,7 +266,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
                 onClick={() => setNotesOpen((open) => !open)}
               >
                 <p className="text-sm font-medium text-foreground">Notes</p>
-                <ChevronDown
+                <CaretDown
                   className={cn(
                     "size-3.5 text-muted-foreground transition-transform",
                     notesOpen && "rotate-180",
@@ -303,7 +291,7 @@ export function ClientDetailsDrawer({ clientId, onClose }: ClientDetailsDrawerPr
               onClick={() => setSharedOpen((open) => !open)}
             >
               <p className="text-sm font-medium text-foreground">Shared file</p>
-              <ChevronDown
+              <CaretDown
                 className={cn(
                   "size-3.5 text-muted-foreground transition-transform",
                   sharedOpen && "rotate-180",

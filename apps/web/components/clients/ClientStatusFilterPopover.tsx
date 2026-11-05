@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { CaretDown } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -36,7 +36,7 @@ export function ClientStatusFilterPopover({ initialStatus }: ClientStatusFilterP
                     <span className="text-xs text-muted-foreground">Stage</span>
                     <span className="inline-flex items-center gap-2 rounded-full p-0 text-xs font-medium text-foreground">
                         <ClientStatusBadge status={status} />
-                        <ChevronDown className="size-3 text-muted-foreground" />
+                        <CaretDown className="size-3 text-muted-foreground" />
                     </span>
                 </Button>
             </PopoverTrigger>

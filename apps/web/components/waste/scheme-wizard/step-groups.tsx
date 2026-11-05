@@ -4,7 +4,7 @@
 // service day, the issue alert, and one row per collection group.
 
 import { useState } from "react"
-import { Check, Pencil, Plus, Trash2 } from "lucide-react"
+import { Check, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -217,7 +217,7 @@ export function StepGroups({
                           aria-label={`Edit ${group.name}`}
                           onClick={() => setEditor({ mode: "edit", group })}
                         >
-                          <Pencil />
+                          <PencilSimple />
                         </Button>
                         <Button
                           variant="ghost"
@@ -225,7 +225,7 @@ export function StepGroups({
                           aria-label={`Remove ${group.name}`}
                           onClick={() => remove(group.id)}
                         >
-                          <Trash2 />
+                          <Trash />
                         </Button>
                       </div>
                     </TableCell>

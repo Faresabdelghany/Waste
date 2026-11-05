@@ -20,7 +20,7 @@
 import { useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
-import { Factory, RefreshCw, Warehouse } from "lucide-react"
+import { ArrowsClockwise, Factory, Warehouse } from "@phosphor-icons/react/dist/ssr"
 
 import { useRoadGeometries } from "@/components/waste/map-planning/use-road-geometries"
 import { RoutingQuotaBanner } from "@/components/waste/routing/routing-quota-banner"
@@ -143,7 +143,7 @@ export function StepRouteMap({
           </TabsList>
         </Tabs>
         <Button variant="outline" className="rounded-xl" onClick={regenerate}>
-          <RefreshCw /> Regenerate
+          <ArrowsClockwise /> Regenerate
         </Button>
       </div>
 

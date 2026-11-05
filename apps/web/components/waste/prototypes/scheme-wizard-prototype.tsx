@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowRight, Check, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, X } from "@phosphor-icons/react/dist/ssr"
 
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
