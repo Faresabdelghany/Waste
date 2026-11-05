@@ -13,7 +13,9 @@
 // service notifications' `ticket-replied` (C18 of #291), and
 // service-notifications-rendering.test.ts from 0084's to 0085's, before the
 // weight review's `weight-reviewed` (O28 of #290), and
-// weight-charges-rendering.test.ts from 0085's, since an applied file is never
+// weight-charges-rendering.test.ts from 0085's to the weight charges', before
+// the scale house's `scale-ticket-completed` and `scale-ticket-voided` and their
+// `scale-ticket` (M16b of #293, the window prices' migration), since an applied file is never
 // edited and the schema module spells the table as it is today.
 import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"
@@ -25,12 +27,16 @@ import { company, project } from "../schema/organisation"
 import { companyReference, indexOn, tenantIndex, tenantReference } from "../schema/references"
 import { wms } from "../schema/wms"
 
+/** The outbox's vocabulary as of the weight charges' migration: everything until the scale house's kinds and aggregate (M16b of #293). */
+export const OUTBOX_KINDS_AS_OF_WEIGHT_CHARGES = OUTBOX_KINDS.filter((kind) => kind !== "scale-ticket-completed" && kind !== "scale-ticket-voided")
+export const OUTBOX_AGGREGATES_AS_OF_WEIGHT_CHARGES = OUTBOX_AGGREGATES.filter((aggregate) => aggregate !== "scale-ticket")
+
 /** The outbox's vocabulary as of 0085: everything until the weight review's kind (O28 of #290), about an aggregate already there. */
-export const OUTBOX_KINDS_AS_OF_0085 = OUTBOX_KINDS.filter((kind) => kind !== "weight-reviewed")
+export const OUTBOX_KINDS_AS_OF_0085 = OUTBOX_KINDS_AS_OF_WEIGHT_CHARGES.filter((kind) => kind !== "weight-reviewed")
 
 /** The outbox's vocabulary as of 0084: everything until the service notifications' reply (C18 of #291), which no aggregate of its own carries. */
 export const OUTBOX_KINDS_AS_OF_0084 = OUTBOX_KINDS_AS_OF_0085.filter((kind) => kind !== "ticket-replied")
-export const OUTBOX_AGGREGATES_AS_OF_0084 = OUTBOX_AGGREGATES
+export const OUTBOX_AGGREGATES_AS_OF_0084 = OUTBOX_AGGREGATES_AS_OF_WEIGHT_CHARGES
 
 /** The outbox's vocabulary as of 0083: everything until the booking notices' kinds and aggregate (O16 of #290, part b). */
 export const OUTBOX_KINDS_AS_OF_0083 = OUTBOX_KINDS_AS_OF_0084.filter((kind) => kind !== "bulky-booking-booked" && kind !== "bulky-booking-cancelled")
@@ -48,7 +54,7 @@ export const OUTBOX_AGGREGATES_AS_OF_0040 = OUTBOX_AGGREGATES_AS_OF_0054.filter(
 export const OUTBOX_KINDS_AS_OF_0010 = OUTBOX_KINDS_AS_OF_0040.filter((kind) => kind !== "application-decided")
 export const OUTBOX_AGGREGATES_AS_OF_0010 = OUTBOX_AGGREGATES_AS_OF_0040.filter((aggregate) => aggregate !== "application")
 
-/** The outbox table as 0010, 0040, 0054, 0083, 0084 or 0085 left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the earlier lists. */
+/** The outbox table as 0010, 0040, 0054, 0083, 0084, 0085 or the weight charges' migration left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the earlier lists. */
 const outboxEventAsOf = (kinds: readonly string[], aggregates: readonly string[]) =>
   wms.table(
   "outbox_event",
@@ -79,4 +85,5 @@ export const outboxEventAsOf0040 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0040, OUTB
 export const outboxEventAsOf0054 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0054, OUTBOX_AGGREGATES_AS_OF_0054)
 export const outboxEventAsOf0083 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0083, OUTBOX_AGGREGATES_AS_OF_0083)
 export const outboxEventAsOf0084 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0084, OUTBOX_AGGREGATES_AS_OF_0084)
-export const outboxEventAsOf0085 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0085, OUTBOX_AGGREGATES)
+export const outboxEventAsOf0085 = outboxEventAsOf(OUTBOX_KINDS_AS_OF_0085, OUTBOX_AGGREGATES_AS_OF_WEIGHT_CHARGES)
+export const outboxEventAsOfWeightCharges = outboxEventAsOf(OUTBOX_KINDS_AS_OF_WEIGHT_CHARGES, OUTBOX_AGGREGATES_AS_OF_WEIGHT_CHARGES)

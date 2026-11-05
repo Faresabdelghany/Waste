@@ -7,7 +7,10 @@
 // at its tare — a second pass or the registered tare — with its load split
 // into lines by fraction and origin municipality, and voided with its reason,
 // never deleted. The window splits a load into up to three lines; the API
-// takes twenty. The words a person reads, and the forms, are here.
+// takes twenty. A line may name the window's product it is sold by, per tonne
+// or per cubic metre with its volume, and a completed ticket shows what it
+// comes to (M16b of #293); nothing here takes a payment. The words a person
+// reads, and the forms, are here.
 import type { ScaleTicketParty, ScaleTicketStatus, ScaleTicketVoidReason, TareSource, VehicleTareStatus } from "@waste/domain/scale-house/vocabulary"
 
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
@@ -96,11 +99,16 @@ export const WEIGH_IN_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", initialStatus: "Weighed in", completionMessage: "Weighed in." },
 }
 
-/** The fields of one line of the Weigh out form, numbered from 1; the first is required. */
+/** The window's products: those sold by the tonne or the cubic metre (M16b of #293). */
+const productRelation = { workspaceId: "commercial", moduleId: "products" } as const
+
+/** The fields of one line of the Weigh out form, numbered from 1; the first is required. A line sold by the cubic metre declares its volume. */
 const lineFields = (n: number) => [
   { id: `fraction${n}`, label: `Fraction ${n}`, type: "select" as const, required: n === 1, relation: masterRelation },
   { id: `origin${n}`, label: `Origin municipality ${n}`, type: "text" as const, description: n === 1 ? "The kommunekode, four digits: 0101." : undefined },
   { id: `net${n}`, label: `Net ${n} (kg)`, type: "number" as const, required: n === 1 },
+  { id: `product${n}`, label: `Sold as ${n}`, type: "select" as const, relation: productRelation, description: n === 1 ? "The window's product, by the tonne or the cubic metre: what an account is charged and a walk-in pays." : undefined },
+  { id: `volume${n}`, label: `Volume ${n} (m³)`, type: "number" as const, description: n === 1 ? "For a load sold by the cubic metre: 1.5." : undefined },
 ]
 
 /** Weigh out: the tare, and the load split into lines that sum to the net. The fractions' options are the surface's. */

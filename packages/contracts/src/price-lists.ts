@@ -35,7 +35,7 @@ import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, Minor, NonNegativeMinor, somethingToChange, stamped } from "./resource"
+import { changesSomething, Minor, NonNegativeMinor, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 import * as z from "zod"
@@ -116,6 +116,8 @@ export const PriceListRow = z
     indexLabel: Label.nullable(),
     /** 320 for +3.2 %; a negative figure is a deflator. */
     indexBasisPoints: z.int().nullable(),
+    /** A quantity tier (M16b of #293): the row applies from this many of its product's unit; null for any quantity. */
+    fromQuantity: PositiveInt.nullable(),
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -135,6 +137,8 @@ export const PriceListRowCreate = z
     containerTypeId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),
     customerId: Id.nullable().optional(),
+    /** A quantity tier (M16b of #293), part of the row's key beside its conditions. */
+    fromQuantity: PositiveInt.nullable().optional(),
     note: Paragraph.nullable().optional(),
     ...ValidityCreate,
   })
@@ -178,6 +182,8 @@ export const PriceResolveQuery = z.object({
   containerTypeId: Id.optional(),
   wasteFractionId: Id.optional(),
   customerId: Id.optional(),
+  /** How many of the product's unit, which a quantity tier is judged against (M16b of #293); a decimal, 2.34 tonnes. */
+  quantity: z.coerce.number().positive().max(1_000_000).optional(),
 })
 export type PriceResolveQuery = z.infer<typeof PriceResolveQuery>
 

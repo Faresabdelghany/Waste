@@ -164,6 +164,7 @@ const rowColumns = {
   indexedFromId: priceListRow.indexedFromId,
   indexLabel: priceListRow.indexLabel,
   indexBasisPoints: priceListRow.indexBasisPoints,
+  fromQuantity: priceListRow.fromQuantity,
   validFrom: priceListRow.validFrom,
   validTo: priceListRow.validTo,
   createdAt: priceListRow.createdAt,
@@ -189,6 +190,7 @@ function rowOf(row: PriceRowRow): PriceListRow {
     indexedFromId: row.indexedFromId,
     indexLabel: row.indexLabel,
     indexBasisPoints: row.indexBasisPoints,
+    fromQuantity: row.fromQuantity,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -208,7 +210,7 @@ export const defaultListCurrency = (currency: string): string => `A default pric
 
 /** `EXCLUDE USING gist (company_id, price_list_id, product_id, condition_key, daterange)`: one row of a list, a product and a condition set is in force at a time; a scheduled change is the next row. */
 const ROW_RUNNING = "price_list_row_no_overlap"
-const ROW_RUNNING_SENTENCE = "A row of this product with these conditions is already in force over part of that period; end it first or schedule this one after it"
+const ROW_RUNNING_SENTENCE = "A row of this product with these conditions and this quantity tier is already in force over part of that period; end it first or schedule this one after it"
 
 /** What a row put outside its list's period is refused with, at the bound the caller chose. */
 export const OUTSIDE_PRICE_LIST = "Outside the price list's period"
@@ -507,7 +509,7 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createPriceListRow",
         summary: "Add a row to a price list",
         description:
-          "Adds one price to the list in the path, which must be a list of a project the caller works in: the product, the unit price in the list's currency and in minor units (a free service is a price of zero, not a missing row), and up to five conditions — a planning area of the project (the prototype's Zone, matched against the route's scheme's planning area), a customer kind (its Customer type, matched against the agreement's customer), a container type and a waste fraction of this company, and the customer a negotiated row is for alone; a row with no conditions is the default price. The product is a product of the project (400 on `productId`) and `active`, since a price is a new reference to it (409 otherwise). The period lies inside the list's (400 on the bound outside), and one row of a product with one condition set is in force at a time, so a period overlapping such a row is refused (409, `A row of this product with these conditions is already in force over part of that period; end it first or schedule this one after it`): a scheduled change is a row starting when the current one ends. The server mints the id; the row is read at `/price-list-rows/{id}`.",
+          "Adds one price to the list in the path, which must be a list of a project the caller works in: the product, the unit price in the list's currency and in minor units (a free service is a price of zero, not a missing row), and up to five conditions — a planning area of the project (the prototype's Zone, matched against the route's scheme's planning area), a customer kind (its Customer type, matched against the agreement's customer), a container type and a waste fraction of this company, and the customer a negotiated row is for alone; a row with no conditions is the default price. The product is a product of the project (400 on `productId`) and `active`, since a price is a new reference to it (409 otherwise). The period lies inside the list's (400 on the bound outside), and one row of a product with one condition set is in force at a time, so a period overlapping such a row is refused (409, `A row of this product with these conditions and this quantity tier is already in force over part of that period; end it first or schedule this one after it`): a scheduled change is a row starting when the current one ends. A row may name a quantity tier, `fromQuantity` (M16b of #293): it applies from that many of the product's unit, and runs beside the row of the same conditions with none. The server mints the id; the row is read at `/price-list-rows/{id}`.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The row as it was written.", PriceListRow),
@@ -675,6 +677,8 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
                 containerTypeId: old.containerTypeId,
                 wasteFractionId: old.wasteFractionId,
                 customerId: old.customerId,
+                // The successor is the same tier (M16b of #293): its key is the ended row's.
+                fromQuantity: old.fromQuantity,
                 note: null,
                 indexedFromId: old.id,
                 indexLabel: index.label,

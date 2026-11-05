@@ -36,7 +36,7 @@ const NEXT_YEAR = "2027-01-01"
 /** The sentences this family answers with, pinned here so a change to one is a change to this file too. */
 const DEFAULT_TAKEN = "This project already has a default price list; unset it first"
 const LIST_RUNNING = "A price list of this code is already in force over part of that period"
-const ROW_RUNNING = "A row of this product with these conditions is already in force over part of that period; end it first or schedule this one after it"
+const ROW_RUNNING = "A row of this product with these conditions and this quantity tier is already in force over part of that period; end it first or schedule this one after it"
 const OUTSIDE_LIST = "Outside the price list's period"
 const defaultInCurrency = (currency: string) => `A default price list is in the project's currency (${currency})`
 
@@ -436,6 +436,20 @@ describe("the price list endpoints", { skip: database.skip }, () => {
   })
 
   describe("GET /price-lists/:id/resolve", () => {
+    test("a quantity tier is a row of its own beside the untiered one, met from its quantity, and the read says why it lost below it (M16b of #293)", async () => {
+      const made = await list("pl-tiers", { validTo: null })
+      const base = await row(olivia, made.id, rowBody({ unitPriceMinor: 60_000, validTo: null }))
+      const tier = await row(olivia, made.id, rowBody({ unitPriceMinor: 50_000, fromQuantity: 2, validTo: null }))
+      assert.deepEqual([base.fromQuantity, tier.fromQuantity], [null, 2])
+      const twice = await refused(await olivia(`/price-lists/${made.id}/rows`, { method: "POST", body: rowBody({ unitPriceMinor: 49_000, fromQuantity: 2, validTo: null }) }), 409)
+      assert.equal(twice.detail, ROW_RUNNING, "a tier runs once over a period too")
+      assert.equal((await resolve(olivia, made.id, { productId: products.residual.id, on: AUGUST, quantity: "2.5" })).winner?.row.id, tier.id)
+      const below = await resolve(olivia, made.id, { productId: products.residual.id, on: AUGUST, quantity: "1.5" })
+      assert.equal(below.winner?.row.id, base.id)
+      assert.equal(below.verdicts.find((verdict) => verdict.row.id === tier.id)?.reason, "Applies from a quantity of 2")
+      assert.equal((await resolve(olivia, made.id, { productId: products.residual.id, on: AUGUST })).winner?.row.id, base.id, "a read naming no quantity meets no tier")
+    })
+
     test("the row matching the most conditions wins: every verdict is answered with the winner first and scored, and the VAT rate and the currency ride beside", async () => {
       const made = await list("pl-resolve", { validTo: null })
       const everyone = await row(olivia, made.id, rowBody({ unitPriceMinor: 1_000, validTo: null }))

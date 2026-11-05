@@ -31,7 +31,7 @@ import { check, date, index, integer, text, timestamp, uniqueIndex, uuid, type P
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
 import { agreement } from "./agreements"
-import { wasteFraction } from "./catalogue"
+import { product, wasteFraction } from "./catalogue"
 import { oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, timestamps } from "./columns"
 import { customer } from "./customers"
@@ -184,18 +184,27 @@ export const scaleTicketLine = wms.table(
     /** The kommunekode it came from, four digits as a Property spells it. */
     originMunicipality: text(),
     netKg: integer().notNull(),
+    /** The window's product the line is sold by (M16b of #293), per tonne or per cubic metre; null where the window named none, which a walk-in's ticket may leave. */
+    productId: uuid(),
+    /** The declared volume of a line sold by the cubic metre, whole litres. */
+    volumeLitres: integer(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.ticketId], scaleTicket),
+    projectReference(t, [t.productId], product),
+    // The project key a billable event's charge of the line references (M16b of #293).
+    projectKey(t),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     // Leads with the ticket, so it is the reference's index and a ticket's lines in order.
     tenantUnique(t, t.ticketId, t.position),
     positive(t.position),
     positive(t.netKg),
+    positive(t.volumeLitres),
     check(tableObjectName(t.id.table, "origin_shape", "scaleTicketLine"), sql`${t.originMunicipality} ~ ${sql.raw(`'${FOUR_DIGITS_PATTERN}'`)}`),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.projectId),
+    tenantIndex(t, t.productId),
   ],
 )

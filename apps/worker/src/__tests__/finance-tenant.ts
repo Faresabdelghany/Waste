@@ -43,6 +43,7 @@ import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/p
 import { unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
+import { scaleTicket, scaleTicketLine } from "@waste/db/schema/scale-house"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -443,6 +444,9 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
   await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
   // A weight charge names the Unload it charges a share of (O28 of #290), and a review the Unload it judged: the events, then the two ledgers.
   await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+  // A window line's charge names its line (M16b of #293), a ledger row the owner deletes, and the line its ticket.
+  await owner.db.delete(scaleTicketLine).where(eq(scaleTicketLine.companyId, companyId))
+  await owner.db.delete(scaleTicket).where(eq(scaleTicket.companyId, companyId))
   await owner.db.delete(weightReview).where(eq(weightReview.companyId, companyId))
   await owner.db.delete(unload).where(eq(unload.companyId, companyId))
   await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))

@@ -75,23 +75,25 @@ import { SiteVisit } from "@waste/contracts/site-visits"
 import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { WeightReview } from "@waste/contracts/weight-control"
+import { ScaleTicket } from "@waste/contracts/scale-house"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, ONE_WEIGHT_CHARGE_PER_STOP, recordBillableEvent, reversalOfEvent, weightChargeBySource } from "@waste/db/commands/billable-writes"
 import { eventOf, type EventReading } from "@waste/db/commands/billing-shapes"
 import { lockRow } from "@waste/db/commands/shared"
+import { ONE_SCALE_TICKET_CHARGE_PER_LINE, scaleTicketChargeOf } from "@waste/db/commands/window-prices"
 import { visitById } from "@waste/db/commands/site-visits"
 import { siteVisit } from "@waste/db/schema/site-visits"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
-import { billableActionsFor, PICKUP_EVENT_KINDS, VISIT_EVENT_KINDS, WEIGHT_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
+import { billableActionsFor, PICKUP_EVENT_KINDS, SCALE_TICKET_EVENT_KINDS, VISIT_EVENT_KINDS, WEIGHT_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
 
 import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
-import { pickupFacts, pickupRow, ticketFacts, ticketRow, visitFacts, weightFacts } from "./finance-facts"
+import { pickupFacts, pickupRow, scaleTicketFacts, ticketFacts, ticketRow, visitFacts, weightFacts } from "./finance-facts"
 
 /** The kinds this consumer takes, one queue each: what Finance reads of the outbox (§3's table, the visits' two and the weight review; `unload-recorded` is not read, since only a reviewed weight is billable). */
-export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed", ...VISIT_EVENT_KINDS, ...WEIGHT_EVENT_KINDS] as const satisfies readonly OutboxKind[]
+export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed", ...VISIT_EVENT_KINDS, ...WEIGHT_EVENT_KINDS, ...SCALE_TICKET_EVENT_KINDS] as const satisfies readonly OutboxKind[]
 
 /** The job's data as the relay sends it: the seam's `RelayedEvent`, under the name this module always used. */
 export type PublishedEvent = RelayedEvent
@@ -140,6 +142,12 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
       const review = WeightReview.parse(event.payload)
       return await weightFacts(tx, event.companyId, review.unloadId)
     }
+    case "scale-ticket-completed":
+    case "scale-ticket-voided": {
+      // The ticket's id is all the consumer reads off the payload; the rest is read from the tables as they stand.
+      const named = ScaleTicket.pick({ id: true }).parse(event.payload)
+      return await scaleTicketFacts(tx, event.companyId, event.kind, named.id)
+    }
     default:
       return { facts: { kind: event.kind } as EventFacts, live: [] }
   }
@@ -157,12 +165,16 @@ async function act(tx: Tx, event: PublishedEvent, action: BillableAction, live: 
   const did = action.action === "reverse" ? "reversed" : "recorded"
   // A record is one row of its kind with the event's id, a reversal one row naming the event it undoes. The row written the first time is read before the write — the common redelivery — and the index is the word behind it for two workers on one event at once: the insert runs in a savepoint, so a 23505 on it rolls the savepoint back and not the transaction, and the winner's row is read back.
   const weighed = action.action === "record" && action.draft.kind === "weight" ? action.draft.links.pickupId : null
+  // A window line's charge is one per line (M16b of #293), whichever event recorded it.
+  const line = action.action === "record" && action.draft.kind === "scale-ticket" ? action.draft.links.scaleTicketLineId : null
   const already = () =>
     action.action === "reverse"
       ? reversalOfEvent(tx, event.companyId, action.eventId)
       : weighed !== null
         ? weightChargeBySource(tx, event.companyId, event.id, weighed)
-        : eventBySource(tx, event.companyId, event.id, action.draft.kind)
+        : line !== null
+          ? scaleTicketChargeOf(tx, event.companyId, line)
+          : eventBySource(tx, event.companyId, event.id, action.draft.kind)
   const before = await already()
   if (before !== undefined) return { did: "replayed", billableEventId: before.id }
   try {
@@ -172,7 +184,7 @@ async function act(tx: Tx, event: PublishedEvent, action: BillableAction, live: 
     return { did, billableEventId: answered.id }
   } catch (error) {
     const constraint = uniqueConstraintOf(error)
-    if (constraint !== ONE_ROW_PER_SOURCE_EVENT && constraint !== ONE_REVERSAL_PER_EVENT && constraint !== ONE_WEIGHT_CHARGE_PER_STOP) throw error
+    if (constraint !== ONE_ROW_PER_SOURCE_EVENT && constraint !== ONE_REVERSAL_PER_EVENT && constraint !== ONE_WEIGHT_CHARGE_PER_STOP && constraint !== ONE_SCALE_TICKET_CHARGE_PER_LINE) throw error
     const winner = await already()
     if (winner === undefined) throw error
     return { did: "replayed", billableEventId: eventOf(winner).id }
@@ -201,7 +213,7 @@ export const recordBillableEvents = defineOutboxConsumer({
   name: "finance",
   kinds: FINANCE_EVENT_KINDS,
   description:
-    "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, a Pickup Exception's charge from a pickup's completion, failure, skip or correction, a recycling-centre visit's charge from site-visit-recorded, and a stop's share of an approved Unload's weight under a product sold by the tonne from weight-reviewed, or cancels or reverses a pickup's live charges on a correction, a visit's on site-visit-voided and an Unload's weight charges on a review that takes the approval back; one row of a kind per outbox event however often it is delivered.",
+    "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, a Pickup Exception's charge from a pickup's completion, failure, skip or correction, a recycling-centre visit's charge from site-visit-recorded, a stop's share of an approved Unload's weight under a product sold by the tonne from weight-reviewed, and each line of an account's completed Scale Ticket from scale-ticket-completed, or cancels or reverses a pickup's live charges on a correction, a visit's on site-visit-voided an Unload's weight charges on a review that takes the approval back, and a Scale Ticket's on scale-ticket-voided; one row of a kind per outbox event however often it is delivered.",
   queueOptions: RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS,
   handler: (event, context) => recordBillableEventFor(event, context),
 })

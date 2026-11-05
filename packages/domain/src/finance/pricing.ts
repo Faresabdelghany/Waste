@@ -35,6 +35,13 @@
 // list an agreement is priced under is `priceListIdFor`: the agreement's own
 // when it names one, the project's default otherwise, none being
 // `no-price-list`. Money is minor units and the VAT rounds as money.ts says.
+//
+// A row may be a quantity tier (M16b of #293): `fromQuantity`, in the
+// product's unit, makes it eligible only for an occurrence of at least that
+// many — a window's load of 2.4 tonnes meets a row from 2 and not one from 5
+// — and among rows of the same score the higher tier wins before the later
+// start. A row with no tier is judged exactly as before, whatever the
+// quantity, so a list with no tiers resolves as it always has.
 import type { AgreementStatus, CustomerKind } from "../registry/vocabulary"
 import { fitsMinor, vatOf } from "./money"
 import type { BlockReason } from "./vocabulary"
@@ -62,6 +69,8 @@ export type PriceRow = {
   validFrom: string
   /** `YYYY-MM-DD`, the first day out of force; null while it runs. */
   validTo: string | null
+  /** The quantity tier (M16b of #293): eligible only from this many of the product's unit; null or absent for a row of any quantity. */
+  fromQuantity?: number | null
 }
 
 /** What the occurrence is: the day, and the values the rows' conditions are matched against, each null or absent where the occurrence has none. */
@@ -74,6 +83,8 @@ export type PriceInput = {
   wasteFractionId?: string | null
   /** The agreement's customer; a negotiated row for another customer is not eligible. */
   customerId?: string | null
+  /** How many of the product's unit, which a tier is judged against (M16b of #293); absent where the occurrence names none. */
+  quantity?: number | null
 }
 
 /** How an id of each kind is spelled in a sentence; an id stands where the caller gives no spelling. */
@@ -115,6 +126,10 @@ export const expiredOn = (validTo: string): string => `Expired on ${validTo}`
 export const negotiatedForAnother = (customer: string): string => `Negotiated for ${customer}, not this customer`
 export const requiresCondition = (condition: PriceCondition, required: string): string => `Requires ${CONDITION_NAMES[condition].toLowerCase()} ${required}`
 export const conditionDiffers = (condition: PriceCondition, required: string, provided: string): string => `${CONDITION_NAMES[condition]} is ${required}, not ${provided}`
+export const appliesFrom = (fromQuantity: number): string => `Applies from a quantity of ${fromQuantity}`
+
+/** A row's tier as the rule ranks it: none counts as the lowest. */
+const tierOf = (row: PriceRow): number => row.fromQuantity ?? 0
 
 /** The score of an eligible row: the conditions it names, plus one hundred for a negotiated row. */
 export const scoreOf = (row: PriceRow): number => (row.customerId === null ? 0 : 100) + PRICE_CONDITIONS.filter((condition) => row[condition] !== null).length
@@ -146,6 +161,11 @@ function judge<Row extends PriceRow>(row: Row, input: PriceInput, labels: PriceL
       matched.push(`${CONDITION_NAMES[condition]} ${spelled(labels, condition, required)}`)
     }
   }
+  // A tier is judged last: a row of the right conditions and period that the quantity does not reach.
+  if (reason === null && row.fromQuantity != null) {
+    if (input.quantity == null || input.quantity < row.fromQuantity) reason = appliesFrom(row.fromQuantity)
+    else matched.push(`From ${row.fromQuantity}`)
+  }
   const eligible = reason === null
   return { row, eligible, reason, matched, score: eligible ? scoreOf(row) : -1, winner: false }
 }
@@ -153,11 +173,12 @@ function judge<Row extends PriceRow>(row: Row, input: PriceInput, labels: PriceL
 /** Two ids in string order: for a UUIDv7, the order the rows were made in. */
 const byId = (a: RowVerdict, b: RowVerdict): number => (a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0)
 
-/** The order the rule ranks eligible rows in — the score, then the later start, then the lower id, every tie decided — with the ineligible after them, by id, so a list of verdicts reads the same twice. */
+/** The order the rule ranks eligible rows in — the score, then the higher tier, then the later start, then the lower id, every tie decided — with the ineligible after them, by id, so a list of verdicts reads the same twice. */
 export function compareVerdicts(a: RowVerdict, b: RowVerdict): number {
   if (a.eligible !== b.eligible) return a.eligible ? -1 : 1
   if (!a.eligible) return byId(a, b)
   if (a.score !== b.score) return b.score - a.score
+  if (tierOf(a.row) !== tierOf(b.row)) return tierOf(b.row) - tierOf(a.row)
   if (a.row.validFrom !== b.row.validFrom) return a.row.validFrom > b.row.validFrom ? -1 : 1
   return byId(a, b)
 }

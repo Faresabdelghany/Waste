@@ -687,6 +687,13 @@
       "when": 1793819438754,
       "tag": "0097_public_placements",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793867212088,
+      "tag": "0098_window_prices",
+      "breakpoints": true
     }
   ]
 }

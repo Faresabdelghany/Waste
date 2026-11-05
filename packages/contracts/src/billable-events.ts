@@ -47,6 +47,8 @@ export const BillableEventLinks = z.object({
   visitId: Id.nullable(),
   /** On a weight charge (O28 of #290): the Unload whose reviewed weight it charges a share of. */
   unloadId: Id.nullable(),
+  /** On a window line's charge (M16b of #293): the Scale Ticket line it charges. */
+  scaleTicketLineId: Id.nullable(),
 })
 export type BillableEventLinks = z.infer<typeof BillableEventLinks>
 
@@ -150,7 +152,7 @@ export type BillableEventRelease = z.infer<typeof BillableEventRelease>
 
 /** `POST /billable-events/:id/cancel`: the office's reason, never the consumer's, and a note. */
 export const BillableEventCancel = z.strictObject({
-  reason: CancelReason.exclude(["pickup-corrected", "visit-voided", "weight-revised"]),
+  reason: CancelReason.exclude(["pickup-corrected", "visit-voided", "weight-revised", "scale-ticket-voided"]),
   note: Paragraph.optional(),
 })
 export type BillableEventCancel = z.infer<typeof BillableEventCancel>
