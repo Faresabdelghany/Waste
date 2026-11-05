@@ -1647,28 +1647,6 @@ index wms.fill_reading fill_reading_pkey CREATE UNIQUE INDEX fill_reading_pkey O
 index wms.fill_reading fill_reading_project_id_idx CREATE INDEX fill_reading_project_id_idx ON wms.fill_reading USING btree (company_id, project_id)
 index wms.fill_reading fill_reading_sensor_id_measured_at_key CREATE UNIQUE INDEX fill_reading_sensor_id_measured_at_key ON wms.fill_reading USING btree (company_id, sensor_id, measured_at)
 policy wms.fill_reading fill_reading_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.fuel_emission_factor kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.fuel_emission_factor 1 id uuid not-null default=wms.uuidv7()
-column wms.fuel_emission_factor 2 company_id uuid not-null
-column wms.fuel_emission_factor 3 created_at timestamp with time zone not-null default=now()
-column wms.fuel_emission_factor 4 updated_at timestamp with time zone not-null default=now()
-column wms.fuel_emission_factor 5 fuel text not-null
-column wms.fuel_emission_factor 6 grams_per_unit integer not-null
-column wms.fuel_emission_factor 7 source text not-null
-column wms.fuel_emission_factor 8 valid_from date not-null
-column wms.fuel_emission_factor 9 valid_to date
-constraint wms.fuel_emission_factor fuel_emission_factor_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.fuel_emission_factor fuel_emission_factor_fuel_one_of CHECK ((fuel = ANY (ARRAY['diesel'::text, 'hvo'::text, 'biogas'::text, 'electric'::text, 'hybrid'::text, 'other'::text])))
-constraint wms.fuel_emission_factor fuel_emission_factor_grams_per_unit_bounds CHECK (((grams_per_unit >= 0) AND (grams_per_unit <= 10000)))
-constraint wms.fuel_emission_factor fuel_emission_factor_no_overlap EXCLUDE USING gist (company_id WITH =, fuel WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
-constraint wms.fuel_emission_factor fuel_emission_factor_pkey PRIMARY KEY (id)
-constraint wms.fuel_emission_factor fuel_emission_factor_source_given CHECK ((length(btrim(source)) > 0))
-constraint wms.fuel_emission_factor fuel_emission_factor_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
-index wms.fuel_emission_factor fuel_emission_factor_no_overlap CREATE INDEX fuel_emission_factor_no_overlap ON wms.fuel_emission_factor USING gist (company_id, fuel, daterange(valid_from, valid_to, '[)'::text))
-index wms.fuel_emission_factor fuel_emission_factor_pkey CREATE UNIQUE INDEX fuel_emission_factor_pkey ON wms.fuel_emission_factor USING btree (id)
-trigger wms.fuel_emission_factor fuel_emission_factor_audit_trail enabled=O CREATE TRIGGER fuel_emission_factor_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.fuel_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
-trigger wms.fuel_emission_factor fuel_emission_factor_touch_updated_at enabled=O CREATE TRIGGER fuel_emission_factor_touch_updated_at BEFORE UPDATE ON wms.fuel_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.fuel_emission_factor fuel_emission_factor_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.generation_match kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.generation_match 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.generation_match 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -4974,25 +4952,6 @@ index wms.vehicle_type vehicle_type_tenant_key CREATE UNIQUE INDEX vehicle_type_
 trigger wms.vehicle_type vehicle_type_audit_trail enabled=O CREATE TRIGGER vehicle_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.vehicle_type vehicle_type_touch_updated_at enabled=O CREATE TRIGGER vehicle_type_touch_updated_at BEFORE UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_type vehicle_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.vehicle_type_consumption kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.vehicle_type_consumption 1 id uuid not-null default=wms.uuidv7()
-column wms.vehicle_type_consumption 2 company_id uuid not-null
-column wms.vehicle_type_consumption 3 created_at timestamp with time zone not-null default=now()
-column wms.vehicle_type_consumption 4 updated_at timestamp with time zone not-null default=now()
-column wms.vehicle_type_consumption 5 vehicle_type_id uuid not-null
-column wms.vehicle_type_consumption 6 fuel text not-null
-column wms.vehicle_type_consumption 7 milli_units_per_km integer not-null
-constraint wms.vehicle_type_consumption vehicle_type_consumption_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.vehicle_type_consumption vehicle_type_consumption_fuel_one_of CHECK ((fuel = ANY (ARRAY['diesel'::text, 'hvo'::text, 'biogas'::text, 'electric'::text, 'hybrid'::text, 'other'::text])))
-constraint wms.vehicle_type_consumption vehicle_type_consumption_milli_units_per_km_bounds CHECK (((milli_units_per_km >= 1) AND (milli_units_per_km <= 10000)))
-constraint wms.vehicle_type_consumption vehicle_type_consumption_pkey PRIMARY KEY (id)
-constraint wms.vehicle_type_consumption vehicle_type_consumption_type_fuel_key UNIQUE (company_id, vehicle_type_id, fuel)
-constraint wms.vehicle_type_consumption vehicle_type_consumption_vehicle_type_id_fk FOREIGN KEY (company_id, vehicle_type_id) REFERENCES wms.vehicle_type(company_id, id)
-index wms.vehicle_type_consumption vehicle_type_consumption_pkey CREATE UNIQUE INDEX vehicle_type_consumption_pkey ON wms.vehicle_type_consumption USING btree (id)
-index wms.vehicle_type_consumption vehicle_type_consumption_type_fuel_key CREATE UNIQUE INDEX vehicle_type_consumption_type_fuel_key ON wms.vehicle_type_consumption USING btree (company_id, vehicle_type_id, fuel)
-trigger wms.vehicle_type_consumption vehicle_type_consumption_audit_trail enabled=O CREATE TRIGGER vehicle_type_consumption_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_type_consumption FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle_type', 'vehicle_type_id')
-trigger wms.vehicle_type_consumption vehicle_type_consumption_touch_updated_at enabled=O CREATE TRIGGER vehicle_type_consumption_touch_updated_at BEFORE UPDATE ON wms.vehicle_type_consumption FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.vehicle_type_consumption vehicle_type_consumption_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle_unavailability kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.vehicle_unavailability 1 id uuid not-null default=wms.uuidv7()
 column wms.vehicle_unavailability 2 company_id uuid not-null
@@ -5149,31 +5108,6 @@ trigger wms.waste_fraction waste_fraction_audit_trail enabled=O CREATE TRIGGER w
 trigger wms.waste_fraction waste_fraction_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_touch_updated_at BEFORE UPDATE ON wms.waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.waste_fraction waste_fraction_public_door permissive SELECT to=wms_public using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=none
 policy wms.waste_fraction waste_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.waste_fraction_emission_factor kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.waste_fraction_emission_factor 1 id uuid not-null default=wms.uuidv7()
-column wms.waste_fraction_emission_factor 2 company_id uuid not-null
-column wms.waste_fraction_emission_factor 3 created_at timestamp with time zone not-null default=now()
-column wms.waste_fraction_emission_factor 4 updated_at timestamp with time zone not-null default=now()
-column wms.waste_fraction_emission_factor 5 waste_fraction_id uuid not-null
-column wms.waste_fraction_emission_factor 6 footprint_kg_per_tonne integer not-null
-column wms.waste_fraction_emission_factor 7 avoided_kg_per_tonne integer
-column wms.waste_fraction_emission_factor 8 source text not-null
-column wms.waste_fraction_emission_factor 9 valid_from date not-null
-column wms.waste_fraction_emission_factor 10 valid_to date
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_avoided_bounds CHECK (((avoided_kg_per_tonne >= 0) AND (avoided_kg_per_tonne <= 10000)))
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_footprint_bounds CHECK (((footprint_kg_per_tonne >= 0) AND (footprint_kg_per_tonne <= 10000)))
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_no_overlap EXCLUDE USING gist (company_id WITH =, waste_fraction_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_pkey PRIMARY KEY (id)
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_source_given CHECK ((length(btrim(source)) > 0))
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
-constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
-index wms.waste_fraction_emission_factor waste_fraction_emission_factor_no_overlap CREATE INDEX waste_fraction_emission_factor_no_overlap ON wms.waste_fraction_emission_factor USING gist (company_id, waste_fraction_id, daterange(valid_from, valid_to, '[)'::text))
-index wms.waste_fraction_emission_factor waste_fraction_emission_factor_pkey CREATE UNIQUE INDEX waste_fraction_emission_factor_pkey ON wms.waste_fraction_emission_factor USING btree (id)
-index wms.waste_fraction_emission_factor waste_fraction_emission_factor_waste_fraction_id_idx CREATE INDEX waste_fraction_emission_factor_waste_fraction_id_idx ON wms.waste_fraction_emission_factor USING btree (company_id, waste_fraction_id)
-trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_audit_trail enabled=O CREATE TRIGGER waste_fraction_emission_factor_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
-trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_emission_factor_touch_updated_at BEFORE UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.waste_fraction_emission_factor waste_fraction_emission_factor_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.weighbridge_ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.weighbridge_ticket 1 id uuid not-null default=wms.uuidv7()
 column wms.weighbridge_ticket 2 company_id uuid not-null
@@ -5409,4 +5343,5 @@ journal 1793909104002 e9a44efe8ffe945d7517aa814fc6007ce2402604f1aae098867369fc80
 journal 1793952044162 5587d766cdf82edab9c6b47ceea0c32c804b946f5c8d1e52324481d954786844
 journal 1793952115029 1808664578c7521dad88cc4f0b4b419ce0f403f2a7cb9d42119c52d6d41ce82f
 journal 1793952129739 6eb121585a7a7e828ec2053f9ef25e4fff6a8832084876f40b57282d8149c55a
+journal 1793952137785 117c4f4b466e7cfa44613d86140cc89b92a390cfbae4e01dcbc093477e121dcb
 pgboss-version 42

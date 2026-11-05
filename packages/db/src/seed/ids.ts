@@ -32,11 +32,10 @@ const BUCKET = "01a0d2a4-a280-7"
  * is not the order the seed writes them in: Resources goes first, since
  * Planning's schemes and groups name its rows (demo.ts). The Pickup
  * Exceptions' contaminant codes and their fractions (M5 of #293) follow
- * Finance's, and the fleet's emission factors and its vehicle types'
- * consumption (M10 of #293) take 0x02c and 0x02d after them, the
- * decommission reasons (O30 of #290, row 9.6) 0x02e, the default ticket
- * types (#545 of #544) 0x02f, and the Holiday Lists and their days 0x030
- * and 0x031.
+ * Finance's, the decommission reasons (O30 of #290, row 9.6) take 0x02e,
+ * the default ticket types (#545 of #544) 0x02f, and the Holiday Lists and
+ * their days 0x030 and 0x031; 0x02c and 0x02d were the fleet's emission
+ * factors and its vehicle types' consumption (M10 of #293), since removed.
  */
 export const DEMO_KINDS = {
   company: 0x001,
@@ -82,8 +81,6 @@ export const DEMO_KINDS = {
   priceListRow: 0x029,
   contaminantCode: 0x02a,
   contaminantCodeFraction: 0x02b,
-  fuelEmissionFactor: 0x02c,
-  vehicleTypeConsumption: 0x02d,
   decommissionReason: 0x02e,
   ticketType: 0x02f,
   holidayList: 0x030,

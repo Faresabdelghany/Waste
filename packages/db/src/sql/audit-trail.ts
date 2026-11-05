@@ -66,7 +66,6 @@ import { maintenanceOrder, vehicleMaintenancePlan } from "../schema/maintenance"
 import { scaleTicket, scaleTicketLine, vehicleTare } from "../schema/scale-house"
 import { routeMessage } from "../schema/route-messages"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
-import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
 import { importRun, importRunRow } from "../schema/imports"
@@ -84,7 +83,6 @@ import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { fillReading, sensor, sensorPairing } from "../schema/sensors"
 import { materialAdjustment, outboundLoad } from "../schema/haul-out"
 import { decommissionReason, stockMinimum, stockMovement } from "../schema/stock"
-import { wasteFractionEmissionFactor } from "../schema/sustainability"
 import { tankInspection, tankInstallation } from "../schema/tanks"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
 
@@ -216,18 +214,8 @@ export const PICKUP_EXCEPTIONS_AUDITED: readonly Audited[] = [
   { table: pickupExceptionRuleStep, module: "commercial.price-rows", parent: setOf(pickupExceptionRule, pickupExceptionRuleStep.ruleId) },
 ]
 
-/** The fleet's emissions (M10 of #293): a fuel's factor, and a vehicle type's consumption, a set under its type, both master data. */
-export const EMISSIONS_AUDITED: readonly Audited[] = [
-  { table: fuelEmissionFactor, module: "configure.master" },
-  { table: vehicleTypeConsumption, module: "configure.master", parent: setOf(vehicleType, vehicleTypeConsumption.vehicleTypeId) },
-]
-
 /** The Applications (M7 of #293): a customer's request, each move audited under the module it is read in; its Decisions are a ledger, exempt. */
 export const APPLICATIONS_AUDITED: readonly Audited[] = [{ table: application, module: "customers.applications" }]
-
-/** The waste fractions' emission factors (M13 of #293), the master data's beside the fractions they price in CO₂e: its trigger is the sustainability report's migration's. */
-export const SUSTAINABILITY_AUDITED: readonly Audited[] = [{ table: wasteFractionEmissionFactor, module: "configure.master" }]
-
 
 /** Container hire (M14 of #293): a project's work-order products, the set of its project they are replaced whole as, under the products they price; their migration writes the trigger. */
 export const CONTAINER_HIRE_AUDITED: readonly Audited[] = [
@@ -352,7 +340,7 @@ export const TICKET_AUTOMATION_AUDITED: readonly Audited[] = [{ table: ticketTyp
 const standsToday = (entry: AuditedAsWritten): entry is Audited => !(DROPPED_TABLES as readonly PgTable[]).includes(entry.table) && (MODULE_KEYS as readonly string[]).includes(entry.module)
 const AUDITED_FROM_0019: readonly Audited[] = AUDITED_AT_0019.filter(standsToday)
 
-export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED, ...TICKET_AUTOMATION_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...APPLICATIONS_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED, ...TICKET_AUTOMATION_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

@@ -63,7 +63,6 @@ import {
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
-import { fuelEmissionFactor, vehicleTypeConsumption } from "@waste/db/schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { importRun, importRunRow } from "@waste/db/schema/imports"
@@ -73,7 +72,6 @@ import { materialAdjustment, outboundLoad } from "@waste/db/schema/haul-out"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { decommissionReason, stockMinimum, stockMovement } from "@waste/db/schema/stock"
-import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
   customerContact,
@@ -489,8 +487,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
-    await tx.delete(vehicleTypeConsumption).where(eq(vehicleTypeConsumption.companyId, companyId))
-    await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
     await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
@@ -526,8 +522,6 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
-    // The fractions' emission factors (M13 of #293) name the fractions.
-    await tx.delete(wasteFractionEmissionFactor).where(eq(wasteFractionEmissionFactor.companyId, companyId))
     await tx.delete(wasteFraction).where(eq(wasteFraction.companyId, companyId))
     await tx.delete(serviceProviderAccess).where(eq(serviceProviderAccess.companyId, companyId))
     await tx.delete(projectAccess).where(eq(projectAccess.companyId, companyId))

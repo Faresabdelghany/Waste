@@ -10,7 +10,6 @@ import { describe, test } from "node:test"
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID, COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_SETTINGS_PANE_ID, OPERATIONS_SETUP_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
-import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "../fleet-emissions"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 
 describe("the Settings panes offered", () => {
@@ -26,11 +25,6 @@ describe("the Settings panes offered", () => {
   test("Exception charges on the Pilot only (M5 of #293): the rules are the API's alone", () => {
     assert.equal(settingsPaneOffered(PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, true), true)
     assert.equal(settingsPaneOffered(PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, false), false)
-  })
-
-  test("the emission factors on the Pilot only (M10 of #293): they are the API's alone", () => {
-    assert.equal(settingsPaneOffered(EMISSION_FACTORS_SETTINGS_PANE_ID, true), true)
-    assert.equal(settingsPaneOffered(EMISSION_FACTORS_SETTINGS_PANE_ID, false), false)
   })
 
   test("the Ticket SLA on the Pilot only, in place of Tickets & communication, whose link opens it there (O4 of #290)", () => {

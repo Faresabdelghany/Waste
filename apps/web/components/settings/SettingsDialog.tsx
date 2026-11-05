@@ -13,7 +13,6 @@ import {
   CreditCard,
   Database,
   Gear,
-  Leaf,
   LinkSimple,
   MagnifyingGlass,
   MapTrifold,
@@ -67,7 +66,6 @@ import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings
 import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
-import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
@@ -80,7 +78,6 @@ import { TICKET_TYPES_SETTINGS_PANE_ID } from "@/lib/data/ticket-types"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
-import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "@/lib/data/fleet-emissions"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -190,8 +187,6 @@ const settingsSections: Array<{
       { id: TICKET_TYPES_SETTINGS_PANE_ID, label: "Ticket types", icon: Ticket },
       // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
-      // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
-      { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
     ],
   },
   {
@@ -1278,11 +1273,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend.",
     groups: [],
   },
-  [EMISSION_FACTORS_SETTINGS_PANE_ID]: {
-    title: "Emission factors",
-    description: "Grams of CO₂e per unit of each fuel, over the period it is in force, which the fleet's routes are measured by.",
-    groups: [],
-  },
   [MESSAGE_TEMPLATES_SETTINGS_PANE_ID]: {
     title: "Message templates",
     description: "The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing.",
@@ -1454,7 +1444,6 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
     paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
-    paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1885,8 +1874,6 @@ function SettingsPane({
         <PickupExceptionChargesSettings />
       ) : paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ? (
         <BulkySchedulesSettings />
-      ) : paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ? (
-        <EmissionFactorsSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

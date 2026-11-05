@@ -750,6 +750,13 @@
       "when": 1793952129739,
       "tag": "0106_drop_sorting_guide",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793952137785,
+      "tag": "0107_drop_emissions",
+      "breakpoints": true
     }
   ]
 }

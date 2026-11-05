@@ -33,15 +33,11 @@
 // and the rule a set names a kind and a priority once by. #291 C4 added one:
 // finance.ts reads the invoice identity's shapes and the payment terms' range
 // from @waste/domain/finance/payment, the patterns the database's checks read
-// too. M10 of #293 added @waste/domain/resources/emissions: emissions.ts
-// bounds a factor and a consumption by the domain's caps, which the
-// database's checks read too. M7 of #293 added
+// too. M7 of #293 added
 // @waste/domain/registry/applications: applications.ts holds a Decision's
 // period and appeal text to the domain's rules in the domain's sentences.
 // #291 C6 added @waste/domain/finance/payments: payments.ts reads the
-// invoice's payment statuses from it, the reading the API answers.
-// M13 of #293 added @waste/domain/insight/sustainability: sustainability.ts
-// reads a factor's bound from it, the bound the database's check reads. M14
+// invoice's payment statuses from it, the reading the API answers. M14
 // of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
 // free days by its cap and holds them to its unit, which the database reads.
 // #291 C7 added @waste/domain/finance/accounting: accounting.ts reads the
@@ -126,7 +122,6 @@ definePurityTests({
     "@waste/domain/imports/vocabulary",
     "@waste/domain/inspections/rules",
     "@waste/domain/inspections/vocabulary",
-    "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
@@ -144,7 +139,6 @@ definePurityTests({
     "@waste/domain/resolution/transitions",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
-    "@waste/domain/resources/emissions",
     "@waste/domain/resources/maintenance",
     "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",

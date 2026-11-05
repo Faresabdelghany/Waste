@@ -65,9 +65,7 @@ import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
-import { emissionReportRoutes } from "./routes/emissions"
 import { fieldInspectionRoutes } from "./routes/field-inspections"
-import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
 import { maintenanceRoutes } from "./routes/maintenance"
@@ -124,7 +122,6 @@ import { siteVisitRoutes } from "./routes/site-visits"
 import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { bulkyBookingRoutes } from "./routes/bulky-bookings"
 import { bulkyScheduleRoutes } from "./routes/bulky-schedules"
-import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { workOrderProductRoutes } from "./routes/work-order-charges"
 import { routeMessageRoutes } from "./routes/route-messages"
@@ -141,7 +138,6 @@ import { visitRuleRoutes } from "./routes/visit-rules"
 import { vehicleRoutes } from "./routes/vehicles"
 import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
-import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
 import { weighbridgeRoutes } from "./routes/weighbridge"
 import { weightControlRoutes } from "./routes/weight-control"
 
@@ -286,7 +282,6 @@ export function createApp({
   app.route("/", roleRoutes(guard))
   app.route("/", auditEventRoutes(guard))
   app.route("/", catalogueRoutes(guard))
-  app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
   app.route("/", customerContactRoutes(guard))
@@ -317,8 +312,6 @@ export function createApp({
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
-  // The fleet's emission factors (M10 of #293), master data beside the vehicle types whose consumption they measure.
-  app.route("/", fuelEmissionFactorRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", stockBalanceRoutes(guard))
   app.route("/", depotRoutes(guard))
@@ -416,10 +409,6 @@ export function createApp({
   app.route("/", weightControlRoutes(guard))
   // The reports (#292): reads that count the rows above and store nothing. The ticket report reads "open now" and "overdue" at the request's clock, so the module takes `now`.
   app.route("/", reportRoutes(guard, { now }))
-  // The fleet's emissions (M10 of #293): a report of its own, read like the others.
-  app.route("/", emissionReportRoutes(guard))
-  // A customer's sustainability report (M13 of #293), likewise.
-  app.route("/", sustainabilityRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
   app.route("/", importRoutes(guard, { now }))
 

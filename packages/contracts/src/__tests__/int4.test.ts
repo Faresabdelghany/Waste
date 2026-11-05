@@ -28,7 +28,6 @@ import * as customersModule from "../customers"
 import * as datesModule from "../dates"
 import * as driverCommandsModule from "../driver-commands"
 import * as dropOffPointsModule from "../drop-off-points"
-import * as emissionsModule from "../emissions"
 import * as executionModule from "../execution"
 import * as financeModule from "../finance"
 import * as fleetModule from "../fleet"
@@ -83,7 +82,6 @@ import * as rightSizingModule from "../right-sizing"
 import * as siteVisitsModule from "../site-visits"
 import * as settlementsModule from "../settlements"
 import * as stockModule from "../stock"
-import * as sustainabilityModule from "../sustainability"
 import * as textModule from "../text"
 import * as ticketSlaModule from "../ticket-sla"
 import * as ticketTeamsModule from "../ticket-teams"
@@ -126,7 +124,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "dates": datesModule,
   "driver-commands": driverCommandsModule,
   "drop-off-points": dropOffPointsModule,
-  "emissions": emissionsModule,
   "execution": executionModule,
   "finance": financeModule,
   "fleet": fleetModule,
@@ -181,7 +178,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "right-sizing": rightSizingModule,
   "settlements": settlementsModule,
   "stock": stockModule,
-  "sustainability": sustainabilityModule,
   "text": textModule,
   "ticket-sla": ticketSlaModule,
   "ticket-teams": ticketTeamsModule,
