@@ -9,24 +9,37 @@
 // trigger. The file is found by its name, not its number, which it takes at
 // its turn. SAF-T (C7b) gave a VAT code its standard tax code and its shape,
 // in a migration of its own: `CHANGED_BY_SAF_T` maps the code's table as
-// drizzle-kit writes it today onto what the export's migration created. No
-// database.
+// drizzle-kit writes it as of SAF-T onto what the export's migration
+// created. The accounting export was removed since, its tables dropped by a
+// migration of its own (drop-accounting-rendering.test.ts), so the seven are
+// read here as SAF-T left them (accounting-as-of.ts), since an applied file
+// is never edited. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { ACCOUNT_NUMBER_PATTERN, VAT_CODE_PATTERN } from "@waste/domain/finance/accounting"
-import { ACCOUNTING_SOURCE_KINDS } from "@waste/domain/finance/vocabulary"
 import { getTableName } from "drizzle-orm"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { userAccount } from "../schema/access"
 import { product } from "../schema/catalogue"
-import { accountingAccount, accountingExport, accountingExportLine, accountingExportVoucher, accountingProductAccount, accountingSettings, accountingVatCode } from "../schema/finance"
 import { company, project } from "../schema/organisation"
-import { ACCOUNTING_AUDITED, auditTrail, AUDITED_TABLE_NAMES } from "../sql/audit-trail"
+import { auditTrail, AUDITED_TABLE_NAMES } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import {
+  ACCOUNT_NUMBER_PATTERN,
+  ACCOUNTING_AUDITED_AS_OF_SAF_T as ACCOUNTING_AUDITED,
+  ACCOUNTING_SOURCE_KINDS,
+  accountingAccountAsOfSafT as accountingAccount,
+  accountingExportAsOfSafT as accountingExport,
+  accountingExportLineAsOfSafT as accountingExportLine,
+  accountingExportVoucherAsOfSafT as accountingExportVoucher,
+  accountingProductAccountAsOfSafT as accountingProductAccount,
+  accountingSettingsAsOfSafT as accountingSettings,
+  accountingVatCodeAsOfSafT as accountingVatCode,
+  VAT_CODE_PATTERN,
+} from "./accounting-as-of"
 import { checksOf, COMPANY, companyFk, createTable, ID, index, oneOfCheck, PROJECT, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -64,7 +77,7 @@ const vatCodeTable = (asOf: "export" | "saf-t"): string =>
     ...(asOf === "saf-t" ? [`CONSTRAINT "accounting_vat_code_standard_shape" CHECK (${STANDARD_SHAPE})`] : []),
   ])
 
-/** What SAF-T changed: the VAT code's CREATE TABLE as drizzle-kit generates it now onto what the export's migration created. */
+/** What SAF-T changed: the VAT code's CREATE TABLE as drizzle-kit generates it as of SAF-T onto what the export's migration created. */
 const CHANGED_BY_SAF_T = new Map([[vatCodeTable("saf-t"), vatCodeTable("export")]])
 
 describe("the accounting export as drizzle-kit writes it", () => {
@@ -162,7 +175,7 @@ describe("the accounting export as drizzle-kit writes it", () => {
       audit,
       ["accounting_account", "accounting_settings", "accounting_vat_code", "accounting_product_account"].map((name) => `CREATE TRIGGER "${name}_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."${name}" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id');`),
     )
-    for (const ledger of ["accounting_export", "accounting_export_voucher", "accounting_export_line"]) assert.ok(!AUDITED_TABLE_NAMES.has(ledger), `${ledger}: a ledger, its rows its own history`)
+    for (const ledger of ["accounting_export", "accounting_export_voucher", "accounting_export_line"]) assert.ok(!AUDITED_TABLE_NAMES.has(ledger), `${ledger}: a ledger, its rows its own history, and dropped since`)
     assert.equal(ACCOUNTING_AUDITED.every((entry) => entry.module === "configure.finance"), true, "audited under Settings › Finance & invoicing, where the mapping is set")
   })
 

@@ -14,9 +14,8 @@
 // to one project's set take turns under a transaction-scoped advisory lock on
 // the set, so neither merges into the other. Not `lockRow` on the project,
 // as a set whose parent the API locks would be: the set's rule is the set's
-// alone, and the project's row lock is held for a whole billing run, an
-// accounting export or a payment's allocation, none of which an SLA save
-// should wait for.
+// alone, and the project's row lock is held for a whole billing run or a
+// payment's allocation, neither of which an SLA save should wait for.
 //
 // The project is a path's row: one the caller does not work in, or another
 // company's, is the family's 404, as a read of the project would be.

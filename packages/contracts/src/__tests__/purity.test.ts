@@ -40,9 +40,7 @@
 // invoice's payment statuses from it, the reading the API answers. M14
 // of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
 // free days by its cap and holds them to its unit, which the database reads.
-// #291 C7 added @waste/domain/finance/accounting: accounting.ts reads the
-// account number's and the VAT code's patterns the database's checks read,
-// and the CSV's columns its file is documented by. O11 of #290 added
+// O11 of #290 added
 // @waste/domain/execution/bulky: bulky.ts bounds a booking's items and an
 // availability window by the domain's caps. M4 of #293 added
 // @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
@@ -114,7 +112,6 @@ definePurityTests({
     "@waste/domain/execution/weighbridge",
     "@waste/domain/execution/work-orders",
     "@waste/domain/execution/workload",
-    "@waste/domain/finance/accounting",
     "@waste/domain/finance/hire",
     "@waste/domain/finance/payment",
     "@waste/domain/finance/payments",

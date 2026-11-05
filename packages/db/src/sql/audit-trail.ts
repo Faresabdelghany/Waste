@@ -58,7 +58,7 @@ import { collectionCalendarHoliday, DROPPED_TABLES, sortingGuideItem } from "../
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, customerContact, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "../schema/execution"
-import { accountingAccount, accountingExport, accountingExportLine, accountingExportVoucher, accountingProductAccount, accountingSettings, accountingVatCode, billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, payment, paymentAllocation, ticketKindProduct, weightReview } from "../schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, payment, paymentAllocation, ticketKindProduct, weightReview } from "../schema/finance"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { fieldInspection, fieldInspectionPhoto, rightSizingProposal } from "../schema/inspections"
 import { weighbridgeTicket } from "../schema/weighbridge"
@@ -217,9 +217,6 @@ export const PICKUP_EXCEPTIONS_AUDITED: readonly Audited[] = [
 /** The Applications (M7 of #293): a customer's request, each move audited under the module it is read in; its Decisions are a ledger, exempt. */
 export const APPLICATIONS_AUDITED: readonly Audited[] = [{ table: application, module: "customers.applications" }]
 
-/** The accounting mapping (#291 C7): a project's accounts, its four defaults, its VAT codes and its products' accounts, each a set of its project that Settings › Finance replaces whole; the exports are ledgers, exempt. */
-export const ACCOUNTING_AUDITED: readonly Audited[] = [accountingAccount, accountingSettings, accountingVatCode, accountingProductAccount].map((table) => ({ table, module: "configure.finance", parent: setOf(project, table.projectId) }))
-
 /** Recycling-centre visits (M4 of #293): the register of plates and cards, the visit ledger with its fractions — a visit voided in place is audited, never deleted — and a project's Visit Rules with their ladders and free fractions; their migration writes these triggers. */
 export const SITE_VISITS_AUDITED: readonly Audited[] = [
   { table: accessCredential, module: "customers.site-access" },
@@ -335,7 +332,7 @@ export const TICKET_AUTOMATION_AUDITED: readonly Audited[] = [{ table: ticketTyp
 const standsToday = (entry: AuditedAsWritten): entry is Audited => !(DROPPED_TABLES as readonly PgTable[]).includes(entry.table) && (MODULE_KEYS as readonly string[]).includes(entry.module)
 const AUDITED_FROM_0019: readonly Audited[] = AUDITED_AT_0019.filter(standsToday)
 
-export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...APPLICATIONS_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED, ...TICKET_AUTOMATION_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_FROM_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...APPLICATIONS_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...SENSORS_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED, ...MAINTENANCE_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED, ...INSPECTIONS_AUDITED, ...RIGHT_SIZING_AUDITED, ...TANKS_AUDITED, ...HAUL_OUT_AUDITED, ...TICKET_TYPES_AUDITED, ...HOLIDAY_LISTS_AUDITED, ...TICKET_AUTOMATION_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))
@@ -350,7 +347,7 @@ const ROUTING = "routing: Plans and the quota, written by the worker and the pro
 
 export const EXEMPT: readonly Exempt[] = [
   { table: auditEvent, why: "the audit log itself" },
-  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, ticketBooking, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation, accountingExport, accountingExportVoucher, accountingExportLine, routeMessage, fieldInspectionPhoto, tankInspection].map((table) => ({ table, why: LEDGER })),
+  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, ticketBooking, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation, routeMessage, fieldInspectionPhoto, tankInspection].map((table) => ({ table, why: LEDGER })),
   ...[route, pickup, session].map((table) => ({ table, why: EXECUTION })),
   { table: outboxEvent, why: "the outbox: a transport, stamped as it is relayed" },
   { table: sessionPosition, why: "a ledger of where a session's vehicle was, appended by the driver door in bulk and removed only by the retention purge (O8 of #290); a trail of it would keep the coordinates the purge removes" },

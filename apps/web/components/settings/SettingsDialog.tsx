@@ -24,7 +24,6 @@ import {
   SquaresFour,
   Tag,
   Ticket,
-  Calculator,
   Timer,
   EnvelopeSimple,
   UserCircle,
@@ -213,8 +212,6 @@ const settingsSections: Array<{
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
       // A project's Visit Rules for its recycling centres on the API (#393): offered with the adapter configured.
       { id: VISIT_RULES_SETTINGS_PANE_ID, label: "Recycling-centre charges", icon: Recycle },
-      // A project's mapping onto the office's chart, which its accounting exports book to (#291 C7).
-      { id: "commercial-accounting", label: "Accounting", icon: Calculator },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
       { id: PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, label: "Exception charges", icon: Warning },
     ],
@@ -1382,11 +1379,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [VISIT_RULES_SETTINGS_PANE_ID]: {
     title: "Recycling-centre charges",
     description: "How a project's recycling-centre visits are charged: a household's free visits a year and the ladder after them, the free fractions, a business's visit and the likely-trade threshold (#393).",
-    groups: [],
-  },
-  "commercial-accounting": {
-    title: "Accounting",
-    description: "The office's chart of accounts a project's accounting exports book to (#291 C7).",
     groups: [],
   },
   "commercial-price-lists": {
