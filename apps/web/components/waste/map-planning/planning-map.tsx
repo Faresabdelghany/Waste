@@ -48,6 +48,7 @@ import type { ServiceAreaLayer } from "@waste/domain/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
 import { pointMapLibreWorkerAtRouteHandler } from "./maplibre-worker"
+import { useMapProjection } from "./use-map-projection"
 import type { RoadGeometryState } from "./use-road-geometries"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
@@ -215,9 +216,9 @@ export function PlanningMap({
   // The map instance also lives in state because `project` runs during render
   // (marker positions); the ref serves handlers and effects.
   const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
+  // A new projection on every camera change, so every overlay re-projects.
+  const project = useMapProjection(mapInstance)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
-  // Bumped on every camera change so marker positions re-project.
-  const [, setFrame] = useState(0)
   const [baseMapFailed, setBaseMapFailed] = useState(false)
 
   // MapLibre only runs animation frames once a style has loaded; without a
@@ -269,10 +270,7 @@ export function PlanningMap({
       if (!loadedRef.current) setBaseMapFailed(true)
     })
     ;(container as HTMLDivElement & { __planningMap?: MapLibreMap }).__planningMap = map
-    const onMove = () => {
-      setZoom(map.getZoom())
-      setFrame((frame) => frame + 1)
-    }
+    const onMove = () => setZoom(map.getZoom())
     map.on("move", onMove)
     map.on("resize", onMove)
     mapRef.current = map
@@ -320,12 +318,6 @@ export function PlanningMap({
   // Cluster at half-zoom steps so a slow pan does not re-cluster every frame.
   const clusterZoom = Math.round(zoom * 2) / 2
   const clusters = useMemo(() => clusterPoints(points, clusterZoom), [points, clusterZoom])
-
-  const project = useCallback((lngLat: LngLat): ScreenPoint | null => {
-    if (!mapInstance) return null
-    const point = mapInstance.project([lngLat.lng, lngLat.lat])
-    return { x: point.x, y: point.y }
-  }, [mapInstance])
 
   const unproject = useCallback((screen: ScreenPoint): LngLat => {
     const map = mapRef.current
