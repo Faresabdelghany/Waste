@@ -17,6 +17,7 @@ import {
   simulatedPeriod,
   SIMULATION_WINDOWS,
   simulationBodyOf,
+  simulationSentence,
   simulationWindowOf,
 } from "../counting-rules"
 
@@ -95,6 +96,14 @@ describe("a simulation", () => {
 
   test("names each ticket's period as a person reads it", () => {
     assert.equal(simulatedPeriod("2026-04-01", "quarter"), "Q2 2026")
+  })
+
+  test("says its window through its last day, never the first day not counted", () => {
+    const window = { from: "2025-11-01", to: "2026-12-01" }
+    assert.equal(simulationSentence({ ...window, tickets: 0, properties: 0, shown: [] }), "No property would have received a ticket from 2025-11-01 through 2026-11-30.")
+    const one = { propertyId: GLASS, propertyName: "Harbour 1", projectId: TEAM, periodFrom: "2026-03-01", reachedOn: "2026-03-20", count: 3 }
+    assert.equal(simulationSentence({ ...window, tickets: 1, properties: 1, shown: [one] }), "1 ticket at 1 property from 2025-11-01 through 2026-11-30.")
+    assert.equal(simulationSentence({ ...window, tickets: 3, properties: 2, shown: [one] }), "3 tickets at 2 properties from 2025-11-01 through 2026-11-30. The first 1 are listed.")
   })
 })
 

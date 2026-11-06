@@ -41,3 +41,11 @@ export const opensTickets = (paneId: string): boolean => Object.hasOwn(TAB_OF_PA
 
 /** The tab a pane id opens the page at: its pane's, else the types'. */
 export const ticketsTabOf = (paneId: string | undefined): TicketsTab => (paneId === undefined ? undefined : TAB_OF_PANE[paneId]) ?? "types"
+
+/** The project the Deadlines, Teams and Charges tabs share, by the API's id: picked on one, it is the one the others open on. */
+export type TicketsProjectPick = { projectId: string | null; onProjectChange: (projectId: string) => void }
+
+/** The project a tab shows: the one picked on the page where the tab lists it, else the tab's first by name, so every tab opens on the same one. `serverIdOf` names a listed project by the API's id. */
+export function projectShown<P extends { name: string }>(projects: readonly P[], picked: string | null, serverIdOf: (project: P) => string | undefined): P | null {
+  return projects.find((project) => picked !== null && serverIdOf(project) === picked) ?? [...projects].sort((one, other) => one.name.localeCompare(other.name))[0] ?? null
+}

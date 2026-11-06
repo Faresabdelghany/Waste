@@ -1,8 +1,8 @@
 "use client"
 
-// Settings › Operations › Ticket SLA (O4 of #290): one project's targets at a
+// Settings › Tickets › Deadlines (O4 of #290): one project's targets at a
 // time — the hours a ticket of a priority has from opening to its due date,
-// for every kind or for one kind — read from and saved whole to the API's
+// for every kind, one kind or one ticket type — read from and saved whole to the API's
 // `/projects/:id/ticket-sla` under `configure.templates`. A ticket opened
 // without a due date takes one from them; a ticket already open keeps its
 // own. The rows and the body they become are lib/data/ticket-sla.ts's. Offered
@@ -26,16 +26,16 @@ import { get, put } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { typesListed } from "@/lib/data/ticket-scope"
-import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
+import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
+import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
-export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Teams and Charges tabs. */
+export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const client = useApiClient()
   const { me } = useApiSession()
   const projects = me?.projects ?? []
   const access = slaAccessOf(me?.role.grants)
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
+  const project = projectShown(projects, projectId, (candidate) => candidate.id)
 
   const read = useReport<TicketSla>(project === null || !access.view ? null : `ticket-sla:${project.id}`, (asking) => get<TicketSla>(asking, `/projects/${project?.id}/ticket-sla`))
   // The set the last save answered, which stands for the project's until the next read of another project.
@@ -78,7 +78,7 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
         (sla) => {
           setAnswered(sla)
           setEdits(null)
-          toast.success("SLA saved", { description: `${project.name} has ${sla.targets.length === 1 ? "one target" : `${sla.targets.length} targets`}. Tickets opened from now on are due by them.` })
+          toast.success("SLA saved", { description: slaSavedSentence(project.name, sla.targets.length) })
         },
         (error: unknown) => toast.error("The SLA was not saved", { description: problemSentence(problemOfError(error)) }),
       )
@@ -100,7 +100,7 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
       heading="Tickets"
       tabs={tabs}
       title="Ticket SLA"
-      description="How long a ticket has from opening to its due date, by priority, for every kind or for one kind."
+      description="How long a ticket has from opening to its due date, by priority, for every kind, one kind or one ticket type."
       action={
         <div className="flex items-center gap-2">
           {editing && (
@@ -123,7 +123,7 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
           <Select
             value={project?.id ?? ""}
             onValueChange={(id) => {
-              setChosenProjectId(id)
+              onProjectChange(id)
               setAnswered(null)
               setRefusal(null)
             }}
@@ -149,11 +149,11 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
       }
     >
       <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A ticket opened without a due date is due this many hours after it opens: its kind&apos;s target at its priority, else the one for every kind. Tickets already open keep their due date.
+        A ticket opened without a due date is due this many hours after it opens: its type&apos;s target at its priority, else its kind&apos;s, else the one for every kind. Tickets already open keep their due date.
       </p>
       <RecordsSection shown={rows.length} total={rows.length}>
         <div className="overflow-x-auto">
-          <Table className="min-w-[640px]">
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Kind or type</TableHead>
@@ -172,7 +172,7 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
                     <TableRow key={row.key} aria-label={`Target ${index + 1}`}>
                       <TableCell>
                         <Select value={row.kind} onValueChange={(kind) => changeRow(index, { kind })} disabled={!access.edit}>
-                          <SelectTrigger className="w-56" aria-label="Kind" aria-invalid={refused?.field === "kind"}>
+                          <SelectTrigger className="w-80 max-w-full" aria-label="Kind or type" aria-invalid={refused?.field === "kind"}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

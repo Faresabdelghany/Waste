@@ -74,6 +74,12 @@ export function slaBodyOf(rows: readonly SlaRow[]): TicketSlaSet | SlaRefusal {
   return twice === undefined ? { targets } : { index: twice, field: "kind", message: ONCE_SENTENCE }
 }
 
+/** What a save of a project's targets tells: how many it holds, and what tickets opened from now on take from them, or that they take nothing. */
+export function slaSavedSentence(projectName: string, targets: number): string {
+  if (targets === 0) return `${projectName} has no SLA now: tickets opened from now on have no due date unless someone gives one.`
+  return targets === 1 ? `${projectName} has one target. Tickets opened from now on are due by it.` : `${projectName} has ${targets} targets. Tickets opened from now on are due by them.`
+}
+
 /** What the person's role lets them do with the SLA: read it under `view` on the templates' module, set it under `edit`. */
 export const slaAccessOf = (grants: Grants | undefined): { view: boolean; edit: boolean } => ({
   view: allows(grants, "configure.templates", "view"),
