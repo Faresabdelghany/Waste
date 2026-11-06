@@ -42,6 +42,17 @@ export const opensTickets = (paneId: string): boolean => Object.hasOwn(TAB_OF_PA
 /** The tab a pane id opens the page at: its pane's, else the types'. */
 export const ticketsTabOf = (paneId: string | undefined): TicketsTab => (paneId === undefined ? undefined : TAB_OF_PANE[paneId]) ?? "types"
 
+/** The search param that opens a ticket type's own page on the Types tab, naming the type by the API's id, so a reload or a shared link lands on it. */
+export const TICKET_TYPE_PARAM = "type"
+
+/** Settings › Tickets' address: the Types tab's list, or the page of the type `typeId` names; `returnTo` is where Back to app goes, kept as the pane's other links keep it. */
+export function ticketsSettingsHref(typeId: string | null, returnTo: string): string {
+  const params = new URLSearchParams({ pane: TICKETS_SETTINGS_PANE_ID })
+  if (typeId !== null) params.set(TICKET_TYPE_PARAM, typeId)
+  if (returnTo !== "/") params.set("from", returnTo)
+  return `/settings?${params.toString()}`
+}
+
 /** The project the Deadlines, Teams and Charges tabs share, by the API's id: picked on one, it is the one the others open on. */
 export type TicketsProjectPick = { projectId: string | null; onProjectChange: (projectId: string) => void }
 

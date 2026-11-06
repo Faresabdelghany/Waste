@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, useServerResolver, whenSaved } from "@/components/waste/business-record-store"
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
@@ -72,7 +72,7 @@ import {
   type TicketCommandName,
 } from "@/lib/api/records/tickets"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
-import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
+import { isTicketTypeRecord, typeLetsRole } from "@/lib/api/records/ticket-types"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
@@ -86,6 +86,7 @@ import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceFo
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
+import { isAutomationLine } from "@waste/domain/resolution/automation"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
@@ -199,6 +200,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [saving, setSaving] = useState(false)
   // A sub-ticket is a create in this module: the create grant, and the office's alone.
   const { me } = useApiSession()
+  const resolve = useServerResolver()
   const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, `${workspaceId}.${moduleId}`, "create")
 
   const value = (key: string) => (typeof live.submittedValues?.[key] === "string" ? (live.submittedValues[key] as string) : "")
@@ -280,7 +282,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     })
   }
 
-  const machine = TICKET_MACHINE_COMMANDS.filter((name) => offeredCommand(name) && offersTicketCommand(status, name, label))
+  // A move the type keeps for other roles is not offered: the API would refuse it (#545 of #544).
+  const machine = TICKET_MACHINE_COMMANDS.filter((name) => offeredCommand(name) && offersTicketCommand(status, name, label) && typeLetsRole(type, name, me?.role.id, resolve))
   // Book a stop (O3c of #290): on an open ticket a stop answers, once the routes are read.
   const bookable = offeredStop(ADD_STOP) && offersBookAStop(value("kind"), status)
   const bookingWaits = bookAStopWaits(routesState)
@@ -355,7 +358,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   ) : (
                     <ol className="space-y-1" data-testid="ticket-history">
                       {detail.events.map((event) => (
-                        <HistoryRow key={event.id} event={event} who={event.recordedBy === null ? live.facts["Opened via"] ?? "The system" : userName(event.recordedBy)} assignee={event.assigneeUserAccountId === null ? undefined : userName(event.assigneeUserAccountId)} at={shownOn(event.recordedAt, timezone)} />
+                        <HistoryRow key={event.id} event={event} who={event.recordedBy === null ? (isAutomationLine(event.body) ? "Automation" : (live.facts["Opened via"] ?? "The system")) : userName(event.recordedBy)} assignee={event.assigneeUserAccountId === null ? undefined : userName(event.assigneeUserAccountId)} at={shownOn(event.recordedAt, timezone)} />
                       ))}
                     </ol>
                   )}

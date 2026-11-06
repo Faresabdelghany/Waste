@@ -22,7 +22,7 @@ import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { TICKET_TYPE_ACTIONS_KEY, TICKET_TYPE_FIELDS_KEY, TICKET_TYPE_PERMISSIONS_KEY, TICKET_TYPE_PREFIX, typeActionsOf, typeFieldsOf, typePermissionsOf } from "@/lib/data/ticket-types"
 
 import { create, listAll, patch, put } from "../client"
-import { inheritedPresentation, ofKind, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter } from "./adapter"
+import { inheritedPresentation, ofKind, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter } from "./adapter"
 import { vehicleAdapter } from "./fleet"
 import { roleAdapter, userAdapter } from "./organisation"
 import { isTicketTeamRecord } from "./ticket-teams"
@@ -118,6 +118,18 @@ function permissionServerIds(record: BusinessRecord, context: MappingContext): T
     if (roleIds.length > 0) permissions.push({ command: entry.command, roleIds })
   }
   return permissions
+}
+
+/**
+ * Whether the caller's role may move a ticket of the type by the command, as
+ * the API judges it: a command no role is ticked for is everyone's who works
+ * tickets, a ticked one the ticked roles' alone. A type not read, or a role
+ * not yet known, is left to the API.
+ */
+export function typeLetsRole(type: Pick<BusinessRecord, "submittedValues"> | undefined, command: string, roleServerId: string | undefined, resolve: Resolver): boolean {
+  const ticked = type === undefined ? [] : (typePermissionsOf(type).find((entry) => entry.command === command)?.roleIds ?? [])
+  if (ticked.length === 0 || roleServerId === undefined) return true
+  return ticked.some((webId) => referencedServerId(webId, "role", { fixtures: [], resolve }) === roleServerId)
 }
 
 /** An edit's four parts: the type's own fields, the whole list of fields, the whole set of permissions, the whole automation — each where the edit changed it. */

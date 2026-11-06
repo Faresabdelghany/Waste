@@ -96,7 +96,7 @@ export const IDLE: ModuleState = { status: "idle", records: [], serverIds: new M
 /**
  * A module the person's `/me` role does not view (`viewableModules`): never
  * requested, so no read failed and nobody is told; `getRecords` answers its
- * fixtures as for `idle`, and its problem is the sentence a pane shows in
+ * fixtures, the one state not `ready` that it does, and its problem is the sentence a pane shows in
  * place of rows — a 403 in the API's shape, which ends no session.
  */
 export function notGranted(moduleKey: string): ModuleState {
@@ -120,8 +120,9 @@ export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId,
 }
 
 /**
- * What `getRecords` answers for a switched module: the server's records once
- * they are here, the fixtures until then. Never both.
+ * A switched module's records: the server's once they are here, else the
+ * fixtures, which `getRecords` hands out only where the role does not view
+ * the module, or nobody is signed in. Never both.
  */
 export function recordsOf(module: ModuleState, fixtures: readonly BusinessRecord[]): BusinessRecord[] {
   return module.status === "ready" ? module.records : [...fixtures]

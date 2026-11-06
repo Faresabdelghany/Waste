@@ -482,7 +482,7 @@ export const TICKET_COMMANDS_BY_NAME = {
     if (!(TICKET_RESOLUTIONS as readonly string[]).includes(resolution)) return refusal("resolution", RESOLUTION_SENTENCE)
     const note = needed(input, "note", "Say how the case was resolved")
     if (isLocalRefusal(note)) return note
-    // The product the work is charged at, with a re-collection or a service alone (#291 C3); None leaves the project's charge for the ticket's kind to stand in.
+    // The product the work is charged at, with a re-collection or a service alone (#291 C3); None leaves the project's charge for the ticket's type, else its kind, to stand in.
     const charge = chargeOf(input, resolution as TicketResolution, context)
     if (isLocalRefusal(charge)) return charge
     if (resolution !== "recollected") return { resolution, note, ...charge }

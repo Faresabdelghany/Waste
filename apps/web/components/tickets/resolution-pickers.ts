@@ -16,7 +16,7 @@
 // — and a completion's product (#291 C3) among the project's not sold by the
 // month, a recurring charge being no ticket's work; an optional pick offers
 // None first, since a select cannot be emptied, and the product's None leaves
-// the project's charge for the ticket's kind to stand in.
+// the project's charge for the ticket's type, else its kind, to stand in.
 // The stop a ticket is about (M6 of #293) is one of its route's, of any
 // outcome: a missed one is what a complaint is about.
 import { useModuleRecords } from "@/components/waste/business-record-store"
