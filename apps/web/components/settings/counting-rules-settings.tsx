@@ -26,7 +26,7 @@ import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -127,9 +127,6 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
         </span>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        The worker counts each completed emptying as it happens, by its route&apos;s service date. A property gets at most one ticket per rule and period; the ticket names the property, the rule and the count, and is never charged. Simulate a rule over past emptyings before you switch it on.
-      </p>
       <RecordsSection shown={rows.length} total={rows.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
@@ -296,10 +293,9 @@ function CountingRuleDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl" aria-describedby={undefined}>
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>{rule === undefined ? "New counting rule" : rule.name}</DialogTitle>
-          <DialogDescription>What it counts at each property, the limit that opens a ticket, and the ticket it opens.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
           <div className="grid gap-3 sm:grid-cols-2">

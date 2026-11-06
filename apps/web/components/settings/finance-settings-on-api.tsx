@@ -17,7 +17,7 @@ import { toast } from "sonner"
 
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -144,7 +144,6 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
     <section className="rounded-xl border border-border/60">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">Invoice identity</h2>
-        <p className="text-xs text-muted-foreground">Printed on every invoice and credit note issued from now on; an issued one keeps what it was issued with. A FI card needs the creditor number before a project can use it.</p>
       </div>
       <form
         className="grid gap-4 px-4 py-4 md:grid-cols-2"
@@ -169,7 +168,6 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
         <div className="grid gap-1.5 md:col-span-2">
           <Label htmlFor="finance-postalAddress">Postal address</Label>
           <Textarea id="finance-postalAddress" rows={3} value={postalAddress} placeholder={"Havnegade 4\n2100 København Ø"} onChange={(event) => setPostalAddress(event.target.value)} />
-          <p className="text-xs text-muted-foreground">The seller&apos;s address the documents print, a line per row.</p>
         </div>
         <div className="md:col-span-2 flex justify-end">
           <Button type="submit" size="sm" disabled={saving || refused}>
@@ -204,10 +202,9 @@ function ProjectTermsDialog({ project, hasCreditor, onClose }: { project: Busine
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{project.name}&apos;s terms</DialogTitle>
-          <DialogDescription>An invoice issued from now on is due by these terms, unless its payer has terms of its own.</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -235,16 +232,11 @@ function ProjectTermsDialog({ project, hasCreditor, onClose }: { project: Busine
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {hasCreditor ? "Under FIK each invoice carries a reference its payment is matched by." : "Set the company's FIK creditor number above to use a FIK scheme."}
-            </p>
+            {!hasCreditor && <p className="text-xs text-muted-foreground">Set the company&apos;s FIK creditor number above to use a FIK scheme.</p>}
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="grid gap-1">
               <Label htmlFor="finance-project-hold">Hold hires and jobs for review</Label>
-              <p className="text-xs text-muted-foreground">
-                A container&apos;s hire and a bulky collection&apos;s job are held as they are charged, and a run passes over them until someone releases them under Billable events.
-              </p>
             </div>
             <Switch id="finance-project-hold" checked={held} onCheckedChange={setHeld} />
           </div>

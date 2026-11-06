@@ -20,7 +20,7 @@ import type { ContaminantCode, PickupExceptionRule } from "@waste/contracts/pick
 import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -165,9 +165,6 @@ export function PickupExceptionChargesSettings() {
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        Each exception is counted against the earlier chargeable ones at the same property or shared point over the rule&apos;s window. The free ones cost nothing; after them each is charged the ladder&apos;s next product, the last repeating.
-      </p>
       <RecordsSection shown={rules.length} total={rules.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
@@ -204,7 +201,7 @@ export function PickupExceptionChargesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           {editing !== null && shown !== null && project !== null && (
             <RuleDialogForm
               editing={editing}
@@ -259,11 +256,6 @@ function RuleDialogForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit rule" : "Add rule"}</DialogTitle>
-        <DialogDescription>
-          {keyed
-            ? "Move the free count, the window, the ladder or the end. What the rule matches and its start are its own: end it and add another to change them."
-            : "What the rule matches, how many are free over its window, and what each one after them is charged."}
-        </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">

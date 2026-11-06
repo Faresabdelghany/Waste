@@ -150,7 +150,6 @@ export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange }:
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">A ticket opened without a team goes to its type&apos;s team here, else its kind&apos;s. A retired team gives a new ticket none; tickets already open keep their team.</p>
       <RecordsSection shown={rows.length} total={rows.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[520px]">

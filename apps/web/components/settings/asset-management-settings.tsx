@@ -26,7 +26,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -99,13 +98,14 @@ function parseNumber(value: string) {
 
 export function Field({
   label,
-  description,
+  note,
   required,
   wide,
   children,
 }: {
   label: string
-  description?: string
+  /** What the value is, where it says something about it — never how to fill it in. */
+  note?: string
   required?: boolean
   wide?: boolean
   children: ReactNode
@@ -117,28 +117,21 @@ export function Field({
         {required && <span className="ml-1 text-destructive">*</span>}
       </Label>
       {children}
-      {description && (
-        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
-      )}
+      {note && <p className="text-xs leading-5 text-muted-foreground">{note}</p>}
     </div>
   )
 }
 
 export function DialogSection({
   title,
-  description,
   children,
 }: {
   title: string
-  description?: string
   children: ReactNode
 }) {
   return (
     <section className="border-t border-border/70 py-5 first:border-t-0 first:pt-0">
       <h3 className="text-sm font-semibold">{title}</h3>
-      {description && (
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-      )}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </section>
   )
@@ -196,9 +189,6 @@ function AssetFilterPopover({ groups }: { groups: AssetFilterGroup[] }) {
         <div className="space-y-3 p-4">
           <div>
             <p className="text-sm font-semibold">Filter</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Narrow the table by {groups.map((group) => group.label.toLowerCase()).join(" and ")}.
-            </p>
           </div>
           {groups.map((group) => (
             <div key={group.label} className="space-y-2">
@@ -261,9 +251,6 @@ function AssetViewPopover({
         <div className="space-y-4 p-4">
           <div>
             <p className="text-sm font-semibold">Table view</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Choose ordering and visible details.
-            </p>
           </div>
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm">Ordering</span>
@@ -434,7 +421,7 @@ export function AssetPanelShell({
   heading?: string | null
   tabs?: ReactNode
   action?: ReactNode
-  toolbar: ReactNode
+  toolbar?: ReactNode
   /** The table's title and its ⓘ; left out, the content starts at once. */
   title?: string
   description?: string
@@ -449,10 +436,12 @@ export function AssetPanelShell({
             {action && <div className="flex items-center gap-2">{action}</div>}
           </div>
         )}
-        <div className="flex flex-col gap-3 px-4 py-3">
-          {tabs}
-          {toolbar}
-        </div>
+        {(tabs || toolbar) && (
+          <div className="flex flex-col gap-3 px-4 py-3">
+            {tabs}
+            {toolbar}
+          </div>
+        )}
       </header>
       <div className="flex-1 p-4">
         <div className="mx-auto max-w-[1500px] space-y-4">
@@ -733,12 +722,9 @@ function ContainerTypeDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" aria-describedby={undefined}>
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>{isEditing ? "Edit container type" : "New container type"}</DialogTitle>
-          <DialogDescription>
-            Kind cannot be changed after creation. Volume and dimensions should describe the same physical container.
-          </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <DialogSection title="Configuration">
@@ -758,11 +744,7 @@ function ContainerTypeDialog({
             <Field label="Name" required>
               <Input value={draft.name} onChange={(event) => update("name", event.target.value)} />
             </Field>
-            <Field
-              label="Project visibility"
-              wide
-              description="Leave every project unchecked to make this type available company-wide."
-            >
+            <Field label="Project visibility" wide>
               <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
                 {organization.projects.map((project) => (
                   <label key={project.id} className="flex items-center gap-2 text-sm">
@@ -797,7 +779,7 @@ function ContainerTypeDialog({
             <Field label="Vehicle coupling">
               <Input value={draft.vehicleCoupling} onChange={(event) => update("vehicleCoupling", event.target.value)} />
             </Field>
-            <Field label="Emptying time" description="Default time used by route planning.">
+            <Field label="Emptying time">
               <div className="relative">
                 <Input type="number" min={0} value={draft.emptyingTimeMinutes} onChange={(event) => update("emptyingTimeMinutes", parseNumber(event.target.value))} className="pr-12" />
                 <span className="absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">min</span>
@@ -818,7 +800,7 @@ function ContainerTypeDialog({
               </Field>
             )}
           </DialogSection>
-          <DialogSection title="Internal dimensions" description="Volume must match the physical dimensions recorded for the asset type.">
+          <DialogSection title="Internal dimensions">
             <Field label="Volume preset">
               <Select value={draft.volumePreset} onValueChange={(next) => update("volumePreset", next)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -849,12 +831,12 @@ function ContainerTypeDialog({
               </>
             )}
           </DialogSection>
-          <DialogSection title="Waste fraction weight table" description="Expected full weight by compatible waste fraction. A derived weight is a planning default computed from the residual weight; saving a number here makes it the catalogue's.">
+          <DialogSection title="Waste fraction weight table">
             {assets.wasteFractions.filter((fraction) => fraction.status === "Active").map((fraction) => (
               <Field
                 key={fraction.id}
                 label={fraction.name}
-                description={draft.wasteFractionWeights[fraction.id] !== undefined && containerWeightSource(draft, fraction.id) === "derived" ? "Derived planning default" : undefined}
+                note={draft.wasteFractionWeights[fraction.id] !== undefined && containerWeightSource(draft, fraction.id) === "derived" ? "Derived planning default" : undefined}
               >
                 <div className="relative">
                   <Input
@@ -1000,12 +982,12 @@ function WasteFractionDialog({ value, onClose }: { value: WasteFraction | null; 
   }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b px-6 py-5 pr-12"><DialogTitle>{isEditing ? "Edit waste fraction" : "New waste fraction"}</DialogTitle><DialogDescription>Configure operational classification, compliance, recovery outcomes, and display preferences.</DialogDescription></DialogHeader>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" aria-describedby={undefined}>
+        <DialogHeader className="border-b px-6 py-5 pr-12"><DialogTitle>{isEditing ? "Edit waste fraction" : "New waste fraction"}</DialogTitle></DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <DialogSection title="Configurations">
             <Field label="Name" required><Input value={draft.name} onChange={(event) => update("name", event.target.value)} /></Field>
-            <Field label="Project visibility" description="Leave blank for company-wide availability."><Select value={draft.projectIds[0] ?? "company"} onValueChange={(next) => update("projectIds", next === "company" ? [] : [next])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="company">All company projects</SelectItem>{organization.projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Project visibility"><Select value={draft.projectIds[0] ?? "company"} onValueChange={(next) => update("projectIds", next === "company" ? [] : [next])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="company">All company projects</SelectItem>{organization.projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent></Select></Field>
             <Field label="Waste substance"><Input value={draft.wasteSubstance} onChange={(event) => update("wasteSubstance", event.target.value)} /></Field>
             <Field label="Waste disposal method"><Input value={draft.disposalMethod} onChange={(event) => update("disposalMethod", event.target.value)} /></Field>
             <Field label="Waste type"><Input value={draft.wasteType} onChange={(event) => update("wasteType", event.target.value)} /></Field>
@@ -1017,7 +999,7 @@ function WasteFractionDialog({ value, onClose }: { value: WasteFraction | null; 
             <Field label="R/D code"><Input value={draft.rdCode} onChange={(event) => update("rdCode", event.target.value)} /></Field>
             <Field label="Hazardous"><div className="flex h-10 items-center"><Switch checked={draft.hazardous} onCheckedChange={(checked) => update("hazardous", checked)} /></div></Field>
             <Field label="Recyclable"><div className="flex h-10 items-center"><Switch checked={draft.recyclable} onCheckedChange={(checked) => update("recyclable", checked)} /></div></Field>
-            <Field label="Must Include VAT" description="Every product and price row on this waste fraction must carry a VAT rate that resolves to a non-zero percentage."><div className="flex h-10 items-center"><Switch checked={draft.mustIncludeVat} onCheckedChange={(checked) => update("mustIncludeVat", checked)} /></div></Field>
+            <Field label="Must Include VAT"><div className="flex h-10 items-center"><Switch checked={draft.mustIncludeVat} onCheckedChange={(checked) => update("mustIncludeVat", checked)} /></div></Field>
             <Field label="Recycling %"><Input type="number" min={0} max={100} value={draft.recyclingPercent} onChange={numberField("recyclingPercent")} /></Field>
             <Field label="Energy recovery %"><Input type="number" min={0} max={100} value={draft.energyRecoveryPercent} onChange={numberField("energyRecoveryPercent")} /></Field>
             <Field label="Material recovery %"><Input type="number" min={0} max={100} value={draft.materialRecoveryPercent} onChange={numberField("materialRecoveryPercent")} /></Field>
@@ -1139,7 +1121,7 @@ function SparePartDialog({ value, onClose }: { value: SparePart | null; onClose:
     assets.saveSparePart({ ...draft, id: draft.id || assetEntityId("spare-part"), name: draft.name.trim(), createdAt: draft.createdAt || timestamp, updatedAt: timestamp })
     onClose(); toast.success(value.id ? "Spare part updated" : "Spare part created")
   }
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>{value.id ? "Edit spare part" : "New spare part"}</DialogTitle><DialogDescription>Define the primary container fit and optional compatibility and inventory identity.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Container type" required description="The container this part fits."><Select value={draft.containerTypeId} onValueChange={(next) => update("containerTypeId", next)}><SelectTrigger><SelectValue placeholder="Select container type" /></SelectTrigger><SelectContent>{assets.containerTypes.filter((item) => item.lifecycleStatus === "Active").map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field><Field label="Part type"><Select value={draft.partTypeId || "none"} onValueChange={(next) => update("partTypeId", next === "none" ? "" : next)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No part type</SelectItem>{assets.partTypes.filter((item) => item.active).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field><Field label="Name" required wide><Input value={draft.name} onChange={(event) => update("name", event.target.value)} /></Field><div className="sm:col-span-2"><Button variant="ghost" size="sm" onClick={() => setAdvanced((current) => !current)}>{advanced ? "Hide advanced" : "Show advanced"}</Button></div>{advanced && <><Field label="Additional container types" wide description="Other containers this part also fits."><div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">{assets.containerTypes.filter((item) => item.id !== draft.containerTypeId).map((item) => <label key={item.id} className="flex items-center gap-2 text-sm"><Checkbox checked={draft.additionalContainerTypeIds.includes(item.id)} onCheckedChange={(checked) => update("additionalContainerTypeIds", checked ? [...draft.additionalContainerTypeIds, item.id] : draft.additionalContainerTypeIds.filter((id) => id !== item.id))} />{item.name}</label>)}</div></Field><Field label="SKU / Part number"><Input value={draft.sku} onChange={(event) => update("sku", event.target.value)} /></Field><Field label="Active"><div className="flex h-10 items-center"><Switch checked={draft.active} onCheckedChange={(checked) => update("active", checked)} /></div></Field><Field label="Description" wide><Textarea value={draft.description} onChange={(event) => update("description", event.target.value)} /></Field></>}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save spare part</Button></DialogFooter></DialogContent></Dialog>
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="sm:max-w-2xl" aria-describedby={undefined}><DialogHeader><DialogTitle>{value.id ? "Edit spare part" : "New spare part"}</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Container type" required><Select value={draft.containerTypeId} onValueChange={(next) => update("containerTypeId", next)}><SelectTrigger><SelectValue placeholder="Select container type" /></SelectTrigger><SelectContent>{assets.containerTypes.filter((item) => item.lifecycleStatus === "Active").map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field><Field label="Part type"><Select value={draft.partTypeId || "none"} onValueChange={(next) => update("partTypeId", next === "none" ? "" : next)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No part type</SelectItem>{assets.partTypes.filter((item) => item.active).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field><Field label="Name" required wide><Input value={draft.name} onChange={(event) => update("name", event.target.value)} /></Field><div className="sm:col-span-2"><Button variant="ghost" size="sm" onClick={() => setAdvanced((current) => !current)}>{advanced ? "Hide advanced" : "Show advanced"}</Button></div>{advanced && <><Field label="Additional container types" wide><div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">{assets.containerTypes.filter((item) => item.id !== draft.containerTypeId).map((item) => <label key={item.id} className="flex items-center gap-2 text-sm"><Checkbox checked={draft.additionalContainerTypeIds.includes(item.id)} onCheckedChange={(checked) => update("additionalContainerTypeIds", checked ? [...draft.additionalContainerTypeIds, item.id] : draft.additionalContainerTypeIds.filter((id) => id !== item.id))} />{item.name}</label>)}</div></Field><Field label="SKU / Part number"><Input value={draft.sku} onChange={(event) => update("sku", event.target.value)} /></Field><Field label="Active"><div className="flex h-10 items-center"><Switch checked={draft.active} onCheckedChange={(checked) => update("active", checked)} /></div></Field><Field label="Description" wide><Textarea value={draft.description} onChange={(event) => update("description", event.target.value)} /></Field></>}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save spare part</Button></DialogFooter></DialogContent></Dialog>
 }
 
 function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
@@ -1200,7 +1182,7 @@ function SimpleEquipmentDialog({ value, onClose }: { value: PropertyEquipment | 
   const [draft, setDraft] = useState(value)
   if (!value || !draft) return null
   const save = () => { if (!draft.name.trim()) return toast.error("Equipment name is required."); const timestamp = nowIso(); assets.savePropertyEquipment({ ...draft, id: draft.id || assetEntityId("property-equipment"), name: draft.name.trim(), updatedAt: timestamp }); onClose(); toast.success(value.id ? "Property equipment updated" : "Property equipment created") }
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent><DialogHeader><DialogTitle>{value.id ? "Edit property equipment" : "New property equipment"}</DialogTitle><DialogDescription>Custom appliances are company-owned library entries.</DialogDescription></DialogHeader><Field label="Name" required><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="Description"><Textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></Field><label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"><span>Active in property pickers</span><Switch checked={draft.active} onCheckedChange={(active) => setDraft({ ...draft, active })} /></label><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save appliance</Button></DialogFooter></DialogContent></Dialog>
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>{value.id ? "Edit property equipment" : "New property equipment"}</DialogTitle></DialogHeader><Field label="Name" required><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="Description"><Textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></Field><label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"><span>Active in property pickers</span><Switch checked={draft.active} onCheckedChange={(active) => setDraft({ ...draft, active })} /></label><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save appliance</Button></DialogFooter></DialogContent></Dialog>
 }
 
 function KeyTypesPanel({ tabs }: { tabs: ReactNode }) {
@@ -1230,5 +1212,5 @@ function KeyTypesPanel({ tabs }: { tabs: ReactNode }) {
 function KeyTypeDialog({ value, onClose }: { value: KeyType | null; onClose: () => void }) {
   const assets = useAssetManagementStore(); const [draft, setDraft] = useState(value); if (!value || !draft) return null
   const save = () => { if (!draft.name.trim()) return toast.error("Key type name is required."); const timestamp = nowIso(); assets.saveKeyType({ ...draft, id: draft.id || assetEntityId("key-type"), name: draft.name.trim(), updatedAt: timestamp }); onClose(); toast.success(value.id ? "Key type updated" : "Key type created") }
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>{value.id ? "Edit key type" : "New key type"}</DialogTitle><DialogDescription>Deactivation removes a type from pickers while issued keys keep their historical classification.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Name" required><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="Active"><div className="flex h-10 items-center"><Switch checked={draft.active} onCheckedChange={(active) => setDraft({ ...draft, active })} /></div></Field><Field label="Chargeable by default"><div className="flex h-10 items-center"><Switch checked={draft.chargeableByDefault} onCheckedChange={(chargeableByDefault) => setDraft({ ...draft, chargeableByDefault })} /></div></Field><Field label="Fee product"><Input value={draft.feeProduct} onChange={(event) => setDraft({ ...draft, feeProduct: event.target.value })} /></Field><Field label="Deposit"><Input type="number" min={0} value={draft.deposit} onChange={(event) => setDraft({ ...draft, deposit: parseNumber(event.target.value) })} /></Field><Field label="Instructions" wide><Textarea value={draft.instructions} onChange={(event) => setDraft({ ...draft, instructions: event.target.value })} /></Field></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save key type</Button></DialogFooter></DialogContent></Dialog>
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="sm:max-w-2xl" aria-describedby={undefined}><DialogHeader><DialogTitle>{value.id ? "Edit key type" : "New key type"}</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Name" required><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="Active"><div className="flex h-10 items-center"><Switch checked={draft.active} onCheckedChange={(active) => setDraft({ ...draft, active })} /></div></Field><Field label="Chargeable by default"><div className="flex h-10 items-center"><Switch checked={draft.chargeableByDefault} onCheckedChange={(chargeableByDefault) => setDraft({ ...draft, chargeableByDefault })} /></div></Field><Field label="Fee product"><Input value={draft.feeProduct} onChange={(event) => setDraft({ ...draft, feeProduct: event.target.value })} /></Field><Field label="Deposit"><Input type="number" min={0} value={draft.deposit} onChange={(event) => setDraft({ ...draft, deposit: parseNumber(event.target.value) })} /></Field><Field label="Instructions" wide><Textarea value={draft.instructions} onChange={(event) => setDraft({ ...draft, instructions: event.target.value })} /></Field></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save}>Save key type</Button></DialogFooter></DialogContent></Dialog>
 }

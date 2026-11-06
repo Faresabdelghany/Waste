@@ -232,9 +232,6 @@ function FilterPopover({ groups }: { groups: FilterGroup[] }) {
         <div className="space-y-3 p-4">
           <div>
             <p className="text-sm font-semibold">Filter</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Narrow the table by {groups.map((group) => group.label.toLowerCase()).join(" and ")}.
-            </p>
           </div>
           {groups.map((group) => (
             <div key={group.label} className="space-y-2">
@@ -301,9 +298,6 @@ function ViewPopover({
         <div className="space-y-4 p-4">
           <div>
             <p className="text-sm font-semibold">Table view</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Choose ordering and visible details.
-            </p>
           </div>
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm">Ordering</span>
@@ -1309,13 +1303,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
       </Dialog>
 
       <Dialog open={!configured && addUserOpen} onOpenChange={handleUserDialogOpenChange}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <form onSubmit={submitUser}>
             <DialogHeader>
               <DialogTitle>Add user</DialogTitle>
-              <DialogDescription>
-                Add a user and assign their role and project access.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-5 sm:grid-cols-2">
@@ -1485,14 +1476,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
       )}
 
       <Dialog open={!configured && newRoleOpen} onOpenChange={handleRoleDialogOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <form onSubmit={submitRole}>
             <DialogHeader>
               <DialogTitle>New role</DialogTitle>
-              <DialogDescription>
-                Custom roles bundle permissions at a scope and can be assigned
-                when adding users.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-5">

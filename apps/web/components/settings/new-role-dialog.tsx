@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -110,14 +109,10 @@ export function NewRoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>New role</DialogTitle>
-            <DialogDescription>
-              A custom role of your company: its permissions are set next, and
-              it can be given to users once it is saved.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-5">
@@ -139,7 +134,6 @@ export function NewRoleDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Where the role applies when it is given to a user.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role-description">Description</Label>
@@ -151,7 +145,6 @@ export function NewRoleDialog({
                 rows={3}
                 required
               />
-              <p className="text-xs text-muted-foreground">Shown in the roles table to say what the role is for.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role-start-from">Start from</Label>
@@ -168,11 +161,6 @@ export function NewRoleDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                The permissions the new role begins with. A system role&apos;s
-                cannot be changed, so start from one to make a role that allows
-                more or less.
-              </p>
             </div>
             {refusal !== null && (
               <p role="alert" className="text-sm text-destructive">

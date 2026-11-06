@@ -218,7 +218,6 @@ function ApplyListIndex({ list, onClose }: { list: BusinessRecord; onClose: () =
   return (
     <ApplyIndexDialog
       title={`Apply index to ${list.name}`}
-      description="Each row in force on the day ends on it, and its successor carries the indexed price, rounded to the minor unit. A row that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
       defaultDay={dayIn(new Date(), project === undefined ? undefined : typed(project, "timezone"))}
       currencyOf={() => String(list.submittedValues?.currency ?? (project === undefined ? undefined : typed(project, "currency")) ?? "")}
       nameOf={(line) => {

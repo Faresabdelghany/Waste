@@ -37,7 +37,6 @@ import {
   isTemplateRefusal,
   NEW_TEMPLATE,
   PLACEHOLDERS,
-  PURPOSE_HINTS,
   PURPOSE_LABELS,
   templateCreateBody,
   templateDraftOf,
@@ -115,7 +114,7 @@ export function MessageTemplatesSettings() {
     <AssetPanelShell
       heading="Operations"
       title="Message templates"
-      description="The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing."
+      description={`The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing. A text names its values as ${PLACEHOLDERS.join(", ")}.`}
       action={
         <Button size="sm" disabled={!access.create || project === null || read.report === null} onClick={() => open({ ...NEW_TEMPLATE })}>
           <Plus className="h-4 w-4" weight="bold" />
@@ -142,9 +141,6 @@ export function MessageTemplatesSettings() {
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A text names its values as {PLACEHOLDERS.join(", ")}; {"{{collectionDate}}"} is filled only for a customer notice of a bulky collection. Messages are sent by a log-only sender until a provider is chosen: each is recorded as sent, and nothing reaches the customer yet.
-      </p>
       <RecordsSection shown={templates.length} total={templates.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[640px]" data-testid="message-templates">
@@ -227,7 +223,6 @@ export function MessageTemplatesSettings() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{PURPOSE_HINTS[draft.purpose]}</p>
                 </div>
               </div>
               {draft.channel === "email" && (

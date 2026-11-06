@@ -16,7 +16,7 @@ import { toast } from "sonner"
 import type { IndexLine, IndexResult } from "@waste/contracts/finance"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -34,7 +34,6 @@ export type ApplyIndexScope = { field: ReactNode; ready: boolean; waiting?: stri
 
 export function ApplyIndexDialog({
   title,
-  description,
   defaultDay,
   waiting,
   currencyOf,
@@ -47,7 +46,6 @@ export function ApplyIndexDialog({
   onClose,
 }: {
   title: string
-  description: string
   /** The day the index applies from until one is typed: today on the project's clock. */
   defaultDay: string
   /** Why Preview cannot be asked yet — the rows a line is named by still being read — or undefined when it can. */
@@ -102,10 +100,9 @@ export function ApplyIndexDialog({
 
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-3xl" data-testid="apply-index">
+      <DialogContent className="sm:max-w-3xl" data-testid="apply-index" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           {scope?.field}
@@ -116,7 +113,7 @@ export function ApplyIndexDialog({
           <div className="space-y-1.5">
             <Label htmlFor="apply-index-percent">Change (%)</Label>
             <Input id="apply-index-percent" value={percent} placeholder="3.2" inputMode="decimal" aria-invalid={percentRefused} onChange={(event) => setPercent(event.target.value)} />
-            <p className={percentRefused ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{percentRefused ? INDEX_REFUSAL : "Two decimals at most; negative for a deflator."}</p>
+            {percentRefused && <p className="text-xs text-destructive">{INDEX_REFUSAL}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="apply-index-from">From</Label>

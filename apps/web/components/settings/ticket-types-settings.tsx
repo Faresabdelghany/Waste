@@ -152,7 +152,6 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
       tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
-      toolbar={<p className="text-sm text-muted-foreground">A ticket opened by its kind alone — by a driver, the worker or a work order — is of the kind&apos;s default type.</p>}
       action={
         <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" weight="bold" />
@@ -370,23 +369,16 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
               <Textarea id="ticket-type-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What the type is for, for the office." />
             </div>
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-              <span>
-                <span className="font-medium">Active</span>
-                <span className="block text-xs text-muted-foreground">A retired type is offered to no new ticket and keeps the tickets it holds.</span>
-              </span>
+              <span className="font-medium">Active</span>
               <Switch checked={active} onCheckedChange={setActive} disabled={isDefault} aria-label="Active" />
             </label>
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-              <span>
-                <span className="font-medium">Default for its kind</span>
-                <span className="block text-xs text-muted-foreground">{isDefault ? "Make another type of the kind the default to change it." : "Makes this the type of a ticket opened by its kind alone."}</span>
-              </span>
+              <span className="font-medium">Default for its kind</span>
               <Switch checked={makeDefault} onCheckedChange={setMakeDefault} disabled={isDefault} aria-label="Default for its kind" />
             </label>
           </TabsContent>
 
           <TabsContent value="fields" className="mt-0 space-y-3">
-            <p className="text-sm text-muted-foreground">The facts the office records on a ticket of this type, in the order its form asks for them. A field taken off keeps its values on the tickets that hold them.</p>
             {fields.length === 0 && <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No field yet.</p>}
             {fields.map((draft, index) => (
               <div key={index} className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_10rem_10rem_auto]" aria-label={`Field ${index + 1}`}>
@@ -458,7 +450,6 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
           </TabsContent>
 
           <TabsContent value="permissions" className="mt-0 space-y-3">
-            <p className="text-sm text-muted-foreground">Who may move a ticket of this type. A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone. The system&apos;s own work — a stop serving its ticket — is not held to it.</p>
             <div className="overflow-x-auto rounded-md border">
               <Table className="min-w-[760px]">
                 <TableHeader>

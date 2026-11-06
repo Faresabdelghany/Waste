@@ -22,7 +22,7 @@ import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -168,9 +168,6 @@ export function BulkySchedulesSettings() {
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A place is booked on the days of the schedule of the area it lies in. Each booking takes one slot of its day; a full day is not offered. Fewer slots close a day to new bookings and move none already made.
-      </p>
       <RecordsSection shown={schedules.length} total={schedules.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
@@ -209,7 +206,7 @@ export function BulkySchedulesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           {editing !== null && shown !== null && (
             <ScheduleDialogForm
               editing={editing}
@@ -257,9 +254,6 @@ function ScheduleDialogForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit schedule" : "Add schedule"}</DialogTitle>
-        <DialogDescription>
-          {keyed ? "Move the slots a day, the product or the end. The area, its days and the start are the schedule's own: end it and add another to change them." : "The area, the days it collects bulky waste on, the slots each day has and the product a booking is charged at."}
-        </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">

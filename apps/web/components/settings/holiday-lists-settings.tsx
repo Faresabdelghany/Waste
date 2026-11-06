@@ -37,7 +37,7 @@ import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -581,14 +581,9 @@ function HolidayListDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{editing ? "Edit holiday list" : "Add country"}</DialogTitle>
-          <DialogDescription>
-            {editing
-              ? "Rename the list or move it to another country. Its holidays stay as they are, and the projects resting on it keep it."
-              : "A holiday list for one country. Open it from the table to add its holidays by date and name."}
-          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -632,7 +627,6 @@ function HolidayListDialog({
               placeholder="Danish public holidays"
             />
             {nameTaken && <p className="text-xs text-destructive">The company already has a holiday list called {trimmed}.</p>}
-            <p className="text-xs leading-5 text-muted-foreground">The name a project picks the list by, and the guided setup shows beside the policy.</p>
           </div>
           {!editing && known.length > 0 && (
             <label className="flex items-start gap-2 text-sm">

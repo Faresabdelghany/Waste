@@ -23,7 +23,7 @@ import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -165,9 +165,6 @@ export function VisitRulesSettings() {
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A household&apos;s visits are counted by calendar year, a visit bringing only free fractions not counted. Once its free visits are spent each visit is charged the next step, the last step repeating. A business is charged its per-visit product, or nothing while its agreement holds annual access. A visit is charged at the step it was checked in at: voiding one never re-tiers the rest.
-      </p>
       <RecordsSection shown={rules.length} total={rules.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[860px]">
@@ -209,7 +206,7 @@ export function VisitRulesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
           {editing !== null && shown !== null && (
             <VisitRuleDialogForm
               editing={editing}
@@ -288,7 +285,6 @@ function VisitRuleDialogForm({
     <form onSubmit={onSubmit} className="space-y-5">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit Visit Rule" : "Add Visit Rule"}</DialogTitle>
-        <DialogDescription>{keyed ? "Move the charges, the free fractions, the likely-trade threshold or the end. The start is the rule's own: end it and add another to change it." : "How the project's visits are charged from its first day in force. One rule is in force at a time."}</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -342,7 +338,6 @@ function VisitRuleDialogForm({
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Free fractions</legend>
-        <p className="text-xs text-muted-foreground">A household&apos;s visit bringing only these is neither counted nor charged.</p>
         {!fractionsRead ? (
           <p className="text-xs text-muted-foreground">The waste fractions are not shown to your role; the rule keeps the {form.freeFractionIds.length} it names.</p>
         ) : (
@@ -366,7 +361,6 @@ function VisitRuleDialogForm({
         <div className="space-y-1.5">
           <Label htmlFor="visit-rule-annual">Included with annual access</Label>
           <ProductSelect id="visit-rule-annual" value={form.annualAccessProductId} products={accessProducts} none="No annual access" onChange={(annualAccessProductId) => onChange({ annualAccessProductId })} />
-          <p className="text-xs text-muted-foreground">A product sold by the month; a business whose agreement subscribes to it is charged nothing per visit.</p>
         </div>
       </fieldset>
 
