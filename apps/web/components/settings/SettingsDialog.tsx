@@ -1381,6 +1381,9 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
 }
 
+/** Panes whose title stands alone, the description kept for the settings search only. */
+const PANES_WITHOUT_LEAD: ReadonlySet<string> = new Set([HOLIDAY_LISTS_SETTINGS_PANE_ID])
+
 /**
  * Panes that render their own full-height panel (header, toolbar, table)
  * instead of the centred control groups.
@@ -1784,9 +1787,11 @@ function SettingsPane({
               <h1 className="text-xl font-semibold tracking-tight">
                 {definition.title}
               </h1>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                {definition.description}
-              </p>
+              {!PANES_WITHOUT_LEAD.has(paneId) && (
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  {definition.description}
+                </p>
+              )}
             </div>
             {paneId === "account" &&
               (profile === null ? (

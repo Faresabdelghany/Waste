@@ -8,14 +8,14 @@
 // own, as a route opens: the breadcrumbs back, one Actions menu, and a table
 // of the list's holidays — searched and filtered by year, each with Edit and
 // Remove, a form to add one by date and name, and "Copy to next year", which
-// places next year's from this year's. Below the lists, every project picks
-// the list it rests on and its weekend. The record writes are
+// places next year's from this year's. The pane no longer sets which list a
+// project rests on or its weekend (2026-11-06); a project keeps what it has.
+// The record writes are
 // lib/data/holiday-lists.ts's; on the Pilot the lists are the API's
 // (`/holiday-lists`, lib/api/records/holiday-lists.ts) and a project's list
 // is a key into them, so a rename follows to its projects.
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useSearchParams } from "next/navigation"
+import { Fragment, useMemo, useState, type ReactNode } from "react"
 import {
   ArrowSquareOut,
   CalendarPlus,
@@ -23,7 +23,6 @@ import {
   Check,
   CopySimple,
   DownloadSimple,
-  Info,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -52,11 +51,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
-import { savedRow, useBusinessRecordStore, useBusinessRecordsHydrated, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
 import { RecordActionsMenu } from "@/components/waste/business-record-views"
 import {
   BusinessViewOptionsPopover,
@@ -68,7 +65,6 @@ import {
 } from "@/components/waste/business-view-options-popover"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
-import { HOLIDAY_LISTS_PROJECT_PARAM } from "@/lib/data/business-links"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { COUNTRY_CODES, countryName, suggestedHolidayListName } from "@/lib/data/countries"
@@ -107,8 +103,8 @@ import { typedString } from "@waste/domain/record-values"
 import { holidayListCountry, holidayListEntries, holidayListName, holidayListYears, isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { knownHolidaysOfYear, type HolidayEntry } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/route-schemes/holiday-names"
-import { NO_HOLIDAY_LIST_LABEL, projectHolidayListName, projectWeekend, weekendLabel } from "@waste/domain/route-schemes/project-calendar"
-import { SERVICE_DAYS, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, formatServiceDate, isIsoDate, todayIso, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { projectHolidayListName, projectWeekend } from "@waste/domain/route-schemes/project-calendar"
+import { formatServiceDate, isIsoDate, todayIso } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
 import { cn } from "@/lib/utils"
 
@@ -120,13 +116,8 @@ const NO_RECORDS: readonly BusinessRecord[] = []
 const ORGANISATION_FIXTURES = getModuleDefinition(ORGANISATION_MODULE)?.records ?? NO_RECORDS
 const CALENDAR_FIXTURES = getModuleDefinition(COLLECTION_CALENDARS_MODULE)?.records ?? NO_RECORDS
 
-/** The project select's value for "no list". */
-const NO_LIST = "__none__"
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"
-
-const PANE_DESCRIPTION =
-  "The company's holiday lists, one per country, and the holidays of each. A project rests on one list: the guided setup, route generation and the scheme detail read its holidays from there."
 
 /* ------------------------------ The table's view ------------------------------ */
 
@@ -164,23 +155,6 @@ function HolidayListStatusBadge({ status }: { status: HolidayListStatus }) {
   )
 }
 
-/** A section's title and its ⓘ, as the Routes page heads its table. */
-function SectionTitle({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button type="button" variant="unstyled" className="text-muted-foreground hover:text-foreground" aria-label={`About ${title}`}>
-            <Info className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-sm text-xs">{description}</TooltipContent>
-      </Tooltip>
-    </div>
-  )
-}
-
 /** The bordered table card with its count on the left and its actions on the right, as the Routes table's. */
 function TableCard({ summary, actions, children, testId }: { summary: ReactNode; actions?: ReactNode; children: ReactNode; testId?: string }) {
   return (
@@ -203,10 +177,7 @@ type ListDialogState = { mode: "create"; country?: string } | { mode: "edit"; re
 
 export function HolidayListsSettings() {
   const { upsertRecord, sendAction, refreshModule } = useBusinessRecordStore()
-  const hydrated = useBusinessRecordsHydrated()
   const onApi = useApiConfigured()
-  const searchParams = useSearchParams()
-  const requestedProjectId = searchParams.get(HOLIDAY_LISTS_PROJECT_PARAM)
   const [openListId, setOpenListId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<ListDialogState | null>(null)
 
@@ -231,15 +202,9 @@ export function HolidayListsSettings() {
     })
   }
 
-  const saveProject = (project: BusinessRecord, settings: ProjectCalendarSettings, quiet = false) => {
-    const written = withProjectCalendar(project, settings)
-    whenSaved(upsertRecord(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, written), () => {
-      if (!quiet) {
-        toast.success(`${project.name} updated`, {
-          description: `${projectHolidayListName(written) ?? NO_HOLIDAY_LIST_LABEL} · ${weekendLabel(projectWeekend(written))} weekend.`,
-        })
-      }
-    })
+  // A project keeps the list it rests on by name: a rename is written to each project on the list.
+  const moveProject = (project: BusinessRecord, settings: ProjectCalendarSettings) => {
+    void upsertRecord(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, withProjectCalendar(project, settings))
   }
 
   const submitListDialog = (draft: HolidayListDraft, startWith: readonly HolidayEntry[]) => {
@@ -260,7 +225,7 @@ export function HolidayListsSettings() {
       if (oldName === draft.name.trim()) return
       // A rename follows to the projects on the list: the API's key does it on the Pilot, which the projects are read again for; here the pane does.
       if (onApi) void refreshModule(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
-      else for (const project of resting) saveProject(project, { holidayList: draft.name.trim(), weekend: projectWeekend(project) }, true)
+      else for (const project of resting) moveProject(project, { holidayList: draft.name.trim(), weekend: projectWeekend(project) })
     })
   }
 
@@ -343,14 +308,6 @@ export function HolidayListsSettings() {
         onCreate={(country) => setDialog({ mode: "create", country })}
         onEdit={(list) => setDialog({ mode: "edit", record: list })}
         onRemove={removeList}
-        projectsTable={
-          <ProjectListsTable
-            projects={projects}
-            lists={lists}
-            highlightedId={hydrated ? requestedProjectId : null}
-            onSave={(project, settings) => saveProject(project, settings)}
-          />
-        }
       />
       {listDialog}
     </>
@@ -369,7 +326,6 @@ function HolidayListsIndex({
   onCreate,
   onEdit,
   onRemove,
-  projectsTable,
 }: {
   ready: boolean
   notReady: ReactNode
@@ -381,7 +337,6 @@ function HolidayListsIndex({
   onCreate: (country?: string) => void
   onEdit: (list: BusinessRecord) => void
   onRemove: (list: BusinessRecord) => void
-  projectsTable: ReactNode
 }) {
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
@@ -418,9 +373,7 @@ function HolidayListsIndex({
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Holiday lists"
-      description={PANE_DESCRIPTION}
+      heading={null}
       toolbar={
         <div className="flex flex-col gap-2">
           <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
@@ -581,7 +534,6 @@ function HolidayListsIndex({
             </div>
             <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} emptyLabel="No matching holiday lists" />
           </TableCard>
-          {projectsTable}
         </div>
       )}
     </AssetPanelShell>
@@ -795,9 +747,7 @@ function HolidayListPage({
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title={name}
-      description={`The holidays of ${country ? countryName(country) : "this list"}, by date. Every project resting on the list skips or shifts its collections on them, by its scheme's holiday policy.`}
+      heading={null}
       toolbar={
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -969,105 +919,5 @@ function HolidayListPage({
         <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} emptyLabel="No holidays shown" />
       </TableCard>
     </AssetPanelShell>
-  )
-}
-
-/* ------------------------------ The projects ------------------------------ */
-
-function ProjectListsTable({
-  projects,
-  lists,
-  highlightedId,
-  onSave,
-}: {
-  projects: readonly BusinessRecord[]
-  lists: readonly BusinessRecord[]
-  highlightedId: string | null
-  onSave: (project: BusinessRecord, settings: ProjectCalendarSettings) => void
-}) {
-  const highlightedRef = useRef<HTMLTableRowElement>(null)
-  useEffect(() => {
-    if (highlightedId) highlightedRef.current?.scrollIntoView({ block: "center" })
-  }, [highlightedId])
-  const names = lists.map(holidayListName)
-
-  return (
-    <section className="space-y-4">
-      <SectionTitle
-        title="Projects"
-        description="The list each project rests on, and the days of its weekend. A holiday policy that shifts a collection skips both."
-      />
-      <TableCard testId="holiday-projects-table" summary={`${count(projects.length, "project")} · the list each rests on, and its weekend`}>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead>Project</TableHead>
-                <TableHead className="w-72">Holiday list</TableHead>
-                <TableHead className="w-80">Weekend</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {projects.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="h-40 text-center text-sm text-muted-foreground">
-                    No project yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                projects.map((project) => {
-                  const listName = projectHolidayListName(project)
-                  const weekend = projectWeekend(project)
-                  const highlighted = project.id === highlightedId
-                  // A name no list carries (a browser's old state): shown as it is, so the person can move it onto a list.
-                  const options = listName && !names.includes(listName) ? [...names, listName] : names
-                  return (
-                    <TableRow key={project.id} ref={highlighted ? highlightedRef : undefined} data-testid={`holiday-project-${project.id}`} className={cn(highlighted && "bg-primary/5")}>
-                      <TableCell className="min-w-[200px] text-sm font-medium text-foreground">{project.name}</TableCell>
-                      <TableCell>
-                        <Select value={listName ?? NO_LIST} onValueChange={(value) => onSave(project, { holidayList: value === NO_LIST ? null : value, weekend })}>
-                          <SelectTrigger className="h-8 w-64" aria-label={`Holiday list of ${project.name}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NO_LIST}>{NO_HOLIDAY_LIST_LABEL}</SelectItem>
-                            {options.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <ToggleGroup
-                          type="multiple"
-                          variant="outline"
-                          size="sm"
-                          aria-label={`Weekend of ${project.name}`}
-                          value={[...weekend]}
-                          onValueChange={(days) => {
-                            // A project rests at least one day; the last one cannot be lifted.
-                            if (days.length === 0) return
-                            onSave(project, { holidayList: listName, weekend: days as ServiceDay[] })
-                          }}
-                          className="flex-wrap"
-                        >
-                          {SERVICE_DAYS.map((day) => (
-                            <ToggleGroupItem key={day} value={day} aria-label={SERVICE_DAY_LABELS[day]}>
-                              {SERVICE_DAY_SHORT_LABELS[day]}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </TableCard>
-    </section>
   )
 }
