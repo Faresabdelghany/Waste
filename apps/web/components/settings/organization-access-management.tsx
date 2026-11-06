@@ -14,8 +14,11 @@ import { toast } from "sonner"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import {
   useBusinessRecordStore,
+  useModuleRecords,
   useServerModuleState,
+  whenSaved,
 } from "@/components/waste/business-record-store"
+import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
 import { NewRoleDialog } from "@/components/settings/new-role-dialog"
@@ -79,7 +82,20 @@ import {
   REACTIVATE_USER,
   roleAdapter,
 } from "@/lib/api/records/organisation"
-import { IDLE } from "@/lib/api/records/server-records"
+import { IDLE, type PaneAnswer } from "@/lib/api/records/server-records"
+import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
+import { accessUnknownSentence } from "@/lib/api/session"
+import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
+import {
+  createTicketTeamRecord,
+  ticketTeamsAccessOf,
+  TICKET_TEAM_EDIT_FORM,
+  TICKET_TEAM_FORM,
+  TICKET_TEAMS_MODULE,
+  updateTicketTeamRecord,
+} from "@/lib/data/ticket-teams"
+import { ACCESS_MODULE } from "@/lib/data/tickets"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import {
   FIXTURE_COMPANY_ID,
   FIXTURE_SERVICE_PROVIDER_IDS,
@@ -94,6 +110,7 @@ import {
   roleRowsOf,
   userRowsOf,
   type UserRow,
+  type UsersRolesTab,
 } from "@/lib/data/users-roles"
 import { cn } from "@/lib/utils"
 
@@ -420,8 +437,198 @@ function PanelShell({
 
 const defaultUserView: TableView = { ordering: "name", showDetails: true }
 const defaultRoleView: TableView = { ordering: "default", showDetails: true }
+const defaultTeamView: TableView = { ordering: "default", showDetails: true }
 
-export function OrganizationAccessManagement() {
+function TeamRowActions({
+  team,
+  disabled,
+  onEdit,
+  onStatus,
+}: {
+  team: BusinessRecord
+  disabled: boolean
+  onEdit: () => void
+  onStatus: (status: "Active" | "Inactive") => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={`Actions for ${team.name}`}
+          className="h-7 w-7 rounded-lg text-muted-foreground"
+          disabled={disabled}
+        >
+          <DotsThree className="h-4 w-4" weight="bold" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
+        {team.status === "Active" ? (
+          <DropdownMenuItem onSelect={() => onStatus("Inactive")}>Retire</DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => onStatus("Active")}>Reactivate</DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/**
+ * The Teams tab (O30 of #290, moved from Settings › Tickets): the company's
+ * teams a ticket waits with — added, edited, retired and reactivated through
+ * the record store, which on the Pilot reaches `/teams` through
+ * lib/api/records/ticket-teams.ts. Which team a ticket opened without one
+ * takes stays Settings › Tickets' Default teams tab. Offered on the Pilot
+ * alone, since the teams are the API's.
+ */
+function TeamsPanel({ tabs, teams, rows }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[] }) {
+  const session = useApiSession()
+  const access = ticketTeamsAccessOf(session.me?.role.grants)
+  const { upsertRecord } = useBusinessRecordStore()
+  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
+  const [query, setQuery] = useState("")
+  const [statuses, setStatuses] = useState<string[]>([])
+  const [view, setView] = useState<TableView>(defaultTeamView)
+  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<BusinessRecord | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const matches = rows.filter(
+    (team) =>
+      (statuses.length === 0 || statuses.includes(team.status)) &&
+      (normalizedQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedQuery)),
+  )
+  const filtered = view.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
+
+  // The accounts a member may be: the company's own people, never a provider's.
+  const relationOptions = (field: BusinessFormField): readonly BusinessFormOption[] =>
+    field.id === "memberUserAccountIds"
+      ? users.records.filter((record) => record.recordKind === "User" && record.serviceProviderId === undefined && !isSoftDeleted(record)).map((record) => ({ value: record.id, label: record.name }))
+      : (field.options ?? [])
+
+  const write = (record: BusinessRecord, done: () => void, said: string) => {
+    if (saving) return
+    setSaving(true)
+    whenSaved(
+      upsertRecord(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, record),
+      () => {
+        done()
+        toast.success(said, { description: record.name })
+      },
+      () => setSaving(false),
+    )
+  }
+  const handleCreate = (values: BusinessFormValues) => write(createTicketTeamRecord(values, { now: Date.now() }), () => setCreating(false), "Team added")
+  const handleEdit = (values: BusinessFormValues) => {
+    if (editing !== null) write(updateTicketTeamRecord(editing, values), () => setEditing(null), "Team saved")
+  }
+  const setStatus = (team: BusinessRecord, status: "Active" | "Inactive") =>
+    write(updateTicketTeamRecord(team, { status }), () => undefined, status === "Active" ? "Team reactivated" : "Team retired")
+
+  const emptyMessage =
+    accessUnknownSentence(session) ??
+    (teams.pending
+      ? "Reading the teams from the API…"
+      : teams.notGranted
+        ? "The ticket teams are not shown to your role."
+        : teams.problem
+          ? `The teams could not be read from the API: ${teams.problem.detail ?? teams.problem.title}`
+          : rows.length > 0
+            ? "No teams match your search."
+            : "No team yet.")
+
+  return (
+    <>
+      <PanelShell
+        tabs={tabs}
+        action={
+          <Button size="sm" onClick={() => setCreating(true)} disabled={!access.create || !teams.ready || saving}>
+            <Plus className="h-4 w-4" weight="bold" /> New team
+          </Button>
+        }
+        toolbar={
+          <Toolbar
+            searchPlaceholder="Search teams"
+            query={query}
+            onQueryChange={setQuery}
+            filterGroups={[{ label: "Status", options: ["Active", "Inactive"], value: statuses, onChange: setStatuses }]}
+            view={view}
+            onViewChange={setView}
+            orderingOptions={[
+              { value: "default", label: "Default order" },
+              { value: "name", label: "Name" },
+            ]}
+            detailsLabel="Show members"
+          />
+        }
+        title="Teams"
+        description="The teams the company's tickets wait with. A team's queue is its open tickets nobody works: anyone who works tickets takes one, member or not."
+      >
+        <RecordsSection shown={filtered.length} total={rows.length}>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10">Team</TableHead>
+                {view.showDetails && <TableHead className="h-10">Members</TableHead>}
+                <TableHead className="h-10">Status</TableHead>
+                <TableHead className="h-10 w-12">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pageRows.map((team) => (
+                <TableRow key={team.id}>
+                  <TableCell className="min-w-52 py-3 font-medium text-foreground">{team.name}</TableCell>
+                  {view.showDetails && <TableCell className="min-w-64 text-muted-foreground">{team.facts.Members ?? "None"}</TableCell>}
+                  <TableCell>
+                    <Badge variant="outline" className={cn("whitespace-nowrap", statusClassName(team.status))}>
+                      {team.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="w-12 text-right">
+                    <TeamRowActions team={team} disabled={!access.edit || saving} onEdit={() => setEditing(team)} onStatus={(status) => setStatus(team, status)} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filtered.length === 0 && (
+                <EmptyRow
+                  colSpan={view.showDetails ? 4 : 3}
+                  message={emptyMessage}
+                  hint={teams.notGranted ? teams.problem?.detail : undefined}
+                  narrowed={rows.length > 0}
+                />
+              )}
+            </TableBody>
+          </Table>
+          <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
+        </RecordsSection>
+      </PanelShell>
+
+      <BusinessRecordFormDialog schema={TICKET_TEAM_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={relationOptions} />
+      {editing && (
+        <BusinessRecordFormDialog
+          schema={TICKET_TEAM_EDIT_FORM}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditing(null)
+          }}
+          onSubmit={handleEdit}
+          relationOptions={relationOptions}
+          initialValueOverrides={{ ...editing.submittedValues }}
+        />
+      )}
+    </>
+  )
+}
+
+/** The pane at `tab`, which the Settings page holds so leaving and coming back finds the tab last used; `onTabChange` moves it. */
+export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersRolesTab; onTabChange: (tab: UsersRolesTab) => void }) {
   // On the Pilot (the adapter configured) the pane reads and writes the
   // access module through the record store and nothing else: the
   // organisation store below is fixture mode's (Issue #163).
@@ -442,8 +649,12 @@ export function OrganizationAccessManagement() {
     createUser,
     createRole,
   } = useOrganizationStore()
-  const [activeTab, setActiveTab] = useState("users")
+  // The teams are the API's: fixture mode has no Teams tab.
+  const activeTab: UsersRolesTab = tab === "teams" && !configured ? "users" : tab
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
+  // The Teams tab's rows, read here for the tab's count.
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  const teamRows: readonly BusinessRecord[] = configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS
 
   const [userQuery, setUserQuery] = useState("")
   const [userStatuses, setUserStatuses] = useState<string[]>([])
@@ -769,8 +980,8 @@ export function OrganizationAccessManagement() {
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs
         value={activeTab}
-        onValueChange={(tab) => {
-          setActiveTab(tab)
+        onValueChange={(next) => {
+          onTabChange(next as UsersRolesTab)
           setSelectedRoleId(null)
         }}
       >
@@ -787,6 +998,14 @@ export function OrganizationAccessManagement() {
               {roleRows.length}
             </span>
           </TabsTrigger>
+          {configured && (
+            <TabsTrigger value="teams" className="rounded-full px-3 whitespace-nowrap">
+              Teams
+              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                {teamRows.length}
+              </span>
+            </TabsTrigger>
+          )}
         </TabsList>
       </Tabs>
     </div>
@@ -794,7 +1013,9 @@ export function OrganizationAccessManagement() {
 
   return (
     <>
-      {activeTab === "users" ? (
+      {activeTab === "teams" ? (
+        <TeamsPanel tabs={tabs} teams={teams} rows={teamRows} />
+      ) : activeTab === "users" ? (
         <PanelShell
           tabs={tabs}
           action={

@@ -21,7 +21,7 @@ export const TICKET_TEAMS_MODULE: ModuleLocation = { workspaceId: "configure", m
 
 export const TICKET_TEAM_PREFIX = "team"
 
-/** The pane, offered on the Pilot alone: the teams are the API's. */
+/** The teams' pane before they moved to Settings › Users & roles: a link to it opens that pane's Teams tab (`usersRolesTabOf`). */
 export const TICKET_TEAMS_SETTINGS_PANE_ID = "ticket-teams"
 
 /** A team's two statuses as the form offers them. */
@@ -52,7 +52,7 @@ const teamForm = (mode: "create" | "action", title: string, submitLabel: string)
   mode,
   recordKind: "Ticket team",
   title,
-  description: "A team the company's tickets wait with. A project names a default team per kind in the section below.",
+  description: "A team the company's tickets wait with.",
   submitLabel,
   nameField: "name",
   execution: mode === "create" ? { kind: "create-record", completionMessage: "Team added." } : { kind: "append-event", completionMessage: "Team saved." },

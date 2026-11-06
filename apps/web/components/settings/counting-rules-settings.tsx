@@ -82,7 +82,7 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
   return { types, teams: teams.rows, teamsRead: teams.read, fractions, containerTypes }
 }
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` moves the page to its Teams tab, where a rule's team is added. */
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` opens Settings › Users & roles at its Teams tab, where a rule's team is added. */
 export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } = {}) {
   const client = useApiClient()
   const configured = useApiConfigured()
@@ -144,7 +144,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint={!access.create || rules.report === null ? "" : noTeam ? "Add a team on the Teams tab first: a rule's tickets wait with one. Then add a rule, simulate it, and switch it on." : "Add a rule, simulate it, then switch it on."} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={!access.create || rules.report === null ? "" : noTeam ? "Add a team on the Teams tab of Users & roles first: a rule's tickets wait with one. Then add a rule, simulate it, and switch it on." : "Add a rule, simulate it, then switch it on."} />
               ) : (
                 rows.map((rule) => (
                   <TableRow key={rule.id} aria-label={rule.name}>
@@ -351,7 +351,7 @@ function CountingRuleDialog({
                       onOpenTeams()
                     }}
                   >
-                    Close and open the Teams tab
+                    Close and open Teams
                   </Button>
                 )}
               </div>

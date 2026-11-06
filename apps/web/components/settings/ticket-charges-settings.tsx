@@ -40,7 +40,7 @@ const asIs = (id: string) => id
 /** A project's charges as read: the picks, or why they could not be. */
 type Read = { projectId: string; picks: TicketChargePicks } | { projectId: string; problem: Problem }
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Teams tabs. */
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Default teams tabs. */
 export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const configured = useApiConfigured()
   const client = useApiClient()
@@ -48,7 +48,7 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, [])
 
-  // The projects the person works in, as the Deadlines and Teams tabs list them: the API answers another's charges with a 400.
+  // The projects the person works in, as the Deadlines and Default teams tabs list them: the API answers another's charges with a 400.
   const session = useApiSession()
   const { me } = session
   const mine = new Set((me?.projects ?? []).map((candidate) => candidate.id))
