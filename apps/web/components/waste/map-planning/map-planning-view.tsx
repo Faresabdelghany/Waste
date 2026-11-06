@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { whenSaved } from "@/components/waste/business-record-store"
 import { useModuleReady } from "@/components/waste/commands/use-command-support"
 import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
-import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
+import { ContainerDetailsSheet } from "@/components/waste/container-details-sheet"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
   applyBusinessFilters,

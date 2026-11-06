@@ -5,29 +5,24 @@ import type { ReactNode } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
-export type TaskRowBaseProps = {
-  checked: boolean
-  title: string
-  onCheckedChange?: () => void
-  titleAriaLabel?: string
-  titleSuffix?: ReactNode
-  meta?: ReactNode
-  className?: string
-  subtitle?: ReactNode
-  onClick?: () => void
-}
-
-export function TaskRowBase({
+/** A row led by a round check mark, struck through once checked: its title, an optional suffix and subtitle, and trailing meta. */
+export function CheckRow({
   checked,
   title,
-  onCheckedChange,
-  titleAriaLabel,
   titleSuffix,
   meta,
   className,
   subtitle,
   onClick,
-}: TaskRowBaseProps) {
+}: {
+  checked: boolean
+  title: string
+  titleSuffix?: ReactNode
+  meta?: ReactNode
+  className?: string
+  subtitle?: ReactNode
+  onClick?: () => void
+}) {
   return (
     <div
       role={onClick ? "button" : undefined}
@@ -47,8 +42,7 @@ export function TaskRowBase({
     >
       <Checkbox
         checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-label={titleAriaLabel ?? title}
+        aria-label={title}
         className="rounded-full border-border bg-background data-[state=checked]:border-success data-[state=checked]:bg-success hover:cursor-pointer"
       />
       <div className="flex-1 min-w-0">

@@ -14,10 +14,9 @@ import { useState } from "react"
 import { Plus } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
-import { StepMode } from "@/components/project-wizard/steps/StepMode"
+import { CreateModeChooser, type CreateMode } from "@/components/waste/create-mode-chooser"
 import { whenSaved } from "@/components/waste/business-record-store"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
-import type { ProjectMode } from "@/components/project-wizard/types"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
   resolvedDraftGroups,
@@ -91,12 +90,12 @@ function SchemeModeChooserOverlay({
   onQuick: () => void
   onGuided: () => void
 }) {
-  const [mode, setMode] = useState<ProjectMode | undefined>()
+  const [mode, setMode] = useState<CreateMode | undefined>()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="flex w-full max-w-[900px] overflow-hidden rounded-[24px] bg-background shadow-2xl">
-        <StepMode
+        <CreateModeChooser
           selected={mode}
           onSelect={setMode}
           onCancel={onClose}

@@ -10,16 +10,13 @@ import {
   SERVICE_PROVIDER_TICKET_ATTENTION_ROWS,
 } from "@/lib/data/performance-dashboard"
 
-const PerformanceControlRoom = dynamic(
-  () =>
-    import("@/components/performance-control-room").then(
-      (module) => module.PerformanceControlRoom,
-    ),
+const ProviderControlRoom = dynamic(
+  () => import("./provider-control-room").then((module) => module.ProviderControlRoom),
   { ssr: false },
 )
 
-// The operator's Route performance control room, scoped to NordRen ApS —
-// same layout and interactions, service-provider-only routes and totals.
+// A service provider's dashboard in fixture mode: the prototype's route
+// performance control room over NordRen ApS's routes and totals.
 export function ServiceProviderDashboard() {
   const router = useRouter()
 
@@ -30,7 +27,7 @@ export function ServiceProviderDashboard() {
   }
 
   return (
-    <PerformanceControlRoom
+    <ProviderControlRoom
       breadcrumbLabel="Dashboard"
       subtitle="NordRen ApS · Service area CA-Ø-2"
       rows={SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS}
@@ -38,7 +35,6 @@ export function ServiceProviderDashboard() {
       summary={SERVICE_PROVIDER_PORTFOLIO_SUMMARY}
       tickets={SERVICE_PROVIDER_TICKET_ATTENTION_ROWS}
       ticketsBasePath="/service-provider-workspace/tickets"
-      hideTableColumns={["proof", "exceptions", "trend"]}
       onRouteOpen={openRoute}
     />
   )

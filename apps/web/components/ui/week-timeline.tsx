@@ -1,32 +1,40 @@
 import { useState } from "react"
 import { addDays, differenceInDays, format, isWithinInterval, startOfWeek } from "date-fns"
 
-import type { TimelineTask } from "@/lib/data/project-details"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { CaretLeft, CaretRight, CalendarBlank, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
 import { cn } from "@/lib/utils"
 
-type TimelineGanttProps = {
-  tasks: TimelineTask[]
-  title?: string
-  emptyLabel?: string
-  onTaskSelect?: (taskId: string) => void
+/** One bar of the timeline: a named span of days and how far along it is. */
+export type TimelineItem = {
+  id: string
+  name: string
+  startDate: Date
+  endDate: Date
+  status: "planned" | "in-progress" | "done"
+}
+
+type WeekTimelineProps = {
+  items: TimelineItem[]
+  title: string
+  emptyLabel: string
+  onItemSelect?: (itemId: string) => void
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-export function TimelineGantt({
-  tasks,
-  title = "Expected Timeline",
-  emptyLabel = "No tasks scheduled",
-  onTaskSelect,
-}: TimelineGanttProps) {
+export function WeekTimeline({
+  items,
+  title,
+  emptyLabel,
+  onItemSelect,
+}: WeekTimelineProps) {
   const [rangeStart, setRangeStart] = useState<Date | null>(null)
 
-  if (tasks.length === 0) {
+  if (items.length === 0) {
     return (
       <section>
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
@@ -37,8 +45,8 @@ export function TimelineGantt({
     )
   }
 
-  const minDate = tasks.reduce((acc, t) => (t.startDate < acc ? t.startDate : acc), tasks[0].startDate)
-  const maxDate = tasks.reduce((acc, t) => (t.endDate > acc ? t.endDate : acc), tasks[0].endDate)
+  const minDate = items.reduce((acc, item) => (item.startDate < acc ? item.startDate : acc), items[0].startDate)
+  const maxDate = items.reduce((acc, item) => (item.endDate > acc ? item.endDate : acc), items[0].endDate)
   const minWeekStart = startOfWeek(minDate, { weekStartsOn: 1 })
   const maxWeekStart = startOfWeek(maxDate, { weekStartsOn: 1 })
 
@@ -88,7 +96,7 @@ export function TimelineGantt({
   const rangeStartDate = days[0]
   const rangeEndDate = addDays(days[days.length - 1], 1)
 
-  const hasTasksInRange = tasks.some((t) => t.startDate < rangeEndDate && t.endDate >= rangeStartDate)
+  const hasItemsInRange = items.some((item) => item.startDate < rangeEndDate && item.endDate >= rangeStartDate)
 
   const canGoPrevious = currentWeekStart.getTime() > minWeekStart.getTime()
   const canGoNext = currentWeekStart.getTime() < maxWeekStart.getTime()
@@ -146,7 +154,7 @@ export function TimelineGantt({
                   <Button variant="ghost" size="icon-sm" aria-label="Date range">
                     <CalendarBlank className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label="Search tasks">
+                  <Button variant="ghost" size="icon-sm" aria-label="Search">
                     <MagnifyingGlass className="h-4 w-4" />
                   </Button>
                 </div>
@@ -178,17 +186,17 @@ export function TimelineGantt({
               aria-hidden="true"
             />
 
-            {!hasTasksInRange && (
+            {!hasItemsInRange && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/70">
                 <div className="rounded-md border border-dashed border-border/70 bg-background px-4 py-2 text-xs text-muted-foreground">
-                  No tasks scheduled in this week
+                  Nothing scheduled in this week
                 </div>
               </div>
             )}
 
-            {tasks.map((t, rowIdx) => {
-              const startOffset = differenceInDays(t.startDate, days[0])
-              const endOffset = differenceInDays(t.endDate, days[0])
+            {items.map((item, rowIdx) => {
+              const startOffset = differenceInDays(item.startDate, days[0])
+              const endOffset = differenceInDays(item.endDate, days[0])
 
               const totalDays = days.length
               const leftPct = clamp((startOffset / totalDays) * 100, 0, 100)
@@ -197,18 +205,18 @@ export function TimelineGantt({
               const widthPct = clamp(rightPct - leftPct + minWidthPct, minWidthPct, 100)
 
               return (
-                <div key={t.id} className="grid grid-cols-[240px_1fr]">
-                  {onTaskSelect ? (
+                <div key={item.id} className="grid grid-cols-[240px_1fr]">
+                  {onItemSelect ? (
                     <Button variant="unstyled"
                       type="button"
                       className="cursor-pointer truncate border-r border-border bg-transparent px-4 py-2 text-left text-sm text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                      onClick={() => onTaskSelect(t.id)}
+                      onClick={() => onItemSelect(item.id)}
                     >
-                      {t.name}
+                      {item.name}
                     </Button>
                   ) : (
                     <div className="truncate border-r border-border px-4 py-2 text-sm text-foreground">
-                      {t.name}
+                      {item.name}
                     </div>
                   )}
                   <div className="relative px-4 py-0">
@@ -218,31 +226,31 @@ export function TimelineGantt({
                       ))}
                     </div>
                     <div
-                      role={onTaskSelect ? "button" : undefined}
-                      tabIndex={onTaskSelect ? 0 : undefined}
-                      onClick={() => onTaskSelect?.(t.id)}
+                      role={onItemSelect ? "button" : undefined}
+                      tabIndex={onItemSelect ? 0 : undefined}
+                      onClick={() => onItemSelect?.(item.id)}
                       onKeyDown={(event) => {
-                        if (onTaskSelect && (event.key === "Enter" || event.key === " ")) {
+                        if (onItemSelect && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault()
-                          onTaskSelect(t.id)
+                          onItemSelect(item.id)
                         }
                       }}
                       className={cn(
                         "absolute top-1/2 flex h-7 -translate-y-1/2 items-center rounded-md border px-2",
-                        t.status === "done"
+                        item.status === "done"
                           ? "border-success/30 bg-success/10"
-                          : t.status === "in-progress"
+                          : item.status === "in-progress"
                             ? "border-warning/30 bg-warning/10"
                             : "border-border bg-muted",
-                        onTaskSelect && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        onItemSelect && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                       )}
                       style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                      title={t.name}
+                      title={item.name}
                     >
-                      <span className="text-xs text-foreground truncate">{t.name}</span>
+                      <span className="text-xs text-foreground truncate">{item.name}</span>
                     </div>
                   </div>
-                  {rowIdx < tasks.length - 1 ? <Separator className="col-span-2" /> : null}
+                  {rowIdx < items.length - 1 ? <Separator className="col-span-2" /> : null}
                 </div>
               )
             })}

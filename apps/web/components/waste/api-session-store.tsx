@@ -24,10 +24,8 @@
 // the domain schema is not reachable with it (ADR-0001: the API is the one
 // door, and it looks the caller's grants up on every request). The refresh
 // token goes to sessionStorage under `API_REFRESH_TOKEN_STORAGE_KEY`, this
-// tab's alone: it is the one long-lived credential, and this app carries
-// surfaces script can reach (the legacy dashboard's `dangerouslySetInnerHTML`,
-// tiptap), so it is kept where only the tab that signed in can read it and
-// where closing the tab ends it. A tab that did not sign in itself therefore
+// tab's alone: it is the one long-lived credential, so it is kept where only
+// the tab that signed in can read it and where closing the tab ends it. A tab that did not sign in itself therefore
 // borrows the shared token and holds no refresh: `refreshToken` is null
 // there. It takes the token the signing tab refreshes when the storage event
 // says so, and if its copy runs out first its session ends as expired — the

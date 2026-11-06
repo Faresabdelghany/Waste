@@ -1,24 +1,15 @@
 import React from "react";
 import { Lightning, Compass, Check, CaretRight, X } from '@phosphor-icons/react';
-import { Button } from "../../ui/button";
-import { ProjectMode } from "../types";
+import { Button } from "@/components/ui/button";
 
-function Wrapper({ children }: React.PropsWithChildren) {
-  return (
-    <div className="relative shrink-0 size-[24px]">
-      <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
-        {children}
-      </svg>
-    </div>
-  );
-}
+/** How a create flow starts: one quick form, or the guided setup. */
+export type CreateMode = 'quick' | 'guided';
 
-interface ProjectCardProps extends React.PropsWithChildren {
+interface ModeCardProps extends React.PropsWithChildren {
   onClick: () => void;
-  isSelected: boolean;
 }
 
-function ProjectCard({ children, onClick, isSelected }: ProjectCardProps) {
+function ModeCard({ children, onClick }: ModeCardProps) {
   return (
     <div 
       className={`basis-0 bg-background grow h-auto relative rounded-3xl shrink-0 cursor-pointer transition-all duration-200 hover:shadow-xl/5 border border-border/60`}
@@ -45,9 +36,9 @@ function Helper({ text, text1 }: HelperProps) {
   );
 }
 
-interface StepModeProps {
-  selected?: ProjectMode;
-  onSelect: (mode: ProjectMode) => void;
+interface CreateModeChooserProps {
+  selected?: CreateMode;
+  onSelect: (mode: CreateMode) => void;
   onCancel?: () => void;
   onContinue?: () => void;
   onClose?: () => void;
@@ -55,7 +46,7 @@ interface StepModeProps {
   entityLabel?: string;
 }
 
-export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, entityLabel = "route" }: StepModeProps) {
+export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, onClose, entityLabel = "route" }: CreateModeChooserProps) {
   return (
     <div className="bg-muted relative rounded-3xl size-full" data-name="Card">
       <div className="size-full">
@@ -65,7 +56,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
           <div className="content-stretch flex gap-1 items-start px-0 py-2 relative shrink-0 w-full">
             
             {/* Quick Create Card */}
-            <ProjectCard onClick={() => onSelect('quick')} isSelected={selected === 'quick'}>
+            <ModeCard onClick={() => onSelect('quick')}>
               <div className="content-stretch flex items-center p-3 relative rounded-xl shrink-0">
                 <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-xl" />
                 <Lightning className="size-6 text-muted-foreground" />
@@ -93,10 +84,10 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
                   <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-3xl" />
                 </div>
               )}
-            </ProjectCard>
+            </ModeCard>
 
             {/* Guided Setup Card */}
-            <ProjectCard onClick={() => onSelect('guided')} isSelected={selected === 'guided'}>
+            <ModeCard onClick={() => onSelect('guided')}>
               <div className="content-stretch flex items-center p-3 relative rounded-[16px] shrink-0">
                 <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-[16px]" />
                 <Compass className="size-6 text-muted-foreground" />
@@ -124,7 +115,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
                   <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-3xl" />
                 </div>
               )}
-            </ProjectCard>
+            </ModeCard>
           </div>
 
           {/* Footer */}

@@ -1,8 +1,8 @@
 "use client"
 
-// The Dashboard on the Pilot (#292, #291 slices 27 and 29, #290 O12):
-// `/performance` reads the API's reports for the person's projects, in place
-// of the fixture control room the prototype shows without the API. Its tabs
+// The Dashboard (#292, #291 slices 27 and 29, #290 O12): `/performance`
+// reads the API's reports for the person's projects, and without the API it
+// says they are kept there. Its tabs
 // are Improve's modules, Performance, Analytics and Compliance, each shown to
 // a role that views it (`/me`'s grants). One row of filters scopes everything
 // below it — the project (one of `/me`'s, or every one) and, for Performance
@@ -17,12 +17,12 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { UploadSimple } from "@phosphor-icons/react/dist/ssr"
 
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
@@ -50,6 +50,7 @@ import { ReportNotice } from "./report-card"
 const ALL = "all"
 
 export function DashboardOnApi() {
+  const onApi = useApiConfigured()
   const { me } = useApiSession()
   const { getRecords } = useBusinessRecordStore()
   const [projectChoice, setProjectChoice] = useState<string>(ALL)
@@ -153,7 +154,9 @@ export function DashboardOnApi() {
       </header>
 
       <main className="min-w-0 flex-1 overflow-y-auto">
-        {me === null ? (
+        {!onApi ? (
+          <ReportNotice empty="The Dashboard is kept on the API: sign in on the Pilot to read it." />
+        ) : me === null ? (
           <ReportNotice />
         ) : tab === undefined ? (
           <ReportNotice notGranted="Dashboard's modules" />

@@ -418,12 +418,6 @@ function record(
   if (!fixtureScope) {
     throw new Error(`Missing explicit fixture scope for ${id}`)
   }
-  const pointsToLegacyDemo =
-    deepLink !== undefined &&
-    ["/projects/", "/tasks", "/clients", "/inbox", "/performance", "/configure"].some(
-      (legacyPath) => deepLink.startsWith(legacyPath),
-    )
-
   return {
     id,
     name,
@@ -438,7 +432,7 @@ function record(
     source,
     freshness,
     allowedTransitions,
-    deepLink: pointsToLegacyDemo ? undefined : deepLink,
+    deepLink,
     companyId: fixtureScope.companyId,
     projectIds: [...fixtureScope.projectIds],
     serviceProviderId: fixtureScope.serviceProviderId,
@@ -655,7 +649,6 @@ const operate: WorkspaceDefinition = {
           "Driver app + vehicle GPS",
           "2 minutes",
           ["Pause", "Complete", "Reassign"],
-          "/projects/1",
         ),
         record(
           "route-1048",
@@ -678,7 +671,6 @@ const operate: WorkspaceDefinition = {
           "Driver app + dispatch",
           "5 minutes",
           ["Reassign", "Create recollection", "Pause"],
-          "/projects/2",
         ),
         record(
           "route-1039",
@@ -701,7 +693,6 @@ const operate: WorkspaceDefinition = {
           "Driver app + vehicle GPS",
           "1 minute",
           ["Complete", "Send message"],
-          "/projects/3",
         ),
         record(
           "route-1051",
@@ -724,7 +715,6 @@ const operate: WorkspaceDefinition = {
           "Driver app",
           "14 minutes · stale",
           ["Contact driver", "Reassign"],
-          "/projects/4",
         ),
       ],
     },
@@ -764,7 +754,6 @@ const operate: WorkspaceDefinition = {
           "Route scheme RS-Central-A",
           "Live",
           ["Pause", "Complete"],
-          "/projects/1",
         ),
         record(
           "route-day-1058",
@@ -795,7 +784,6 @@ const operate: WorkspaceDefinition = {
           "Driver app + weighbridge",
           "Yesterday",
           ["Reopen", "Approve collection"],
-          "/projects/5",
         ),
         record(
           "route-day-1048",
@@ -1099,7 +1087,6 @@ const operate: WorkspaceDefinition = {
           "Driver app",
           "10 minutes",
           ["Completed", "On hold", "Rejected"],
-          "/tasks",
         ),
         record(
           "ticket-8826",
@@ -1115,7 +1102,6 @@ const operate: WorkspaceDefinition = {
           "Customer portal",
           "45 minutes",
           ["In progress", "Pending", "Rejected"],
-          "/tasks",
         ),
         record(
           "ticket-8840",
@@ -1201,7 +1187,6 @@ const operate: WorkspaceDefinition = {
           "Inbound email",
           "Yesterday",
           ["Open", "Rejected"],
-          "/tasks",
         ),
       ],
     },
@@ -1914,7 +1899,6 @@ const operate: WorkspaceDefinition = {
           "Driver app + vehicle GPS",
           "2 minutes",
           ["On break", "Report problem", "Complete route"],
-          "/projects/1",
         ),
         record(
           "driver-session-1039",
@@ -1936,7 +1920,6 @@ const operate: WorkspaceDefinition = {
           "Driver app · offline cache",
           "18 minutes · stale",
           ["Retry sync", "Continue offline"],
-          "/projects/3",
         ),
         record(
           "driver-session-1048",
@@ -1958,7 +1941,6 @@ const operate: WorkspaceDefinition = {
           "Driver app",
           "5 minutes",
           ["Active", "End route"],
-          "/projects/2",
         ),
       ],
     },
@@ -2862,7 +2844,6 @@ const customers: WorkspaceDefinition = {
           "Citizen portal",
           "Today",
           ["Create request", "Update preferences"],
-          "/clients",
         ),
         record(
           "portal-request-8826",
@@ -2884,7 +2865,6 @@ const customers: WorkspaceDefinition = {
           "Citizen portal",
           "45 minutes",
           ["Waiting for citizen", "Resolved"],
-          "/inbox",
         ),
         record(
           "portal-request-container",
@@ -2906,7 +2886,6 @@ const customers: WorkspaceDefinition = {
           "Citizen portal",
           "8 minutes",
           ["Submitted", "Discard"],
-          "/clients",
         ),
       ],
     },
@@ -5610,7 +5589,6 @@ const improve: WorkspaceDefinition = {
           "Semantic model",
           "2 minutes",
           ["Create copy", "Archive"],
-          "/performance",
         ),
         record(
           "dashboard-service-provider",
@@ -5803,7 +5781,6 @@ const improve: WorkspaceDefinition = {
           "Certified semantic model",
           "2 minutes",
           ["Create report", "Archive"],
-          "/performance",
         ),
         record(
           "compliance-gps",
@@ -6508,7 +6485,6 @@ const configure: WorkspaceDefinition = {
           "Waste Sales",
           "Today",
           ["Offer sent", "Archived"],
-          "/configure",
         ),
         record(
           "offer-2044",
@@ -6530,7 +6506,6 @@ const configure: WorkspaceDefinition = {
           "Control Center offer service",
           "2 days",
           ["Accepted", "Archived"],
-          "/configure",
         ),
         record(
           "subscription-harbor",
@@ -6552,7 +6527,6 @@ const configure: WorkspaceDefinition = {
           "Subscription and entitlement service",
           "18 minutes",
           ["Active", "Payment pending", "Suspended"],
-          "/configure",
         ),
         record(
           "subscription-route-studio",
@@ -6574,7 +6548,6 @@ const configure: WorkspaceDefinition = {
           "Subscription and entitlement service",
           "1 week",
           ["Suspended", "Archived"],
-          "/configure",
         ),
         record(
           "marketplace-order-2908",
@@ -6596,7 +6569,6 @@ const configure: WorkspaceDefinition = {
           "Waste Marketplace",
           "Today",
           ["Active", "Archived"],
-          "/configure",
         ),
       ],
     },

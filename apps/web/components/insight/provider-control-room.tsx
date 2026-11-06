@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { format, subDays } from "date-fns"
 import {
@@ -21,7 +21,6 @@ import {
   ComposedChart,
   CartesianGrid,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip as ChartTooltip,
   XAxis,
@@ -29,7 +28,7 @@ import {
 } from "recharts"
 
 import { PageActions, PageTopBar } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -38,9 +37,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   PERFORMANCE_REFERENCE_DATE,
-  ROUTE_PERFORMANCE_ROWS,
-  THROUGHPUT_SERIES,
-  TICKET_ATTENTION_ROWS,
   type PerformancePortfolioSummary,
   type RouteHealthStatus,
   type RoutePerformanceRow,
@@ -52,16 +48,7 @@ import { cn } from "@/lib/utils"
 
 type RangeId = "7d" | "30d" | "90d"
 type Cadence = "daily" | "weekly"
-type SortKey =
-  | "route"
-  | "area"
-  | "type"
-  | "onTime"
-  | "stops"
-  | "proof"
-  | "exceptions"
-  | "sla"
-  | "status"
+type SortKey = "route" | "area" | "type" | "onTime" | "stops" | "sla" | "status"
 
 const RANGE_OPTIONS: Array<{ value: RangeId; label: string; days: number }> = [
   { value: "7d", label: "Last 7 days", days: 7 },
@@ -75,32 +62,16 @@ const STATUS_ORDER: Record<RouteHealthStatus, number> = {
   "On track": 2,
 }
 
-const PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
-  onTimePercent: 86,
-  onTimeRoutes: 31,
-  totalRoutes: 36,
-  completed: 4612,
-  planned: 5148,
-  openTickets: 27,
-  ticketRouteCount: 11,
-  resolvedWithinSla: 118,
-  resolvedTotal: 128,
-}
-
-type HideableTableColumn = "proof" | "exceptions" | "trend"
-
-type PerformanceControlRoomProps = {
-  breadcrumbLabel?: string
-  subtitle?: string
-  rows?: RoutePerformanceRow[]
-  series?: ThroughputPoint[]
-  summary?: PerformancePortfolioSummary
-  tickets?: TicketAttentionRow[]
+type ProviderControlRoomProps = {
+  breadcrumbLabel: string
+  subtitle: string
+  rows: RoutePerformanceRow[]
+  series: ThroughputPoint[]
+  summary: PerformancePortfolioSummary
+  tickets: TicketAttentionRow[]
   /** Tickets page this view navigates to for ticket rows and "View all". */
-  ticketsBasePath?: string
-  hideTableColumns?: readonly HideableTableColumn[]
-  /** When set, clicking a route opens it here instead of filtering in place. */
-  onRouteOpen?: (routeId: string) => void
+  ticketsBasePath: string
+  onRouteOpen: (routeId: string) => void
 }
 
 const numberFormatter = new Intl.NumberFormat("en-US")
@@ -181,27 +152,6 @@ function KpiItem({
   )
 }
 
-function TrendSparkline({ row }: { row: RoutePerformanceRow }) {
-  const data = row.trend.map((value, index) => ({ index, value }))
-
-  return (
-    <div className="h-7 w-20" aria-label={`${row.id} SLA trend`}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke={getStatusColor(row.status)}
-            strokeWidth={1.75}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
 function SortButton({
   label,
   sortKey,
@@ -237,17 +187,16 @@ function completionPercent(row: RoutePerformanceRow) {
   return Math.round((row.stopsCompleted / row.stopsPlanned) * 100)
 }
 
-export function PerformanceControlRoom({
-  breadcrumbLabel = "Route performance",
+export function ProviderControlRoom({
+  breadcrumbLabel,
   subtitle,
-  rows = ROUTE_PERFORMANCE_ROWS,
-  series = THROUGHPUT_SERIES,
-  summary = PORTFOLIO_SUMMARY,
-  tickets = TICKET_ATTENTION_ROWS,
-  ticketsBasePath = "/tickets",
-  hideTableColumns = [],
+  rows,
+  series,
+  summary,
+  tickets,
+  ticketsBasePath,
   onRouteOpen,
-}: PerformanceControlRoomProps) {
+}: ProviderControlRoomProps) {
   const router = useRouter()
   const [rangeId, setRangeId] = useState<RangeId>("30d")
   const [cadence, setCadence] = useState<Cadence>("daily")
@@ -258,7 +207,6 @@ export function PerformanceControlRoom({
     direction: "asc",
   })
   const [page, setPage] = useState(1)
-  const tableSectionRef = useRef<HTMLDivElement>(null)
 
   const selectedRoute = useMemo(
     () => rows.find((route) => route.id === selectedRouteId) ?? null,
@@ -334,8 +282,6 @@ export function PerformanceControlRoom({
         type: [a.serviceType, b.serviceType],
         onTime: [a.onTimePercent, b.onTimePercent],
         stops: [a.stopsCompleted, b.stopsCompleted],
-        proof: [proofPercent(a), proofPercent(b)],
-        exceptions: [a.exceptions, b.exceptions],
         sla: [a.slaPercent, b.slaPercent],
         status: [STATUS_ORDER[a.status], STATUS_ORDER[b.status]],
       }
@@ -457,21 +403,7 @@ export function PerformanceControlRoom({
     setPage(1)
   }
 
-  const focusRoute = (routeId: string) => {
-    setSelectedRouteId(routeId)
-    setSelectedStatus("all")
-    setPage(1)
-    window.requestAnimationFrame(() => {
-      tableSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    })
-  }
-
-  const openRoute = onRouteOpen ?? focusRoute
-
-  const showProof = !hideTableColumns.includes("proof")
-  const showExceptions = !hideTableColumns.includes("exceptions")
-  const showTrend = !hideTableColumns.includes("trend")
-  const tableColumnCount = 8 + Number(showProof) + Number(showExceptions) + Number(showTrend)
+  const tableColumnCount = 8
 
   const exportCsv = () => {
     const header = [
@@ -516,7 +448,7 @@ export function PerformanceControlRoom({
       <header className="shrink-0 border-b border-border/70">
         <PageTopBar>
           <Breadcrumbs items={[{ label: breadcrumbLabel }]} />
-          {subtitle !== undefined && <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>}
+          <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>
         </PageTopBar>
 
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
@@ -778,22 +710,18 @@ export function PerformanceControlRoom({
           </section>
         </div>
 
-        <section ref={tableSectionRef} className="scroll-mt-4 px-3 pb-3 lg:px-4 lg:pb-4">
+        <section className="px-3 pb-3 lg:px-4 lg:pb-4">
           <div className="overflow-hidden rounded-lg border border-border/70 bg-card/55">
             <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Route health</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {showProof && showExceptions
-                    ? "Service delivery, proof, exceptions, and SLA performance"
-                    : "Service delivery and SLA performance"}
-                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Service delivery and SLA performance</p>
               </div>
               <p className="text-[11px] text-muted-foreground">Showing {sortedRows.length} of {summary.totalRoutes} routes</p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className={cn("w-full border-collapse text-left", showTrend && showProof && showExceptions ? "min-w-[1080px]" : "min-w-[840px]")}>
+              <table className="w-full min-w-[840px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-border/70 text-[10px]">
                     <th className="px-4 py-2.5"><SortButton label="Route" sortKey="route" activeKey={sort.key} onSort={handleSort} /></th>
@@ -801,15 +729,8 @@ export function PerformanceControlRoom({
                     <th className="px-3 py-2.5"><SortButton label="Type" sortKey="type" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="On-time %" sortKey="onTime" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="Stops" sortKey="stops" activeKey={sort.key} onSort={handleSort} /></th>
-                    {showProof && (
-                      <th className="px-3 py-2.5"><SortButton label="Proof %" sortKey="proof" activeKey={sort.key} onSort={handleSort} /></th>
-                    )}
-                    {showExceptions && (
-                      <th className="px-3 py-2.5"><SortButton label="Exceptions" sortKey="exceptions" activeKey={sort.key} onSort={handleSort} /></th>
-                    )}
                     <th className="px-3 py-2.5"><SortButton label="SLA" sortKey="sla" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="Status" sortKey="status" activeKey={sort.key} onSort={handleSort} /></th>
-                    {showTrend && <th className="px-3 py-2.5 text-muted-foreground">Trend</th>}
                     <th className="w-8 px-2 py-2.5"><span className="sr-only">Open</span></th>
                   </tr>
                 </thead>
@@ -822,16 +743,12 @@ export function PerformanceControlRoom({
                     </tr>
                   ) : (
                     visibleRows.map((row) => {
-                      const proof = proofPercent(row)
                       const completion = completionPercent(row)
                       return (
                         <tr
                           key={row.id}
-                          onClick={onRouteOpen ? () => onRouteOpen(row.id) : undefined}
-                          className={cn(
-                            "border-b border-border/60 text-xs last:border-b-0 hover:bg-accent/35",
-                            onRouteOpen && "cursor-pointer",
-                          )}
+                          onClick={() => onRouteOpen(row.id)}
+                          className="cursor-pointer border-b border-border/60 text-xs last:border-b-0 hover:bg-accent/35"
                         >
                           <td className="px-4 py-2">
                             <Button
@@ -839,8 +756,7 @@ export function PerformanceControlRoom({
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
-                                // eslint-disable-next-line react-hooks/refs -- runs on click; focusRoute reads the ref inside requestAnimationFrame, never during render
-                                openRoute(row.id)
+                                onRouteOpen(row.id)
                               }}
                               className="flex min-w-0 items-center gap-2 text-left"
                             >
@@ -864,12 +780,6 @@ export function PerformanceControlRoom({
                             <span className="text-muted-foreground"> / {row.stopsPlanned}</span>
                             <span className="ml-1 text-[10px] text-muted-foreground">({completion}%)</span>
                           </td>
-                          {showProof && (
-                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-destructive-foreground" : proof < 92 ? "text-warning" : "text-success")}>
-                              {proof}%
-                            </td>
-                          )}
-                          {showExceptions && <td className="px-3 py-2 text-foreground">{row.exceptions}</td>}
                           <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-destructive-foreground" : row.slaPercent < 85 ? "text-warning" : "text-success")}>
                             {row.slaPercent}%
                           </td>
@@ -878,14 +788,13 @@ export function PerformanceControlRoom({
                               {row.status}
                             </StatusBadge>
                           </td>
-                          {showTrend && <td className="px-3 py-2"><TrendSparkline row={row} /></td>}
                           <td className="px-2 py-2">
                             <Button
                               variant="unstyled"
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
-                                openRoute(row.id)
+                                onRouteOpen(row.id)
                               }}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                               aria-label={`View ${row.id}`}
