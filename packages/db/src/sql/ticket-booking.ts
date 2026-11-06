@@ -3,7 +3,6 @@
 // when the migration runs. A booking an earlier rebooking replaced is not
 // there, since nothing kept it; the ticket's comments still name it. The
 // migration runs it after the table and before its fence, as the owner;
-// ticket-booking-rendering.test.ts pins it in the file, and
 // resolution.test.ts runs it over a booking the ledger lacks.
 
 /** The statement that gives the ledger every ticket's booking as its columns hold it when the migration runs. */

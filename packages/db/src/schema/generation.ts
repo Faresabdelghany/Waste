@@ -39,6 +39,7 @@ import { tableObjectName } from "../names"
 import { oneOf } from "./checks"
 import { id, projectScoped, timestamps } from "./columns"
 import { company, project } from "./organisation"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
@@ -88,6 +89,8 @@ export const generationRun = wms.table(
   ],
 )
 
+export const generationRunPolicies = policies(generationRun, { exempt: "generation's own record of a run, the worker's" })
+
 export const generationMatch = wms.table(
   "generation_match",
   {
@@ -112,3 +115,17 @@ export const generationMatch = wms.table(
     tenantIndex(t, t.generationRunId),
   ],
 )
+
+export const generationMatchPolicies = policies(generationMatch, {
+  exempt: "generation's own record of a run, the worker's",
+  door: {
+    columns: [
+      generationMatch.id,
+      generationMatch.companyId,
+      generationMatch.projectId,
+      generationMatch.collectionGroupId,
+      generationMatch.containerIds,
+    ],
+    rows: inPublishedProject("generation_match"),
+  },
+})

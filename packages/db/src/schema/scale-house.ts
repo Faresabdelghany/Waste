@@ -39,6 +39,7 @@ import { route, unload } from "./execution"
 import { vehicle } from "./fleet"
 import { company, project } from "./organisation"
 import { unloadingStation } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -82,6 +83,8 @@ export const vehicleTare = wms.table(
     tenantIndex(t, t.customerId),
   ],
 )
+
+export const vehicleTarePolicies = policies(vehicleTare, { audited: {} })
 
 export const scaleTicket = wms.table(
   "scale_ticket",
@@ -172,6 +175,8 @@ export const scaleTicket = wms.table(
   ],
 )
 
+export const scaleTicketPolicies = policies(scaleTicket, { audited: {} })
+
 export const scaleTicketLine = wms.table(
   "scale_ticket_line",
   {
@@ -208,3 +213,7 @@ export const scaleTicketLine = wms.table(
     tenantIndex(t, t.productId),
   ],
 )
+
+export const scaleTicketLinePolicies = policies(scaleTicketLine, {
+  exempt: "a ledger of a completed ticket's split, written once with the completion its ticket's trail records; a voided ticket voids its lines with it",
+})

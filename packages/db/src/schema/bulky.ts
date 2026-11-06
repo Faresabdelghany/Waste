@@ -29,6 +29,7 @@ import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { customer, property, sharedCollectionPoint } from "./customers"
 import { company, project } from "./organisation"
 import { planningArea } from "./planning-areas"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -71,6 +72,8 @@ export const bulkySchedule = wms.table(
     tenantIndex(t, t.productId),
   ],
 )
+
+export const bulkySchedulePolicies = policies(bulkySchedule, { audited: {} })
 
 export const bulkyBooking = wms.table(
   "bulky_booking",
@@ -130,6 +133,8 @@ export const bulkyBooking = wms.table(
   ],
 )
 
+export const bulkyBookingPolicies = policies(bulkyBooking, { audited: {} })
+
 export const bulkyBookingItem = wms.table(
   "bulky_booking_item",
   {
@@ -155,3 +160,5 @@ export const bulkyBookingItem = wms.table(
     tenantUnique(t, t.bookingId, t.position),
   ],
 )
+
+export const bulkyBookingItemPolicies = policies(bulkyBookingItem, { audited: { parent: bulkyBookingItem.bookingId } })

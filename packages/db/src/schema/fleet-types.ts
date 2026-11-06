@@ -29,6 +29,7 @@ import { containerType } from "./catalogue"
 import { lowercase } from "./checks"
 import { id, tenant, timestamps } from "./columns"
 import { company } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -45,6 +46,8 @@ export const vehicleType = wms.table(
   },
   (t) => [companyReference(t, company), tenantUnique(t, t.key), tenantUnique(t, t.name), tenantKey(t), lowercase(t.key)],
 )
+
+export const vehicleTypePolicies = policies(vehicleType, { audited: {} })
 
 export const containerTypeVehicleType = wms.table(
   "container_type_vehicle_type",
@@ -64,3 +67,5 @@ export const containerTypeVehicleType = wms.table(
     tenantIndex(t, t.containerTypeId),
   ],
 )
+
+export const containerTypeVehicleTypePolicies = policies(containerTypeVehicleType, { audited: { parent: containerTypeVehicleType.vehicleTypeId } })

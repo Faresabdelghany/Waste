@@ -10,8 +10,8 @@
 // runs as API_ROLE under `withCompany`, fenced like a request's; the public
 // door's anonymous reads run as PUBLIC_ROLE (Issue #293, ADR-0010), which
 // logs in as nobody — the API's connection sets it for a public request's
-// transaction alone — and SELECTs exactly the columns sql/public-door.ts
-// names, under policies of its own. Spelled once here, so a URL cannot
+// transaction alone — and SELECTs exactly the columns the tables' `door`
+// declarations name, under policies of its own. Spelled once here, so a URL cannot
 // retarget a statement meant for one role at some other role.
 export const API_ROLE = "wms_api"
 export const WORKER_ROLE = "wms_worker"

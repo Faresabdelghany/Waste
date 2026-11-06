@@ -4,8 +4,7 @@
 // given its kind's default. drizzle-kit writes `ticket.ticket_type_id` as one
 // NOT NULL `ADD COLUMN`, which a database holding tickets refuses, so the
 // migration adds it nullable, runs these two as the owner, and then holds the
-// column to NOT NULL; ticket-types-rendering.test.ts pins them in the file. A
-// company made later is given its defaults by its provisioning and by the
+// column to NOT NULL. A company made later is given its defaults by its provisioning and by the
 // seed, and a kind without one is given it as its first ticket opens
 // (`defaultTicketTypeOf`, src/commands/ticket-types.ts).
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"

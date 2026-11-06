@@ -27,7 +27,7 @@ import { getTableName } from "drizzle-orm"
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core"
 
 import { columnNamed, qualifiedTable, tableObjectName } from "../names"
-import { WINDOW_CHECK } from "../schema/columns"
+import { isLedger, WINDOW_CHECK } from "../schema/columns"
 import { appendOnly } from "./append-only"
 import { excludeOverlapping, NO_OVERLAP } from "./exclude-overlapping"
 import { WINDOW_RANGE } from "./exclude-overlapping-window"
@@ -60,9 +60,6 @@ export function statementsOf(migration: string): string[] {
     )
     .filter((statement) => statement.length > 0)
 }
-
-/** Whether the table is a ledger: it spread `recorded`, so it carries `recorded_at`, and nothing may update a row. */
-export const isLedger = (table: PgTable): boolean => columnNamed(table, "recorded_at") !== undefined
 
 /** The statements every migration that creates this table must carry, derived from its columns: the fence, then the trigger or, for a ledger, the revoke. */
 export function handWrittenStatements(table: PgTable): string[] {

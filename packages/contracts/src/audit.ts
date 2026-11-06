@@ -11,7 +11,7 @@
 // spells it — a header carries bytes, and a reason may be in any script — and
 // bounded like any paragraph once decoded. The actor never travels: the API's
 // principal is the only source of who.
-import { AUDIT_ACTIONS } from "@waste/domain/audit/vocabulary"
+import { AUDIT_ACTIONS, AUDITED_TABLES, type AuditedTableName } from "@waste/domain/audit/vocabulary"
 import * as z from "zod"
 
 import { Id } from "./ids"
@@ -24,121 +24,18 @@ export const CHANGE_REASON_HEADER = "waste-change-reason"
 export const AuditAction = z.enum(AUDIT_ACTIONS)
 export type AuditAction = z.infer<typeof AuditAction>
 
-/**
- * The tables whose rows have a history, as the database spells them, in the
- * audit trail's order (`AUDITED`, @waste/db/sql/audit-trail, whose test holds
- * the two equal): what a client names a row's table from.
- */
-export const AUDITED_TABLES = [
-  "company",
-  "project",
-  "service_provider",
-  "role",
-  "role_grant",
-  "user_account",
-  "project_access",
-  "service_provider_access",
-  "waste_fraction",
-  "container_type",
-  "service_frequency",
-  "vehicle_type",
-  "container_type_vehicle_type",
-  "product",
-  "customer",
-  "property",
-  "property_party",
-  "property_group",
-  "property_group_member",
-  "shared_collection_point",
-  "shared_collection_point_member",
-  "agreement",
-  "subscription",
-  "container",
-  "container_service_placement",
-  "depot",
-  "unloading_station",
-  "unloading_station_fraction",
-  "warehouse",
-  "vehicle",
-  "vehicle_compartment",
-  "vehicle_compartment_fraction",
-  "driver",
-  "planning_area",
-  "planning_area_boundary",
-  "collection_calendar",
-  "route_scheme",
-  "collection_group",
-  "collection_group_fraction",
-  "collection_group_container_type",
-  "collection_group_container",
-  "price_list",
-  "price_list_row",
-  "service_area",
-  "service_area_planning_area",
-  "service_area_waste_fraction",
-  "service_area_assignment",
-  "service_provider_price",
-  "settlement",
-  "subscription_pause",
-  "ticket_sla",
-  "drop_off_point",
-  "drop_off_point_fraction",
-  "drop_off_point_hours",
-  "drop_off_point_exception",
-  "driver_absence",
-  "vehicle_unavailability",
-  "ticket_kind_product",
-  "contaminant_code",
-  "contaminant_code_fraction",
-  "pickup_exception_rule",
-  "pickup_exception_rule_step",
-  "application",
-  "bulky_schedule",
-  "bulky_booking",
-  "bulky_booking_item",
-  "access_credential",
-  "site_visit",
-  "site_visit_fraction",
-  "visit_rule",
-  "visit_rule_step",
-  "visit_rule_free_fraction",
-  "route_scheme_season",
-  "service_provider_activity",
-  "stock_minimum",
-  "decommission_reason",
-  "team",
-  "team_member",
-  "ticket_team_default",
-  "service_provider_activity_container",
-  "service_provider_activity_fraction",
-  "customer_contact",
-  "message_template",
-  "sensor",
-  "sensor_pairing",
-  "notification_preference",
-  "notification_rule",
-  "notification_rule_area",
-  "vehicle_maintenance_plan",
-  "maintenance_order",
-  "weighbridge_ticket",
-  "vehicle_tare",
-  "scale_ticket",
-  "field_inspection",
-  "right_sizing_proposal",
-  "tank_installation",
-  "outbound_load",
-  "ticket_type",
-  "ticket_type_field",
-  "ticket_type_permission",
-  "holiday_list",
-  "holiday_list_holiday",
-  "ticket_type_action",
-  "counting_rule",
-] as const
-export type AuditedTable = (typeof AUDITED_TABLES)[number]
-
 /** A table's name as the database spells it: `role_grant`, `property_party`. */
 const TableName = z.string().regex(/^[a-z][a-z_]*$/, "a table's name, in the database's spelling: role_grant")
+
+/**
+ * A table whose rows have a history (`AUDITED_TABLES`, @waste/domain/audit/vocabulary):
+ * what a client names a row's table by. A row's history also carries its
+ * sets' rows, so an event's own `table` is held to the name's shape alone.
+ */
+export const AuditedTable = z.enum(Object.keys(AUDITED_TABLES) as [AuditedTableName, ...AuditedTableName[]], {
+  error: (issue) => (issue.input === undefined ? undefined : "Not an audited table"),
+})
+export type AuditedTable = z.infer<typeof AuditedTable>
 
 export const AuditEvent = z.object({
   ...recorded,
@@ -165,7 +62,7 @@ export type AuditEvent = z.infer<typeof AuditEvent>
  * the sets it is the parent of, two levels down.
  */
 export const AuditEventListQuery = PageRequest.extend({
-  table: TableName,
+  table: AuditedTable,
   rowId: Id,
 })
 export type AuditEventListQuery = z.infer<typeof AuditEventListQuery>

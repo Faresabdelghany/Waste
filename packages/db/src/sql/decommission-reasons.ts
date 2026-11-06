@@ -4,9 +4,7 @@
 // the note it already is (`stock_movement.reason`). The migration runs both
 // after the column and before the shape check that asks every decommission
 // for a reason, and before the reasons' audit trail, as the owner, who may
-// write the ledger where the API role may not;
-// decommission-reasons-rendering.test.ts pins them in the file. A company
-// made later is given them by the seed, or by the office in Settings.
+// write the ledger where the API role may not. A company made later is given them by the seed, or by the office in Settings.
 import { BACKFILLED_DECOMMISSION_REASON, DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 
 import { literal } from "../schema/checks"

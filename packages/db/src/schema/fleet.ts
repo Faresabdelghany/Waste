@@ -56,6 +56,7 @@ import { id, projectScoped, timestamps } from "./columns"
 import { vehicleType } from "./fleet-types"
 import { company, project, serviceProvider } from "./organisation"
 import { depot } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -108,6 +109,8 @@ export const vehicle = wms.table(
   ],
 )
 
+export const vehiclePolicies = policies(vehicle, { audited: {} })
+
 export const vehicleCompartment = wms.table(
   "vehicle_compartment",
   {
@@ -135,6 +138,8 @@ export const vehicleCompartment = wms.table(
   ],
 )
 
+export const vehicleCompartmentPolicies = policies(vehicleCompartment, { audited: { parent: vehicleCompartment.vehicleId } })
+
 export const vehicleCompartmentFraction = wms.table(
   "vehicle_compartment_fraction",
   {
@@ -155,6 +160,10 @@ export const vehicleCompartmentFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const vehicleCompartmentFractionPolicies = policies(vehicleCompartmentFraction, {
+  audited: { parent: vehicleCompartmentFraction.vehicleCompartmentId },
+})
 
 export const driver = wms.table(
   "driver",
@@ -215,3 +224,5 @@ export const driver = wms.table(
     tenantIndex(t, t.homeDepotId),
   ],
 )
+
+export const driverPolicies = policies(driver, { audited: {} })

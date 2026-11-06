@@ -23,16 +23,18 @@
 // the office's alone, an active point is on the public map, a closed one is
 // kept for the record.
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
 import { DROP_OFF_POINT_KINDS, DROP_OFF_POINT_STATUSES } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
 import { boolean, check, date, text, time, unique, uuid } from "drizzle-orm/pg-core"
 
-import { tableObjectName } from "../names"
+import { quoted, tableObjectName } from "../names"
 import { wasteFraction } from "./catalogue"
 import { oneOf } from "./checks"
 import { id, projectScoped, timestamps } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -72,6 +74,26 @@ export const dropOffPoint = wms.table(
   ],
 )
 
+export const dropOffPointPolicies = policies(dropOffPoint, {
+  audited: {},
+  door: {
+    columns: [
+      dropOffPoint.id,
+      dropOffPoint.companyId,
+      dropOffPoint.projectId,
+      dropOffPoint.name,
+      dropOffPoint.kind,
+      dropOffPoint.address,
+      dropOffPoint.location,
+      dropOffPoint.openAlways,
+      dropOffPoint.closedOnHolidays,
+      dropOffPoint.publicNote,
+      dropOffPoint.status,
+    ],
+    rows: `${inPublishedProject("drop_off_point")} and ${quoted("status")} = '${ON_THE_MAP}'`,
+  },
+})
+
 export const dropOffPointFraction = wms.table(
   "drop_off_point_fraction",
   {
@@ -90,6 +112,23 @@ export const dropOffPointFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+/** A set's rows of a point on the public map: the point itself is, so a draft's hours are no more readable than the draft. */
+const ofPointOnTheMap = (table: string) =>
+  `${inPublishedProject(table)} and exists (select 1 from "wms"."drop_off_point" "point" where "point"."company_id" = ${quoted(table)}.${quoted("company_id")} and "point"."id" = ${quoted(table)}.${quoted("drop_off_point_id")} and "point"."status" = '${ON_THE_MAP}')`
+
+export const dropOffPointFractionPolicies = policies(dropOffPointFraction, {
+  audited: { parent: dropOffPointFraction.dropOffPointId },
+  door: {
+    columns: [
+      dropOffPointFraction.companyId,
+      dropOffPointFraction.projectId,
+      dropOffPointFraction.dropOffPointId,
+      dropOffPointFraction.wasteFractionId,
+    ],
+    rows: ofPointOnTheMap("drop_off_point_fraction"),
+  },
+})
 
 export const dropOffPointHours = wms.table(
   "drop_off_point_hours",
@@ -111,6 +150,21 @@ export const dropOffPointHours = wms.table(
     tenantIndex(t, t.dropOffPointId),
   ],
 )
+
+export const dropOffPointHoursPolicies = policies(dropOffPointHours, {
+  audited: { parent: dropOffPointHours.dropOffPointId },
+  door: {
+    columns: [
+      dropOffPointHours.companyId,
+      dropOffPointHours.projectId,
+      dropOffPointHours.dropOffPointId,
+      dropOffPointHours.weekday,
+      dropOffPointHours.opensAt,
+      dropOffPointHours.closesAt,
+    ],
+    rows: ofPointOnTheMap("drop_off_point_hours"),
+  },
+})
 
 export const dropOffPointException = wms.table(
   "drop_off_point_exception",
@@ -134,3 +188,19 @@ export const dropOffPointException = wms.table(
     check(tableObjectName(t.id.table, "window_shape", "dropOffPointException"), sql`(${t.opensAt} is null) = (${t.closesAt} is null) and (${t.opensAt} is null or ${t.opensAt} < ${t.closesAt})`),
   ],
 )
+
+export const dropOffPointExceptionPolicies = policies(dropOffPointException, {
+  audited: { parent: dropOffPointException.dropOffPointId },
+  door: {
+    columns: [
+      dropOffPointException.companyId,
+      dropOffPointException.projectId,
+      dropOffPointException.dropOffPointId,
+      dropOffPointException.day,
+      dropOffPointException.opensAt,
+      dropOffPointException.closesAt,
+      dropOffPointException.note,
+    ],
+    rows: ofPointOnTheMap("drop_off_point_exception"),
+  },
+})

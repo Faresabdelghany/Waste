@@ -14,7 +14,7 @@ import { is } from "drizzle-orm"
 import { pgTable, PgTable, text, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { id, orderedWindow, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
+import { id, isLedger, orderedWindow, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
 import { wms } from "../schema/wms"
 import { appendOnly } from "../sql/append-only"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
@@ -23,7 +23,6 @@ import {
   createsTable,
   createTableStatement,
   handWrittenStatements,
-  isLedger,
   isReservation,
   missingHandWritten,
   overlapConstraintShape,

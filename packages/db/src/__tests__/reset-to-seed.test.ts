@@ -24,7 +24,7 @@ import { createDb, type Database, type Tx } from "../client"
 import { defaultTicketTypeOf } from "../commands/ticket-types"
 import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
-import { KEPT_TABLES, resetToSeed, SWEPT_TABLES, sweepOrder } from "../reset-to-seed"
+import { resetToSeed, SWEPT_TABLES, sweepOrder } from "../reset-to-seed"
 import { projectAccess, role, roleGrant, userAccount } from "../schema/access"
 import { containerType, product, wasteFraction } from "../schema/catalogue"
 import { container, containerServicePlacement } from "../schema/containers"
@@ -42,6 +42,7 @@ import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { stockMovement } from "../schema/stock"
 import { DEMO_IDS, seedDemo } from "../seed/demo"
 import { PGBOSS_SCHEMA } from "../sql/pgboss"
+import { KEPT_TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
@@ -192,10 +193,15 @@ async function operate(tx: Tx, ground: Ground): Promise<void> {
     issuedBy: by,
     parties: { seller: { legalName: "Test Renovation A/S", registrationNumber: "12345678", vatNumber: null, postalAddress: null, bankIban: null, bankBic: null, fikCreditorNumber: null }, buyer: { name: "Test Customer", registrationNumber: null, billingAddress: null } },
   })
-  // The counters, as generation, Resolution and a billing run take them.
+  // The counters, as generation, Resolution, a billing run and the scale house take them.
   await tx
     .update(company)
-    .set({ nextRouteNumber: sql`${company.nextRouteNumber} + 1`, nextTicketNumber: sql`${company.nextTicketNumber} + 1`, nextInvoiceNumber: sql`${company.nextInvoiceNumber} + 1` })
+    .set({
+      nextRouteNumber: sql`${company.nextRouteNumber} + 1`,
+      nextTicketNumber: sql`${company.nextTicketNumber} + 1`,
+      nextInvoiceNumber: sql`${company.nextInvoiceNumber} + 1`,
+      nextScaleTicketNumber: sql`${company.nextScaleTicketNumber} + 1`,
+    })
     .where(eq(company.id, companyId))
 }
 
@@ -369,8 +375,11 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     const resetAt = resetInstant(reset, new Set([seedInstant, ...instantsIn(operated)]))
     assert.ok(Date.parse(resetAt) > Date.parse(seedInstant))
     assert.deepEqual(withoutMintedIds(reset), withoutMintedIds(expectedAfterReset(seeded, resetAt, { company: [DEMO], project: [DEMO_IDS.projects.harbor] })))
-    const [counters] = await owner.db.select({ route: company.nextRouteNumber, ticket: company.nextTicketNumber, invoice: company.nextInvoiceNumber }).from(company).where(eq(company.id, DEMO))
-    assert.deepEqual(counters, { route: 1000, ticket: 1000, invoice: 1000 }, "the counters a fresh seed leaves, the columns' defaults")
+    const [counters] = await owner.db
+      .select({ route: company.nextRouteNumber, ticket: company.nextTicketNumber, invoice: company.nextInvoiceNumber, scaleTicket: company.nextScaleTicketNumber })
+      .from(company)
+      .where(eq(company.id, DEMO))
+    assert.deepEqual(counters, { route: 1000, ticket: 1000, invoice: 1000, scaleTicket: 1000 }, "the counters a fresh seed leaves, the columns' defaults")
 
     // What it says: every row it deleted, table by table, the news no relay will send, the jobs left to fail.
     const expectedSweep = Object.entries(operated)
@@ -470,7 +479,10 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     assert.deepEqual(said.slice(0, 2), ["Reset the demo company 01a0d2a4-a280-7001-8000-000000000001 on 127.0.0.1 to its seed, in one transaction.", sweptLine(before)])
     assert.match(said[2], /Kept Organisation & Access .* so every Login stays bound; the seeded rows are back at the seed's word, and 1 account the seed does not name is as it was\.$/)
     // Every swept row but the outbox's was the seed's, and comes back from it.
-    assert.equal(said[3], `The seed wrote ${sweptRows(before) - 1} rows; the route, ticket and invoice counters were put back to 1000, 1000 and 1000, as a fresh seed leaves them.`)
+    assert.equal(
+      said[3],
+      `The seed wrote ${sweptRows(before) - 1} rows; the route, ticket, invoice and scale-ticket counters were put back to 1000, 1000, 1000 and 1000, as a fresh seed leaves them.`,
+    )
     assert.match(said[4], /^Audit history: the company's \d+ rows went with the sweep; the trail begins again with the seed writing the tenant back\.$/)
     assert.deepEqual(said.slice(5), ["Outbox: 1 unpublished event went with the sweep and will never be relayed.", "pg-boss: no waiting job names the company.", ""])
 
@@ -483,7 +495,7 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     assert.deepEqual([...lines.slice(0, 3), ...lines.slice(4)], [
       sweptLine(settled),
       "Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; the seeded rows are back at the seed's word, and 1 account the seed does not name is as it was.",
-      `The seed wrote ${sweptRows(settled)} rows; the route, ticket and invoice counters were already at 1000, 1000 and 1000, as a fresh seed leaves them.`,
+      `The seed wrote ${sweptRows(settled)} rows; the route, ticket, invoice and scale-ticket counters were already at 1000, 1000, 1000 and 1000, as a fresh seed leaves them.`,
       "Outbox: no unpublished event was swept.",
       "pg-boss: 2 waiting jobs still name the company and are left on their queues: when a worker takes one it meets a tenant without the rows it names, and either finds nothing to do or fails, is retried and ends failed — an outbox consumer's copy on outbox.dead, which is not to be redriven.",
       "",

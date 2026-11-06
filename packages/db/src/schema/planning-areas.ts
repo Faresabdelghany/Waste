@@ -32,6 +32,7 @@ import { oneOf } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -56,6 +57,8 @@ export const planningArea = wms.table(
   ],
 )
 
+export const planningAreaPolicies = policies(planningArea, { audited: {} })
+
 export const planningAreaBoundary = wms.table(
   "planning_area_boundary",
   {
@@ -79,3 +82,5 @@ export const planningAreaBoundary = wms.table(
     index(tableObjectName(t.companyId.table, "boundary_idx", "planningAreaBoundary")).using("gist", t.boundary),
   ],
 )
+
+export const planningAreaBoundaryPolicies = policies(planningAreaBoundary, { audited: { parent: planningAreaBoundary.planningAreaId } })

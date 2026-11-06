@@ -42,8 +42,12 @@ import { pickup, route } from "./execution"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
 import { unloadingStation } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
+
+/** Why a Plan, its stops and legs, and the quota keep no audit trail. */
+const WRITTEN_BY_ROUTING = "routing: Plans and the quota, written by the worker and the provider's answers"
 
 export const plan = wms.table(
   "plan",
@@ -96,6 +100,8 @@ export const plan = wms.table(
   ],
 )
 
+export const planPolicies = policies(plan, { exempt: WRITTEN_BY_ROUTING })
+
 export const planStop = wms.table(
   "plan_stop",
   {
@@ -140,6 +146,8 @@ export const planStop = wms.table(
   ],
 )
 
+export const planStopPolicies = policies(planStop, { exempt: WRITTEN_BY_ROUTING })
+
 export const planLeg = wms.table(
   "plan_leg",
   {
@@ -169,6 +177,8 @@ export const planLeg = wms.table(
   ],
 )
 
+export const planLegPolicies = policies(planLeg, { exempt: WRITTEN_BY_ROUTING })
+
 export const routingQuota = wms.table(
   "routing_quota",
   {
@@ -196,3 +206,5 @@ export const routingQuota = wms.table(
     check(tableObjectName(t.id.table, "counts_shape", "routingQuota"), sql`(${t.remaining} is null or ${t.remaining} >= 0) and (${t.limit} is null or ${t.limit} >= 0)`),
   ],
 )
+
+export const routingQuotaPolicies = policies(routingQuota, { exempt: WRITTEN_BY_ROUTING })

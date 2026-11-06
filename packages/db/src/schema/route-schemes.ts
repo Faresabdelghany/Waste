@@ -96,6 +96,7 @@ import { vehicleType } from "./fleet-types"
 import { company, project, serviceProvider } from "./organisation"
 import { depot, unloadingStation } from "./places"
 import { planningArea } from "./planning-areas"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -163,6 +164,25 @@ export const routeScheme = wms.table(
   ],
 )
 
+export const routeSchemePolicies = policies(routeScheme, {
+  audited: {},
+  door: {
+    columns: [
+      routeScheme.id,
+      routeScheme.companyId,
+      routeScheme.projectId,
+      routeScheme.frequency,
+      routeScheme.serviceDays,
+      routeScheme.weekRotation,
+      routeScheme.validFrom,
+      routeScheme.validTo,
+      routeScheme.holidayPolicy,
+      routeScheme.status,
+    ],
+    rows: inPublishedProject("route_scheme"),
+  },
+})
+
 export const collectionGroup = wms.table(
   "collection_group",
   {
@@ -213,6 +233,22 @@ export const collectionGroup = wms.table(
   ],
 )
 
+export const collectionGroupPolicies = policies(collectionGroup, {
+  audited: { parent: collectionGroup.routeSchemeId },
+  door: {
+    columns: [
+      collectionGroup.id,
+      collectionGroup.companyId,
+      collectionGroup.projectId,
+      collectionGroup.routeSchemeId,
+      collectionGroup.position,
+      collectionGroup.days,
+      collectionGroup.stopSource,
+    ],
+    rows: inPublishedProject("collection_group"),
+  },
+})
+
 export const collectionGroupFraction = wms.table(
   "collection_group_fraction",
   {
@@ -234,6 +270,8 @@ export const collectionGroupFraction = wms.table(
   ],
 )
 
+export const collectionGroupFractionPolicies = policies(collectionGroupFraction, { audited: { parent: collectionGroupFraction.collectionGroupId } })
+
 export const collectionGroupContainerType = wms.table(
   "collection_group_container_type",
   {
@@ -254,6 +292,10 @@ export const collectionGroupContainerType = wms.table(
     tenantIndex(t, t.containerTypeId),
   ],
 )
+
+export const collectionGroupContainerTypePolicies = policies(collectionGroupContainerType, {
+  audited: { parent: collectionGroupContainerType.collectionGroupId },
+})
 
 export const collectionGroupContainer = wms.table(
   "collection_group_container",
@@ -279,6 +321,19 @@ export const collectionGroupContainer = wms.table(
     tenantIndex(t, t.containerId),
   ],
 )
+
+export const collectionGroupContainerPolicies = policies(collectionGroupContainer, {
+  audited: { parent: collectionGroupContainer.collectionGroupId },
+  door: {
+    columns: [
+      collectionGroupContainer.companyId,
+      collectionGroupContainer.projectId,
+      collectionGroupContainer.collectionGroupId,
+      collectionGroupContainer.containerId,
+    ],
+    rows: inPublishedProject("collection_group_container"),
+  },
+})
 
 export const routeSchemeSeason = wms.table(
   "route_scheme_season",
@@ -312,3 +367,20 @@ export const routeSchemeSeason = wms.table(
     tenantIndex(t, t.projectId),
   ],
 )
+
+export const routeSchemeSeasonPolicies = policies(routeSchemeSeason, {
+  audited: { parent: routeSchemeSeason.routeSchemeId },
+  door: {
+    columns: [
+      routeSchemeSeason.companyId,
+      routeSchemeSeason.projectId,
+      routeSchemeSeason.routeSchemeId,
+      routeSchemeSeason.name,
+      routeSchemeSeason.startsOn,
+      routeSchemeSeason.endsOn,
+      routeSchemeSeason.frequency,
+      routeSchemeSeason.weekRotation,
+    ],
+    rows: inPublishedProject("route_scheme_season"),
+  },
+})

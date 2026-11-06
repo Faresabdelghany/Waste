@@ -1,11 +1,12 @@
 // A row's history on the wire (#291): every switched kind whose table the
-// audit trail keeps names that table, the kinds that keep none are the
-// ledgers, execution and the money the work makes, and a history is one
-// page of `GET /audit-events` for the row's table and server id.
+// audit trail keeps names that table (`AUDITED_TABLES`, the domain's), the
+// kinds that keep none are the ledgers, execution and the money the work
+// makes, and a history is one page of `GET /audit-events` for the row's table
+// and server id.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AUDITED_TABLES } from "@waste/contracts/audit"
+import { AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
 
 import { PAGE_LIMIT_MAX } from "../client"
 import { historyPage, historySubjectOf } from "../records/audit"
@@ -17,7 +18,7 @@ const kinds = SERVER_MODULES.flatMap((module) => module.resources.map((resource)
 describe("which kinds keep a history", () => {
   test("a kind's table is one the audit trail keeps, and no two kinds name one table", () => {
     const named = kinds.flatMap((kind) => (kind.table === undefined ? [] : [kind.table]))
-    for (const table of named) assert.ok((AUDITED_TABLES as readonly string[]).includes(table), table)
+    for (const table of named) assert.ok(Object.hasOwn(AUDITED_TABLES, table), table)
     assert.equal(new Set(named).size, named.length)
   })
 
