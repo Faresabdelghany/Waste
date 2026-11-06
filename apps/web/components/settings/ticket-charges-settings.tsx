@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { useModuleRecords, useServerResolver } from "@/components/waste/business-record-store"
 import { problemSentence, type Problem } from "@/lib/api/problem"
 import { isLocalRefusal } from "@/lib/api/records/adapter"
@@ -47,7 +47,10 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, [])
 
-  const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-"))
+  // The projects the person works in, as the Deadlines and Teams tabs list them: the API answers another's charges with a 400.
+  const { me } = useApiSession()
+  const mine = new Set((me?.projects ?? []).map((candidate) => candidate.id))
+  const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-") && mine.has(resolve.serverIdOf(record.id) ?? ""))
   // The page names its project by the API's id; this tab lists the organisation's records, by the web's.
   const project = projectShown(projects, projectId, (record) => resolve.serverIdOf(record.id))
   const projectServerId = project === null ? undefined : resolve.serverIdOf(project.id)

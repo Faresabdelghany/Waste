@@ -58,9 +58,10 @@ import {
 import type { CountingPeriod } from "@waste/domain/resolution/vocabulary"
 
 /** What the pickers offer and the table names a rule's references by: each by server id. */
-type Choices = { types: readonly TicketType[]; teams: readonly Team[]; fractions: readonly WasteFraction[]; containerTypes: readonly ContainerType[] }
+/** `teamsRead` says the teams were answered, none among them or not, rather than refused or lost on the way. */
+type Choices = { types: readonly TicketType[]; teams: readonly Team[]; teamsRead: boolean; fractions: readonly WasteFraction[]; containerTypes: readonly ContainerType[] }
 
-const NO_CHOICES: Choices = { types: [], teams: [], fractions: [], containerTypes: [] }
+const NO_CHOICES: Choices = { types: [], teams: [], teamsRead: false, fractions: [], containerTypes: [] }
 
 /** The name of a reference among the choices, or its id where no list the role reads holds it. */
 const nameIn = (rows: readonly { id: string; name: string }[], id: string | null): string | null => (id === null ? null : (rows.find((row) => row.id === id)?.name ?? id))
@@ -70,11 +71,14 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
   const settle = async <T,>(read: Promise<T[]>): Promise<T[]> => read.catch(() => [])
   const [types, teams, fractions, containerTypes] = await Promise.all([
     settle(listAll<TicketType>(client, "/ticket-types")),
-    settle(listAll<Team>(client, "/teams")),
+    listAll<Team>(client, "/teams").then(
+      (rows) => ({ rows, read: true }),
+      () => ({ rows: [] as Team[], read: false }),
+    ),
     settle(listAll<WasteFraction>(client, "/waste-fractions")),
     settle(listAll<ContainerType>(client, "/container-types")),
   ])
-  return { types, teams, fractions, containerTypes }
+  return { types, teams: teams.rows, teamsRead: teams.read, fractions, containerTypes }
 }
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` moves the page to its Teams tab, where a rule's team is added. */
@@ -87,8 +91,8 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))
   const read = useReport<Choices>(access.view ? "counting-rule-choices" : null, choicesOf)
   const choices = read.report ?? NO_CHOICES
-  // Told once the lists are read, never while they are: a rule's tickets wait with a team, and the company has none to pick.
-  const noTeam = read.report !== null && offered(read.report.teams).length === 0
+  // Told once the teams are answered with no active one, never while they are read or where the read failed: a rule's tickets wait with a team, and the company has none to pick.
+  const noTeam = read.report !== null && read.report.teamsRead && offered(read.report.teams).length === 0
   const [editing, setEditing] = useState<CountingRule | "new" | null>(null)
   const rows = rules.report ?? []
 
@@ -329,7 +333,8 @@ function CountingRuleDialog({
               <PickRow id="counting-rule-team" label="Waits with team" value={draft.teamId} rows={choices.teams} invalid={refused("teamId") !== null} disabled={!may} onChange={(teamId) => change({ teamId })} />
               {said("teamId")}
             </div>
-            {noTeam && draft.teamId === null && (
+            {/* For a person who may save the rule: a team must come first, and leaving for one closes the rule unsaved, as the button says. */}
+            {noTeam && may && draft.teamId === null && (
               <div role="note" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm sm:col-span-2">
                 <span className="text-muted-foreground">{NO_TEAM_YET}</span>
                 {onOpenTeams !== undefined && (
@@ -341,7 +346,7 @@ function CountingRuleDialog({
                       onOpenTeams()
                     }}
                   >
-                    Open the Teams tab
+                    Close and open the Teams tab
                   </Button>
                 )}
               </div>

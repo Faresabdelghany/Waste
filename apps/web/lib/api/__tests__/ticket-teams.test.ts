@@ -205,6 +205,9 @@ describe("a project's default team per kind and per type", () => {
     assert.deepEqual([unread.at(-1)?.ticketTypeId, unread.at(-1)?.label], [OLD, "A ticket type not shown to your role"])
     const reading = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, null)
     assert.equal(reading.at(-1)?.label, "Reading the type…")
+    // A read that failed is said as one, never as the role's.
+    const failed = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, "failed")
+    assert.equal(failed.at(-1)?.label, "A ticket type that could not be read")
   })
 
   test("its body names each kind with a team by server id, and refuses a team the API does not hold", () => {

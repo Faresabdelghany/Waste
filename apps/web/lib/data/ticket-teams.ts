@@ -14,7 +14,7 @@ import { accessModule } from "../api/records/organisation"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
-import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoice } from "./ticket-scope"
+import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } from "./ticket-scope"
 
 /** Configure › Tickets & communication: the module the teams are the records of on the Pilot. */
 export const TICKET_TEAMS_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "templates" }
@@ -82,7 +82,7 @@ export const NO_TEAM = "no-team"
 export type TeamDefaultRow = TicketScope & { key: string; label: string; teamId: string }
 
 /** Every kind as a row, in the vocabulary's order, then each type listed (`typesListed`), each with the team the project names for it or none. `webIdOf` turns a team's server id into the record id the picker offers. */
-export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string, types: readonly TypeChoice[] | null = []): TeamDefaultRow[] {
+export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string, types: TypeChoices = []): TeamDefaultRow[] {
   const byKey = new Map(defaults.defaults.map((entry) => [scopeKey(entry), entry.teamId]))
   const row = (scope: TicketScope, label: string): TeamDefaultRow => {
     const teamId = byKey.get(scopeKey(scope))
