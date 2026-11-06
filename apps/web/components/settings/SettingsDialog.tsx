@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Bell,
+  Calculator,
   CalendarBlank,
   CalendarCheck,
   Couch,
@@ -62,6 +63,7 @@ import { MessageTemplatesSettings } from "@/components/settings/message-template
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
 import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
+import { CountingRulesSettings } from "@/components/settings/counting-rules-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
@@ -73,6 +75,7 @@ import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "@/lib/data/ticket-types"
+import { COUNTING_RULES_SETTINGS_PANE_ID } from "@/lib/data/counting-rules"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -183,6 +186,8 @@ const settingsSections: Array<{
       { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
       // The company's ticket types, their fields and status permissions on the API (#545 of #544): offered with the adapter configured.
       { id: TICKET_TYPES_SETTINGS_PANE_ID, label: "Ticket types", icon: Ticket },
+      // The company's counting rules on the API (#547 of #544): the emptyings counted per property and period, simulated before they are switched on; offered with the adapter configured.
+      { id: COUNTING_RULES_SETTINGS_PANE_ID, label: "Counting rules", icon: Calculator },
       // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
     ],
@@ -1844,6 +1849,8 @@ function SettingsPane({
         <TicketTeamsSettings />
       ) : paneId === TICKET_TYPES_SETTINGS_PANE_ID ? (
         <TicketTypesSettings />
+      ) : paneId === COUNTING_RULES_SETTINGS_PANE_ID ? (
+        <CountingRulesSettings />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (

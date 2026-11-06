@@ -52,6 +52,11 @@
 // inspection's removal took `vehicle-defect` again: `CHANGED_LATER` maps
 // today's ticket onto 0009's, and pre-trip-rendering.test.ts and
 // pre-trip-removal-rendering.test.ts pin the two replacements.
+// The counting rules' migration (#547 of #544) gave the ticket the rule that
+// opened it, the period and the count, with their checks, and grew its
+// sources by `counting-rule`, the same way: `CHANGED_LATER` maps today's
+// ticket onto 0009's, `ADDED_FOR_COUNTING_RULES` is left out, and
+// counting-rules-rendering.test.ts pins its statements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -111,11 +116,11 @@ const stampsShape = (() => {
 })()
 
 /** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" | "0075" | "types" | "pre-trip-removal"): string =>
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" | "0075" | "types" | "pre-trip-removal" | "counting"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
-    ...(asOf === "types" || asOf === "pre-trip-removal" ? ['"ticket_type_id" uuid NOT NULL', `"field_values" jsonb DEFAULT '{}'::jsonb NOT NULL`] : []),
+    ...(asOf === "types" || asOf === "pre-trip-removal" || asOf === "counting" ? ['"ticket_type_id" uuid NOT NULL', `"field_values" jsonb DEFAULT '{}'::jsonb NOT NULL`] : []),
     `"status" text DEFAULT 'open' NOT NULL`,
     `"priority" text DEFAULT 'none' NOT NULL`,
     '"source" text NOT NULL',
@@ -142,12 +147,13 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" |
     ...(asOf >= "0033" ? ['"charge_product_id" uuid'] : []),
     `"closed_at" ${INSTANT}`,
     ...(asOf >= "0035" ? ['"booked_route_id" uuid', '"booked_pickup_id" uuid'] : []),
+    ...(asOf === "counting" ? ['"counting_rule_id" uuid', '"counted_from" date', '"counted_to" date', '"counted" integer'] : []),
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0075" && asOf !== "pre-trip-removal" ? ["vehicle-defect"] : []), "other"),
+    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0075" && asOf !== "pre-trip-removal" && asOf !== "counting" ? ["vehicle-defect"] : []), "other"),
     oneOfCheck("ticket", "status", ...STATUSES),
     oneOfCheck("ticket", "priority", "critical", "high", "medium", "low", "none"),
-    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf >= "0031" ? ["service-provider"] : [])),
+    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf >= "0031" ? ["service-provider"] : []), ...(asOf === "counting" ? ["counting-rule"] : [])),
     oneOfCheck("ticket", "resolution", ...RESOLUTIONS),
     `CONSTRAINT "ticket_origin_shape" CHECK ((${ref("ticket", "created_by")} is null) = (${ref("ticket", "source_event_id")} is not null))`,
     `CONSTRAINT "ticket_pickup_shape" CHECK (${ref("ticket", "pickup_id")} is null or ${ref("ticket", "route_id")} is not null)`,
@@ -159,7 +165,8 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" |
     // The resolution named not null: `null in (...)` is null, and a null check passes.
     ...(asOf >= "0033" ? [`CONSTRAINT "ticket_charge_shape" CHECK (${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in ('recollected', 'serviced')))`] : []),
     ...(asOf >= "0035" ? [`CONSTRAINT "ticket_booked_shape" CHECK (${BOOKED_SHAPE})`] : []),
-    ...(asOf === "types" || asOf === "pre-trip-removal" ? [`CONSTRAINT "ticket_field_values_shape" CHECK (jsonb_typeof(${ref("ticket", "field_values")}) = 'object')`] : []),
+    ...(asOf === "counting" ? [`CONSTRAINT "ticket_counting_shape" CHECK (${COUNTING_SHAPE})`, `CONSTRAINT "ticket_counted_positive" CHECK (${ref("ticket", "counted")} > 0)`] : []),
+    ...(asOf === "types" || asOf === "pre-trip-removal" || asOf === "counting" ? [`CONSTRAINT "ticket_field_values_shape" CHECK (jsonb_typeof(${ref("ticket", "field_values")}) = 'object')`] : []),
     `CONSTRAINT "ticket_closed_shape" CHECK ((${ref("ticket", "status")} in ('completed', 'rejected')) = (${ref("ticket", "closed_at")} is not null))`,
   ])
 
@@ -235,9 +242,15 @@ const alertTable = (asOf: "0009" | "0034" | "loads"): string =>
 /** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
 const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
-/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035, 0070 and 0075 (O4, O3c, O30 and O13 of #290) and the pre-trip inspection's removal changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+/** A counting rule's ticket names the rule, the period whole and the count together, with the property counted at (#547 of #544). */
+const COUNTING_SHAPE = (() => {
+  const [rule, from, to, counted, property] = ["counting_rule_id", "counted_from", "counted_to", "counted", "property_id"].map((column) => ref("ticket", column))
+  return `(${rule} is null) = (${from} is null) and (${rule} is null) = (${to} is null) and (${rule} is null) = (${counted} is null) and (${rule} is null or (${property} is not null and ${to} > ${from}))`
+})()
+
+/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035, 0070 and 0075 (O4, O3c, O30 and O13 of #290) the pre-trip inspection's removal and the counting rules changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("pre-trip-removal"), ticketTable("0009")],
+  [ticketTable("counting"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
   [alertTable("loads"), alertTable("0009")],
 ])
@@ -261,8 +274,13 @@ const TYPE_FK = foreignKey("ticket", "ticket_ticket_type_id_kind_fk", ["company_
 const TYPE_INDEX = index("ticket", "ticket_ticket_type_id_kind_idx", "company_id", "ticket_type_id", "kind")
 const ADDED_FOR_TICKET_TYPES = [TYPE_FK, TYPE_INDEX]
 
+/** What the counting rules' migration (#547 of #544) added to the ticket beside the columns and the checks: the key to its rule, and one ticket per rule, property and period. */
+const COUNTING_RULE_FK = tenantFk("ticket", "counting_rule_id", "counting_rule")
+const COUNTING_KEY = partialUniqueIndex("ticket", "ticket_counting_key", ["company_id", "counting_rule_id", "property_id", "counted_from", "counted_to"], `${ref("ticket", "counting_rule_id")} is not null`)
+const ADDED_FOR_COUNTING_RULES = [COUNTING_RULE_FK, COUNTING_KEY]
+
 const expected = [
-  ticketTable("pre-trip-removal"),
+  ticketTable("counting"),
   ticketEventTable("0031"),
   alertTable("loads"),
   companyFk("ticket"),
@@ -286,6 +304,7 @@ const expected = [
   RECOLLECTION_PICKUP_FK,
   CHARGE_PRODUCT_FK,
   BOOKED_PICKUP_FK,
+  COUNTING_RULE_FK,
   companyFk("ticket_event"),
   projectFk("ticket_event"),
   projectFkTo("ticket_event", "ticket_id", "ticket"),
@@ -302,6 +321,7 @@ const expected = [
   tenantFk("alert", "raised_by", "user_account"),
   tenantFk("alert", "acknowledged_by", "user_account"),
   tenantFk("alert", "resolved_by", "user_account"),
+  COUNTING_KEY,
   BOOKED_PICKUP_KEY,
   // The consumer's first idempotency key: one ticket per outbox event, the rows with one alone in the index.
   partialUniqueIndex("ticket", "ticket_source_event_id_idx", ["company_id", "source_event_id"], `${ref("ticket", "source_event_id")} is not null`),
@@ -415,7 +435,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ compan
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0070.includes(statement) && !ADDED_FOR_TICKET_TYPES.includes(statement) && !ADDED_FOR_LOADS.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0070.includes(statement) && !ADDED_FOR_TICKET_TYPES.includes(statement) && !ADDED_FOR_COUNTING_RULES.includes(statement) && !ADDED_FOR_LOADS.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -477,6 +497,8 @@ describe("the checks of this context", () => {
       "ticket_recollection_pickup_shape",
       "ticket_charge_shape",
       "ticket_booked_shape",
+      "ticket_counting_shape",
+      "ticket_counted_positive",
       "ticket_field_values_shape",
       "ticket_closed_shape",
     ])

@@ -194,6 +194,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
         { queue: "outbox.command-rejected.resolution", id: a3 },
         { queue: "outbox.pickup-completed.finance", id: b1 },
         { queue: "outbox.pickup-completed.customer-notices", id: b1 },
+        { queue: "outbox.pickup-completed.counting", id: b1 },
         { queue: "outbox.unload-recorded", id: b2 },
       ],
       "each event sent to its consumer's queue of the kind, or the kind's own where none takes it, in id order within its company",
@@ -209,7 +210,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(stampsA.size, 1, "one company's batch is one transaction, one instant")
 
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 8, "a1 on Resolution's, Finance's (#293 M5b) and the customer notices' queues (O16 of #290), b1 on Finance's and the customer notices', the other three on one each")
+    assert.equal(jobs.length, 9, "a1 on Resolution's, Finance's (#293 M5b) and the customer notices' queues (O16 of #290), b1 on Finance's, the customer notices' and the counting rules' (#547 of #544), the other three on one each")
     for (const job of jobs) {
       const event = RelayedEvent.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
@@ -228,7 +229,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     assert.deepEqual(await relayOnce(context), { swept: 0, published: 0 })
     assert.deepEqual(sent, [])
-    assert.equal((await outboxJobs()).length, 8)
+    assert.equal((await outboxJobs()).length, 9)
   })
 
   test("a send that fails leaves the company's rows unstamped and its other sends unwritten — one transaction — while the other company's rows are published, and the next tick takes them", async () => {
@@ -255,18 +256,18 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(byId.get(b3)!.publishedAt, null, "B's first row is not stamped, though its send came before the failing one")
     assert.equal(byId.get(b4)!.publishedAt, null)
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 10, "A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
+    assert.equal(jobs.length, 11, "the nine before, and A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
     assert.ok(!jobs.some((job) => RelayedEvent.parse(job.data).id === b3), "b3's send did not survive its transaction")
 
-    // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order.
+    // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order, b3 to Finance's queue and the counting rules'.
     await boss.createQueue(outboxQueue("route-dispatched"), { retryLimit: 3, retryDelay: 10, retryBackoff: true })
     sent.length = 0
     assert.deepEqual(await relayOnce(context), { swept: 2, published: 2 })
     assert.deepEqual(
       sent.map((entry) => entry.id),
-      [b3, b4],
+      [b3, b3, b4],
     )
-    assert.equal((await outboxJobs()).length, 12)
+    assert.equal((await outboxJobs()).length, 14)
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
   })
 

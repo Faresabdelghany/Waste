@@ -270,6 +270,9 @@ async function lockedTicket(tx: Tx, principal: Principal, id: string): Promise<T
   return current
 }
 
+/** What a patch moving a counting rule's ticket off its property is told (#547 of #544): the ticket is that property's count, one per rule and period. */
+export const countedPropertyKept = (label: string): string => `${label} was opened by a counting rule for its property's emptyings, so it stays that property's`
+
 /** A closed ticket asked to change by the patch or by `assign`, neither of which asks the machine: the machine's own sentence. */
 function requireOpen(current: TicketRow): void {
   const status = current.status as TicketStatus
@@ -573,7 +576,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           200: describeJson("The ticket as it now stands.", Ticket),
           400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the patch does not take, or names a type, a value or a link the rules above refuse — at the field that is wrong."),
           ...commandProblems("edit"),
-          409: describeProblem("The ticket is completed or rejected; reopen it first. Or the type or the team named is retired."),
+          409: describeProblem("The ticket is completed or rejected; reopen it first. Or the type or the team named is retired, or the patch moves a counting rule's ticket off the property it counted."),
         },
       }),
       guard,
@@ -598,6 +601,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         if (body.teamId != null && body.teamId !== current.teamId) await requireTeam(tx, principal.companyId, body.teamId)
         // The type's 409 after the team's 400.
         refuseRetiredType(type)
+        // A counting rule's ticket is its property's count (#547 of #544): the property stays.
+        if (current.countingRuleId !== null && links.propertyId !== current.propertyId) throw problem(409, { detail: countedPropertyKept(labelOf(current)) })
         const [row] = await tx
           .update(ticket)
           .set({

@@ -55,6 +55,7 @@ import { holidayListRoutes } from "./routes/holiday-lists"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
+import { countingRuleRoutes } from "./routes/counting-rules"
 import { customerContactRoutes } from "./routes/customer-contacts"
 import { tankRoutes } from "./routes/tanks"
 import { customerRoutes } from "./routes/customers"
@@ -353,6 +354,7 @@ export function createApp({
   app.route("/", routeMessageRoutes(guard))
   app.route("/", ticketTeamRoutes(guard))
   app.route("/", ticketTypeRoutes(guard))
+  app.route("/", countingRuleRoutes(guard))
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", decommissionReasonRoutes(guard))

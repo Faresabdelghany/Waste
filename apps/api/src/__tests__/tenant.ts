@@ -81,7 +81,7 @@ import { company, holidayList, holidayListHoliday, project, serviceProvider } fr
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { defaultTicketTypeRows } from "@waste/db/commands/ticket-types"
-import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import { alert, countingRule, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
@@ -412,6 +412,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // A counting rule (#547 of #544) names a type, a team, a fraction and a container type, and a ticket named it: after the tickets, before all four.
+    await tx.delete(countingRule).where(eq(countingRule.companyId, companyId))
     // A ticket type's actions (#546 of #544) name a team, a person and a type, so they go before all three.
     await tx.delete(ticketTypeAction).where(eq(ticketTypeAction.companyId, companyId))
     // The ticket teams (O30 of #290): the defaults and the members name a team, and a ticket did, so the team goes after the tickets.

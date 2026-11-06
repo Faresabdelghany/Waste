@@ -59,7 +59,17 @@ import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } f
 import { Label, Paragraph } from "./text"
 import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
+/** What a Counting Rule's ticket records (#547 of #544): the rule, the period it counted — its first day and the first day after it, so a month, a quarter and a year starting on one day are three periods — and the emptyings counted when the limit was reached. */
+export const TicketCountedBy = z.object({
+  countingRuleId: Id,
+  periodFrom: IsoDate,
+  periodTo: IsoDate,
+  count: PositiveInt,
+})
+export type TicketCountedBy = z.infer<typeof TicketCountedBy>
+
 /** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
+
 export const TicketLinks = z.object({
   routeId: Id.nullable(),
   /** A pickup of the route the ticket names. */
@@ -148,6 +158,12 @@ export const ticketFields = {
    */
   bookedRouteId: Id.nullable().default(null),
   bookedPickupId: Id.nullable().default(null),
+  /**
+   * The Counting Rule that opened it (#547 of #544), the period it counted
+   * and the count that reached the rule's limit; null on every other ticket,
+   * and absent on an event the outbox took before the rules, read as none.
+   */
+  countedBy: TicketCountedBy.nullable().default(null),
 }
 
 export const Ticket = z.object(ticketFields).refine(labelMatches, labelIsTheNumber)
@@ -231,10 +247,10 @@ export const TicketCreate = z
     /** The type's custom fields' values, by key, each one the field takes; the fields the type requires to open included. */
     fieldValues: TicketFieldValuesBody.default({}).describe("None when absent."),
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
-    /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b). */
-    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider"])
+    /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b), nor `counting-rule`, what the worker writes for a counting rule's ticket (#547 of #544). */
+    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider", "counting-rule"])
       .default("office")
-      .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, and service-provider is what the API writes for a ticket a Service Provider's account raises."),
+      .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, service-provider is what the API writes for a ticket a Service Provider's account raises, and counting-rule the worker's for a counting rule's ticket."),
     /** When the issue or request happened; the request's clock when absent. */
     occurredAt: IsoDateTime.optional(),
     /** The due date; null for none, and the project's SLA target of the kind and priority when absent. */
