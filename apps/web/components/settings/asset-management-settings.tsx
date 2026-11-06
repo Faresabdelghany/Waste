@@ -424,21 +424,25 @@ export function AssetPanelShell({
   description,
   children,
 }: {
-  heading?: string
+  /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
+  heading?: string | null
   tabs?: ReactNode
   action?: ReactNode
   toolbar: ReactNode
-  title: string
-  description: string
+  /** The table's title and its ⓘ; left out, the content starts at once. */
+  title?: string
+  description?: string
   children: ReactNode
 }) {
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <p className="text-base font-medium text-foreground">{heading}</p>
-          {action && <div className="flex items-center gap-2">{action}</div>}
-        </div>
+        {(heading !== null || action) && (
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <p className="text-base font-medium text-foreground">{heading}</p>
+            {action && <div className="flex items-center gap-2">{action}</div>}
+          </div>
+        )}
         <div className="flex flex-col gap-3 px-4 py-3">
           {tabs}
           {toolbar}
@@ -446,6 +450,7 @@ export function AssetPanelShell({
       </header>
       <div className="flex-1 p-4">
         <div className="mx-auto max-w-[1500px] space-y-4">
+          {title !== undefined && (
           <section className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
@@ -466,6 +471,7 @@ export function AssetPanelShell({
               </Tooltip>
             </div>
           </section>
+          )}
           {children}
         </div>
       </div>

@@ -125,9 +125,6 @@ const NO_LIST = "__none__"
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"
 
-const PANE_DESCRIPTION =
-  "The company's holiday lists, one per country, and the holidays of each. A project rests on one list: the guided setup, route generation and the scheme detail read its holidays from there."
-
 /* ------------------------------ The table's view ------------------------------ */
 
 /** The View popover's starting point, and what its Reset returns to: every column, by list name, ungrouped. */
@@ -418,9 +415,7 @@ function HolidayListsIndex({
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Holiday lists"
-      description={PANE_DESCRIPTION}
+      heading={null}
       toolbar={
         <div className="flex flex-col gap-2">
           <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
@@ -795,9 +790,7 @@ function HolidayListPage({
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title={name}
-      description={`The holidays of ${country ? countryName(country) : "this list"}, by date. Every project resting on the list skips or shifts its collections on them, by its scheme's holiday policy.`}
+      heading={null}
       toolbar={
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
