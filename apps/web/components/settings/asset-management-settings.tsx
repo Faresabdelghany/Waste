@@ -64,7 +64,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { TableCard } from "@/components/page-layout"
+import { PageActions, TableCard } from "@/components/page-layout"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -419,7 +419,7 @@ export function AssetPanelShell({
   /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
   heading?: string | null
   tabs?: ReactNode
-  /** A pane with no list's own buttons (Save, Refresh). A list's actions go in its `RecordsSection`, as a workspace's do. */
+  /** The buttons of a pane that has no list (Notifications' Save, Integrations' Refresh); a list's actions go in its `RecordsSection`, as a workspace's do. */
   action?: ReactNode
   toolbar?: ReactNode
   /** The table's title and its ⓘ; left out, the content starts at once. */
@@ -433,7 +433,7 @@ export function AssetPanelShell({
         {(heading !== null || action) && (
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <p className="text-base font-medium text-foreground">{heading}</p>
-            {action && <div className="flex items-center gap-2">{action}</div>}
+            {action && <PageActions>{action}</PageActions>}
           </div>
         )}
         {(tabs || toolbar) && (
@@ -1158,7 +1158,7 @@ function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
     title="Part types"
     description="Groupings for spare parts used in pickers and reporting. Deactivated types stay on existing spare parts."
     toolbar={<AssetToolbar searchPlaceholder="Search part types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.partTypes.length} actions={<div className="flex max-w-lg gap-2"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-7 w-48 text-xs" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></div>}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." narrowed={assets.partTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.partTypes.length} actions={<><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-7 w-48 text-xs" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></>}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." narrowed={assets.partTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
 }
 
 function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {

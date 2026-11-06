@@ -156,7 +156,6 @@ function HolidayListStatusBadge({ status }: { status: HolidayListStatus }) {
   )
 }
 
-/** The bordered table card with its count on the left and its actions on the right, as the Routes table's. */
 /** "2 holiday lists", or "1 of 2 holiday lists" under a search or a filter. */
 function shownCount(shown: number, total: number, noun: string): string {
   return shown === total ? count(total, noun) : `${shown} of ${count(total, noun)}`

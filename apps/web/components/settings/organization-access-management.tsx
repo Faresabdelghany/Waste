@@ -367,6 +367,8 @@ function Toolbar({
   )
 }
 
+const USERS_ROLES_HEADING = "Users & roles"
+
 const defaultUserView: TableView = { ordering: "name", showDetails: true }
 const defaultRoleView: TableView = { ordering: "default", showDetails: true }
 const defaultTeamView: TableView = { ordering: "default", showDetails: true }
@@ -479,7 +481,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   return (
     <>
       <AssetPanelShell
-        heading="Users & roles"
+        heading={USERS_ROLES_HEADING}
         tabs={tabs}
         toolbar={
           <Toolbar
@@ -986,7 +988,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
         />
       ) : activeTab === "users" ? (
         <AssetPanelShell
-          heading="Users & roles"
+          heading={USERS_ROLES_HEADING}
           tabs={tabs}
           toolbar={
             <Toolbar
@@ -1125,7 +1127,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
         )
       ) : (
         <AssetPanelShell
-          heading="Users & roles"
+          heading={USERS_ROLES_HEADING}
           tabs={tabs}
           toolbar={
             <Toolbar

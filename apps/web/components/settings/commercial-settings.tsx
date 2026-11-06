@@ -38,6 +38,7 @@ import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-mod
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
+import { TableCard } from "@/components/page-layout"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -135,13 +136,7 @@ export type Registry = { title: string; entries: RegistryEntry[] }
 // registries that are still derived (e.g. Materials from product facts).
 export function RegistryCard({ registry }: { registry: Registry }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-        <p className="text-xs font-medium text-foreground">{registry.title}</p>
-        <p className="text-xs text-muted-foreground">
-          {registry.entries.length} {registry.entries.length === 1 ? "entry" : "entries"}
-        </p>
-      </div>
+    <TableCard summary={`${registry.title} · ${registry.entries.length} ${registry.entries.length === 1 ? "entry" : "entries"}`}>
       <div className="divide-y divide-border/60">
         {registry.entries.map((entry) => (
           <div
@@ -173,7 +168,7 @@ export function RegistryCard({ registry }: { registry: Registry }) {
           </div>
         ))}
       </div>
-    </section>
+    </TableCard>
   )
 }
 

@@ -5327,7 +5327,6 @@ export function BusinessWorkspace({
             summary={`${recordCountLabel(filteredRecords.length, visibleScopedRecords.length)}${fixedScopeLabel ? ` · ${fixedScopeLabel}` : ""}`}
             actions={moduleActions}
           >
-
             {isFleetPlanningView ? (
               <div className="p-4">
                 <TimelineGantt
