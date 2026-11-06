@@ -46,9 +46,11 @@ import {
   countingRulesAccessOf,
   EVERY,
   isCountingRuleRefusal,
+  NO_TEAM_YET,
   simulatedPeriod,
   SIMULATION_WINDOWS,
   simulationBodyOf,
+  simulationSentence,
   simulationWindowOf,
   type CountingRuleDraft,
   type CountingRuleRefusal,
@@ -75,15 +77,18 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
   return { types, teams, fractions, containerTypes }
 }
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
-export function CountingRulesSettings({ tabs }: { tabs?: ReactNode } = {}) {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` moves the page to its Teams tab, where a rule's team is added. */
+export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } = {}) {
   const client = useApiClient()
   const { me } = useApiSession()
   const access = countingRulesAccessOf(me?.role.grants)
   // Read again after every write: the key carries how many there have been.
   const [writes, setWrites] = useState(0)
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))
-  const choices = useReport<Choices>(access.view ? "counting-rule-choices" : null, choicesOf).report ?? NO_CHOICES
+  const read = useReport<Choices>(access.view ? "counting-rule-choices" : null, choicesOf)
+  const choices = read.report ?? NO_CHOICES
+  // Told once the lists are read, never while they are: a rule's tickets wait with a team, and the company has none to pick.
+  const noTeam = read.report !== null && offered(read.report.teams).length === 0
   const [editing, setEditing] = useState<CountingRule | "new" | null>(null)
   const rows = rules.report ?? []
 
@@ -130,7 +135,7 @@ export function CountingRulesSettings({ tabs }: { tabs?: ReactNode } = {}) {
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint={access.create && rules.report !== null ? "Add a rule, simulate it, then switch it on." : ""} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={!access.create || rules.report === null ? "" : noTeam ? "Add a team on the Teams tab first: a rule's tickets wait with one. Then add a rule, simulate it, and switch it on." : "Add a rule, simulate it, then switch it on."} />
               ) : (
                 rows.map((rule) => (
                   <TableRow key={rule.id} aria-label={rule.name}>
@@ -160,6 +165,8 @@ export function CountingRulesSettings({ tabs }: { tabs?: ReactNode } = {}) {
           key={editing === "new" ? "new" : editing.id}
           rule={editing === "new" ? undefined : editing}
           choices={choices}
+          noTeam={noTeam}
+          onOpenTeams={onOpenTeams}
           access={access}
           client={client}
           onClose={() => setEditing(null)}
@@ -202,6 +209,8 @@ function PickRow({ id, label, value, rows, every, invalid, disabled, onChange }:
 function CountingRuleDialog({
   rule,
   choices,
+  noTeam,
+  onOpenTeams,
   access,
   client,
   onClose,
@@ -209,6 +218,8 @@ function CountingRuleDialog({
 }: {
   rule: CountingRule | undefined
   choices: Choices
+  noTeam: boolean
+  onOpenTeams?: () => void
   access: ReturnType<typeof countingRulesAccessOf>
   client: NonNullable<ReturnType<typeof useApiClient>>
   onClose: () => void
@@ -318,6 +329,23 @@ function CountingRuleDialog({
               <PickRow id="counting-rule-team" label="Waits with team" value={draft.teamId} rows={choices.teams} invalid={refused("teamId") !== null} disabled={!may} onChange={(teamId) => change({ teamId })} />
               {said("teamId")}
             </div>
+            {noTeam && draft.teamId === null && (
+              <div role="note" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm sm:col-span-2">
+                <span className="text-muted-foreground">{NO_TEAM_YET}</span>
+                {onOpenTeams !== undefined && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onClose()
+                      onOpenTeams()
+                    }}
+                  >
+                    Open the Teams tab
+                  </Button>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <Checkbox checked={draft.notifiesTeam} disabled={!may} onCheckedChange={(checked) => change({ notifiesTeam: checked === true })} />
               E-mail each member of the team when a ticket opens
@@ -356,12 +384,7 @@ function CountingRuleDialog({
               <p className="px-3 py-3 text-xs text-muted-foreground">The properties that would have received a ticket under these terms, and when, in the projects you work in.</p>
             ) : (
               <div className="space-y-2 px-3 py-3">
-                <p className="text-sm">
-                  {simulation.answer.tickets === 0
-                    ? `No property would have received a ticket from ${simulation.answer.from} to ${simulation.answer.to}.`
-                    : `${simulation.answer.tickets} ${simulation.answer.tickets === 1 ? "ticket" : "tickets"} at ${simulation.answer.properties} ${simulation.answer.properties === 1 ? "property" : "properties"} from ${simulation.answer.from} to ${simulation.answer.to}.`}
-                  {simulation.answer.shown.length < simulation.answer.tickets && ` The first ${simulation.answer.shown.length} are listed.`}
-                </p>
+                <p className="text-sm">{simulationSentence(simulation.answer)}</p>
                 {simulation.answer.shown.length > 0 && (
                   <Table>
                     <TableHeader>

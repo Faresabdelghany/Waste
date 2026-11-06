@@ -45,12 +45,13 @@ import {
   type TeamDefaultRow,
 } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
+import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
-export function TicketTeamsSettings({ tabs }: { tabs?: ReactNode } = {}) {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the defaults' project is the page's, shared with the Deadlines and Charges tabs. */
+export function TicketTeamsSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const client = useApiClient()
   const configured = useApiConfigured()
   const { me } = useApiSession()
@@ -152,6 +153,8 @@ export function TicketTeamsSettings({ tabs }: { tabs?: ReactNode } = {}) {
         canEdit={access.edit}
         client={client}
         projects={me?.projects ?? []}
+        projectId={projectId}
+        onProjectChange={onProjectChange}
       />
 
       <BusinessRecordFormDialog schema={TICKET_TEAM_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={relationOptions} />
@@ -180,6 +183,8 @@ function TeamDefaults({
   canEdit,
   client,
   projects,
+  projectId,
+  onProjectChange,
 }: {
   teams: readonly BusinessRecord[]
   serverIdOf: (webId: string) => string | undefined
@@ -188,9 +193,8 @@ function TeamDefaults({
   canEdit: boolean
   client: ReturnType<typeof useApiClient>
   projects: readonly { id: string; name: string }[]
-}) {
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
+} & TicketsProjectPick) {
+  const project = projectShown(projects, projectId, (candidate) => candidate.id)
   const read = useReport<TicketTeamDefaults>(project === null || !canRead ? null : `ticket-team-defaults:${project.id}`, (asking) => get<TicketTeamDefaults>(asking, `/projects/${project?.id}/ticket-team-defaults`))
   // The set the last save answered, which stands for the project's until the next read of another project.
   const [answered, setAnswered] = useState<TicketTeamDefaults | null>(null)
@@ -250,7 +254,7 @@ function TeamDefaults({
           <Select
             value={project?.id ?? ""}
             onValueChange={(id) => {
-              setChosenProjectId(id)
+              onProjectChange(id)
               setAnswered(null)
               setRefused(null)
             }}

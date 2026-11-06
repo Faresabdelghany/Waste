@@ -37,23 +37,26 @@ export const scopeKey = (scope: TicketScope): string => kindOrTypeKey(scope)
 /** How a type reads in a list of settings: its name, and its kind's beside it where the list told it. */
 export const typeLabel = (type: Pick<TypeChoice, "name" | "kind">): string => (type.kind === null ? type.name : `${type.name} (${statusLabel(type.kind)})`)
 
-/** A type a set names that no list the role reads holds: by its id, its kind unknown. */
-const unknownType = (id: string): TypeChoice => ({ id, name: id, kind: null, status: "active" })
+/** What a type a set names reads as where the types do not hold it: still being read (`types` null), or one the role reads no list of — never its id, which tells a person nothing. */
+export const unknownTypeName = (types: readonly TypeChoice[] | null): string => (types === null ? "Reading the type…" : "A ticket type not shown to your role")
 
-/** The types a pane lists a row for: the active ones in the order given but each kind's default, whose setting is its kind's row, then any the set names already that are retired, a default or unread, so a setting kept is shown. */
-export function typesListed(types: readonly TypeChoice[], named: Iterable<string>): TypeChoice[] {
-  const listed = types.filter((type) => type.status === "active" && type.isDefault !== true)
+/** A type a set names that the types do not hold, its kind unknown. */
+const unknownType = (id: string, types: readonly TypeChoice[] | null): TypeChoice => ({ id, name: unknownTypeName(types), kind: null, status: "active" })
+
+/** The types a pane lists a row for: the active ones in the order given but each kind's default, whose setting is its kind's row, then any the set names already that are retired, a default or unread, so a setting kept is shown. `types` is null while they are read. */
+export function typesListed(types: readonly TypeChoice[] | null, named: Iterable<string>): TypeChoice[] {
+  const listed = (types ?? []).filter((type) => type.status === "active" && type.isDefault !== true)
   const shown = new Set(listed.map((type) => type.id))
   for (const id of named) {
     if (shown.has(id)) continue
     shown.add(id)
-    listed.push(types.find((type) => type.id === id) ?? unknownType(id))
+    listed.push(types?.find((type) => type.id === id) ?? unknownType(id, types))
   }
   return listed
 }
 
 /** The label of a type a set names, read from the types where they hold it. */
-export function labelOfType(types: readonly TypeChoice[], id: string): string {
-  const type = types.find((candidate) => candidate.id === id)
-  return type === undefined ? id : typeLabel(type)
+export function labelOfType(types: readonly TypeChoice[] | null, id: string): string {
+  const type = types?.find((candidate) => candidate.id === id)
+  return type === undefined ? unknownTypeName(types) : typeLabel(type)
 }

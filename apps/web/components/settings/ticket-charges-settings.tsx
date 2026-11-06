@@ -28,6 +28,7 @@ import { getModuleDefinition } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { NO_ONE } from "@/lib/data/properties"
 import { chargeRowsOf, picksOf, ticketChargesBody, ticketWorkProductOptions, typesPicked, type TicketChargePicks } from "@/lib/data/ticket-charges"
+import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
@@ -38,8 +39,8 @@ const asIs = (id: string) => id
 /** A project's charges as read: the picks, or why they could not be. */
 type Read = { projectId: string; picks: TicketChargePicks } | { projectId: string; problem: Problem }
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
-export function TicketChargesSettings({ tabs }: { tabs?: ReactNode } = {}) {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Teams tabs. */
+export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const configured = useApiConfigured()
   const client = useApiClient()
   const resolve = useServerResolver()
@@ -47,8 +48,8 @@ export function TicketChargesSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, [])
 
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-"))
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((record) => record.id === chosenProjectId) ?? projects[0] ?? null
+  // The page names its project by the API's id; this tab lists the organisation's records, by the web's.
+  const project = projectShown(projects, projectId, (record) => resolve.serverIdOf(record.id))
   const projectServerId = project === null ? undefined : resolve.serverIdOf(project.id)
 
   const [read, setRead] = useState<Read | null>(null)
@@ -135,7 +136,14 @@ export function TicketChargesSettings({ tabs }: { tabs?: ReactNode } = {}) {
           <Label htmlFor="ticket-charges-project" className="text-sm text-muted-foreground">
             Project
           </Label>
-          <Select value={project?.id ?? ""} onValueChange={setChosenProjectId} disabled={projects.length === 0 || saving}>
+          <Select
+            value={project?.id ?? ""}
+            onValueChange={(id) => {
+              const serverId = resolve.serverIdOf(id)
+              if (serverId !== undefined) onProjectChange(serverId)
+            }}
+            disabled={projects.length === 0 || saving}
+          >
             <SelectTrigger id="ticket-charges-project" className="w-64">
               <SelectValue placeholder="Pick a project" />
             </SelectTrigger>

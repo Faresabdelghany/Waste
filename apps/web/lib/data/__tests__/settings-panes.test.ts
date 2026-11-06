@@ -14,7 +14,7 @@ import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "../ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "../ticket-types"
 import { COUNTING_RULES_SETTINGS_PANE_ID } from "../counting-rules"
-import { TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
+import { projectShown, TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -55,6 +55,19 @@ describe("the Settings panes offered", () => {
     }
     assert.equal(ticketsTabOf(undefined), "types")
     assert.deepEqual(TICKETS_TABS.map((tab) => tab.label), ["Types", "Teams", "Deadlines", "Charges", "Counting rules"])
+  })
+
+  test("the Deadlines, Teams and Charges tabs open on one project: the one picked where a tab lists it, else the first by name", () => {
+    // The person's projects by the API's id, and the organisation's records by the web's, in different orders.
+    const mine = [{ id: "p-2", name: "Copenhagen Central" }, { id: "p-1", name: "Cairo Operations" }]
+    const records = [{ id: "project-p-1", name: "Cairo Operations" }, { id: "project-p-2", name: "Copenhagen Central" }].reverse()
+    const serverIdOfRecord = (record: { id: string }) => record.id.slice("project-".length)
+    assert.equal(projectShown(mine, null, (project) => project.id)?.name, "Cairo Operations")
+    assert.equal(projectShown(records, null, serverIdOfRecord)?.name, "Cairo Operations")
+    assert.equal(projectShown(mine, "p-2", (project) => project.id)?.name, "Copenhagen Central")
+    assert.equal(projectShown(records, "p-2", serverIdOfRecord)?.name, "Copenhagen Central")
+    assert.equal(projectShown(mine, "p-9", (project) => project.id)?.name, "Cairo Operations", "a project the tab does not list")
+    assert.equal(projectShown([], "p-1", (project: { id: string; name: string }) => project.id), null)
   })
 
   test("Finance & invoicing is the API's on the Pilot (#291 C4) and the browser's in fixture mode, one pane in each", () => {

@@ -82,7 +82,7 @@ export const NO_TEAM = "no-team"
 export type TeamDefaultRow = TicketScope & { key: string; label: string; teamId: string }
 
 /** Every kind as a row, in the vocabulary's order, then each type listed (`typesListed`), each with the team the project names for it or none. `webIdOf` turns a team's server id into the record id the picker offers. */
-export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string, types: readonly TypeChoice[] = []): TeamDefaultRow[] {
+export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string, types: readonly TypeChoice[] | null = []): TeamDefaultRow[] {
   const byKey = new Map(defaults.defaults.map((entry) => [scopeKey(entry), entry.teamId]))
   const row = (scope: TicketScope, label: string): TeamDefaultRow => {
     const teamId = byKey.get(scopeKey(scope))
