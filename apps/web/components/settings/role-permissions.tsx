@@ -446,7 +446,12 @@ export function RolePermissionsMatrix({
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border/40">
-        <RecordPageHeader backLabel="Back to roles" onBack={onBack} name={title} />
+        <RecordPageHeader
+          backLabel="Back to roles"
+          onBack={onBack}
+          name={title}
+          line={`${grantedTotal} of ${rolePermissionCellCount} permissions granted`}
+        />
       </header>
       <div className="flex-1 p-4">
         <div className="mx-auto flex w-full max-w-[1500px] items-start gap-6">
@@ -485,19 +490,6 @@ export function RolePermissionsMatrix({
             </div>
           </nav>
           <div className="min-w-0 flex-1 space-y-4">
-            <section className="flex flex-wrap items-start justify-between gap-3">
-              <h1 className="text-lg font-semibold tracking-tight">
-                {title}
-              </h1>
-              <div className="text-right">
-                <p className="text-sm font-medium tabular-nums text-foreground">
-                  {grantedTotal} of {rolePermissionCellCount}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  permissions granted
-                </p>
-              </div>
-            </section>
             {notice}
   
             <div className="relative max-w-sm">
