@@ -42,9 +42,6 @@ export const COLLECTION_CALENDARS_MODULE: ModuleLocation = {
   moduleId: calendarsDomain.moduleId,
 }
 
-/** The SettingsDialog pane that manages the module. */
-export const COLLECTION_CALENDARS_SETTINGS_PANE_ID = calendarsDomain.settingsPaneId
-
 /** The module definition (label, copy, lifecycle, fixtures) — guaranteed by the registry. */
 export function collectionCalendarsModule(): ModuleDefinition {
   const module = getModuleDefinition(COLLECTION_CALENDARS_MODULE)

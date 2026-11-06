@@ -436,9 +436,6 @@ function CompanyList({
 
   return (
     <AssetPanelShell
-      heading="Company & projects"
-      title="Companies"
-      description="Manage company identities, administrators, projects, and tenant-level operational data."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] max-w-md flex-1">

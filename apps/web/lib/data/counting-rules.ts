@@ -15,8 +15,6 @@ import { COUNTING_PERIODS, type CountingPeriod } from "@waste/domain/resolution/
 
 import { allows, type Grants } from "../api/grants"
 
-export const COUNTING_RULES_SETTINGS_PANE_ID = "counting-rules"
-
 /** What the person may do here: the templates' grant, and the stops' besides to simulate, since a simulation reads them. */
 export const countingRulesAccessOf = (grants: Grants | undefined) => ({
   view: allows(grants, "configure.templates", "view"),

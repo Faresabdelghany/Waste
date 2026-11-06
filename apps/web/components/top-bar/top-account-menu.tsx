@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { initialsOf } from "@/lib/data/account-profile"
+import { settingsHref } from "@/lib/data/settings-panes"
 import type { LinearThemeId } from "@/lib/app-themes"
 import { cn } from "@/lib/utils"
 
@@ -75,7 +76,7 @@ export function TopAccountMenu() {
           <DropdownMenuSeparator />
           {offersSettings && (
             <DropdownMenuItem asChild className="cursor-pointer">
-              <Link href={`/settings?pane=account&from=${encodeURIComponent(pathname)}`}>
+              <Link href={settingsHref("account", { from: pathname })}>
                 <GearSix className="h-4 w-4" />
                 Account settings
               </Link>

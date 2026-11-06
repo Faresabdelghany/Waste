@@ -35,7 +35,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
 import { vehicleAdapter } from "@/lib/api/records/fleet"
@@ -75,7 +75,6 @@ const NO_RECORDS: readonly BusinessRecord[] = []
  * `openTypeId` is the type whose own page stands in the list's place, by the API's id, or null for the list; `onOpenType` opens one, or the list with null.
  */
 export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: ReactNode; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
-  const configured = useApiConfigured()
   const session = useApiSession()
   const { me } = session
   const access = ticketTypesAccessOf(me?.role.grants)
@@ -132,9 +131,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
 
-  const emptyMessage = !configured
-    ? "The ticket types are kept on the API: sign in on the Pilot to read and write them."
-    : accessUnknownSentence(session) ?? (types.pending
+  const emptyMessage = accessUnknownSentence(session) ?? (types.pending
       ? "Reading the ticket types from the API…"
       : types.notGranted
         ? "The ticket types are not shown to your role."
@@ -150,7 +147,6 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
 
   return (
     <AssetPanelShell
-      heading="Tickets"
       tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
@@ -159,7 +155,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
         shown={rows.length}
         total={rows.length}
         actions={
-          <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!access.create || !types.ready || saving} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" weight="bold" />
             New type
           </Button>

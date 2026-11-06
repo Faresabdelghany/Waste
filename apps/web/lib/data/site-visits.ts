@@ -30,9 +30,6 @@ export const SITE_VISITS_MODULE = { workspaceId: "operate", moduleId: "site-visi
 /** The attendant's phone-first page, where a Site attendant lands. */
 export const CHECK_IN_PATH = "/check-in"
 
-/** Settings › Commercial › Recycling-centre charges. */
-export const VISIT_RULES_SETTINGS_PANE_ID = "commercial-visit-rules"
-
 /** The record's keys the surfaces read beside the facts. */
 export const CREDENTIAL_KIND_KEY = "kind"
 export const CREDENTIAL_VALUE_KEY = "value"

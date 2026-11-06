@@ -104,8 +104,9 @@ import {
   roleRowsOf,
   userRowsOf,
   type UserRow,
-  type UsersRolesTab,
 } from "@/lib/data/users-roles"
+import type { SettingsTabOf } from "@/lib/data/settings-panes"
+import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { cn } from "@/lib/utils"
 
 const roleScopeOptions = [
@@ -367,8 +368,6 @@ function Toolbar({
   )
 }
 
-const USERS_ROLES_HEADING = "Users & roles"
-
 const defaultUserView: TableView = { ordering: "name", showDetails: true }
 const defaultRoleView: TableView = { ordering: "default", showDetails: true }
 const defaultTeamView: TableView = { ordering: "default", showDetails: true }
@@ -481,7 +480,6 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   return (
     <>
       <AssetPanelShell
-        heading={USERS_ROLES_HEADING}
         tabs={tabs}
         toolbar={
           <Toolbar
@@ -567,8 +565,10 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   )
 }
 
-/** The pane at `tab`, which the Settings page holds so leaving and coming back finds the tab last used; `onTabChange` moves it. */
-export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersRolesTab; onTabChange: (tab: UsersRolesTab) => void }) {
+type UsersRolesTab = SettingsTabOf<"access">
+
+/** The pane at the address's tab (the Settings table offers Teams on the Pilot alone). */
+export function OrganizationAccessManagement({ params, onParamsChange }: SettingsPaneProps) {
   // On the Pilot (the adapter configured) the pane reads and writes the
   // access module through the record store and nothing else: the
   // organisation store below is fixture mode's (Issue #163).
@@ -589,8 +589,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
     createUser,
     createRole,
   } = useOrganizationStore()
-  // The teams are the API's: fixture mode has no Teams tab.
-  const activeTab: UsersRolesTab = tab === "teams" && !configured ? "users" : tab
+  const activeTab = (params.tab as UsersRolesTab | undefined) ?? "users"
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
@@ -938,7 +937,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
       <Tabs
         value={activeTab}
         onValueChange={(next) => {
-          onTabChange(next as UsersRolesTab)
+          onParamsChange({ tab: next })
           setSelectedRoleId(null)
         }}
       >
@@ -988,7 +987,6 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
         />
       ) : activeTab === "users" ? (
         <AssetPanelShell
-          heading={USERS_ROLES_HEADING}
           tabs={tabs}
           toolbar={
             <Toolbar
@@ -1127,7 +1125,6 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
         )
       ) : (
         <AssetPanelShell
-          heading={USERS_ROLES_HEADING}
           tabs={tabs}
           toolbar={
             <Toolbar

@@ -109,9 +109,6 @@ export function ProductsOnApiPane() {
 
   return (
     <AssetPanelShell
-      heading="Commercial"
-      title="Products"
-      description="The sellable catalogue of each project, as the API holds it: what an invoice line calls a product, the code a ledger books it under, and its VAT rate. Prices are rows of a price list, added in Price Engine with Add price."
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search products"
@@ -305,9 +302,6 @@ export function PriceListsPane() {
 
   return (
     <AssetPanelShell
-      heading="Commercial"
-      title="Price lists"
-      description="Each project's tariff and the named lists an agreement is priced under. A list's code and currency are set once, since its rows are quoted in them; a list ends on its last day in force. Price Engine's Add price puts a row in one."
       toolbar={<AssetToolbar searchPlaceholder="Search price lists" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} statusOptions={LIST_STATUS_OPTIONS} view={view} onViewChange={setView} />}
     >
       <RecordsSection

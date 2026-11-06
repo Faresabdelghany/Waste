@@ -21,9 +21,6 @@
 //   kind's work is charged at, read and set through the client
 //   (ticket-charges-settings.tsx), and so are the recycling-centre charges
 //   (#393): a project's Visit Rules (visit-rules-settings.tsx).
-//
-// `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
-// SettingsDialog renders; keep their exported shape stable.
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
@@ -35,7 +32,6 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
-import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { TableCard } from "@/components/page-layout"
@@ -67,8 +63,7 @@ import {
   sortByView,
   type AssetView,
 } from "@/components/settings/asset-management-settings"
-import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
-import { VisitRulesSettings } from "@/components/settings/visit-rules-settings"
+import { ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
@@ -241,15 +236,8 @@ export function CommercialDefaultsExtras() {
   )
 }
 
-export function CommercialSectionPane({ paneId }: { paneId: string }) {
-  if (paneId === "commercial-products") return <ProductsByModePane />
-  if (paneId === "commercial-price-lists") return <PriceListsPane />
-  if (paneId === VISIT_RULES_SETTINGS_PANE_ID) return <VisitRulesSettings />
-  return null
-}
-
 /** The products' pane: the API's on the Pilot, the fixtures' and the browser's in fixture mode. */
-function ProductsByModePane() {
+export function ProductsByModePane() {
   return useApiConfigured() ? <ProductsOnApiPane /> : <ProductsPane />
 }
 
@@ -419,8 +407,6 @@ function ProductsPane() {
 
   return (
     <AssetPanelShell
-      heading="Commercial"
-      title="Products"
       description="The sellable catalogue — add and edit products here. Prices are managed in Price Engine with Add price."
       toolbar={
         <AssetToolbar

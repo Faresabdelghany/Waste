@@ -18,6 +18,7 @@
  * very same object in that case so callers can detect "nothing changed" by
  * reference.
  */
+import { settingsHref, type SettingsPaneId } from "./settings-panes"
 
 export const LEGACY_WORKSPACE_IDS: Readonly<Record<string, string>> = {
   contractors: "service-providers",
@@ -257,7 +258,7 @@ export function migrateLegacyModuleKey(key: string): string {
  * records now open through their Settings pane. Every other Plan href (the
  * bare workspace, Map Planning) is left alone.
  */
-const PLAN_MODULE_SETTINGS_PANES: Readonly<Record<string, string>> = {
+const PLAN_MODULE_SETTINGS_PANES: Readonly<Record<string, SettingsPaneId>> = {
   areas: "areas",
   calendars: "collection-calendars",
 }
@@ -268,10 +269,7 @@ function migratePlanModuleHref(href: string): string {
   const params = new URLSearchParams(match[1])
   const paneId = PLAN_MODULE_SETTINGS_PANES[params.get("module") ?? ""]
   if (!paneId) return href
-  const next = new URLSearchParams({ pane: paneId })
-  const recordId = params.get("record")
-  if (recordId) next.set("record", recordId)
-  return `/settings?${next.toString()}${match[2] ?? ""}`
+  return `${settingsHref(paneId, { record: params.get("record") })}${match[2] ?? ""}`
 }
 
 /**

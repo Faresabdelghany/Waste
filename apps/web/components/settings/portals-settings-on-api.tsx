@@ -75,7 +75,7 @@ export function PortalsSettingsOnApi() {
     drivers.notGranted ? "Not shown to your role" : drivers.pending ? "Reading…" : drivers.problem ? "Could not be read" : driverAppReadingOf(drivers.records, projectId)
 
   return (
-    <AssetPanelShell heading="Administration" title="Portals & branding" description="What each project's residents find on its public pages, and which of its drivers use the Driver App." toolbar={null}>
+    <AssetPanelShell toolbar={null}>
       <RecordsSection shown={projects.length} total={projects.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[720px]">

@@ -19,9 +19,6 @@ import { allows, type Grants } from "../api/grants"
 import { statusLabel } from "../api/records/adapter"
 import { firstDayOut, lastDayIn } from "../api/records/planning"
 
-/** The pane, offered on the Pilot alone: the rules are the API's. */
-export const PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID = "pickup-exception-charges"
-
 /** The reason and code pickers' value for any: the wire's null. */
 export const ANY = "any"
 

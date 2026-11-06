@@ -8,8 +8,7 @@
 // Schemes, containers, and Service Areas keep referencing them; the record
 // shape written here is lib/data/planning-areas.ts's.
 
-import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useMemo, useState } from "react"
 import { ListBullets, PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -22,6 +21,8 @@ import {
   sortByView,
   type AssetView,
 } from "@/components/settings/asset-management-settings"
+import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -78,10 +79,9 @@ const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", modu
 const isAreasModule = (location: ModuleLocation) =>
   location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
 
-export function PlanningAreasSettings() {
+export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
-  const searchParams = useSearchParams()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [purposes, setPurposes] = useState<string[]>([])
@@ -157,18 +157,7 @@ export function PlanningAreasSettings() {
     [configured, schema],
   )
 
-  // A deep link (/settings?pane=areas&record=…) opens that area for editing —
-  // once the store has loaded and, on the Pilot, once the module's rows are
-  // here, so a user-created area and an API area are found too. Later edits
-  // keep their own state, so the records list is deliberately not a
-  // dependency.
-  const requestedRecordId = searchParams.get("record")
-  useEffect(() => {
-    if (!hydrated || !areas.ready || !requestedRecordId) return
-    const record = areaRecords.find((candidate) => candidate.id === requestedRecordId)
-    if (record) setEditingArea(record)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, areas.ready, requestedRecordId])
+  useLinkedRecord(params.record, areaRecords, hydrated && areas.ready, setEditingArea)
 
   const rows = areaRecords.map((record) => ({
     record,
@@ -234,9 +223,6 @@ export function PlanningAreasSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title={areasModule.label}
-      description={areasModule.description}
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search planning areas"

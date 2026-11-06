@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch, post, remove } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
@@ -85,7 +85,6 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` opens Settings › Users & roles at its Teams tab, where a rule's team is added. */
 export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } = {}) {
   const client = useApiClient()
-  const configured = useApiConfigured()
   const session = useApiSession()
   const access = countingRulesAccessOf(session.me?.role.grants)
   // Read again after every write: the key carries how many there have been.
@@ -99,9 +98,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const rows = rules.report ?? []
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
-  const emptyMessage = !configured
-    ? "The counting rules are kept on the API: sign in on the Pilot to read and write them."
-    : accessUnknownSentence(session) ?? (!access.view
+  const emptyMessage = accessUnknownSentence(session) ?? (!access.view
     ? "The counting rules are not shown to your role."
     : rules.problem !== null
       ? `The counting rules could not be read from the API: ${problemSentence(rules.problem)}`
@@ -111,7 +108,6 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
 
   return (
     <AssetPanelShell
-      heading="Tickets"
       tabs={tabs}
       title="Counting rules"
       description="Count the emptyings at each property over a month, a quarter or a year, and open a ticket when a limit is reached."

@@ -1,3 +1,5 @@
+import type { SettingsPaneId } from "./settings-panes"
+
 export type NavItemId =
   | "operate"
   | "plan"
@@ -29,6 +31,8 @@ export type ActiveRouteSummary = {
 export type SidebarFooterItem = {
   id: SidebarFooterItemId
   label: string
+  /** The Settings pane it opens; a pane its mode lacks opens the one it names instead. */
+  pane: SettingsPaneId
 }
 
 export const navItems: NavItem[] = [
@@ -107,6 +111,6 @@ export const serviceProviderActiveRoutes: ActiveRouteSummary[] = [
 ]
 
 export const footerItems: SidebarFooterItem[] = [
-  { id: "settings", label: "Settings" },
-  { id: "templates", label: "Ticket templates" },
+  { id: "settings", label: "Settings", pane: "account" },
+  { id: "templates", label: "Ticket templates", pane: "message-templates" },
 ]

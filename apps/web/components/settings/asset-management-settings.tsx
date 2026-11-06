@@ -68,6 +68,7 @@ import { PageActions, TableCard } from "@/components/page-layout"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 import { useOrganizationStore } from "@/components/settings/organization-store"
+import { useSettingsPaneFrame } from "@/components/settings/settings-pane-frame"
 import {
   assetEntityId,
   useAssetManagementStore,
@@ -408,28 +409,32 @@ export function AssetManagementSettings() {
 }
 
 export function AssetPanelShell({
-  heading = "Asset management",
+  heading: ownHeading,
   header,
   tabs,
   action,
   toolbar,
-  title,
-  description,
+  title: ownTitle,
+  description: ownDescription,
   children,
 }: {
-  /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
+  /** The bar above the toolbar, the shown pane's from the Settings table unless given; null leaves it out. */
   heading?: string | null
-  /** A record's page: its `RecordPageHeader`, in place of the heading bar (`heading` and `action` then go unused). */
+  /** A record's page: its `RecordPageHeader`, in place of the heading bar (`heading` and `action` then go unused), and no title. */
   header?: ReactNode
   tabs?: ReactNode
   /** The buttons of a pane that has no list (Notifications' Save); a list's actions go in its `RecordsSection`, as a workspace's do. */
   action?: ReactNode
   toolbar?: ReactNode
-  /** The table's title and its ⓘ; left out, the content starts at once. */
+  /** The table's title and its ⓘ, the shown pane's unless a tab gives its own. */
   title?: string
   description?: string
   children: ReactNode
 }) {
+  const frame = useSettingsPaneFrame()
+  const heading = ownHeading === undefined ? (frame?.heading ?? null) : ownHeading
+  const title = ownTitle ?? (header === undefined ? frame?.title : undefined)
+  const description = ownDescription ?? (ownTitle === undefined ? frame?.description : undefined)
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">

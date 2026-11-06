@@ -72,9 +72,6 @@ export function NotificationsSettingsOnApi() {
 
   return (
     <AssetPanelShell
-      heading="Personal"
-      title="Notifications"
-      description="The e-mails you get when something needs you. Nothing is sent until you ask for it."
       action={
         <div className="flex items-center gap-2">
           {editing && (

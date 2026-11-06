@@ -4,11 +4,6 @@ import { describe, test } from "node:test"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
 import {
-  HOLIDAY_LISTS_SETTINGS_PANE_ID,
-  HOLIDAY_SETTINGS_HREF,
-  holidaySettingsHref,
-} from "../business-links"
-import {
   FIXTURE_PROJECT_IDS,
   businessWorkspaces,
   type BusinessRecord,
@@ -33,17 +28,6 @@ const fixture = (records: readonly BusinessRecord[], id: string): BusinessRecord
   if (!record) throw new Error(`no fixture ${id}`)
   return record
 }
-
-describe("the pane's address", () => {
-  test("the wizard and the scheme detail link to the pane, on the scheme's project when known", () => {
-    assert.equal(holidaySettingsHref(), `/settings?pane=${HOLIDAY_LISTS_SETTINGS_PANE_ID}`)
-    assert.equal(
-      holidaySettingsHref(FIXTURE_PROJECT_IDS.cairo),
-      `/settings?pane=${HOLIDAY_LISTS_SETTINGS_PANE_ID}&project=project-cairo`,
-    )
-    assert.equal(HOLIDAY_SETTINGS_HREF, holidaySettingsHref())
-  })
-})
 
 describe("withProjectCalendar — the project record's list name and weekend", () => {
   const harbor = fixture(organisation, FIXTURE_PROJECT_IDS.harbor)

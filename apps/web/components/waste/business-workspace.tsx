@@ -300,6 +300,7 @@ import { MapPlanningView } from "@/components/waste/map-planning/map-planning-vi
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { exportShownRows } from "@/lib/data/workspace-export"
 import {
   isInProjectScope,
@@ -4933,7 +4934,7 @@ export function BusinessWorkspace({
       <>
         {isContainersAssetsView && (
           <Button variant="outline" size="sm" asChild>
-            <Link href="/settings?pane=asset-management&from=%2Fresources%3Fmodule%3Dcontainers">
+            <Link href={settingsHref("asset-management", { from: "/resources?module=containers" })}>
               <Gear className="h-4 w-4" />
               <span className="hidden sm:inline">Asset settings</span>
             </Link>

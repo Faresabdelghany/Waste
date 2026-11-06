@@ -21,9 +21,6 @@ export const TICKET_TEAMS_MODULE: ModuleLocation = { workspaceId: "configure", m
 
 export const TICKET_TEAM_PREFIX = "team"
 
-/** The teams' pane before they moved to Settings › Users & roles: a link to it opens that pane's Teams tab (`usersRolesTabOf`). */
-export const TICKET_TEAMS_SETTINGS_PANE_ID = "ticket-teams"
-
 /** A team's two statuses as the form offers them. */
 export const TEAM_STATUS_LABELS = ["Active", "Inactive"] as const
 

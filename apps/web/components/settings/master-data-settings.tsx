@@ -8,8 +8,7 @@
 // exists for the Pilot: the prototype never had a surface for the module,
 // whose fixture records are coarse master-data sets, so the Settings nav
 // offers it only with the adapter configured.
-import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useMemo, useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -36,7 +35,8 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
   useBusinessRecordStore,
@@ -49,7 +49,6 @@ import type {
   BusinessFormOption,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
-import { MASTER_DATA_KIND_PARAM } from "@/lib/data/business-links"
 import {
   getModuleDefinition,
   type BusinessRecord,
@@ -98,13 +97,10 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
   }
 }
 
-export function MasterDataSettings() {
+export function MasterDataSettings({ params }: SettingsPaneProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
-  const searchParams = useSearchParams()
-  const requestedKind = searchParams.get(MASTER_DATA_KIND_PARAM)
-  const requestedRecordId = searchParams.get("record")
-  const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(requestedKind) ? requestedKind : "waste-fraction")
+  const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(params.kind) ? params.kind : "waste-fraction")
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [view, setView] = useState<AssetView>(defaultAssetView)
@@ -113,9 +109,6 @@ export function MasterDataSettings() {
   // A write in flight: the form holds against a second submit until the API has answered.
   const [saving, setSaving] = useState(false)
 
-  // The pane reads the API alone: off the Pilot it lists nothing and creates
-  // nothing, since the prototype never kept rows of these kinds.
-  const configured = useApiConfigured()
   // The module and the projects its frequencies name: on the Pilot, the API's
   // rows once they are here and nothing before.
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, MASTER_FIXTURES)
@@ -146,25 +139,19 @@ export function MasterDataSettings() {
   const editSchema = useMemo(() => (editKind === null ? null : masterDataEditSchema(editKind)), [editKind])
   const editValues = useMemo(() => (editing === null ? undefined : masterDataFormValues(editing)), [editing])
 
-  // A link to a kind (/settings?pane=master-data&kind=…) switches the tab, on
-  // arrival and on a later link, since the route stays mounted.
-  useEffect(() => {
-    if (isMasterDataKind(requestedKind)) setKind(requestedKind)
-  }, [requestedKind])
+  // A link to a kind switches the tab, on arrival and on a later link, since the pane stays mounted.
+  const [kindLinked, setKindLinked] = useState(params.kind)
+  if (params.kind !== kindLinked) {
+    setKindLinked(params.kind)
+    if (isMasterDataKind(params.kind)) setKind(params.kind)
+  }
 
-  // A deep link (/settings?pane=master-data&record=…) opens that row for
-  // editing on its own tab — once the store has loaded and, on the Pilot,
-  // once the module's rows are here. Later edits keep their own state, so the
-  // records list is deliberately not a dependency.
-  useEffect(() => {
-    if (!hydrated || !master.ready || !requestedRecordId) return
-    const record = rows.find((candidate) => candidate.id === requestedRecordId)
-    if (!record) return
+  // A link to a row opens it for editing on its own tab.
+  useLinkedRecord(params.record, rows, hydrated && master.ready, (record) => {
     const recordKind = masterDataKindOf(record)
     if (recordKind !== null) setKind(recordKind)
     setEditing(record)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, master.ready, requestedRecordId])
+  })
 
   const ofKind = rows.filter((record) => masterDataKindOf(record) === kind)
   const shown = ofKind.map((record) => ({
@@ -224,27 +211,22 @@ export function MasterDataSettings() {
   }
 
   // A frequency names a project, so its create waits for the projects too; the other kinds need only their own module.
-  const canCreate = configured && master.ready && !saving && (kind !== "service-frequency" || organisation.ready)
+  const canCreate = master.ready && !saving && (kind !== "service-frequency" || organisation.ready)
 
-  const emptyMessage = !configured
-    ? "The master data is kept on the API: sign in on the Pilot to read and write it."
-    : master.pending
-      ? "Reading the master data from the API…"
-      : master.notGranted
-        ? "The master data is not shown to your role."
-        : master.problem
-          ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
-          : ofKind.length === 0
-            ? `No ${details.plural.toLowerCase()} yet.`
-            : `No ${details.plural.toLowerCase()} match this search.`
+  const emptyMessage = master.pending
+    ? "Reading the master data from the API…"
+    : master.notGranted
+      ? "The master data is not shown to your role."
+      : master.problem
+        ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
+        : ofKind.length === 0
+          ? `No ${details.plural.toLowerCase()} yet.`
+          : `No ${details.plural.toLowerCase()} match this search.`
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = master.notGranted ? master.problem?.detail : undefined
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Master data"
-      description="The company's own vocabulary: the waste fractions it collects, the container types it owns, the service frequencies each project offers, and the vehicle types with the container types they service. Products, containers, the fleet and route schemes name these rows."
       tabs={
         <Tabs value={kind} onValueChange={changeKind}>
           <TabsList>

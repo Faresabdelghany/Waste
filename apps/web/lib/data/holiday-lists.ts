@@ -6,10 +6,7 @@
  * and each list's dated, named holidays on its own record among the
  * calendars (`configure.calendars`, @waste/domain/route-schemes/
  * holiday-list-records). This module is the one place that knows how a
- * project's calendar settings and a list's entries become record writes. The pane's id and address live in
- * business-links.ts (`HOLIDAY_LISTS_SETTINGS_PANE_ID`, `holidaySettingsHref`)
- * beside every other Settings link, since that module cannot import this one
- * without a cycle through the fixture registry.
+ * project's calendar settings and a list's entries become record writes.
  */
 
 import type { SubmittedValues } from "@waste/domain/prototype-record"

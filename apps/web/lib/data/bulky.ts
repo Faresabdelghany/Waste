@@ -25,9 +25,6 @@ import { itemsSentence } from "./pickup-services"
 /** Where the bookings are: Operate › Bulky Bookings. */
 export const BULKY_BOOKINGS_MODULE = { workspaceId: "operate", moduleId: "bulky-bookings" } as const satisfies ModuleLocation
 
-/** Settings › Operations › Bulky schedules. */
-export const BULKY_SCHEDULES_SETTINGS_PANE_ID = "operations-bulky-schedules"
-
 /** The record's keys the surfaces read beside the facts. */
 export const BULKY_SERVER_ID_KEY = "bulkyServerId"
 export const BULKY_STATUS_KEY = "bulkyStatus"

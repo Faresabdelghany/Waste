@@ -1,3 +1,5 @@
+import type { SettingsPaneId } from "./settings-panes"
+
 export const blueprintModuleIds = [
   "M01",
   "M02",
@@ -1080,8 +1082,8 @@ export type SettingsModuleDomain = {
   key: `configure.${string}`
   workspaceId: "configure"
   moduleId: string
-  /** The SettingsDialog pane that renders the module. */
-  settingsPaneId: string
+  /** The Settings pane that renders the module. */
+  settingsPaneId: SettingsPaneId
   primaryBlueprintModule: BlueprintModuleId
   supportingBlueprintModules: BlueprintModuleId[]
   canonicalOwner: string
