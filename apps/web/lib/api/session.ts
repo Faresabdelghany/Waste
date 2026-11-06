@@ -46,7 +46,7 @@ import {
 } from "./auth"
 import { get, UNREACHABLE_STATUS, type ApiClient } from "./client"
 import type { ApiConfig, AuthConfig } from "./config"
-import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "./problem"
+import { ApiProblem, genericProblem, isAccountRefusal, problemSentence, type Problem } from "./problem"
 import { readStoredSession, writeStoredSession } from "./session-storage"
 
 /**
@@ -65,10 +65,23 @@ export type SessionState = {
   ended: SessionEnding | null
   /** The caller as `/me` last answered for the open session; null until it has. */
   me: Me | null
+  /** Why the open session's last read of `/me` failed short of the account's refusal, which ends the session instead: the API down or unreachable. Null once `/me` answers, and while no read has failed. */
+  meProblem: Problem | null
 }
 
 /** Before the browser's storage is read: nobody signed in, and nothing known yet. The server renders this. */
-export const UNREAD_SESSION: SessionState = { session: null, hydrated: false, ended: null, me: null }
+export const UNREAD_SESSION: SessionState = { session: null, hydrated: false, ended: null, me: null, meProblem: null }
+
+/**
+ * What a pane says while the caller's grants are not known — `/me` still read,
+ * or its read failed — in place of "not shown to your role", which only `/me`'s
+ * answer can say; null once it has answered.
+ */
+export function accessUnknownSentence(state: Pick<SessionState, "me" | "meProblem">): string | null {
+  if (state.me !== null) return null
+  if (state.meProblem === null) return "Reading your access from the API…"
+  return `Your access could not be read from the API (${problemSentence(state.meProblem)}). Reload the page to try again.`
+}
 
 /**
  * Whether a refresh that failed was Auth refusing the session — a 4xx: the
@@ -151,7 +164,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
 
   /** Ends the open session when it is the one `holds` picks out, for the reason given; a session opened since is left alone. */
   const endWhen = (holds: (current: ApiSession) => boolean, ending: SessionEnding) => {
-    store.set((state) => (state.session !== null && holds(state.session) ? { ...state, session: null, me: null, ended: ending } : state))
+    store.set((state) => (state.session !== null && holds(state.session) ? { ...state, session: null, me: null, meProblem: null, ended: ending } : state))
   }
 
   // The rule, for a client of `session`: the account's refusal ends the
@@ -236,14 +249,14 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       }
       if (session !== null && (session.refreshToken !== null || session.accessToken === stored.accessToken)) return
       const samePerson = session !== null && whoOf(session) === whoOf(stored)
-      store.set((state) => ({ ...state, session: stored, ended: null, me: samePerson ? state.me : null }))
+      store.set((state) => ({ ...state, session: stored, ended: null, me: samePerson ? state.me : null, meProblem: samePerson ? state.meProblem : null }))
     },
     signIn: async (email, password) => {
       if (auth === null) throw new SignInRefused(0, "Password sign-in is not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY")
       // A new attempt answers for itself: why the last session ended is not said beside this one's refusal.
       store.set((state) => (state.ended === null ? state : { ...state, ended: null }))
       const session = await signInWithPassword(auth, email, password, authOptions)
-      store.set((state) => ({ ...state, session, ended: null, me: null }))
+      store.set((state) => ({ ...state, session, ended: null, me: null, meProblem: null }))
       return session
     },
     signOut: async () => {
@@ -277,10 +290,18 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       if (session === null || client === null) throw new ApiProblem(genericProblem(UNREACHABLE_STATUS, "Nobody is signed in"))
       const who = whoOf(session)
       if (meInFlight !== null && meInFlight.who === who) return meInFlight.read
-      const read = get<Me>(client, "/me").then((me) => {
-        store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, me } : state))
-        return me
-      })
+      const read = get<Me>(client, "/me").then(
+        (me) => {
+          store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, me, meProblem: null } : state))
+          return me
+        },
+        (error: unknown) => {
+          // The account's refusal ends the session (`refused`); anything else leaves the grants unknown, and says why.
+          const problem = error instanceof ApiProblem ? error.problem : genericProblem(UNREACHABLE_STATUS, error instanceof Error ? error.message : "The request failed")
+          if (!isAccountRefusal(problem)) store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, meProblem: problem } : state))
+          throw error
+        },
+      )
       meInFlight = { who, read }
       const settled = () => {
         if (meInFlight?.read === read) meInFlight = null

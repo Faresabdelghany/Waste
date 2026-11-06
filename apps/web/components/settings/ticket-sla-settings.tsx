@@ -21,18 +21,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { get, put } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
+import { accessUnknownSentence } from "@/lib/api/session"
 import { typesListed } from "@/lib/data/ticket-scope"
 import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
 import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Teams and Charges tabs. */
 export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
+  const configured = useApiConfigured()
   const client = useApiClient()
-  const { me } = useApiSession()
+  const session = useApiSession()
+  const { me } = session
   const projects = me?.projects ?? []
   const access = slaAccessOf(me?.role.grants)
   const project = projectShown(projects, projectId, (candidate) => candidate.id)
@@ -85,7 +88,10 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
       .finally(() => setSaving(false))
   }
 
-  const emptyMessage = !access.view
+  // Until `/me` answers, the grants are unknown: never said to be the role's.
+  const emptyMessage = !configured
+    ? "The ticket SLA is kept on the API: sign in on the Pilot to read and set it."
+    : accessUnknownSentence(session) ?? (!access.view
     ? "The ticket SLA is not shown to your role."
     : project === null
       ? "No project to set an SLA for."
@@ -93,7 +99,7 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
         ? `The SLA could not be read from the API: ${problemSentence(read.problem)}`
         : base === null
           ? "Reading the SLA from the API…"
-          : `${project.name} has no SLA: its tickets open without a due date unless someone gives one.`
+          : `${project.name} has no SLA: its tickets open without a due date unless someone gives one.`)
 
   return (
     <AssetPanelShell
