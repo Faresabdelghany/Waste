@@ -44,6 +44,7 @@
 // (@waste/domain/resolution/event-shapes, the `ProofOfService` precedent), so
 // a row that disagrees with its kind does not parse on the client either.
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
+import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { BILLABLE_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
@@ -354,20 +355,33 @@ export const TicketComplete = z
 export type TicketComplete = z.infer<typeof TicketComplete>
 
 /** One ticket kind's charge (#291 C3): the product a completed ticket of the kind is charged at when its completion names none. */
-export const TicketCharge = z.object({ kind: TicketKind, productId: Id })
+/** The product a completed ticket of one kind, or of one Ticket Type (#548 of #544), is charged at when its completion names none: exactly one of the two, the type's own winning over its kind's. */
+export const TicketCharge = z.object({ kind: TicketKind.nullable(), ticketTypeId: Id.nullable(), productId: Id })
 export type TicketCharge = z.infer<typeof TicketCharge>
 
-/** `GET /ticket-charges`: a project's charges, a kind at most once, in the kinds' order. */
+/** `GET /ticket-charges`: a project's charges, a kind or a type at most once, in the kinds' order, then the types'. */
 export const TicketCharges = z.object({ projectId: Id, charges: z.array(TicketCharge) })
 export type TicketCharges = z.infer<typeof TicketCharges>
 
-/** What a set naming a kind twice is told. */
-export const KIND_CHARGED_ONCE = "Each ticket kind is charged at one product; name a kind once"
+/** What a set naming a kind or a type twice is told. */
+export const KIND_CHARGED_ONCE = "Each ticket kind or type is charged at one product; name each once"
 
-/** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards; each product an offered product of the project, not sold by the month, which only the route can judge. */
+/** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards, a type left out at its kind's; each entry exactly one of a kind and a type, and each product an offered product of the project, not sold by the month, which only the route can judge. */
 export const TicketChargesSet = z
-  .strictObject({ projectId: Id, charges: z.array(TicketCharge.strict()).max(TicketKind.options.length) })
-  .refine((body) => new Set(body.charges.map((charge) => charge.kind)).size === body.charges.length, { message: KIND_CHARGED_ONCE, path: ["charges"] })
+  .strictObject({
+    projectId: Id,
+    charges: z
+      .array(z.strictObject({ kind: TicketKind.nullable().default(null), ticketTypeId: Id.nullable().default(null).describe("Null when absent: a kind's charge."), productId: Id }))
+      .max(TicketKind.options.length + TICKET_TYPE_SETTINGS_MAX),
+  })
+  // zod 4 runs a check on a body whose fields failed: read the entries with care.
+  .superRefine((body, context) => {
+    for (const [index, charge] of body.charges.entries()) {
+      if (charge !== undefined && (charge.kind === null) === (charge.ticketTypeId === null)) context.addIssue({ code: "custom", message: KIND_OR_TYPE, path: ["charges", index] })
+    }
+    const keys = body.charges.filter((charge) => charge !== undefined).map(kindOrTypeKey)
+    if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: KIND_CHARGED_ONCE, path: ["charges"] })
+  })
 export type TicketChargesSet = z.infer<typeof TicketChargesSet>
 
 /** `GET /ticket-charges`: the project the charges are read for. */

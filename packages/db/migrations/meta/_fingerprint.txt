@@ -4255,17 +4255,21 @@ column wms.ticket_kind_product 2 company_id uuid not-null
 column wms.ticket_kind_product 3 project_id uuid not-null
 column wms.ticket_kind_product 4 created_at timestamp with time zone not-null default=now()
 column wms.ticket_kind_product 5 updated_at timestamp with time zone not-null default=now()
-column wms.ticket_kind_product 6 ticket_kind text not-null
+column wms.ticket_kind_product 6 ticket_kind text
 column wms.ticket_kind_product 7 product_id uuid not-null
+column wms.ticket_kind_product 8 ticket_type_id uuid
 constraint wms.ticket_kind_product ticket_kind_product_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_kind_product ticket_kind_product_kind_or_type_exactly_one CHECK (((((ticket_kind IS NOT NULL))::integer + ((ticket_type_id IS NOT NULL))::integer) = 1))
 constraint wms.ticket_kind_product ticket_kind_product_pkey PRIMARY KEY (id)
 constraint wms.ticket_kind_product ticket_kind_product_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
 constraint wms.ticket_kind_product ticket_kind_product_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_key UNIQUE (company_id, project_id, ticket_kind)
+constraint wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_ticket_type_id_key UNIQUE NULLS NOT DISTINCT (company_id, project_id, ticket_kind, ticket_type_id)
 constraint wms.ticket_kind_product ticket_kind_product_ticket_kind_one_of CHECK ((ticket_kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'other'::text])))
+constraint wms.ticket_kind_product ticket_kind_product_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
 index wms.ticket_kind_product ticket_kind_product_pkey CREATE UNIQUE INDEX ticket_kind_product_pkey ON wms.ticket_kind_product USING btree (id)
 index wms.ticket_kind_product ticket_kind_product_product_id_idx CREATE INDEX ticket_kind_product_product_id_idx ON wms.ticket_kind_product USING btree (company_id, product_id)
-index wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_key CREATE UNIQUE INDEX ticket_kind_product_project_id_ticket_kind_key ON wms.ticket_kind_product USING btree (company_id, project_id, ticket_kind)
+index wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_ticket_type_id_key CREATE UNIQUE INDEX ticket_kind_product_project_id_ticket_kind_ticket_type_id_key ON wms.ticket_kind_product USING btree (company_id, project_id, ticket_kind, ticket_type_id) NULLS NOT DISTINCT
+index wms.ticket_kind_product ticket_kind_product_ticket_type_id_idx CREATE INDEX ticket_kind_product_ticket_type_id_idx ON wms.ticket_kind_product USING btree (company_id, ticket_type_id)
 trigger wms.ticket_kind_product ticket_kind_product_audit_trail enabled=O CREATE TRIGGER ticket_kind_product_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_kind_product FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.ticket_kind_product ticket_kind_product_touch_updated_at enabled=O CREATE TRIGGER ticket_kind_product_touch_updated_at BEFORE UPDATE ON wms.ticket_kind_product FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_kind_product ticket_kind_product_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -4278,15 +4282,19 @@ column wms.ticket_sla 5 updated_at timestamp with time zone not-null default=now
 column wms.ticket_sla 6 kind text
 column wms.ticket_sla 7 priority text not-null
 column wms.ticket_sla 8 hours integer not-null
+column wms.ticket_sla 9 ticket_type_id uuid
 constraint wms.ticket_sla ticket_sla_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.ticket_sla ticket_sla_hours_range CHECK (((hours >= 1) AND (hours <= 8760)))
 constraint wms.ticket_sla ticket_sla_kind_one_of CHECK ((kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'other'::text])))
 constraint wms.ticket_sla ticket_sla_pkey PRIMARY KEY (id)
 constraint wms.ticket_sla ticket_sla_priority_one_of CHECK ((priority = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text, 'none'::text])))
 constraint wms.ticket_sla ticket_sla_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.ticket_sla ticket_sla_project_id_kind_priority_key UNIQUE NULLS NOT DISTINCT (company_id, project_id, kind, priority)
+constraint wms.ticket_sla ticket_sla_project_id_kind_ticket_type_id_priority_key UNIQUE NULLS NOT DISTINCT (company_id, project_id, kind, ticket_type_id, priority)
+constraint wms.ticket_sla ticket_sla_scope_shape CHECK (((kind IS NULL) OR (ticket_type_id IS NULL)))
+constraint wms.ticket_sla ticket_sla_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
 index wms.ticket_sla ticket_sla_pkey CREATE UNIQUE INDEX ticket_sla_pkey ON wms.ticket_sla USING btree (id)
-index wms.ticket_sla ticket_sla_project_id_kind_priority_key CREATE UNIQUE INDEX ticket_sla_project_id_kind_priority_key ON wms.ticket_sla USING btree (company_id, project_id, kind, priority) NULLS NOT DISTINCT
+index wms.ticket_sla ticket_sla_project_id_kind_ticket_type_id_priority_key CREATE UNIQUE INDEX ticket_sla_project_id_kind_ticket_type_id_priority_key ON wms.ticket_sla USING btree (company_id, project_id, kind, ticket_type_id, priority) NULLS NOT DISTINCT
+index wms.ticket_sla ticket_sla_ticket_type_id_idx CREATE INDEX ticket_sla_ticket_type_id_idx ON wms.ticket_sla USING btree (company_id, ticket_type_id)
 trigger wms.ticket_sla ticket_sla_audit_trail enabled=O CREATE TRIGGER ticket_sla_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_sla FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.ticket_sla ticket_sla_touch_updated_at enabled=O CREATE TRIGGER ticket_sla_touch_updated_at BEFORE UPDATE ON wms.ticket_sla FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_sla ticket_sla_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -4296,17 +4304,21 @@ column wms.ticket_team_default 2 company_id uuid not-null
 column wms.ticket_team_default 3 project_id uuid not-null
 column wms.ticket_team_default 4 created_at timestamp with time zone not-null default=now()
 column wms.ticket_team_default 5 updated_at timestamp with time zone not-null default=now()
-column wms.ticket_team_default 6 kind text not-null
+column wms.ticket_team_default 6 kind text
 column wms.ticket_team_default 7 team_id uuid not-null
+column wms.ticket_team_default 8 ticket_type_id uuid
 constraint wms.ticket_team_default ticket_team_default_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.ticket_team_default ticket_team_default_kind_one_of CHECK ((kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'other'::text])))
+constraint wms.ticket_team_default ticket_team_default_kind_or_type_exactly_one CHECK (((((kind IS NOT NULL))::integer + ((ticket_type_id IS NOT NULL))::integer) = 1))
 constraint wms.ticket_team_default ticket_team_default_pkey PRIMARY KEY (id)
 constraint wms.ticket_team_default ticket_team_default_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.ticket_team_default ticket_team_default_project_id_kind_key UNIQUE (company_id, project_id, kind)
+constraint wms.ticket_team_default ticket_team_default_project_id_kind_ticket_type_id_key UNIQUE NULLS NOT DISTINCT (company_id, project_id, kind, ticket_type_id)
 constraint wms.ticket_team_default ticket_team_default_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+constraint wms.ticket_team_default ticket_team_default_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
 index wms.ticket_team_default ticket_team_default_pkey CREATE UNIQUE INDEX ticket_team_default_pkey ON wms.ticket_team_default USING btree (id)
-index wms.ticket_team_default ticket_team_default_project_id_kind_key CREATE UNIQUE INDEX ticket_team_default_project_id_kind_key ON wms.ticket_team_default USING btree (company_id, project_id, kind)
+index wms.ticket_team_default ticket_team_default_project_id_kind_ticket_type_id_key CREATE UNIQUE INDEX ticket_team_default_project_id_kind_ticket_type_id_key ON wms.ticket_team_default USING btree (company_id, project_id, kind, ticket_type_id) NULLS NOT DISTINCT
 index wms.ticket_team_default ticket_team_default_team_id_idx CREATE INDEX ticket_team_default_team_id_idx ON wms.ticket_team_default USING btree (company_id, team_id)
+index wms.ticket_team_default ticket_team_default_ticket_type_id_idx CREATE INDEX ticket_team_default_ticket_type_id_idx ON wms.ticket_team_default USING btree (company_id, ticket_type_id)
 trigger wms.ticket_team_default ticket_team_default_audit_trail enabled=O CREATE TRIGGER ticket_team_default_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.ticket_team_default ticket_team_default_touch_updated_at enabled=O CREATE TRIGGER ticket_team_default_touch_updated_at BEFORE UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_team_default ticket_team_default_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -5204,4 +5216,5 @@ journal 1793952137785 117c4f4b466e7cfa44613d86140cc89b92a390cfbae4e01dcbc093477e
 journal 1793952146294 6e4653033ff4f3f7b9e3200818c56d138bc8d38fb4c806dd93f058898d8c72a3
 journal 1793952149939 ae5d9ea5151ab1c6d9546163ac5bcdaf3fcaa731d85bb01586b3684f506ae4d2
 journal 1793954181730 4695abc819cd6ddcbf7028781d8cded88ec465531dc76ed40e859747885ab300
+journal 1793955942536 a6e59802616e92b100c765800949a9c45787ccdd84a971d2d1358c90e7d7a6a6
 pgboss-version 42

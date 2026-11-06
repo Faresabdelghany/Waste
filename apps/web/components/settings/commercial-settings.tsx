@@ -67,7 +67,6 @@ import {
   type AssetView,
 } from "@/components/settings/asset-management-settings"
 import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
-import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
 import { VisitRulesSettings } from "@/components/settings/visit-rules-settings"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
@@ -260,7 +259,6 @@ export function CommercialDefaultsExtras() {
 export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-products") return <ProductsByModePane />
   if (paneId === "commercial-price-lists") return <PriceListsPane />
-  if (paneId === "commercial-ticket-charges") return <TicketChargesSettings />
   if (paneId === VISIT_RULES_SETTINGS_PANE_ID) return <VisitRulesSettings />
   return null
 }

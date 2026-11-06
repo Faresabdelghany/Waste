@@ -11,6 +11,10 @@ import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID, COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_SETTINGS_PANE_ID, OPERATIONS_SETUP_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
+import { TICKET_TEAMS_SETTINGS_PANE_ID } from "../ticket-teams"
+import { TICKET_TYPES_SETTINGS_PANE_ID } from "../ticket-types"
+import { COUNTING_RULES_SETTINGS_PANE_ID } from "../counting-rules"
+import { TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -27,13 +31,30 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOffered(PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, false), false)
   })
 
-  test("the Ticket SLA on the Pilot only, in place of Tickets & communication, whose link opens it there (O4 of #290)", () => {
-    assert.equal(settingsPaneOffered(TICKET_SLA_SETTINGS_PANE_ID, true), true)
-    assert.equal(settingsPaneOffered(TICKET_SLA_SETTINGS_PANE_ID, false), false)
+  test("Settings › Tickets on the Pilot only, in place of Tickets & communication, whose link opens it there at its deadlines (O4 of #290, #548 of #544)", () => {
+    assert.equal(settingsPaneOffered(TICKETS_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(TICKETS_SETTINGS_PANE_ID, false), false)
     assert.equal(settingsPaneOffered(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, true), false)
     assert.equal(settingsPaneOffered(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, false), true)
-    assert.equal(settingsPaneOpened(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, true), TICKET_SLA_SETTINGS_PANE_ID)
+    assert.equal(settingsPaneOpened(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, true), TICKETS_SETTINGS_PANE_ID)
+    assert.equal(ticketsTabOf(TICKETS_COMMUNICATION_SETTINGS_PANE_ID), "deadlines")
     assert.equal(settingsPaneOpened(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, false), TICKETS_COMMUNICATION_SETTINGS_PANE_ID)
+  })
+
+  test("the five ticket panes the Tickets page took the place of open it at their tab, so a link made before it reads as it did (#548 of #544)", () => {
+    const opened: [string, string][] = [
+      [TICKET_TYPES_SETTINGS_PANE_ID, "types"],
+      [TICKET_TEAMS_SETTINGS_PANE_ID, "teams"],
+      [TICKET_SLA_SETTINGS_PANE_ID, "deadlines"],
+      [TICKET_CHARGES_SETTINGS_PANE_ID, "charges"],
+      [COUNTING_RULES_SETTINGS_PANE_ID, "counting-rules"],
+    ]
+    for (const [paneId, tab] of opened) {
+      assert.equal(settingsPaneOpened(paneId, true), TICKETS_SETTINGS_PANE_ID, paneId)
+      assert.equal(ticketsTabOf(paneId), tab, paneId)
+    }
+    assert.equal(ticketsTabOf(undefined), "types")
+    assert.deepEqual(TICKETS_TABS.map((tab) => tab.label), ["Types", "Teams", "Deadlines", "Charges", "Counting rules"])
   })
 
   test("Finance & invoicing is the API's on the Pilot (#291 C4) and the browser's in fixture mode, one pane in each", () => {

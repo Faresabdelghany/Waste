@@ -109,7 +109,7 @@ import { pickup, route, unload } from "./execution"
 import { company, project, serviceProvider } from "./organisation"
 import { planningArea } from "./planning-areas"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
-import { ticket } from "./resolution"
+import { ticket, ticketType } from "./resolution"
 import { scaleTicketLine } from "./scale-house"
 import { siteVisit } from "./site-visits"
 import { wms } from "./wms"
@@ -834,23 +834,33 @@ export const weightReview = wms.table(
   ],
 )
 
+// The product a project charges a completed ticket's work at when its
+// completion names none (#291 C3): one per kind, and since #548 of #544 one
+// per Ticket Type, the type's own winning over its kind's; each row names
+// exactly one of the two.
 export const ticketKindProduct = wms.table(
   "ticket_kind_product",
   {
     ...id,
     ...projectScoped,
     ...timestamps,
-    ticketKind: text().notNull(),
+    /** The kind charged; null where a type is named. */
+    ticketKind: text(),
+    /** The Ticket Type charged (#548 of #544), its own winning over its kind's; null where a kind is named. */
+    ticketTypeId: uuid(),
     productId: uuid().notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.productId], product),
+    tenantReference(t, [t.ticketTypeId], ticketType),
     oneOf(t.ticketKind, TICKET_KINDS),
-    // A kind is charged at one product in a project.
-    tenantUnique(t, t.projectId, t.ticketKind),
+    // A kind or a type is charged at one product in a project.
+    tenantUnique(t, t.projectId, t.ticketKind, t.ticketTypeId).nullsNotDistinct(),
+    exactlyOne(t, "kind_or_type", [t.ticketKind, t.ticketTypeId]),
     tenantIndex(t, t.productId),
+    tenantIndex(t, t.ticketTypeId),
   ],
 )
 

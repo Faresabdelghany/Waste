@@ -38,7 +38,7 @@ import { pickup } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, ticketKindProduct } from "@waste/db/schema/finance"
 import { contaminantCode, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { project } from "@waste/db/schema/organisation"
-import { ticket } from "@waste/db/schema/resolution"
+import { ticket, ticketType } from "@waste/db/schema/resolution"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
@@ -623,6 +623,17 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     // A kind charged at a product retired since: no-product, the office's to price, never a silent charge.
     const stale = await seedTicket(pool, tenant, { resolution: "serviced", agreementId: tenant.agreements.anna.id, closedAt, kind: "container-request" })
     assert.deepEqual(await priced(stale.id, 24, "serviced", { agreementId: tenant.agreements.anna.id }, "container-request"), ["recorded", "blocked", null, null, null, "no-product"])
+    // A ticket type's own charge (#548 of #544) beats its kind's: an overflow of the crane type is charged at residual collection, not at the kind's bulky pickup.
+    const crane = testId()
+    await withCompany(pool.db, tenant.companyId, async (tx) => {
+      await tx.insert(ticketType).values({ id: crane, companyId: tenant.companyId, name: "Crane overflow", kind: "overflow" })
+      await tx.insert(ticketKindProduct).values({ id: testId(), companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, ticketTypeId: crane, productId: residual.id })
+    })
+    const typed = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.anna.id, closedAt, kind: "overflow", ticketTypeId: crane })
+    assert.deepEqual(await priced(typed.id, 25, "recollected", { agreementId: tenant.agreements.anna.id }, "overflow"), ["recorded", "ready", residual.id, 12_000, 12_000, null])
+    // Another type of the kind, with none of its own, takes the kind's.
+    const plain = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.anna.id, closedAt, kind: "overflow" })
+    assert.deepEqual((await priced(plain.id, 26, "recollected", { agreementId: tenant.agreements.anna.id }, "overflow"))[2], bulky.id)
   })
 
   test("a ticket-completed for a ticket reopened since is stale news and nothing, not a failed job: the row stands open with no resolution and no closing instant, and its next completion is its own event", async () => {

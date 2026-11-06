@@ -234,8 +234,8 @@ export type JobChargeFacts<Row extends PriceRow = PriceRow> = {
 
 /** The product a completed ticket charges for, as the worker read it (#291 C3), with what its price is resolved from. */
 export type TicketChargeFacts<Row extends PriceRow = PriceRow> = {
-  /** Who named it: the person who completed the ticket, or the project's charge for the ticket's kind. */
-  source: "completion" | "kind"
+  /** Who named it: the person who completed the ticket, or the project's charge for the ticket's type or, where it has none, its kind (#548 of #544). */
+  source: "completion" | "type" | "kind"
   product: { id: string; status: ProductStatus; unit: ProductUnit; vatPercent: number | null }
   /** The agreement the ticket reaches, as the resolver reads it. */
   agreement: { status: AgreementStatus; customerKind: CustomerKind; customerId: string }

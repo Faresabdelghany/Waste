@@ -124,7 +124,7 @@ export const ticketTeamAdapter: ResourceAdapter<Team> = {
   },
 }
 
-/** Settings › Operations › Ticket teams and Ticket types (#545 of #544), and the module the tickets' Team and Type pickers read: the company's teams and its types, the API keeping both under `configure.templates`. */
+/** Settings › Tickets' Teams and Types tabs (#545 and #548 of #544), and the module the tickets' Team and Type pickers read: the company's teams and its types, the API keeping both under `configure.templates`. */
 export const ticketTeamsModule: ServerModule = {
   workspaceId: TICKET_TEAMS_MODULE.workspaceId,
   moduleId: TICKET_TEAMS_MODULE.moduleId,
