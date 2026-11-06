@@ -142,4 +142,4 @@ export function simulationSentence(answer: Pick<CountingSimulation, "from" | "to
 }
 
 /** What a rule's team picker says where the company has no active team: a rule's tickets wait with one, so a team comes first; a simulation needs none. */
-export const NO_TEAM_YET = "The company has no active team yet. A counting rule's tickets wait with a team, so add one on the Teams tab before saving the rule; you can simulate without one."
+export const NO_TEAM_YET = "The company has no active team yet. A counting rule's tickets wait with a team, so add one on the Teams tab of Users & roles before saving the rule; you can simulate without one."

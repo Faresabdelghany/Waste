@@ -3,9 +3,10 @@ import { chainLanded, expect, test } from "./fixtures"
 import { answerOf, pick, toasts } from "./routes-support"
 import { projectNamed } from "./tester"
 
-// Ticket teams on the API (O30 of #290, row 7.20): the office adds a team in
-// Settings › Ticket teams and names it Copenhagen Central's default for
-// complaints, and the bodies are the contracts'. A complaint opened there
+// Ticket teams on the API (O30 of #290, row 7.20): the office adds a team on
+// Settings › Users & roles' Teams tab, which the teams' old pane id opens, and
+// names it Copenhagen Central's default for complaints on Settings › Tickets'
+// Default teams tab, and the bodies are the contracts'. A complaint opened there
 // without a team then waits with it, the list's Team category finds it, and
 // its details hand it to no team. Copenhagen Central is the project the
 // workspace is pinned to, so the list reads its tickets; its defaults are put
@@ -37,6 +38,8 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     await expect(pane.getByRole("cell", { name, exact: true })).toBeVisible()
 
     // Copenhagen Central's complaints go to the new team.
+    await page.goto("/settings?pane=tickets")
+    await pane.getByRole("tab", { name: "Default teams" }).click()
     const read = answerOf(page, "GET", `/projects/${project.id}/ticket-team-defaults`)
     await pick(pane, page, "Project", project.name)
     expect((await read).status()).toBe(200)

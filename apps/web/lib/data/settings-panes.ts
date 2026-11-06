@@ -44,6 +44,7 @@ import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "./ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "./ticket-types"
 import { opensTickets, TICKETS_SETTINGS_PANE_ID } from "./tickets-settings"
+import { USERS_ROLES_SETTINGS_PANE_ID } from "./users-roles"
 
 export const ASSET_MANAGEMENT_SETTINGS_PANE_ID = "asset-management"
 export const FINANCE_SETTINGS_PANE_ID = "finance"
@@ -89,7 +90,7 @@ export function settingsPaneOffered(paneId: string, configured: boolean): boolea
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Integrations' and Portals & branding's the API's, Tickets & communication's and the five ticket panes' Settings › Tickets (#548 of #544), and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Integrations and Portals panes are the browser's. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Integrations' and Portals & branding's the API's, Tickets & communication's and four of the five ticket panes' Settings › Tickets (#548 of #544), the ticket teams' Settings › Users & roles, and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Integrations and Portals panes are the browser's. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
   if (!configured) {
     if (paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return FINANCE_SETTINGS_PANE_ID
@@ -104,6 +105,7 @@ export function settingsPaneOpened(paneId: string, configured: boolean): string 
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID) return MASTER_DATA_SETTINGS_PANE_ID
   if (paneId === FINANCE_SETTINGS_PANE_ID) return FINANCE_ON_API_SETTINGS_PANE_ID
   // Tickets & communication, and the ticket panes Settings › Tickets took the place of, open it at their tab (#548 of #544).
+  if (paneId === TICKET_TEAMS_SETTINGS_PANE_ID) return USERS_ROLES_SETTINGS_PANE_ID
   if (paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || opensTickets(paneId)) return TICKETS_SETTINGS_PANE_ID
   return paneId
 }
