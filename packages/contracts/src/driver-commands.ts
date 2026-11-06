@@ -91,7 +91,7 @@ const located = {
 /** One command kind: the envelope with its literal kind and its body. */
 const commandOf = <Kind extends DriverCommandKind, Body extends z.ZodType>(kind: Kind, body: Body) => z.strictObject({ ...envelope, kind: z.literal(kind), body })
 
-/** The most a batch carries: PowerSync's upload is one transaction's writes, and two hundred is a long day. */
+/** The most a batch carries: the Driver App drains its queue in batches of at most this many, one `POST /driver/commands` each, and two hundred is a long day. */
 export const BATCH_MAX = 200
 
 /**

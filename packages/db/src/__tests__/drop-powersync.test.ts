@@ -2,8 +2,8 @@
 // migration is hand-written whole, drizzle-kit generating nothing for it —
 // the publication dropped, the role's rights in its own database revoked,
 // and the role dropped unless another database of the cluster still holds a
-// right of it or a lock on it, in which case the file applies all the same
-// and the last database to let go drops it. The file is found by its name.
+// right of it or a lock on it, in which case the file applies all the same,
+// says so in a NOTICE, and the last database to let go drops it. The file is found by its name.
 // Then, on a fresh database migrated to the head: no publication, and
 // nothing of the database depends on the role. The drop's tolerance is
 // exercised on a role of the test's own, the same statement but for the
@@ -32,7 +32,7 @@ BEGIN
     DROP ROLE IF EXISTS ${role};
   EXCEPTION
     WHEN dependent_objects_still_exist OR lock_not_available THEN
-      NULL;
+      RAISE NOTICE '${role} kept: % (another database of the cluster still holds it, and the last to let go drops it)', SQLERRM;
   END;
   PERFORM set_config('lock_timeout', waits, true);
 END
@@ -68,11 +68,12 @@ describe("PowerSync's removal against a database", { skip: database.skip }, () =
   let fresh: FreshDatabase
   let owner: Database
   let other: Database
+  const notices: string[] = []
 
   before(async () => {
     fresh = await freshDatabase(database.adminUrl, "waste_drop_powersync")
     await migrateDatabase(fresh.url)
-    owner = createDb(fresh.url, { max: 1 })
+    owner = createDb(fresh.url, { max: 1, onnotice: (notice) => void notices.push(notice.message) })
     other = createDb(fresh.url, { max: 1 })
   })
   after(async () => {
@@ -100,8 +101,9 @@ describe("PowerSync's removal against a database", { skip: database.skip }, () =
       await owner.sql.unsafe(`drop role if exists ${role}`)
     })
 
-    test("gives up without error while a database still grants the role a right, and keeps the caller's lock_timeout", async () => {
+    test("gives up without error while a database still grants the role a right, says so, and keeps the caller's lock_timeout", async () => {
       await owner.sql.unsafe(`grant usage on schema wms to ${role}`)
+      notices.length = 0
       const kept = await owner.sql.begin(async (tx) => {
         await tx.unsafe("set local lock_timeout = '7s'")
         await tx.unsafe(dropRole(role))
@@ -110,10 +112,12 @@ describe("PowerSync's removal against a database", { skip: database.skip }, () =
       })
       assert.equal(kept, "7s")
       assert.equal(await exists(), true)
+      assert.equal(notices.length, 1)
+      assert.match(notices[0], new RegExp(`^${role} kept: role "${role}" cannot be dropped because some objects depend on it \\(another database`))
       await owner.sql.unsafe(`revoke all on schema wms from ${role}`)
     })
 
-    test("waits only a moment on another transaction's lock on the role, then gives up", async () => {
+    test("waits only a moment on another transaction's lock on the role, then gives up, saying so", async () => {
       let release!: () => void
       const released = new Promise<void>((resolve) => (release = resolve))
       let locked!: () => void
@@ -128,17 +132,22 @@ describe("PowerSync's removal against a database", { skip: database.skip }, () =
         })
         .catch(() => undefined)
       await holding
+      notices.length = 0
       const started = Date.now()
       await owner.sql.unsafe(dropRole(role))
       assert.ok(Date.now() - started < 5_000, "never waited out the other transaction")
       assert.equal(await exists(), true)
+      assert.equal(notices.length, 1)
+      assert.match(notices[0], new RegExp(`^${role} kept: canceling statement due to lock timeout`))
       release()
       await holder
     })
 
-    test("drops the role once nothing holds it", async () => {
+    test("drops the role once nothing holds it, and says nothing", async () => {
+      notices.length = 0
       await owner.sql.unsafe(dropRole(role))
       assert.equal(await exists(), false)
+      assert.deepEqual(notices, [])
     })
   })
 })

@@ -11,8 +11,9 @@
 -- right of it, or be inside its own migration with a lock on it. So the drop
 -- waits on nobody (`lock_timeout` held to a moment around it, then put back)
 -- and gives up without error where another database holds a right of the
--- role (2BP01) or a lock on it (55P03): the last database to let go drops
--- it. The Pilot is one database, so there it goes here.
+-- role (2BP01) or a lock on it (55P03), saying so in a NOTICE the
+-- migrator's log prints: the last database to let go drops it. The Pilot is
+-- one database, so there it goes here.
 DROP PUBLICATION IF EXISTS powersync;
 --> statement-breakpoint
 REVOKE ALL ON ALL TABLES IN SCHEMA wms FROM wms_sync;
@@ -28,7 +29,7 @@ BEGIN
     DROP ROLE IF EXISTS wms_sync;
   EXCEPTION
     WHEN dependent_objects_still_exist OR lock_not_available THEN
-      NULL;
+      RAISE NOTICE 'wms_sync kept: % (another database of the cluster still holds it, and the last to let go drops it)', SQLERRM;
   END;
   PERFORM set_config('lock_timeout', waits, true);
 END

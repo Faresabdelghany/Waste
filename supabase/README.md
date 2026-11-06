@@ -80,6 +80,8 @@ The restored database is at the backup's journal position; a `release` brings it
 
 **If a restore fails or is cancelled after the barrier closed, `wms_api` and `wms_worker` stay NOLOGIN** — the API answers 503 rather than writing into a database mid-restore. Read the failed step, then run `recover-logins` with that run's id.
 
+**A backup taken before migration 0112 cannot be restored once 0112 has applied.** 0112 dropped PowerSync's role, `wms_sync`, and such a backup's schema dump still grants it rights: psql stops at the first `GRANT … TO wms_sync`, the restore's one transaction rolls back and leaves the database as it was, and the barrier has closed, so the app roles stay NOLOGIN until `recover-logins` runs with that run's id. A database-only `release` (`deploy_api` off) dispatched once 0112 has applied takes a restorable backup at once, since every release backs up; the older backups age out of their 30 days.
+
 ## A reset to the seed
 
 `reset-to-seed` takes the demo company, Kystbyen Renovation, back to what `pnpm db:seed` writes (Issue #142): every scheme, route, ticket, movement and invoice testers made goes, and the tenant is again configured and never run. No other company, no `auth` user, no role and no password is touched.
