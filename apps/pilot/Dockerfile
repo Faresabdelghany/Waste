@@ -27,11 +27,10 @@
 # Only the API's port is exposed; the worker's probes stay on loopback inside
 # the container, and its health is the supervisor's restart lines in the log.
 #
-# The API reads HOST, PORT, DATABASE_URL, SUPABASE_URL and DATABASE_POOL_MAX;
-# the worker reads WORKER_DATABASE_URL, DATABASE_URL and its knobs
-# (apps/worker/src/env.ts), its HOST and PORT set by the supervisor from
-# WORKER_HOST and WORKER_PORT. The host sets PORT and the secrets; the Pilot's
-# knobs are its environment too, never a default here (README.md lists them).
+# Each app reads the variables its src/env.ts declares, the worker's HOST and
+# PORT set by the supervisor from WORKER_HOST and WORKER_PORT. The host sets
+# PORT and the secrets; the Pilot's knobs are its environment too, never a
+# default here (README.md lists them).
 
 # Node 22, the major .nvmrc names, on Alpine. Nothing below is Alpine's own,
 # so a Debian variant of the same major builds too.
@@ -62,6 +61,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/documents/package.json packages/documents/
 COPY packages/domain/package.json packages/domain/
 COPY packages/routing/package.json packages/routing/
+COPY packages/server/package.json packages/server/
 COPY packages/tooling/package.json packages/tooling/
 RUN pnpm install --frozen-lockfile --prod --filter @waste/api... --filter @waste/worker... --filter @waste/pilot...
 
@@ -76,6 +76,7 @@ COPY packages/db packages/db
 COPY packages/documents packages/documents
 COPY packages/domain packages/domain
 COPY packages/routing packages/routing
+COPY packages/server packages/server
 COPY tsconfig.base.json ./
 RUN pnpm --filter @waste/api deploy --prod /app/apps/api \
  && pnpm --filter @waste/worker deploy --prod /app/apps/worker

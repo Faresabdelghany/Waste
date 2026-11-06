@@ -10,12 +10,12 @@
 //
 // Two probes: /healthz is liveness (the process answers, with its clock and
 // the build it runs, build-info.ts) and /readyz is readiness (the database
-// answers, within readiness.ts's bound). Both answer Cache-Control: no-store,
+// answers, within the probe's bound). Both answer Cache-Control: no-store,
 // since the Pilot's release reads them to prove a deployment live (Issue
 // #152) and a cached answer would prove nothing.
 // Two pools come in from the composition root and the app connects on
-// neither by itself: the probe pool, the probe's own (readiness.ts says why),
-// and the request pool, on which every authenticated request runs as one
+// neither by itself: the probe pool, the probe's own (@waste/db/probe says
+// why), and the request pool, on which every authenticated request runs as one
 // fenced transaction (auth/principal.ts). A test hands a route that asks
 // nothing of the database pools that go nowhere.
 //
@@ -31,7 +31,9 @@ import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
+import { checkDatabase } from "@waste/db/probe"
 import type { ProofStorage } from "@waste/db/storage"
+import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
 import { Hono, type Context } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
@@ -40,7 +42,6 @@ import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME, identify } from "./a
 import { Allowance, FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS, FeedAllowance, PUBLIC_REQUESTS_PER_MINUTE, publicDoor } from "./auth/public-door"
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
-import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
 import { subscriptionPauseRoutes } from "./routes/subscription-pauses"
 import { alertRoutes } from "./routes/alerts"
@@ -201,7 +202,7 @@ export function createApp({
   pool,
   verifier,
   now = () => new Date(),
-  databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS,
+  databaseTimeoutMs = CHECK_TIMEOUT_MS,
   log,
   build = null,
   jobs = createJobSender(probe),

@@ -17,6 +17,7 @@
     "@waste/db": "workspace:*",
     "@waste/domain": "workspace:*",
     "@waste/routing": "workspace:*",
+    "@waste/server": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.8",
     "pg-boss": "12.34.0",

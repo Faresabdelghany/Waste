@@ -8,7 +8,7 @@
 // which every job writes under `withCompany`, and the worker role's, on which
 // the sweeps read across tenants; both go into the context every handler
 // receives. A fourth, the probe pool /readyz uses, is one connection on the
-// API role's URL (readiness.ts says why a probe gets its own). The two
+// API role's URL (@waste/db/probe says why a probe gets its own). The two
 // application pools take their sizes from the environment's knobs where set
 // (env.ts; the Pilot's are 3 and 2, inside the pooler's 15 per role with the
 // API's own), and the polling knob reaches pg-boss and the context here, so
@@ -35,19 +35,20 @@
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { probePoolOptions } from "@waste/db/probe"
 import { supabaseStorage } from "@waste/db/storage"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
+import { listen, type Listening } from "@waste/server/listen"
+import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
 
 import { createApp } from "./app"
 import { createBoss, startBoss, type Boss } from "./boss"
 import { parseEnv } from "./env"
 import { JOBS } from "./jobs"
 import { staleOutboxCount } from "./jobs/relay-outbox"
-import { listen, type Listening } from "./listen"
 import { messagingProviderFromEnv } from "./messaging/select"
 import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
-import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
 // The routing provider behind the quota engine (#171): one per process, so one key's quota is spent in one place; the reserves and the pace are the Pilot's knobs, the Standard plan's figures where unset.
@@ -115,7 +116,7 @@ async function boot() {
 }
 
 // Shutdown: the workers stop taking jobs and a handler in flight gets
-// STOP_TIMEOUT_MS to finish before pg-boss fails it and closes its pool;
+// JOB_STOP_MS to finish before pg-boss fails it and closes its pool;
 // the listener drains alongside, since a probe mid-shutdown should read
 // "stopped" and then nothing. The two application pools close after, so a
 // handler that is finishing keeps the connection its transaction runs on.

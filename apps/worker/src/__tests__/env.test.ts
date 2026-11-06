@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { parseEnv, TRANSACTION_POOLER_PORT } from "../env"
+import { TRANSACTION_POOLER_PORT } from "@waste/server/process"
+import { turboTaskEnv } from "@waste/tooling/turbo"
+
+import { Env, parseEnv } from "../env"
 
 const WORKER = "postgresql://wms_worker:secret@127.0.0.1:54322/postgres"
 const API = "postgresql://wms_api:secret@127.0.0.1:54322/postgres"
@@ -9,6 +12,12 @@ const base = { WORKER_DATABASE_URL: WORKER, DATABASE_URL: API }
 const expected = { HOST: "127.0.0.1", PORT: 3002, WORKER_DATABASE_URL: WORKER, DATABASE_URL: API }
 
 const naming = (variable: string) => (error: unknown) => error instanceof Error && error.message.includes(variable)
+
+describe("Env", () => {
+  test("declares exactly the variables turbo.json hands @waste/worker#dev: in strict env mode a variable on one list alone never reaches the process", () => {
+    assert.deepEqual(Object.keys(Env.shape).sort(), [...turboTaskEnv("@waste/worker#dev")].sort())
+  })
+})
 
 describe("parseEnv", () => {
   test("binds the probes to localhost on 3002, one above the API, when only the two database URLs are given", () => {

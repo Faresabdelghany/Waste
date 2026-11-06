@@ -1,12 +1,20 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { parseEnv } from "../env"
+import { turboTaskEnv } from "@waste/tooling/turbo"
+
+import { Env, parseEnv } from "../env"
 
 const LOCAL = "postgresql://wms_api:wms_api@127.0.0.1:54322/postgres"
 const SUPABASE = "https://ztmisreemxepvjxelbql.supabase.co"
 const base = { DATABASE_URL: LOCAL, SUPABASE_URL: SUPABASE }
 const expected = { HOST: "127.0.0.1", PORT: 3001, DATABASE_URL: LOCAL, SUPABASE_URL: SUPABASE }
+
+describe("Env", () => {
+  test("declares exactly the variables turbo.json hands @waste/api#dev: in strict env mode a variable on one list alone never reaches the process", () => {
+    assert.deepEqual(Object.keys(Env.shape).sort(), [...turboTaskEnv("@waste/api#dev")].sort())
+  })
+})
 
 describe("parseEnv", () => {
   test("binds to localhost on 3001 when only the database and the Supabase project are given", () => {

@@ -24,9 +24,11 @@
 // its commit for the API alone, and the worker says so rather than guessing.
 import { HealthResponse, PROBE_HEADERS, type WorkerReadinessResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
+import { checkDatabase } from "@waste/db/probe"
+import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
 import { Hono } from "hono"
 
-import { CHECK_TIMEOUT_MS, checkBoss, checkDatabase, countStale, type BossProbe } from "./readiness"
+import { checkBoss, countStale, type BossProbe } from "./readiness"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: main.ts builds it from probePoolOptions; a test hands whatever it wants probed. */

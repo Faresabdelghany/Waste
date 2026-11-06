@@ -16,12 +16,14 @@
     "bundle": "node --import tsx src/bundle.ts"
   },
   "dependencies": {
+    "@waste/server": "workspace:*",
     "esbuild": "~0.28.0",
     "tsx": "^4.23.12"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "@waste/tooling": "workspace:*",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

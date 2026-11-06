@@ -19,9 +19,14 @@
 // src/server.mjs and src/main.mjs beside the source, so the API's
 // ../build.json still resolves), else the TypeScript source through tsx with
 // the app's own tsconfig — a workstation without Docker.
+import { API_PORT, withoutEmpty, WORKER_PORT, type Environment } from "@waste/server/process"
+
 import type { ChildSpec } from "./supervise"
 
-export type Environment = Readonly<Record<string, string | undefined>>
+export type { Environment }
+
+/** The variables the supervisor reads itself; every other one passes through to the children, which declare their own. */
+export const SUPERVISOR_VARIABLES = ["HOST", "PORT", "WORKER_HOST", "WORKER_PORT", "PILOT_API_DIR", "PILOT_WORKER_DIR", "PILOT_MEMORY_LOG_SECONDS"] as const
 
 export type Host = {
   /** Whether a bundle exists at the path. */
@@ -29,8 +34,6 @@ export type Host = {
   /** The node to run the children with: process.execPath. */
   execPath: string
 }
-
-const setOr = (value: string | undefined, fallback: string) => (value === undefined || value === "" ? fallback : value)
 
 function spec(name: string, dir: string, entry: string, address: { HOST: string; PORT: string }, host: Host): ChildSpec {
   const bundle = `${dir}/src/${entry}.mjs`
@@ -40,12 +43,13 @@ function spec(name: string, dir: string, entry: string, address: { HOST: string;
   return { name, command: host.execPath, args: ["--import", "tsx", `src/${entry}.ts`], cwd: dir, env: { ...address, TSX_TSCONFIG_PATH: `${dir}/tsconfig.json` } }
 }
 
-export function childSpecs(env: Environment, host: Host): { api: ChildSpec; worker: ChildSpec } {
-  const apiDir = setOr(env.PILOT_API_DIR, "/app/apps/api")
-  const workerDir = setOr(env.PILOT_WORKER_DIR, "/app/apps/worker")
+export function childSpecs(source: Environment, host: Host): { api: ChildSpec; worker: ChildSpec } {
+  const env: Partial<Record<(typeof SUPERVISOR_VARIABLES)[number], string>> = withoutEmpty(source)
+  const apiDir = env.PILOT_API_DIR ?? "/app/apps/api"
+  const workerDir = env.PILOT_WORKER_DIR ?? "/app/apps/worker"
   return {
-    api: spec("api", apiDir, "server", { HOST: setOr(env.HOST, "0.0.0.0"), PORT: setOr(env.PORT, "3001") }, host),
-    worker: spec("worker", workerDir, "main", { HOST: setOr(env.WORKER_HOST, "127.0.0.1"), PORT: setOr(env.WORKER_PORT, "3002") }, host),
+    api: spec("api", apiDir, "server", { HOST: env.HOST ?? "0.0.0.0", PORT: env.PORT ?? String(API_PORT) }, host),
+    worker: spec("worker", workerDir, "main", { HOST: env.WORKER_HOST ?? "127.0.0.1", PORT: env.WORKER_PORT ?? String(WORKER_PORT) }, host),
   }
 }
 
