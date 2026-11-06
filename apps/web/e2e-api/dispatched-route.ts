@@ -86,6 +86,22 @@ export async function generate(api: APIRequestContext, schemeId: string, window:
   return run as GenerationRun
 }
 
+type RouteSpan = Route & { shift: { startsAt: string | null; workSeconds: number | null } }
+
+/** A start on the day's clock after every open route of the day that shares the crew; null when none does. */
+async function startAfterCrewRoutes(api: APIRequestContext, { day, driverId, vehicleId, except }: { day: string; driverId: string; vehicleId: string | null; except: string }): Promise<string | null> {
+  const open = new Set(["planned", "ready", "active"])
+  const crewRoutes = (await listAll<RouteSpan>(api, "/routes", { from: day, to: day })).filter(
+    (other) => other.id !== except && open.has(other.status) && (other.planned.driverId === driverId || (vehicleId !== null && other.planned.vehicleId === vehicleId)),
+  )
+  if (crewRoutes.length === 0) return null
+  const minuteOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+  // A span not known (no start or no measured Plan) is given an hour.
+  const lastEnd = Math.max(...crewRoutes.map(({ shift }) => (shift.startsAt === null ? 6 * 60 : minuteOf(shift.startsAt)) + (shift.workSeconds === null ? 60 : Math.ceil(shift.workSeconds / 60))))
+  const start = Math.min(lastEnd + 5, 23 * 60)
+  return `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`
+}
+
 async function command(api: APIRequestContext, path: string, data?: unknown): Promise<RouteDetail> {
   const response = await api.post(path, data === undefined ? {} : { data })
   expect(response.status(), `POST ${path}: ${await response.text()}`).toBe(200)
@@ -118,8 +134,12 @@ export async function dispatchedRouteFor(api: APIRequestContext, { schemeName = 
 
   // The seeded driver runs other routes of today that earlier tests dispatched, none of them timed: the office plans them knowingly (O7 of #290).
   await command(api, `/routes/${chosen.id}/assign`, { driverId: driver.id, acceptSameDay: true })
-  // Today may be a day the project rests on (a weekend, a holiday): the office moves the route there knowingly (O5 of #290).
-  if (chosen.operatingDate !== today) await command(api, `/routes/${chosen.id}/reschedule`, { operatingDate: today, acceptNonWorkingDay: true, acceptSameDay: true })
+  // Today may be a day the project rests on (a weekend, a holiday): the office moves the route there knowingly (O5 of #290),
+  // after the crew's other routes of today, since a known overlap is refused whatever the body says (O7 of #290).
+  if (chosen.operatingDate !== today) {
+    const plannedStartTime = await startAfterCrewRoutes(api, { day: today, driverId: driver.id, vehicleId: chosen.planned.vehicleId, except: chosen.id })
+    await command(api, `/routes/${chosen.id}/reschedule`, { operatingDate: today, acceptNonWorkingDay: true, acceptSameDay: true, ...(plannedStartTime === null ? {} : { plannedStartTime }) })
+  }
   const route = await command(api, `/routes/${chosen.id}/dispatch`)
   expect(route.status).toBe("ready")
   expect(route.operatingDate).toBe(today)
