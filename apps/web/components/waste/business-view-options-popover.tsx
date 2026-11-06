@@ -93,6 +93,17 @@ export type BusinessGroupOption = {
   count?: string
 }
 
+export type BusinessOrderingOption = {
+  value: BusinessViewOptions["ordering"]
+  label: string
+}
+
+const DEFAULT_ORDERING_OPTIONS: readonly BusinessOrderingOption[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "name", label: "Name" },
+  { value: "status", label: "Status" },
+]
+
 export type BusinessColumnChip = {
   key: BooleanViewOption
   label: string
@@ -157,6 +168,8 @@ export function BusinessViewOptionsPopover({
   builtinColumnChips,
   fixedColumnChips = [],
   columnsStyle = "chips",
+  orderingOptions = DEFAULT_ORDERING_OPTIONS,
+  defaults = defaultBusinessViewOptions,
 }: {
   value: BusinessViewOptions
   onChange: (options: BusinessViewOptions) => void
@@ -175,6 +188,10 @@ export function BusinessViewOptionsPopover({
    * Display-columns panel with a Static Columns drop zone and Other Columns.
    */
   columnsStyle?: "chips" | "display"
+  /** The orders "Order by" offers, for a surface whose rows read no update time or status. */
+  orderingOptions?: readonly BusinessOrderingOption[]
+  /** What Reset returns to: a surface with columns of its own resets to its own, not the workspace's. */
+  defaults?: BusinessViewOptions
 }) {
   const [groupByOpen, setGroupByOpen] = useState(false)
   const [addColumnOpen, setAddColumnOpen] = useState(false)
@@ -324,9 +341,11 @@ export function BusinessViewOptionsPopover({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="updated">Recently updated</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
+                  {orderingOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -682,7 +701,7 @@ export function BusinessViewOptionsPopover({
                 className="text-xs text-primary hover:underline"
                 onClick={() =>
                   onChange({
-                    ...defaultBusinessViewOptions,
+                    ...defaults,
                     viewType: value.viewType,
                   })
                 }
