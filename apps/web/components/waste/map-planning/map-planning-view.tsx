@@ -36,7 +36,7 @@ import {
   type BusinessFilters,
 } from "@waste/domain/business-filters"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
-import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
@@ -116,8 +116,6 @@ export type MapPlanningViewProps = {
   pickups: readonly BusinessRecord[]
   /** Every Route Scheme — coverage gaps and scheme comparison resolve their stops. */
   schemes: readonly BusinessRecord[]
-  /** The Containers module — the details sheet reads its copy and lifecycle. */
-  containersModule: ModuleDefinition
   canCreateScheme: boolean
   /** The create's outcome on the Pilot, awaited before the wizard closes; undefined on the browser's path. */
   onCreateScheme: (data: GuidedSchemeData) => Promise<WriteOutcome> | undefined
@@ -143,7 +141,6 @@ export function MapPlanningView({
   routes,
   pickups,
   schemes,
-  containersModule,
   canCreateScheme,
   onCreateScheme,
   canCreateServiceArea,
@@ -876,7 +873,6 @@ export function MapPlanningView({
 
       <ContainerDetailsSheet
         key={detail?.id ?? "closed-container"}
-        module={containersModule}
         record={detail}
         onClose={() => setDetail(null)}
         onAction={(action) =>

@@ -1623,10 +1623,6 @@ export function BusinessWorkspace({
       schemes: moduleRecords("route-studio", "schemes"),
     }
   }, [apiConfigured, isMapPlanningView, moduleRecords, pickupsOnApi, routesOnApi])
-  const containersModuleDefinition = getModuleDefinition({
-    workspaceId: "resources",
-    moduleId: "containers",
-  })
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
@@ -5240,7 +5236,7 @@ export function BusinessWorkspace({
         )}
       </header>
 
-      {isMapPlanningView && mapPlanningRecords && containersModuleDefinition ? (
+      {isMapPlanningView && mapPlanningRecords ? (
         <MapPlanningView
           containers={mapPlanningRecords.containers}
           planningAreas={mapPlanningRecords.planningAreas}
@@ -5248,7 +5244,6 @@ export function BusinessWorkspace({
           routes={mapPlanningRecords.routes}
           pickups={mapPlanningRecords.pickups}
           schemes={mapPlanningRecords.schemes}
-          containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
           onCreateServiceArea={(seed) => {
@@ -5810,7 +5805,6 @@ export function BusinessWorkspace({
       ) : isContainersAssetsView && RowSurface === undefined ? (
         <ContainerDetailsSheet
           key={selectedRecord?.id ?? "closed-container"}
-          module={activeModule}
           record={selectedRecord}
           onClose={closeRecord}
           onAction={requestRecordAction}

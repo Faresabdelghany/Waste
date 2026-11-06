@@ -4,7 +4,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { DotsThree, Printer, Ticket, Trash, Wrench } from "@phosphor-icons/react/dist/ssr"
 
-import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { serviceFrequencyOfRecord } from "@waste/domain/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -180,12 +180,10 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
 }
 
 export function ContainerDetailsSheet({
-  module,
   record,
   onClose,
   onAction,
 }: {
-  module: ModuleDefinition
   record: BusinessRecord | null
   onClose: () => void
   onAction: (action: string) => void
