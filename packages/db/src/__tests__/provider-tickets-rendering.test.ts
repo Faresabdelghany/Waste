@@ -5,6 +5,8 @@
 // (ticket-as-of.ts) to the ticket as 0031 left it, before O3c (#290) booked
 // a stop on it, and to today's history, since an applied file is never edited;
 // resolution-rendering.test.ts maps today's tables back (`CHANGED_LATER`).
+// The counting rules' migration (#547 of #544) grew the sources again, so
+// 0031's are `TICKET_SOURCES_AS_OF_0031`, the head of today's list.
 // Then migration 0031, which is exactly those statements under its header:
 // no table is new, so nothing is hand-written, and every source and
 // visibility a row holds is still in its list, so nothing is guarded. No
@@ -28,7 +30,7 @@ import { ticket, ticketEvent } from "../schema/resolution"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
-import { TICKET_SOURCES_AS_OF_0009, TICKET_VISIBILITIES_AS_OF_0009, ticketAsOf, ticketEventAsOf0009 } from "./ticket-as-of"
+import { TICKET_SOURCES_AS_OF_0009, TICKET_SOURCES_AS_OF_0031, TICKET_VISIBILITIES_AS_OF_0009, ticketAsOf, ticketEventAsOf0009 } from "./ticket-as-of"
 
 const MIGRATION = "0031_provider_tickets.sql"
 
@@ -41,7 +43,7 @@ describe("a Service Provider's tickets as drizzle-kit writes them", () => {
     assert.deepEqual(await generated, [
       'ALTER TABLE "wms"."ticket" DROP CONSTRAINT "ticket_source_one_of";',
       'ALTER TABLE "wms"."ticket_event" DROP CONSTRAINT "ticket_event_visibility_one_of";',
-      `ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_source_one_of" CHECK (${ref("ticket", "source")} in (${list(...TICKET_SOURCES)}));`,
+      `ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_source_one_of" CHECK (${ref("ticket", "source")} in (${list(...TICKET_SOURCES_AS_OF_0031)}));`,
       `ALTER TABLE "wms"."ticket_event" ADD CONSTRAINT "ticket_event_visibility_one_of" CHECK (${ref("ticket_event", "visibility")} in (${list(...TICKET_VISIBILITIES)}));`,
     ])
   })
@@ -52,7 +54,8 @@ describe("a Service Provider's tickets as drizzle-kit writes them", () => {
   })
 
   test("each list is 0009's and service-provider after it, so every row already written still passes", () => {
-    assert.deepEqual([...TICKET_SOURCES], [...TICKET_SOURCES_AS_OF_0009, "service-provider"])
+    assert.deepEqual([...TICKET_SOURCES_AS_OF_0031], [...TICKET_SOURCES_AS_OF_0009, "service-provider"])
+    assert.deepEqual(TICKET_SOURCES.slice(0, TICKET_SOURCES_AS_OF_0031.length), [...TICKET_SOURCES_AS_OF_0031], "a later file grows the list at its end alone")
     assert.deepEqual([...TICKET_VISIBILITIES], [...TICKET_VISIBILITIES_AS_OF_0009, "service-provider"])
     assert.equal(checksOf(ticket).get("ticket_source_one_of"), `${ref("ticket", "source")} in (${list(...TICKET_SOURCES)})`)
     assert.equal(checksOf(ticketEvent).get("ticket_event_visibility_one_of"), `${ref("ticket_event", "visibility")} in (${list(...TICKET_VISIBILITIES)})`)

@@ -111,7 +111,7 @@ const missed: Ticket = {
   chargeProductId: null,
   closedAt: null,
   bookedRouteId: null,
-  bookedPickupId: null,
+  bookedPickupId: null, countedBy: null,
 }
 
 const record = ticketAdapter.toRecord(missed, context())

@@ -378,6 +378,10 @@ _Avoid_: Alert, message
 The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
 _Avoid_: Ticket kind (the built-in category a type belongs to), category, form
 
+**Counting Rule**:
+The company's rule counting the completed emptyings at each Property over a calendar month, quarter or year, optionally of one waste fraction or container type, by the service date of each stop's route. A property whose count reaches the rule's limit gets one Ticket of the rule's Ticket Type, waiting with its Team and naming the rule, the period and the count, at most once per rule and period; the rule never charges. It is simulated over past emptyings before it is switched on.
+_Avoid_: Threshold rule, frequency check, alert rule (an Alert's rules are the worker's own)
+
 **Message Template**:
 A project's text for one kind of message the office sends — an e-mail with a subject, or a text message — for service (sent only to a Customer who allows service messages) or for billing (sent whatever they chose), its values named as `{{placeholders}}`. Retired by its status, never deleted.
 _Avoid_: Notification template, letter

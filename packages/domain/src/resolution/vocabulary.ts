@@ -76,8 +76,8 @@ export const TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold", "co
 export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"] as const
 /** How urgent: the prototype's five, `none` the default. */
 export const TICKET_PRIORITIES = ["critical", "high", "medium", "low", "none"] as const
-/** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, two machines, and a Service Provider's workspace. */
-export const TICKET_SOURCES = ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider"] as const
+/** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, two machines, a Service Provider's workspace, and a counting rule's limit reached (#547 of #544). */
+export const TICKET_SOURCES = ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider", "counting-rule"] as const
 /** What a completed Ticket ended in; a rejected one has a reason and no resolution. */
 export const TICKET_RESOLUTIONS = ["recollected", "serviced", "answered", "no-action", "duplicate"] as const
 /** What a row of a Ticket's history is; there is no `edited` (ADR-0005). */
@@ -108,6 +108,10 @@ export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priorit
 export const TICKET_ACTION_COMMANDS = ["start", "wait", "hold", "complete", "reject"] as const
 /** Who a message an action sends goes to: the customer the ticket names, or the customer in a role at its property. */
 export const TICKET_MESSAGE_RECIPIENTS = ["ticket-customer", "owner", "payer", "tenant", "administrator", "service-contact"] as const
+/** The calendar period a Counting Rule counts over (#547 of #544): a month, a quarter or a year. */
+export const COUNTING_PERIODS = ["month", "quarter", "year"] as const
+/** Whether a Counting Rule counts (#547 of #544): an inactive rule counts nothing and opens no ticket, and may be simulated before it is switched on. */
+export const COUNTING_RULE_STATUSES = ["active", "inactive"] as const
 /** The worker's rules an Alert is raised by (O4 of #290, O8's stale position, O26's filling container, O20's maintenance due, and M17 of #293's disposal-site reconciliation); null on an alert a person raised. */
 export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due", "load-not-received", "load-weight-mismatch", "load-overweight", "route-not-tipped"] as const
 
@@ -131,6 +135,8 @@ export type TicketActionTrigger = (typeof TICKET_ACTION_TRIGGERS)[number]
 export type TicketActionKind = (typeof TICKET_ACTION_KINDS)[number]
 export type TicketActionCommand = (typeof TICKET_ACTION_COMMANDS)[number]
 export type TicketMessageRecipient = (typeof TICKET_MESSAGE_RECIPIENTS)[number]
+export type CountingPeriod = (typeof COUNTING_PERIODS)[number]
+export type CountingRuleStatus = (typeof COUNTING_RULE_STATUSES)[number]
 
 /** The statuses a Ticket is open in: what "open" means in a list filter and a count. A value of `TICKET_STATUSES`, not a vocabulary. */
 export const OPEN_TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold"] as const satisfies readonly TicketStatus[]
@@ -171,4 +177,6 @@ export const RESOLUTION_VOCABULARIES = {
   TICKET_ACTION_KINDS,
   TICKET_ACTION_COMMANDS,
   TICKET_MESSAGE_RECIPIENTS,
+  COUNTING_PERIODS,
+  COUNTING_RULE_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

@@ -90,6 +90,9 @@
 // #546 of #544 added @waste/domain/resolution/automation: ticket-types.ts
 // holds an action to the parameters its kind takes, in the domain's
 // sentences, and a type's actions to the domain's cap.
+// #547 of #544 added @waste/domain/resolution/counting-rules: counting-rules.ts
+// holds a rule's limit to the domain's cap and a simulation's window to the
+// domain's rule, in its sentence.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -130,6 +133,7 @@ definePurityTests({
     "@waste/domain/registry/vocabulary",
     "@waste/domain/registry/waste-code",
     "@waste/domain/resolution/automation",
+    "@waste/domain/resolution/counting-rules",
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/sla",
     "@waste/domain/resolution/ticket-types",

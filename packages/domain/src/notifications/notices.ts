@@ -1,6 +1,6 @@
 // What a staff member is told (O16 of #290), pure: whether an alert reaches
 // the severity a person picked, and the e-mail an alert raised or a ticket
-// assigned becomes. A staff notice is rendered here, from the event, never
+// assigned or a counting rule's ticket becomes. A staff notice is rendered here, from the event, never
 // from a customer's message template; the worker's notifications consumer
 // queues it through @waste/db's `queueStaffMessage` to each person who opted
 // in. A ticket's number reads as the API spells it, `T-<number>`.
@@ -47,6 +47,15 @@ export function ticketAssignedNotice(ticket: { number: number; subject: string; 
       "",
       signed(where.companyName),
     ].join("\n"),
+  }
+}
+
+/** A ticket a counting rule opened (#547 of #544), as its e-mail to each member of the team it waits with reads: told whatever their own choices, since the rule's administrator asked for it. */
+export function countingTicketNotice(ticket: { number: number; subject: string; description: string }, where: { projectName: string; companyName: string; teamName: string }): Notice {
+  const label = `T-${ticket.number}`
+  return {
+    subject: `Ticket ${label} for ${where.teamName} · ${ticket.subject}`,
+    body: [`A counting rule opened ticket ${label} in ${where.projectName}, waiting with ${where.teamName}.`, "", ticket.subject, ticket.description, "", signed(where.companyName)].join("\n"),
   }
 }
 

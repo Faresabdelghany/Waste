@@ -1074,6 +1074,41 @@ index wms.contaminant_code_fraction contaminant_code_fraction_waste_fraction_id_
 trigger wms.contaminant_code_fraction contaminant_code_fraction_audit_trail enabled=O CREATE TRIGGER contaminant_code_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.contaminant_code_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('contaminant_code', 'contaminant_code_id')
 trigger wms.contaminant_code_fraction contaminant_code_fraction_touch_updated_at enabled=O CREATE TRIGGER contaminant_code_fraction_touch_updated_at BEFORE UPDATE ON wms.contaminant_code_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.contaminant_code_fraction contaminant_code_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.counting_rule kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.counting_rule 1 id uuid not-null default=wms.uuidv7()
+column wms.counting_rule 2 company_id uuid not-null
+column wms.counting_rule 3 created_at timestamp with time zone not-null default=now()
+column wms.counting_rule 4 updated_at timestamp with time zone not-null default=now()
+column wms.counting_rule 5 name text not-null
+column wms.counting_rule 6 status text not-null default='inactive'::text
+column wms.counting_rule 7 period text not-null
+column wms.counting_rule 8 limit integer not-null
+column wms.counting_rule 9 waste_fraction_id uuid
+column wms.counting_rule 10 container_type_id uuid
+column wms.counting_rule 11 ticket_type_id uuid not-null
+column wms.counting_rule 12 team_id uuid not-null
+column wms.counting_rule 13 notifies_team boolean not-null default=false
+constraint wms.counting_rule counting_rule_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.counting_rule counting_rule_container_type_id_fk FOREIGN KEY (company_id, container_type_id) REFERENCES wms.container_type(company_id, id)
+constraint wms.counting_rule counting_rule_limit_range CHECK ((("limit" >= 1) AND ("limit" <= 1000)))
+constraint wms.counting_rule counting_rule_name_key UNIQUE (company_id, name)
+constraint wms.counting_rule counting_rule_period_one_of CHECK ((period = ANY (ARRAY['month'::text, 'quarter'::text, 'year'::text])))
+constraint wms.counting_rule counting_rule_pkey PRIMARY KEY (id)
+constraint wms.counting_rule counting_rule_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.counting_rule counting_rule_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+constraint wms.counting_rule counting_rule_tenant_key UNIQUE (company_id, id)
+constraint wms.counting_rule counting_rule_ticket_type_id_fk FOREIGN KEY (company_id, ticket_type_id) REFERENCES wms.ticket_type(company_id, id)
+constraint wms.counting_rule counting_rule_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.counting_rule counting_rule_container_type_id_idx CREATE INDEX counting_rule_container_type_id_idx ON wms.counting_rule USING btree (company_id, container_type_id)
+index wms.counting_rule counting_rule_name_key CREATE UNIQUE INDEX counting_rule_name_key ON wms.counting_rule USING btree (company_id, name)
+index wms.counting_rule counting_rule_pkey CREATE UNIQUE INDEX counting_rule_pkey ON wms.counting_rule USING btree (id)
+index wms.counting_rule counting_rule_team_id_idx CREATE INDEX counting_rule_team_id_idx ON wms.counting_rule USING btree (company_id, team_id)
+index wms.counting_rule counting_rule_tenant_key CREATE UNIQUE INDEX counting_rule_tenant_key ON wms.counting_rule USING btree (company_id, id)
+index wms.counting_rule counting_rule_ticket_type_id_idx CREATE INDEX counting_rule_ticket_type_id_idx ON wms.counting_rule USING btree (company_id, ticket_type_id)
+index wms.counting_rule counting_rule_waste_fraction_id_idx CREATE INDEX counting_rule_waste_fraction_id_idx ON wms.counting_rule USING btree (company_id, waste_fraction_id)
+trigger wms.counting_rule counting_rule_audit_trail enabled=O CREATE TRIGGER counting_rule_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.counting_rule FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.counting_rule counting_rule_touch_updated_at enabled=O CREATE TRIGGER counting_rule_touch_updated_at BEFORE UPDATE ON wms.counting_rule FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.counting_rule counting_rule_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.customer kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.customer 1 id uuid not-null default=wms.uuidv7()
 column wms.customer 2 company_id uuid not-null
@@ -4086,6 +4121,10 @@ column wms.ticket 33 booked_pickup_id uuid
 column wms.ticket 34 team_id uuid
 column wms.ticket 35 ticket_type_id uuid not-null
 column wms.ticket 36 field_values jsonb not-null default='{}'::jsonb
+column wms.ticket 37 counting_rule_id uuid
+column wms.ticket 38 counted_from date
+column wms.ticket 39 counted_to date
+column wms.ticket 40 counted integer
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_booked_route_id_booked_pickup_id_fk FOREIGN KEY (company_id, project_id, booked_route_id, booked_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
@@ -4095,6 +4134,9 @@ constraint wms.ticket ticket_charge_shape CHECK (((charge_product_id IS NULL) OR
 constraint wms.ticket ticket_closed_shape CHECK (((status = ANY (ARRAY['completed'::text, 'rejected'::text])) = (closed_at IS NOT NULL)))
 constraint wms.ticket ticket_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.ticket ticket_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.ticket ticket_counted_positive CHECK ((counted > 0))
+constraint wms.ticket ticket_counting_rule_id_fk FOREIGN KEY (company_id, counting_rule_id) REFERENCES wms.counting_rule(company_id, id)
+constraint wms.ticket ticket_counting_shape CHECK ((((counting_rule_id IS NULL) = (counted_from IS NULL)) AND ((counting_rule_id IS NULL) = (counted_to IS NULL)) AND ((counting_rule_id IS NULL) = (counted IS NULL)) AND ((counting_rule_id IS NULL) OR ((property_id IS NOT NULL) AND (counted_to > counted_from)))))
 constraint wms.ticket ticket_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
 constraint wms.ticket ticket_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
@@ -4119,7 +4161,7 @@ constraint wms.ticket ticket_resolution_shape CHECK (((status = 'completed'::tex
 constraint wms.ticket ticket_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.ticket ticket_route_id_pickup_id_fk FOREIGN KEY (company_id, project_id, route_id, pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
 constraint wms.ticket ticket_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
-constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text, 'service-provider'::text])))
+constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text, 'service-provider'::text, 'counting-rule'::text])))
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 constraint wms.ticket ticket_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
 constraint wms.ticket ticket_ticket_type_id_kind_fk FOREIGN KEY (company_id, ticket_type_id, kind) REFERENCES wms.ticket_type(company_id, id, kind)
@@ -4129,6 +4171,7 @@ index wms.ticket ticket_booked_pickup_id_key CREATE UNIQUE INDEX ticket_booked_p
 index wms.ticket ticket_booked_route_id_idx CREATE INDEX ticket_booked_route_id_idx ON wms.ticket USING btree (company_id, booked_route_id)
 index wms.ticket ticket_charge_product_id_idx CREATE INDEX ticket_charge_product_id_idx ON wms.ticket USING btree (company_id, charge_product_id)
 index wms.ticket ticket_container_id_idx CREATE INDEX ticket_container_id_idx ON wms.ticket USING btree (company_id, container_id)
+index wms.ticket ticket_counting_key CREATE UNIQUE INDEX ticket_counting_key ON wms.ticket USING btree (company_id, counting_rule_id, property_id, counted_from, counted_to) WHERE (counting_rule_id IS NOT NULL)
 index wms.ticket ticket_created_by_idx CREATE INDEX ticket_created_by_idx ON wms.ticket USING btree (company_id, created_by)
 index wms.ticket ticket_customer_id_idx CREATE INDEX ticket_customer_id_idx ON wms.ticket USING btree (company_id, customer_id)
 index wms.ticket ticket_driver_id_idx CREATE INDEX ticket_driver_id_idx ON wms.ticket USING btree (company_id, driver_id)
@@ -5160,4 +5203,5 @@ journal 1793952129739 6eb121585a7a7e828ec2053f9ef25e4fff6a8832084876f40b57282d81
 journal 1793952137785 117c4f4b466e7cfa44613d86140cc89b92a390cfbae4e01dcbc093477e121dcb
 journal 1793952146294 6e4653033ff4f3f7b9e3200818c56d138bc8d38fb4c806dd93f058898d8c72a3
 journal 1793952149939 ae5d9ea5151ab1c6d9546163ac5bcdaf3fcaa731d85bb01586b3684f506ae4d2
+journal 1793954181730 4695abc819cd6ddcbf7028781d8cded88ec465531dc76ed40e859747885ab300
 pgboss-version 42

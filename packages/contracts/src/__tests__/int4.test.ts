@@ -23,6 +23,7 @@ import * as catalogueModule from "../catalogue"
 import * as applicationsModule from "../applications"
 import * as collectionCalendarsModule from "../collection-calendars"
 import * as containersModule from "../containers"
+import * as countingRulesModule from "../counting-rules"
 import * as customersModule from "../customers"
 import * as datesModule from "../dates"
 import * as driverCommandsModule from "../driver-commands"
@@ -117,6 +118,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "catalogue": catalogueModule,
   "collection-calendars": collectionCalendarsModule,
   "containers": containersModule,
+  "counting-rules": countingRulesModule,
   "customers": customersModule,
   "dates": datesModule,
   "driver-commands": driverCommandsModule,
