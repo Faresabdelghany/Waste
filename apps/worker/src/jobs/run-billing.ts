@@ -50,7 +50,7 @@
 // record that the month was looked at.
 import type { Tx } from "@waste/db/client"
 import { runBilling, type Transact } from "@waste/db/commands/billing-runs"
-import { dayInTimezone } from "@waste/db/commands/days"
+import { dayInTimezone } from "@waste/domain/clock"
 import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { billingRun } from "@waste/db/schema/finance"

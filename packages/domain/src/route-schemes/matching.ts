@@ -13,7 +13,9 @@
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, splitList, typedString } from "../record-values"
 import { schemeLicenceDay } from "../planning/checks"
-import { addDays, isIsoDate, SERVICE_DAYS, serviceDayOf, sortServiceDays, type ServiceDay } from "./recurrence"
+import { sortServiceDays } from "./recurrence"
+import { addDays, isIsoDate, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
+import { lastDayIn } from "../periods"
 import { stringValue } from "./validation"
 
 /* ------------------------------ vocabulary -------------------------------- */
@@ -170,7 +172,7 @@ function outOfService(periods: readonly ServingPeriod[], day: string): string | 
   const next = periods.filter((period) => period.from > day).map((period) => period.from).sort()[0]
   if (next !== undefined) return `Serves from ${next}`
   const last = periods.flatMap((period) => (period.until === null ? [] : [period.until])).sort().at(-1)
-  return last === undefined ? "No placement serves it" : `Served until ${addDays(last, -1)}`
+  return last === undefined ? "No placement serves it" : `Served until ${lastDayIn(last)}`
 }
 
 /**

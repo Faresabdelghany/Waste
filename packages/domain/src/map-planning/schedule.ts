@@ -7,7 +7,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
-import { addDays, isIsoDate } from "../route-schemes/recurrence"
+import { addDays, isIsoDate } from "../days"
 
 export type CollectionWindow = "any" | "today" | "next-7" | "next-14" | "next-30"
 

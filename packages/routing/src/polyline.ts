@@ -5,7 +5,7 @@
 // printable ASCII, latitude before longitude — so the decoder answers GeoJSON's
 // [longitude, latitude] and refuses a string cut off inside a position rather
 // than invent the ordinate it lacks.
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 /** VROOM's precision, and the format's usual one: five decimals. */
 const FACTOR = 1e5

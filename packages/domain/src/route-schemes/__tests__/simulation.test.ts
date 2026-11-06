@@ -3,8 +3,8 @@ import { describe, test } from "node:test"
 
 import { danishHolidayName } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
-import { NO_HOLIDAYS, generateOccurrences, occurrencePreview } from "../occurrences"
-import type { ServiceDay } from "../recurrence"
+import { generateOccurrences, occurrencePreview } from "../occurrences"
+import { NO_HOLIDAYS, type ServiceDay } from "../../days"
 import {
   DEFAULT_SIMULATION_COUNT,
   SIMULATION_COUNTS,

@@ -15,6 +15,7 @@
 // Completing a plan's order is the service done: its day and its readings are
 // the plan's new baseline, so the plan reads `ok` again and the alert clears.
 // The rules here are pure; the API reads the rows and the readings and asks.
+import { addDays } from "../days"
 
 /** How long before a date limit a plan reads due soon. */
 export const MAINTENANCE_WARNING_DAYS = 14
@@ -53,9 +54,6 @@ export type MaintenanceDue = {
   odometerKm: number | null
   engineHours: number | null
 }
-
-const DAY_MS = 86_400_000
-const addDays = (day: string, days: number): string => new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 
 const worse = (a: MaintenanceDueState, b: MaintenanceDueState): MaintenanceDueState => (MAINTENANCE_DUE_STATES.indexOf(a) >= MAINTENANCE_DUE_STATES.indexOf(b) ? a : b)
 

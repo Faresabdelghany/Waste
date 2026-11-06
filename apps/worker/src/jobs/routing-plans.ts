@@ -27,7 +27,7 @@ import { recordQuota, type QuotaRow } from "@waste/db/commands/routing-quota"
 import { succeedInTransaction } from "@waste/db/jobs"
 import { plan } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
-import { samePosition } from "@waste/routing/geodesy"
+import { samePosition } from "@waste/domain/geo"
 import type { QuotaFamily, RoutedLeg } from "@waste/routing/provider"
 import type { QuotaEngine } from "@waste/routing/quota"
 import { eq } from "drizzle-orm"
@@ -44,7 +44,7 @@ export const positionOf = (location: Point | null): Position2D | null => (locati
  * The legs within the trip from its `first` to its `last` point, both
  * indices into `trip` as asked for, from legs the provider answered one per
  * consecutive pair of distinct points (provider.ts; the rule is
- * `distinctConsecutive`, @waste/routing/geodesy, and `samePosition` below):
+ * `distinctConsecutive`, @waste/domain/geo, and `samePosition` below):
  * a stops-only Plan ordered from the depot keeps only the legs between its
  * stops.
  */

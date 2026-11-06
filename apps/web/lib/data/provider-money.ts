@@ -14,6 +14,8 @@
 // (the command surface's `shows`), and an area's details list its
 // assignments, which the provider prices and the settlements pick from. An indexed provider price is a create of the prices module that
 // names the row it indexes: the next row of the chain.
+import { periodOn, type PeriodStanding } from "@waste/domain/periods"
+
 import { hasPrefix, ofKind } from "@/lib/api/records/adapter"
 
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
@@ -71,9 +73,7 @@ export function assignmentsOf(records: readonly BusinessRecord[], areaWebId: str
   return records.filter((record) => isAssignmentRecord(record) && record.submittedValues?.serviceAreaId === areaWebId).sort((a, b) => startOf(a).localeCompare(startOf(b)))
 }
 
-/** A period as a reading of a day: not yet in force, in force, or ended (ADR-0005: `validTo` is the first day out). */
-export function periodReading(validFrom: string, validTo: string | null, day: string): "Upcoming" | "Active" | "Expired" {
-  if (validFrom > day) return "Upcoming"
-  if (validTo !== null && validTo <= day) return "Expired"
-  return "Active"
-}
+const PERIOD_READING: Record<PeriodStanding, "Upcoming" | "Active" | "Expired"> = { upcoming: "Upcoming", "in-force": "Active", ended: "Expired" }
+
+/** A period's standing on a day, as a provider's price, award or assignment names it. */
+export const periodReading = (validFrom: string, validTo: string | null, day: string) => PERIOD_READING[periodOn({ validFrom, validTo }, day)]

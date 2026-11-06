@@ -26,7 +26,7 @@
 // priced as a pickup is, its charged days the quantity, so its net is the
 // day's price times the days, rounded nowhere.
 import type { ProductUnit } from "../registry/vocabulary"
-import { addDays } from "../route-schemes/recurrence"
+import { addDays, daysBetween } from "../days"
 import type { BillingPeriod } from "./periods"
 import { chargePeriodContaining, type ChargePeriod, type InForce } from "./recurring"
 
@@ -40,7 +40,7 @@ export const FREE_DAYS_MAX = 366
 export const monthOf = (day: string): ChargePeriod => chargePeriodContaining("monthly", day)
 
 /** How many days a period holds. */
-export const daysOf = (period: ChargePeriod): number => Math.round((Date.parse(period.to) - Date.parse(period.from)) / 86_400_000)
+export const daysOf = (period: ChargePeriod): number => daysBetween(period.from, period.to)
 
 /** The first month a run over `period` reaches: the one its period's day before falls in, which a run made before that month ended left undue. */
 export const hireWindowFirst = (period: BillingPeriod): ChargePeriod => monthOf(addDays(period.periodFrom, -1))

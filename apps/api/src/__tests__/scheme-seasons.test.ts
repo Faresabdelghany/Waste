@@ -10,7 +10,7 @@ import { Page } from "@waste/contracts/pagination"
 import { Occurrence, RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { routeSchemeSeason } from "@waste/db/schema/route-schemes"
-import { isoWeek } from "@waste/domain/route-schemes/recurrence"
+import { isoWeek } from "@waste/domain/days"
 import { eq } from "drizzle-orm"
 import * as z from "zod"
 

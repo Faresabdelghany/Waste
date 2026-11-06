@@ -26,7 +26,7 @@ import { typedString } from "../record-values"
 import { coversClass } from "../resources/licence"
 import type { LicenceClass as LicenceClassToken } from "../resources/vocabulary"
 import { vehicleTypeOfRecord } from "./matching"
-import { isIsoDate } from "./recurrence"
+import { isIsoDate } from "../days"
 
 /** What the readers need of a fleet record — a fixture, a created record, or a test's stand-in. */
 export type FleetRecord = Pick<BusinessRecord, "id" | "name" | "context" | "facts" | "submittedValues">

@@ -9,6 +9,7 @@
 // Text is escaped (backslash, semicolon, comma, new line) and every line is
 // folded at 75 octets, continuation lines beginning with a space, and ended
 // with CRLF, as the RFC asks.
+import { addDays } from "@waste/domain/days"
 
 /**
  * One all-day event: a day, what it says, and whether it is a day that will
@@ -26,11 +27,6 @@ export const CALENDAR_MEDIA_TYPE = "text/calendar; charset=utf-8"
 const escapeText = (text: string): string => text.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replace(/\r?\n/g, "\\n")
 
 const basicDate = (iso: string): string => iso.replaceAll("-", "")
-
-const nextDay = (iso: string): string => {
-  const [year, month, day] = iso.split("-").map(Number)
-  return new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, (day ?? 1) + 1)).toISOString().slice(0, 10)
-}
 
 const stampOf = (at: Date): string => `${at.toISOString().slice(0, 19).replaceAll("-", "").replaceAll(":", "")}Z`
 
@@ -73,7 +69,7 @@ export function icsOf({ name, timezone, events, now }: Calendar): string {
       `DTSTAMP:${stamp}`,
       `SEQUENCE:${event.sequence}`,
       `DTSTART;VALUE=DATE:${basicDate(event.date)}`,
-      `DTEND;VALUE=DATE:${basicDate(nextDay(event.date))}`,
+      `DTEND;VALUE=DATE:${basicDate(addDays(event.date, 1))}`,
       `SUMMARY:${escapeText(event.summary)}`,
       ...(event.description === null ? [] : [`DESCRIPTION:${escapeText(event.description)}`]),
       ...(event.cancelled ? ["STATUS:CANCELLED"] : []),

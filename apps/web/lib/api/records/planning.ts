@@ -69,7 +69,7 @@ import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
 import { PLANNING_AREA_GEOMETRY_KEY } from "@waste/domain/map-planning/areas"
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut, inForceOn, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
@@ -91,50 +91,12 @@ import {
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import { dayIn } from "./clock"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 /** Whether a typed form value differs between two records. */
 const changedTyped = (before: BusinessRecord, after: BusinessRecord, key: string) => typed(before, key) !== typed(after, key)
-
-/** The day as the browser's calendar has it. */
-function localDay(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const day = String(now.getDate()).padStart(2, "0")
-  return `${now.getFullYear()}-${month}-${day}`
-}
-
-/**
- * The day `now` falls on in a project's timezone, `YYYY-MM-DD` (`en-CA`
- * spells it so), the day a version is read as in force on; the browser's own
- * day for a project without one, or one Intl does not know. The agreements
- * adapter reads a subscription's period against the same day.
- */
-export function dayIn(now: Date, timezone: string | undefined): string {
-  if (timezone) {
-    try {
-      return dayFormatter(timezone).format(now)
-    } catch {
-      // A timezone Intl does not know: the browser's day below.
-    }
-  }
-  return localDay(now)
-}
-
-/** One formatter per timezone: a load reads hundreds of rows against a handful of projects, and building one is the costly part. */
-const dayFormatters = new Map<string, Intl.DateTimeFormat>()
-function dayFormatter(timezone: string): Intl.DateTimeFormat {
-  let formatter = dayFormatters.get(timezone)
-  if (formatter === undefined) {
-    formatter = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
-    dayFormatters.set(timezone, formatter)
-  }
-  return formatter
-}
-
-/** The form's last day in force from the wire's first day out (half-open), and back; every effective-dated adapter spells the two ends this way. */
-export const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
-export const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
 // ---------------------------------------------------------------------------
 // The polygon a form's geometry text spells
@@ -225,6 +187,9 @@ export const NEXT_VERSION_GEOMETRY_KEY = "nextVersionGeometry"
 export type BoundaryVersionRow = { id: string; validFrom: string; lastDay: string | null; standing: "in force" | "upcoming" | "ended" }
 
 /** An area's versions as the record lists them, by the day each starts, read against the project's day. */
+/** How a version row names its standing. */
+const STANDING_WORDS: Record<PeriodStanding, BoundaryVersionRow["standing"]> = { upcoming: "upcoming", "in-force": "in force", ended: "ended" }
+
 export function boundaryVersionRows(boundaries: readonly PlanningAreaBoundary[], day: string): BoundaryVersionRow[] {
   return [...boundaries]
     .sort((a, b) => a.validFrom.localeCompare(b.validFrom))
@@ -232,7 +197,7 @@ export function boundaryVersionRows(boundaries: readonly PlanningAreaBoundary[],
       id: version.id,
       validFrom: version.validFrom,
       lastDay: version.validTo === null ? null : lastDayIn(version.validTo),
-      standing: version.validFrom > day ? "upcoming" : version.validTo !== null && version.validTo <= day ? "ended" : "in force",
+      standing: STANDING_WORDS[periodOn(version, day)],
     }))
 }
 
@@ -256,7 +221,7 @@ export type PlanningAreaResource = PlanningArea & { boundaries: PlanningAreaBoun
 
 /** The record's status as a reading of the versions against the day, and the version it reads. */
 export function versionInForce(boundaries: readonly PlanningAreaBoundary[], day: string): { status: "Draft" | "Active" | "Upcoming" | "Expired"; version: PlanningAreaBoundary | null } {
-  const inForce = boundaries.find((version) => version.validFrom <= day && (version.validTo === null || day < version.validTo))
+  const inForce = boundaries.find((version) => inForceOn(version, day))
   if (inForce) return { status: "Active", version: inForce }
   const upcoming = boundaries.filter((version) => version.validFrom > day).sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0]
   if (upcoming) return { status: "Upcoming", version: upcoming }

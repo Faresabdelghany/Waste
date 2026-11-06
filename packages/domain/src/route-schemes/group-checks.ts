@@ -9,11 +9,8 @@
 
 import type { CollectionGroup } from "./groups"
 import { containerTypeShortLabel } from "./matching"
-import {
-  SERVICE_DAY_LABELS,
-  sortServiceDays,
-  type ServiceDay,
-} from "./recurrence"
+import { sortServiceDays } from "./recurrence"
+import { SERVICE_DAY_LABELS, type ServiceDay } from "../days"
 import { containerTypesOutsideServiceType } from "./scope"
 
 export type GroupCheckKind = "coverage" | "vehicle" | "driver" | "service-type"

@@ -10,7 +10,7 @@
 // module does not know — such dates read "Holiday". Pure date math over ISO
 // `yyyy-mm-dd` strings.
 
-import { addDays } from "./recurrence"
+import { addDays } from "../days"
 
 const FIXED_HOLIDAYS: Readonly<Record<string, string>> = {
   "01-01": "New Year's Day",

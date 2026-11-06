@@ -21,10 +21,8 @@
 // `ticketEventShape(kind, row)` is the whole rule over a row;
 // `ticketEventShapeIssue` says which column disagrees, for the API's sentence
 // before the check's code.
-import type { Presence } from "../execution/proof-shapes"
+import type { Presence } from "../presence"
 import type { TicketEventKind, TicketStatus, TicketVisibility } from "./vocabulary"
-
-export type { Presence }
 
 /** What one kind of history row carries. */
 export type TicketEventShape = {

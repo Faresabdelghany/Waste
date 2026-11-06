@@ -15,7 +15,7 @@ import {
   type OccurrencePreviewInput,
   type OccurrenceWindow,
 } from "./occurrences"
-import { isIsoDate } from "./recurrence"
+import { isIsoDate } from "../days"
 
 /** The horizons the simulation offers, in collections. */
 export const SIMULATION_COUNTS = [5, 10, 20, 50] as const

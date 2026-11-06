@@ -23,7 +23,7 @@ import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-r
 import { boundaryVersionsOf, NEXT_VERSION_FROM_KEY, NEXT_VERSION_GEOMETRY_KEY, type BoundaryVersionRow } from "@/lib/api/records/planning"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { formatServiceDate } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay } from "@waste/domain/days"
 
 const STANDING_CLASSES: Record<BoundaryVersionRow["standing"], string> = {
   "in force": "border-transparent bg-success/10 text-success-foreground",
@@ -45,7 +45,7 @@ export function PlanningAreaVersionsDialog({ record, open, onOpenChange }: { rec
       upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, next),
       () => {
         onOpenChange(false)
-        toast.success(`Next boundary of ${record.name} from ${formatServiceDate(from)}`, { description: "The version in force until then ends the day before; the map draws the new one from that day." })
+        toast.success(`Next boundary of ${record.name} from ${formatShortDay(from)}`, { description: "The version in force until then ends the day before; the map draws the new one from that day." })
       },
       () => setPending(false),
     )
@@ -77,8 +77,8 @@ export function PlanningAreaVersionsDialog({ record, open, onOpenChange }: { rec
               ) : (
                 versions.map((version) => (
                   <TableRow key={version.id}>
-                    <TableCell className="whitespace-nowrap text-sm">{formatServiceDate(version.validFrom)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{version.lastDay === null ? "ongoing" : formatServiceDate(version.lastDay)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatShortDay(version.validFrom)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{version.lastDay === null ? "ongoing" : formatShortDay(version.lastDay)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STANDING_CLASSES[version.standing]}`}>
                         {version.standing}

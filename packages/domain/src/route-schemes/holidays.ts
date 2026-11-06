@@ -8,8 +8,8 @@
 
 import type { BusinessRecord } from "../prototype-record"
 import { holidayLabel, type HolidayNameLookup } from "./holiday-names"
-import { isHolidayPolicy, type HolidayList, type HolidayPolicy } from "./occurrences"
-import { isIsoDate } from "./recurrence"
+import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
+import { type HolidayList, isIsoDate } from "../days"
 import { stringValue } from "./validation"
 
 type StoredValues = Record<string, string | boolean | undefined>

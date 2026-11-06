@@ -82,6 +82,7 @@ import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerServ
 import { and, asc, desc, eq, gt, gte, inArray, lte, max } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { inForceOn } from "@waste/domain/periods"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
@@ -290,7 +291,7 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
     const wasteFractionId = body.wasteFractionId ?? under.productFractionId
     if (wasteFractionId === null) throw invalidRequest("body", [{ path: "wasteFractionId", message: NAME_THE_FRACTION }])
     if (body.wasteFractionId != null) await requireWasteFraction(tx, scope.companyId, body.wasteFractionId)
-    if (!(under.validFrom <= serviceDate && (under.validTo === null || serviceDate < under.validTo))) throw problem(409, { detail: notInForceOn(serviceDate) })
+    if (!inForceOn(under, serviceDate)) throw problem(409, { detail: notInForceOn(serviceDate) })
     // The two statuses are text the columns' checks hold to the vocabulary, read as the statuses they are.
     refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus } as Place, "stop")
     await requireDeparture(tx, principal, taken, "issue")

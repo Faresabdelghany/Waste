@@ -26,7 +26,8 @@ import { EndRouteDialog, FillDialog, NoteDialog, ReasonDialog, UnloadDialog, Vol
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { DriverRouteMessages } from "@/components/waste/driver/driver-route-messages"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
-import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
+import { DriverLink, KeptNotice, RejectionList, progressLine } from "@/components/waste/driver/driver-parts"
+import { formatShortDay } from "@waste/domain/days"
 import { ScanDialog } from "@/components/waste/driver/driver-scan-dialog"
 import type { DriverMe, DriverPickup, DriverRouteDetail, DriverUnloadingStation } from "@waste/contracts/driver-commands"
 import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
@@ -93,7 +94,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">{detail.label}</h1>
-            <p className="text-sm text-muted-foreground">{operatingDay(detail.operatingDate)}</p>
+            <p className="text-sm text-muted-foreground">{formatShortDay(detail.operatingDate)}</p>
             <p className="text-sm text-muted-foreground">{progressLine(detail.progress)}</p>
             {sessionRecords(detail, me.driver.id) && <p className="text-sm text-muted-foreground">Your position is shared with the office while this route runs and this screen is open.</p>}
           </div>

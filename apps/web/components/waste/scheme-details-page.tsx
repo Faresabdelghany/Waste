@@ -81,14 +81,8 @@ import {
   withRouteWasteFractions,
   withStopServiceDate,
 } from "@waste/domain/route-schemes/scheme-tabs"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  formatServiceDate,
-  recurrenceFromValues,
-  recurrenceSentence,
-  serviceDaysFromValues,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { stringValue } from "@waste/domain/route-schemes/validation"
 import { recordCountLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
@@ -122,7 +116,7 @@ import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { useBusinessRecordStore, useServerModuleState, useStoreRecords, whenSaved } from "@/components/waste/business-record-store"
@@ -195,8 +189,8 @@ function effectivePeriodLabel(
   effectiveTo: string | undefined,
 ): string {
   if (!effectiveFrom) return "—"
-  const from = formatServiceDate(effectiveFrom)
-  return effectiveTo ? `${from} → ${formatServiceDate(effectiveTo)}` : `${from} → ongoing`
+  const from = formatShortDay(effectiveFrom)
+  return effectiveTo ? `${from} → ${formatShortDay(effectiveTo)}` : `${from} → ongoing`
 }
 
 export function SchemeDetailsPage({
@@ -1079,7 +1073,7 @@ function SchemeRoutesTab({
                           <TableCell className="min-w-[180px]">
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-foreground">
-                                {operatingDate ? formatServiceDate(operatingDate) : "—"}
+                                {operatingDate ? formatShortDay(operatingDate) : "—"}
                               </p>
                               {deviationNote && (
                                 <p className="max-w-[340px] truncate text-xs text-warning-foreground">
@@ -1252,7 +1246,7 @@ function SchemeStopsTab({
                       <TableCell className="min-w-[200px]">
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-foreground">
-                            {date ? formatServiceDate(date) : "—"}
+                            {date ? formatShortDay(date) : "—"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {pickup.facts.Route ?? "—"}
@@ -1373,7 +1367,7 @@ function SchemeHolidaysTab({
                   variant="outline"
                   className="rounded-full px-2 py-0.5 text-[11px] font-normal"
                 >
-                  {formatServiceDate(date)} · {name}
+                  {formatShortDay(date)} · {name}
                 </Badge>
               ))}
             </div>
@@ -1386,7 +1380,7 @@ function SchemeHolidaysTab({
                   variant="outline"
                   className="rounded-full px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
                 >
-                  {formatServiceDate(date)} · {name}
+                  {formatShortDay(date)} · {name}
                 </Badge>
               ))}
             </div>

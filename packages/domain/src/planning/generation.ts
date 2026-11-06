@@ -78,8 +78,10 @@ import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { tankWaits, type TankCadence, type TankGate } from "../route-schemes/due-from-last"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
-import { formatOccurrenceShortDate, generateOccurrences, holidayDecision, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
-import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
+import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
+import { addDays, formatShortDay, type HolidayList, NO_HOLIDAYS, serviceDayOf } from "../days"
+import { lastDayIn } from "../periods"
+import type { SchemeRecurrence } from "../route-schemes/recurrence"
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
 export { WALK_CAP_DAYS }
@@ -134,7 +136,7 @@ export function schemeRecurrenceOf(scheme: StoredRecurrence): SchemeRecurrence {
     serviceDays: [...scheme.serviceDays],
     ...(scheme.weekRotation === null ? {} : { weekRotation: scheme.weekRotation }),
     effectiveFrom: scheme.validFrom,
-    effectiveTo: scheme.validTo === null ? "" : addDays(scheme.validTo, -1),
+    effectiveTo: scheme.validTo === null ? "" : lastDayIn(scheme.validTo),
     ...(scheme.seasons === undefined || scheme.seasons.length === 0
       ? {}
       : {
@@ -179,7 +181,7 @@ export const skippedHoliday = (holiday: string | undefined): string => `Skipped 
 
 /** A collection the policy skips that the office held on another day (#226): "Kept on Fri 9 Oct by the office, off Christmas Day". */
 export const keptOffHoliday = (operatingDate: string, holiday: string | undefined): string =>
-  `Kept on ${formatOccurrenceShortDate(operatingDate)} by the office, off ${holiday ?? "Holiday"}`
+  `Kept on ${formatShortDay(operatingDate)} by the office, off ${holiday ?? "Holiday"}`
 
 /** A scheme's holiday inputs: its policy and its project's calendar, as a run judges a date by them. */
 export type HolidayInputs = { holidayPolicy: HolidayPolicy; calendar: SchemeCalendar }

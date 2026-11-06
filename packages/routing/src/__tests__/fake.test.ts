@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 import { FakeProvider, FAKE_SPEED_METRES_PER_SECOND } from "../fake"
 import type { ProviderAnswer } from "../provider"

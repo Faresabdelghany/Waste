@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test"
 import { periodPhrase } from "@waste/domain/resources/availability"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 
 import { chainLanded, expect, problemOf, test } from "./fixtures"
 import { listAll, projectNamed, TESTER_PROJECT } from "./tester"

@@ -7,6 +7,7 @@
 // earliest date is the nearest, so no sender's clock enters it — nor the
 // question of whose day "today" is — and a deferred job, re-sent with the
 // same date, keeps its place.
+import { daysBetween } from "../days"
 import type { RoutingJobClass } from "./vocabulary"
 
 /** Where the batch scale starts: a batch job's priority is this less its operating date's day of the Unix epoch. */
@@ -15,9 +16,7 @@ const BATCH_CEILING = 1_000_000
 /** Above every batch job. */
 const INTERACTIVE = 2_000_000
 
-const MS_PER_DAY = 86_400_000
-
 export function routingJobPriority({ class: jobClass, operatingDate }: { class: RoutingJobClass; operatingDate: string }): number {
   if (jobClass === "interactive") return INTERACTIVE
-  return BATCH_CEILING - Math.round(Date.parse(`${operatingDate}T00:00:00Z`) / MS_PER_DAY)
+  return BATCH_CEILING - daysBetween("1970-01-01", operatingDate)
 }

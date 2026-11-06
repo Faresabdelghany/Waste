@@ -7,7 +7,7 @@
 import type { ApplicationDecide } from "@waste/contracts/applications"
 import { APPEAL_TEXT_NEEDED, appealTextNeeded, decisionPeriodRefusal, moveOf, type ApplicationCommand } from "@waste/domain/registry/applications"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES, type ApplicationKind, type DecisionOutcome } from "@waste/domain/registry/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import type { LocalRefusal } from "../api/records/adapter"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -74,7 +74,7 @@ export const dayOf = (value: unknown): string | undefined => (typeof value === "
 
 /** A grant's period as the office reads it, by its last day in force where the wire's `validTo` is the first day out (ADR-0005): "From 2026-11-09", "2026-11-09 to 2026-12-31". */
 export function periodText(validFrom: string, validTo: string | null): string {
-  return validTo === null ? `From ${validFrom}` : `${validFrom} to ${addDays(validTo, -1)}`
+  return validTo === null ? `From ${validFrom}` : `${validFrom} to ${lastDayIn(validTo)}`
 }
 
 /** The body the decide form becomes, or the field the API would refuse and why: a day the field does not hold, the period by the outcome, the end after the start, the appeal text where it is needed. A refusal's period fields are dropped, since the form hides them. */
@@ -97,9 +97,7 @@ export function decideBodyOf(values: BusinessFormValues): ApplicationDecide | Lo
     outcome,
     ...(conditions === null ? {} : { conditions }),
     ...(validFrom === null ? {} : { validFrom }),
-    // The last day in force, as the form spells it, is the wire's first day out (ADR-0005). The domain's addDays, not planning.ts's
-    // firstDayOut: the records module reaches the form schemas, which import this file's options, and the cycle meets them uninitialised.
-    ...(lastDay === null ? {} : { validTo: addDays(lastDay, 1) }),
+    ...(lastDay === null ? {} : { validTo: firstDayOut(lastDay) }),
     ...(appealTextNeeded(outcome) ? { appealText } : {}),
   }
 }
@@ -193,7 +191,7 @@ export function decisionLetterOf(record: Pick<BusinessRecord, "facts" | "submitt
   const facts = record.facts ?? {}
   const place = facts.Property ?? facts["Shared point"]
   const kind = kindLabel(String(values.kind))
-  const period = decision.validFrom === null ? [] : [decision.validTo === null ? `The decision is in force from ${decision.validFrom}.` : `The decision is in force from ${decision.validFrom} up to and including ${addDays(decision.validTo, -1)}.`]
+  const period = decision.validFrom === null ? [] : [decision.validTo === null ? `The decision is in force from ${decision.validFrom}.` : `The decision is in force from ${decision.validFrom} up to and including ${lastDayIn(decision.validTo)}.`]
   return {
     sender: parties.company,
     recipient: facts.Customer ?? "",

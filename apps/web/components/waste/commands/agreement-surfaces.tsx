@@ -22,7 +22,7 @@ import type { RowSurfaceProps } from "@/components/waste/commands/command-surfac
 import { useModuleReady, useRelationPickers, useRowHistory } from "@/components/waste/commands/use-command-support"
 import { cancelPause, changeService, pauseSubscription, resumePause, subscriptionPauses, terminateAgreement } from "@/lib/api/records/agreements"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, subscriptionProductOptions } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"

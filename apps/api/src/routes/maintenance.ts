@@ -31,7 +31,7 @@ import {
   type MaintenancePlanStatus,
 } from "@waste/contracts/maintenance"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/db/commands/days"
+import { dayInTimezone } from "@waste/domain/clock"
 import { vehicle } from "@waste/db/schema/fleet"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { project } from "@waste/db/schema/organisation"

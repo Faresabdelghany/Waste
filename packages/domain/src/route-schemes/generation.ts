@@ -51,21 +51,9 @@ import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
 import { schemeHolidayPolicy } from "./holidays"
 import { DEFAULT_WEEKEND } from "./project-calendar"
-import {
-  NO_HOLIDAYS,
-  generateOccurrences,
-  shiftedNote,
-  type SchemeCalendar,
-  type Occurrence,
-} from "./occurrences"
-import {
-  addDays,
-  formatServiceDate,
-  recurrenceFromValues,
-  routeIdentityKey,
-  serviceDayOf,
-  type ServiceDay,
-} from "./recurrence"
+import { generateOccurrences, shiftedNote, type SchemeCalendar, type Occurrence } from "./occurrences"
+import { addDays, formatShortDay, NO_HOLIDAYS, type ServiceDay, serviceDayOf } from "../days"
+import { recurrenceFromValues, routeIdentityKey } from "./recurrence"
 import { stringValue } from "./validation"
 
 export type GenerationWindow = { from: string; to: string }
@@ -929,7 +917,7 @@ export function applySchemeGeneration(input: {
       owner: driver,
       value: `${stops} stops`,
       updated: "Now",
-      description: `Generated from route scheme ${scheme.name} for ${formatServiceDate(planned.actualDate)}.`,
+      description: `Generated from route scheme ${scheme.name} for ${formatShortDay(planned.actualDate)}.`,
       facts: {
         ...(schemeFacts.Project ? { Project: schemeFacts.Project } : {}),
         ...(schemeFacts["Planning area"]
@@ -950,7 +938,7 @@ export function applySchemeGeneration(input: {
               "Time window": `${startTime}–${addMinutes(startTime, stops * MINUTES_PER_STOP + CLOSEOUT_MINUTES)}`,
             }
           : {}),
-        "Operating date": formatServiceDate(planned.actualDate),
+        "Operating date": formatShortDay(planned.actualDate),
         "Route scheme": scheme.name,
         "Scheme version": plan.schemeVersion,
         Stops: String(stops),

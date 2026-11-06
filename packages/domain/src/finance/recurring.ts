@@ -24,7 +24,8 @@
 // itself, never the cadence, so a charge priced again (`reprice`) is priced as
 // it was minted whatever its agreement's cadence has become since.
 import type { BillingCadence, ProductUnit } from "../registry/vocabulary"
-import { addDays } from "../route-schemes/recurrence"
+import { addDays, daysBetween } from "../days"
+import { inForceOn } from "../periods"
 import type { BillingPeriod } from "./periods"
 import { fitsMinor, roundHalfAwayFromZero, vatOf } from "./money"
 import type { PricedAmounts } from "./pricing"
@@ -60,8 +61,6 @@ export function chargePeriodsOfRun(cadence: BillingCadence, period: BillingPerio
   return periods
 }
 
-const covers = (inForce: InForce, day: string): boolean => inForce.validFrom <= day && (inForce.validTo === null || inForce.validTo > day)
-
 /** A period's charged days: inside every period in force, outside every pause; the first of them, null where there is none. */
 export function chargedDays(period: ChargePeriod, inForce: readonly InForce[], pauses: readonly InForce[]): { first: string | null; days: number; periodDays: number } {
   let first: string | null = null
@@ -69,7 +68,7 @@ export function chargedDays(period: ChargePeriod, inForce: readonly InForce[], p
   let periodDays = 0
   for (let day = period.from; day < period.to; day = addDays(day, 1)) {
     periodDays += 1
-    if (!inForce.every((span) => covers(span, day)) || pauses.some((pause) => covers(pause, day))) continue
+    if (!inForce.every((span) => inForceOn(span, day)) || pauses.some((pause) => inForceOn(pause, day))) continue
     days += 1
     first ??= day
   }
@@ -83,14 +82,9 @@ const monthsOf = (period: ChargePeriod): number => {
   return (toYear - fromYear) * 12 + (toMonth - fromMonth)
 }
 
-const DAY_MS = 86_400_000
-
-/** The days a charge period holds. */
-const daysOf = (period: ChargePeriod): number => (Date.parse(`${period.to}T00:00:00Z`) - Date.parse(`${period.from}T00:00:00Z`)) / DAY_MS
-
 /** A recurring charge's unit price: the month's price times the period's months, prorated by the charged days over the period's, rounded half away from zero. */
 export function proratedUnitPrice(monthlyMinor: number, period: ChargePeriod, days: number): number {
-  return roundHalfAwayFromZero((monthlyMinor * monthsOf(period) * days) / daysOf(period))
+  return roundHalfAwayFromZero((monthlyMinor * monthsOf(period) * days) / daysBetween(period.from, period.to))
 }
 
 /**

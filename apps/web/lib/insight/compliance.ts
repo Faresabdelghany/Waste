@@ -14,7 +14,7 @@
 // so the tab says why in a plain sentence rather than asking; from which day
 // the report reads is the API's to judge, in its own sentence.
 import { windowDays } from "@waste/domain/insight/intervals"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 
 import type { FileSeparator, WasteDataQuery } from "@/lib/api/reports"
 

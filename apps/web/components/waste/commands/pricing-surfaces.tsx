@@ -33,7 +33,7 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/co
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { useModuleReady } from "@/components/waste/commands/use-command-support"
 import { isLocalRefusal } from "@/lib/api/records/adapter"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { explainPrice, explainQuery } from "@/lib/api/records/pricing"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"

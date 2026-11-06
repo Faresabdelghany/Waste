@@ -29,7 +29,8 @@ import { findCollectedProperty, readCollectionDayInputs, searchAddresses } from 
 import { readDropOffMap } from "@waste/db/query/drop-off-points"
 import { collectionDaysOf } from "@waste/domain/planning/collection-days"
 import { openingDaysOf } from "@waste/domain/resources/drop-off-points"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
+import { dayInTimezone } from "@waste/domain/clock"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -39,7 +40,6 @@ import type { PublishedProject as PublishedProjectRow } from "@waste/db/public-d
 import { FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS, type PublicEnv } from "../auth/public-door"
 import { CALENDAR_MEDIA_TYPE, icsOf } from "../ical"
 import { describeProblem, problem, validate } from "../problem"
-import { dayInTimezone } from "./days"
 import { describeJson } from "./shared"
 
 /** How long anyone may keep a public answer: a minute, so a published change shows within one. */

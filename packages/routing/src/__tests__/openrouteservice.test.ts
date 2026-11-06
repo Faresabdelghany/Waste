@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 import { OPENROUTESERVICE_HOST, OpenRouteServiceProvider } from "../openrouteservice"
 import type { ProviderAnswer } from "../provider"

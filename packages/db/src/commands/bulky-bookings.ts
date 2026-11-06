@@ -24,7 +24,8 @@ import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, typ
 import type { RecurrenceFrequency } from "@waste/domain/planning/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
 import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
-import { addDays, type ServiceDay, type WeekRotation } from "@waste/domain/route-schemes/recurrence"
+import type { WeekRotation } from "@waste/domain/route-schemes/recurrence"
+import { addDays, type ServiceDay } from "@waste/domain/days"
 import { and, asc, count, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"

@@ -33,13 +33,13 @@ import { route } from "@waste/db/schema/execution"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { project } from "@waste/db/schema/organisation"
 import { allocatedWithOthers, overlappingRoute, sameDayClash, sameDayUnconfirmed, spanOf, type DaySpan } from "@waste/domain/execution/crew-day"
-import { formatOccurrenceShortDate } from "@waste/domain/route-schemes/occurrences"
+import { formatShortDay } from "@waste/domain/days"
+import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm"
 
 import { problem } from "../problem"
 import { driverName, vehicleName } from "./availability-rules"
 import { labelOf, routeColumns, type RouteRow } from "./execution-shapes"
-import { dayInTimezone } from "./days"
 import { projectTimezone } from "./fleet-lookups"
 import type { Scope } from "./references"
 import { LIVE_ALLOCATION_STATUSES } from "./statuses"
@@ -59,14 +59,11 @@ export async function lockCrew(tx: Tx, companyId: string, crew: RouteCrew): Prom
   for (const id of ids) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`crew-day:${companyId}:${id}`}, 0))`)
 }
 
-/** An instant's time on the project's clock: `06:00`. */
-const timeIn = (instant: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant)
-
 /** An allocation's window as a person reads it on the project's clock: "Mon 5 Oct 06:00–14:00", "Mon 5 Oct 06:00 – Tue 6 Oct 02:00". */
 function windowPhrase(from: Date, to: Date, timeZone: string): string {
   const [first, last] = [dayInTimezone(from, timeZone), dayInTimezone(to, timeZone)]
-  if (first === last) return `${formatOccurrenceShortDate(first)} ${timeIn(from, timeZone)}–${timeIn(to, timeZone)}`
-  return `${formatOccurrenceShortDate(first)} ${timeIn(from, timeZone)} – ${formatOccurrenceShortDate(last)} ${timeIn(to, timeZone)}`
+  if (first === last) return `${formatShortDay(first)} ${timeInTimezone(from, timeZone)}–${timeInTimezone(to, timeZone)}`
+  return `${formatShortDay(first)} ${timeInTimezone(from, timeZone)} – ${formatShortDay(last)} ${timeInTimezone(to, timeZone)}`
 }
 
 /**

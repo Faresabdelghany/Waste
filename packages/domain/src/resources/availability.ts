@@ -20,8 +20,8 @@
 // Pure: days are `YYYY-MM-DD`, compared as strings; a person reads a period
 // by its last day in, never the wire's first day out.
 
-import { formatOccurrenceShortDate } from "../route-schemes/occurrences"
-import { addDays, serviceDayOf, type ServiceDay } from "../route-schemes/recurrence"
+import { addDays, formatShortDay, type ServiceDay, serviceDayOf } from "../days"
+import { lastDayIn } from "../periods"
 
 /** A period a driver is away or a vehicle out of use: half-open over days, an open end while the return is not known. */
 export type AwayPeriod = { validFrom: string; validTo: string | null; reason: string }
@@ -40,9 +40,9 @@ export const awayOn = <P extends AwayPeriod>(periods: readonly P[], day: string)
 
 /** The period as a person reads it, by its last day in: "on Mon 5 Oct", "Mon 5 Oct – Fri 9 Oct", "from Mon 5 Oct". */
 export function periodPhrase(period: Pick<AwayPeriod, "validFrom" | "validTo">): string {
-  if (period.validTo === null) return `from ${formatOccurrenceShortDate(period.validFrom)}`
-  const lastDay = addDays(period.validTo, -1)
-  return lastDay === period.validFrom ? `on ${formatOccurrenceShortDate(period.validFrom)}` : `${formatOccurrenceShortDate(period.validFrom)} – ${formatOccurrenceShortDate(lastDay)}`
+  if (period.validTo === null) return `from ${formatShortDay(period.validFrom)}`
+  const lastDay = lastDayIn(period.validTo)
+  return lastDay === period.validFrom ? `on ${formatShortDay(period.validFrom)}` : `${formatShortDay(period.validFrom)} – ${formatShortDay(lastDay)}`
 }
 
 /** What a command naming the driver or the vehicle needs it for, as its sentence says. */
@@ -114,8 +114,8 @@ const awayWord = (role: CrewRole) => (role === "driver" ? "absent" : "unavailabl
 
 /** The run's warning for a route written without its group's driver or vehicle: "Mads Jensen is absent on Mon 12 Oct (holiday): RC-1042 is written without a planned driver". */
 export const crewLeftOff = (role: CrewRole, name: string, day: string, period: AwayPeriod, route: string): string =>
-  `${name} is ${awayWord(role)} on ${formatOccurrenceShortDate(day)} (${period.reason}): ${route} is written without a planned ${role}`
+  `${name} is ${awayWord(role)} on ${formatShortDay(day)} (${period.reason}): ${route} is written without a planned ${role}`
 
 /** The run's warning for a route the office holds whose crew is away on its day: the office's word stands, and the run says so. */
 export const heldCrewAway = (role: CrewRole, name: string, day: string, period: AwayPeriod, route: string): string =>
-  `${name} is ${awayWord(role)} on ${formatOccurrenceShortDate(day)} (${period.reason}), and ${route}, which the office holds, still names ${role === "driver" ? "them" : "it"}`
+  `${name} is ${awayWord(role)} on ${formatShortDay(day)} (${period.reason}), and ${route}, which the office holds, still names ${role === "driver" ? "them" : "it"}`

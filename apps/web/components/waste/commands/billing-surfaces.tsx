@@ -72,7 +72,8 @@ import {
   type EventCommand,
 } from "@/lib/data/commercial-forms"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { projectToday, ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
+import { dayIn } from "@/lib/api/records/clock"
+import { ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
 
 // ---------------------------------------------------------------------------
 // Billable events
@@ -191,7 +192,7 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
     setValues(submitted)
     // A run is for a closed period: Last day is held to the picked project's today on its own clock.
     const projectWebId = typeof submitted.projectId === "string" ? submitted.projectId : undefined
-    const today = projectToday(timezoneOfProject(getRecords("configure", "organization", getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []), projectWebId))
+    const today = dayIn(new Date(), timezoneOfProject(getRecords("configure", "organization", getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []), projectWebId))
     const body = billingRunBody(blankNone(submitted), resolve, today)
     if (isLocalRefusal(body)) {
       toast.error("The run was not previewed", { description: body.message })

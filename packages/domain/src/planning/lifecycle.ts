@@ -27,7 +27,7 @@
 // otherwise and at most 28, four weeks, since every run re-plans and asks a
 // Plan for each route it reshapes. The routing horizon keeps its own fixed
 // week (route-schemes/plan-ahead.ts), since it spends the routing quota.
-import { addDays } from "../route-schemes/recurrence"
+import { addDays } from "../days"
 import type { ExistingRoute, GenerationWindow, RouteDecision } from "./generation"
 
 /** The window the nightly sweep plans when a scheme says nothing: the week it always planned. */

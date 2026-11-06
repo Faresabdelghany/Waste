@@ -37,12 +37,12 @@ import { Refused } from "@waste/db/commands/shared"
 import { isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, type LedgerService } from "@waste/domain/execution/work-orders"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, desc, eq } from "drizzle-orm"
+import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 
 import type { Principal } from "../auth/principal"
 import { newId } from "../ids"
 import { ProblemError } from "../problem"
 import { issueContainer } from "./containers"
-import { dayInTimezone } from "./days"
 import { move, type ContainerRef } from "./lifecycle"
 import { openTicket } from "./ticket-writes"
 
@@ -114,9 +114,6 @@ async function moveFor(tx: Tx, driver: Principal, stop: CompletedStop & { servic
   }
 }
 
-/** The completion's time on the project's clock, as a ticket says it: "10:12". */
-const timeIn = (instant: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant)
-
 /** Who completed the stop: the driver on the route, or the office correcting its outcome; the ticket's source and its sentence say which. */
 type CompletedBy = "driver" | "office"
 const SOURCE_OF: Readonly<Record<CompletedBy, "driver-app" | "dispatch">> = { driver: "driver-app", office: "dispatch" }
@@ -168,7 +165,7 @@ export async function recordLedgerWork(tx: Tx, actor: Principal, send: Send, pic
   } catch (error) {
     const sentence = sentenceOf(error)
     if (sentence === undefined) throw error
-    const words = ledgerNotRecorded({ ...(await workFacts(tx, actor.companyId, work)), by, completedAt: timeIn(completed, work.timezone), sentence })
+    const words = ledgerNotRecorded({ ...(await workFacts(tx, actor.companyId, work)), by, completedAt: timeInTimezone(completed, work.timezone), sentence })
     await openLedgerTask(tx, actor, send, work, words, SOURCE_OF[by], at)
   }
 }
@@ -187,7 +184,7 @@ export async function correctLedgerWork(tx: Tx, office: Principal, send: Send, p
   if (outcome.from !== "completed" || (outcome.to !== "skipped" && outcome.to !== "failed")) return
   const work = await ledgerStop(tx, office.companyId, pickupId)
   if (work === undefined) return
-  const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, office.companyId, work)), outcome: outcome.to, correctedAt: timeIn(at, work.timezone) })
+  const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, office.companyId, work)), outcome: outcome.to, correctedAt: timeInTimezone(at, work.timezone) })
   await openLedgerTask(tx, office, send, work, words, "dispatch", at)
 }
 

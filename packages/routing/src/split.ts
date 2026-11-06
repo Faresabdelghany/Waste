@@ -9,9 +9,8 @@
 // between the line's length and the road's; nearness alone would put a stop
 // on a later pass that runs closer to its address than the road it was
 // visited from. Both, and the line's ends pinned to the trip's ends.
-import type { LineString, Position2D } from "@waste/contracts/geojson"
+import { haversineMetres, type LineString, type Position2D, samePosition } from "@waste/domain/geo"
 
-import { haversine, samePosition } from "./geodesy"
 import type { RoutedLeg } from "./provider"
 
 /** How far along the line from where the route's distance puts it a stop may be found: a quarter of a kilometre, or 3 % of a long route. */
@@ -25,7 +24,7 @@ export function waypointIndices(line: readonly Position2D[], waypoints: readonly
   if (waypoints.length < 2) throw new Error("waypointIndices: a route has at least a start and an end")
   if (line.length < 2) throw new Error("waypointIndices: the line has fewer than two vertices")
   const along = [0]
-  for (let index = 1; index < line.length; index += 1) along.push(along[index - 1] + haversine(line[index - 1], line[index]))
+  for (let index = 1; index < line.length; index += 1) along.push(along[index - 1] + haversineMetres(line[index - 1], line[index]))
   const lineMetres = along[along.length - 1]
   const roadMetres = waypoints[waypoints.length - 1].metres
   // The line's length and the road's differ by the router's own geometry; a stop's distance is read at the line's scale.
@@ -40,7 +39,7 @@ export function waypointIndices(line: readonly Position2D[], waypoints: readonly
     let bestNearness = Number.POSITIVE_INFINITY
     for (let index = from; index <= last; index += 1) {
       if (Math.abs(along[index] - target) > window) continue
-      const nearness = haversine(line[index], waypoint.at)
+      const nearness = haversineMetres(line[index], waypoint.at)
       if (nearness < bestNearness) {
         best = index
         bestNearness = nearness

@@ -28,7 +28,8 @@ import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
 import { getModuleDefinition } from "@/lib/data/business-modules"
 import { mayView as mayViewImports } from "@/lib/imports/import-file"
-import { projectToday, timezoneOfProject } from "@/lib/data/route-schemes"
+import { dayIn } from "@/lib/api/records/clock"
+import { timezoneOfProject } from "@/lib/data/route-schemes"
 import {
   DASHBOARD_RANGES,
   DEFAULT_RANGE,
@@ -69,7 +70,7 @@ export function DashboardOnApi() {
   const organisation = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
   const clockProject = projects.find((candidate) => candidate.id === projectId) ?? projects[0]
   const timezone = clockProject === undefined ? undefined : timezoneOfProject(getRecords("configure", "organization", organisation), projectWebIdOf(clockProject, organisation))
-  const today = projectToday(timezone)
+  const today = dayIn(new Date(), timezone)
 
   const range = rangeOf(rangeId)
   const window = windowEnding(today, range.days)

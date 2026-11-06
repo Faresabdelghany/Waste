@@ -10,7 +10,8 @@
 // first, at its field, in the API's sentence.
 import type { CountingRule, CountingRuleCreate, CountingRulePatch, CountingSimulation, CountingSimulationBody } from "@waste/contracts/counting-rules"
 import { COUNTING_LIMIT_MAX, countedWhat, periodName } from "@waste/domain/resolution/counting-rules"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
+import { lastDayIn } from "@waste/domain/periods"
 import { COUNTING_PERIODS, type CountingPeriod } from "@waste/domain/resolution/vocabulary"
 
 import { allows, type Grants } from "../api/grants"
@@ -131,7 +132,7 @@ export const simulatedPeriod = (periodFrom: string, period: CountingPeriod): str
 
 /** A simulation's answer as a sentence: its window from its first day through its last, the wire's `to` being the first day not counted; and how many of the tickets are listed where not all are. */
 export function simulationSentence(answer: Pick<CountingSimulation, "from" | "to" | "tickets" | "properties" | "shown">): string {
-  const window = `from ${answer.from} through ${addDays(answer.to, -1)}`
+  const window = `from ${answer.from} through ${lastDayIn(answer.to)}`
   const found =
     answer.tickets === 0
       ? `No property would have received a ticket ${window}.`

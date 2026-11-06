@@ -1,7 +1,7 @@
 // The encoder the canned optimisation responses are written with: the
 // format's own algorithm, independent of the decoder under test (which
 // polyline.test.ts holds to the format's published example).
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 const encodeValue = (value: number): string => {
   let shifted = value < 0 ? ~(value << 1) : value << 1

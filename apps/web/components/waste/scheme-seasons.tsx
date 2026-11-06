@@ -19,12 +19,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { seasonLine, withSeasons } from "@/lib/data/scheme-seasons"
+import { MONTH_LABELS } from "@waste/domain/days"
 import { SEASON_FREQUENCIES, type SeasonFrequency, type WeekRotation } from "@waste/domain/planning/vocabulary"
 import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/route-schemes/recurrence"
 import { seasonProblems, storedSeasonsFromValues, type StoredSchemeSeason } from "@waste/domain/route-schemes/scheme-seasons"
 import { SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 /** The days each month offers: a year without a leap day, the one a season is read in. */
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -45,7 +45,7 @@ function MonthDayPicker({ id, label, value, onChange }: { id: string; label: str
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MONTHS.map((name, index) => (
+            {MONTH_LABELS.map((name, index) => (
               <SelectItem key={name} value={String(index + 1)}>
                 {name}
               </SelectItem>

@@ -26,7 +26,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 
 import { command, create, get, listAll, patch } from "../client"
 import { isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./planning"
+import { dayIn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 

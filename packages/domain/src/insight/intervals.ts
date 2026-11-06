@@ -10,8 +10,7 @@
 // so the rule that says which interval a day is in is spelled once, here,
 // and never as a `date_trunc` beside it in SQL. Pure string arithmetic over
 // UTC midnights, like finance/periods.ts: a calendar day has no clock.
-import { SERVICE_DAYS } from "../planning/vocabulary"
-import { addDays, isIsoDate, serviceDayOf } from "../route-schemes/recurrence"
+import { addDays, daysInclusive, isIsoDate, mondayOf } from "../days"
 import type { ReportInterval } from "./vocabulary"
 
 /** A span of days, both inclusive. */
@@ -28,7 +27,7 @@ export function intervalStart(day: string, interval: ReportInterval): string {
     case "day":
       return day
     case "week":
-      return addDays(day, -SERVICE_DAYS.indexOf(serviceDayOf(day)))
+      return mondayOf(day)
     case "month":
       return `${day.slice(0, 7)}-01`
   }
@@ -58,7 +57,7 @@ function daysInMonth(year: number, month: number): number {
 export function windowDays(window: DayInterval): number {
   requireDay(window.from, "windowDays")
   requireDay(window.to, "windowDays")
-  return Math.max(0, Math.round((Date.parse(`${window.to}T00:00:00Z`) - Date.parse(`${window.from}T00:00:00Z`)) / 86_400_000) + 1)
+  return Math.max(0, daysInclusive(window.from, window.to))
 }
 
 /**

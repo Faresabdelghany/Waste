@@ -41,7 +41,7 @@ import type { Container, ContainerOwnership, ContainerServicePlacement } from "@
 import type { StockMovement } from "@waste/contracts/stock"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek, PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
@@ -53,10 +53,9 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, projectTimezoneOf, shownOn } from "./clock"
+import { dayIn, instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { CONTAINER_PLACE_MODULES, containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
-import { dayIn } from "./planning"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
@@ -85,10 +84,6 @@ const KIND = {
   subscription: { bare: true },
   sharedPoint: { owns: isSharedPointRecord },
 } satisfies Record<string, ReferenceRule>
-
-/** The form's last day in from the wire's first day out (half-open), and back. */
-const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
-const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
 const isOwnership = (value: string): value is ContainerOwnership => (CONTAINER_OWNERSHIPS as readonly string[]).includes(value)
 

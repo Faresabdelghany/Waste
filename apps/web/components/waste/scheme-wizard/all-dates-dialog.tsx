@@ -28,7 +28,7 @@ import {
   formatOccurrenceDate,
   type OccurrencePreview,
 } from "@waste/domain/route-schemes/occurrences"
-import { SERVICE_DAY_LABELS, serviceDayOf } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, serviceDayOf } from "@waste/domain/days"
 
 import { OccurrenceStatusBadge } from "./occurrence-status-badge"
 

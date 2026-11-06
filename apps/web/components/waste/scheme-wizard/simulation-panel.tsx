@@ -36,19 +36,10 @@ import {
   draftOccurrenceInput,
   type DraftRecurrenceFields,
 } from "@waste/domain/route-schemes/draft"
-import {
-  formatOccurrenceDate,
-  formatOccurrenceShortDate,
-  type Occurrence,
-} from "@waste/domain/route-schemes/occurrences"
+import { formatOccurrenceDate, type Occurrence } from "@waste/domain/route-schemes/occurrences"
+import { formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import {
-  SERVICE_DAYS,
-  SERVICE_DAY_LABELS,
-  SERVICE_DAY_SHORT_LABELS,
-  sortServiceDays,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import {
   DEFAULT_SIMULATION_COUNT,
   SIMULATION_COUNTS,
@@ -185,7 +176,7 @@ export function SimulationPanel({
             The draft as it stands against the change below, over the draft&apos;s next{" "}
             {count(countValue, "collection")}
             {simulation.window
-              ? ` · ${formatOccurrenceShortDate(simulation.window.from)} – ${formatOccurrenceDate(simulation.window.to)}`
+              ? ` · ${formatShortDay(simulation.window.from)} – ${formatOccurrenceDate(simulation.window.to)}`
               : ""}
             .
           </p>
@@ -335,7 +326,7 @@ export function SimulationPanel({
                     className={row.change === "unchanged" ? "text-muted-foreground" : undefined}
                   >
                     <TableCell className="pl-5 tabular-nums">
-                      {formatOccurrenceShortDate(row.plannedDate)}
+                      {formatShortDay(row.plannedDate)}
                     </TableCell>
                     <TableCell className="tabular-nums">{sideCell(row.current)}</TableCell>
                     <TableCell className="tabular-nums">{sideCell(row.candidate)}</TableCell>

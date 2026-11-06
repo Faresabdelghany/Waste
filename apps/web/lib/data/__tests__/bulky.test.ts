@@ -7,7 +7,7 @@ import type { BulkySchedule } from "@waste/contracts/bulky"
 
 import { mintedRecord } from "../containers"
 
-import { agreementsOfCustomer, bookingPlaceOf, bulkyProductLabel, bulkyProductsOffered, bookingRecordOf, bookingsForRoute, dayOption, placesOfAgreement, routesForBooking, withBookingDay, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, shortDay, slotsSentence } from "../bulky"
+import { agreementsOfCustomer, bookingPlaceOf, bulkyProductLabel, bulkyProductsOffered, bookingRecordOf, bookingsForRoute, dayOption, placesOfAgreement, routesForBooking, withBookingDay, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, slotsSentence } from "../bulky"
 
 const SCHEDULE: BulkySchedule = {
   id: "01a0d2a4-a280-7099-8000-000000000001",
@@ -40,7 +40,6 @@ describe("a booking's items", () => {
 
 describe("a day the dialog offers", () => {
   test("names its weekday and its slots left, and a full one is said so and not offered", () => {
-    assert.equal(shortDay("2027-03-09"), "Tue 9 Mar")
     assert.deepEqual(dayOption({ day: "2027-03-09", slots: 3, booked: 1, left: 2, planningAreaId: "a", scheduleId: "s" }), { value: "2027-03-09", label: "Tue 9 Mar · 2 of 3 left", disabled: false })
     assert.deepEqual(dayOption({ day: "2027-03-16", slots: 3, booked: 3, left: 0, planningAreaId: "a", scheduleId: "s" }), { value: "2027-03-16", label: "Tue 16 Mar · full", disabled: true })
   })

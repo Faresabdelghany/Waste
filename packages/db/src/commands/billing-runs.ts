@@ -115,7 +115,8 @@ import { PERIOD_ENDS_BY_TODAY, type BillingRunPreview } from "@waste/contracts/b
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
 import { catchUpFrom } from "@waste/domain/finance/periods"
 import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
+import { lastDayIn } from "@waste/domain/periods"
 import { and, asc, count, eq, exists, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -454,7 +455,7 @@ function descriptionOf(event: ReadyEvent): string {
   if (event.weightKg !== null) return `${name} · ${event.serviceDate} · ${kilograms(event.weightKg)}`
   if (event.chargePeriodFrom === null || event.chargePeriodTo === null || event.chargedDays === null || event.periodDays === null) return `${name} · ${event.serviceDate}`
   const days = event.chargedDays === event.periodDays ? "" : ` · ${event.chargedDays} of ${event.periodDays} days`
-  return `${name} · ${event.chargePeriodFrom} – ${addDays(event.chargePeriodTo, -1)}${days}`
+  return `${name} · ${event.chargePeriodFrom} – ${lastDayIn(event.chargePeriodTo)}${days}`
 }
 
 /** One event as its line: the frozen text, the product, the day, the amounts as the event froze them — a reversal's negative. */

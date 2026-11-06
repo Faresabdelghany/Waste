@@ -5,7 +5,8 @@
 // visits; real geocoding is explicitly out of scope.
 
 import { avalancheHash } from "./hash"
-import { sortServiceDays, type ServiceDay } from "./recurrence"
+import { sortServiceDays } from "./recurrence"
+import type { ServiceDay } from "../days"
 
 /** The SVG overlay's coordinate space; positions are percentages of it. */
 export const MAP_VIEWBOX = { width: 100, height: 100 } as const

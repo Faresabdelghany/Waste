@@ -6,6 +6,7 @@
 // Node's ICU, so the same rows give the same document on any runtime; and
 // every string is WinAnsi, the encoding the PDF standard fonts print, a
 // character outside it marked `?` rather than dropped.
+import { MONTH_LABELS } from "../days"
 import { fikLine, fikSchemeOf } from "./payment"
 import type { CreditReason } from "./vocabulary"
 
@@ -132,8 +133,6 @@ const LABELS = {
   },
 } as const
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-
 /** The document's language for a project's BCP 47 tag: Danish for `da` and its regions, English otherwise. */
 export const documentLanguageOf = (tag: string): DocumentLanguage => (tag.split("-")[0]?.toLowerCase() === "da" ? "da" : "en")
 
@@ -162,7 +161,7 @@ export function documentAmount(minor: number, currency: string, language: Docume
 export function documentDate(day: string, language: DocumentLanguage): string {
   const [year, month, date] = day.split("-")
   if (language === "da") return `${date}.${month}.${year}`
-  return `${Number(date)} ${MONTHS[Number(month) - 1]} ${year}`
+  return `${Number(date)} ${MONTH_LABELS[Number(month) - 1]} ${year}`
 }
 
 /** The characters WinAnsiEncoding gives beyond Latin-1's printable ones, at 0x80–0x9F. */

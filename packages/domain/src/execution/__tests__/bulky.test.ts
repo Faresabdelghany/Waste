@@ -7,7 +7,8 @@ import { describe, test } from "node:test"
 
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { bulkyBookingStatus, bulkyDays, bulkyQuantity, dayFull, isBulkyProductUnit, notABulkyDay, notAfterToday, onlyABookedBooking, refuseBulkyDay, type BulkySchedule } from "../bulky"
-import { NO_HOLIDAYS, type SchemeCalendar } from "../../route-schemes/occurrences"
+import type { SchemeCalendar } from "../../route-schemes/occurrences"
+import { NO_HOLIDAYS } from "../../days"
 
 const SCHEDULE: BulkySchedule = { frequency: "weekly", serviceDays: ["tuesday"], weekRotation: null, holidayPolicy: "skip", validFrom: "2027-03-01", validTo: null, slotsPerDay: 3 }
 const CALENDAR: SchemeCalendar = { holidays: NO_HOLIDAYS, weekend: ["saturday", "sunday"] }

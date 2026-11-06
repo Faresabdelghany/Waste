@@ -16,7 +16,7 @@ import {
   isLicenceClass,
   vehicleProfile,
 } from "@waste/domain/route-schemes/fleet-profiles"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate } from "@waste/domain/days"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
 import { getModuleDefinition } from "../business-modules"

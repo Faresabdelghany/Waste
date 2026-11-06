@@ -67,10 +67,12 @@ import {
   UNIT_SUFFIX,
 } from "@/lib/data/commercial"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
+import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, withQuery } from "../client"
 import { inheritedPresentation, isLocalRefusal, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn, firstDayOut, lastDayIn, planningAreaAdapter } from "./planning"
+import { planningAreaAdapter } from "./planning"
+import { dayIn } from "./clock"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -101,12 +103,9 @@ export function projectDay(projectServerId: string, context: MappingContext): st
   return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
 }
 
-/** A period as a reading of the day: not yet in force, in force, or ended (ADR-0005: `validTo` is the first day out). */
-function periodStatus(validFrom: string, validTo: string | null, day: string): "Scheduled" | "Active" | "Expired" {
-  if (validFrom > day) return "Scheduled"
-  if (validTo !== null && validTo <= day) return "Expired"
-  return "Active"
-}
+/** A period's standing on the day, as a price list or a row names it. */
+const PERIOD_STATUS: Record<PeriodStanding, "Scheduled" | "Active" | "Expired"> = { upcoming: "Scheduled", "in-force": "Active", ended: "Expired" }
+const periodStatus = (validFrom: string, validTo: string | null, day: string) => PERIOD_STATUS[periodOn({ validFrom, validTo }, day)]
 
 /** `2026-01-01 – open`, or its last day in force. */
 const periodLabel = (validFrom: string, validTo: string | null) => `${validFrom} – ${validTo === null ? "open" : lastDayIn(validTo)}`

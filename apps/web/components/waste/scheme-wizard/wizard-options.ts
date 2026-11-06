@@ -11,16 +11,8 @@ import {
 import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { SCHEME_SERVICE_TYPES } from "@waste/domain/route-schemes/scope"
-import {
-  OFFERED_RECURRENCE_FREQUENCIES,
-  RECURRENCE_FREQUENCY_LABELS,
-  SERVICE_DAYS,
-  isIsoDate,
-  isRecurrenceFrequency,
-  isoWeekRotation,
-  todayIso,
-  type RecurrenceFrequency,
-} from "@waste/domain/route-schemes/recurrence"
+import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, isRecurrenceFrequency, isoWeekRotation, todayIso, type RecurrenceFrequency } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate, SERVICE_DAYS } from "@waste/domain/days"
 
 import type { SelectOption } from "./wizard-fields"
 

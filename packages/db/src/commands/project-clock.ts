@@ -1,14 +1,14 @@
 // The project as a command reads it (lifted from `apps/api/src/routes/
 // fleet-lookups.ts` with the commands the worker runs, Issue #112 part B):
-// its timezone, what an instant is rendered as a day in (days.ts); its
+// its timezone, what an instant is rendered as a day in (@waste/domain/clock); its
 // currency, ISO 4217 as the contracts checked it; and today on its clock. The
 // project is the caller's — proved under the request's scope a moment ago, or
 // the one a job's event names — so its absence here is a bug and is thrown.
 import { and, eq } from "drizzle-orm"
+import { dayInTimezone } from "@waste/domain/clock"
 
 import type { Tx } from "../client"
 import { project } from "../schema/organisation"
-import { dayInTimezone } from "./days"
 
 /** A company and one of its projects: what every project-scoped statement is bounded by. */
 export type Scope = { companyId: string; projectId: string }

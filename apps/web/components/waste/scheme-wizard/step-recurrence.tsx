@@ -29,15 +29,8 @@ import {
   formatOccurrenceDate,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import {
-  SERVICE_DAYS,
-  SERVICE_DAY_LABELS,
-  SERVICE_DAY_SHORT_LABELS,
-  serviceDayOf,
-  sortServiceDays,
-  todayIso,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 import { AllDatesDialog } from "./all-dates-dialog"

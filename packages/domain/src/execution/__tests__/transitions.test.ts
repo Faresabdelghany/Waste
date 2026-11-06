@@ -1,28 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  activeAnd,
-  alreadyActive,
-  alreadyDecided,
-  closingReasonOf,
-  doesNotChange,
-  hasNotRun,
-  nextPickup,
-  notActive,
-  notDispatched,
-  nothingToCorrect,
-  openPickupsClose,
-  orderIsOpen,
-  PICKUP_COMMANDS,
-  PICKUP_OUTCOME_OF,
-  pickupCorrection,
-  pickupTransition,
-  ROUTE_COMMANDS,
-  routeCancellation,
-  routeTransition,
-  type Transition,
-} from "../transitions"
+import { activeAnd, alreadyActive, alreadyDecided, closingReasonOf, doesNotChange, hasNotRun, nextPickup, notActive, notDispatched, nothingToCorrect, openPickupsClose, orderIsOpen, PICKUP_COMMANDS, PICKUP_OUTCOME_OF, pickupCorrection, pickupTransition, ROUTE_COMMANDS, routeCancellation, routeTransition } from "../transitions"
+import type { Transition } from "../../machine"
 import { PICKUP_STATUSES, ROUTE_STATUSES, type PickupStatus, type RouteStatus } from "../vocabulary"
 
 const LABEL = "RC-1042"

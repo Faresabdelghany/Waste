@@ -25,7 +25,7 @@
 // The receipt reads as an Unload's load does (O9 of #290): the receiving
 // site's net against our out-weighing, in percent of ours, and whether that
 // is within the project's weight tolerance.
-import type { Transition } from "./transitions"
+import type { Transition } from "../machine"
 import { loadReading } from "./unloads"
 import type { OutboundLoadStatus } from "./vocabulary"
 

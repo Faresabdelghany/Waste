@@ -7,12 +7,13 @@
 // and the contracts read the same list into a `z.enum`, so the check at the
 // API boundary and the check in the column cannot drift.
 //
-// Three lists moved here from the route-scheme modules that grew them —
-// `SERVICE_DAYS` from route-schemes/recurrence.ts, `HOLIDAY_POLICIES` from
-// route-schemes/occurrences.ts, `SCHEME_EDIT_POLICIES` from
-// route-schemes/creation.ts — and each of those modules re-exports its list,
-// so no import in this package or in apps/web changed. `RECURRENCE_FREQUENCIES`
-// is the tuple the existing `RecurrenceFrequency` union is now read off.
+// Two lists moved here from the route-scheme modules that grew them —
+// `HOLIDAY_POLICIES` from route-schemes/occurrences.ts, `SCHEME_EDIT_POLICIES`
+// from route-schemes/creation.ts — and each of those modules re-exports its
+// list. `SERVICE_DAYS`, the weekdays, is the calendar's (../days), which every
+// context's day arithmetic reads; it is listed here among the lists the
+// database and the contracts read. `RECURRENCE_FREQUENCIES` is the tuple the
+// existing `RecurrenceFrequency` union is now read off.
 // One list is the tokens of a display tuple the prototype still reads by
 // name: `SERVICE_TYPES` of route-schemes/scope.ts's `SCHEME_SERVICE_TYPES`
 // ("Container collection"); the display tuple stays the web's until the
@@ -28,9 +29,9 @@
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `PLANNING_VOCABULARIES`
 // names them all for the test that walks them.
+import { SERVICE_DAYS, type ServiceDay } from "../days"
 
-/** The seven weekdays, Monday first: a scheme's service days, a group's days, a project's weekend. */
-export const SERVICE_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
+export { SERVICE_DAYS }
 /** How often a Route Scheme recurs; `every-4-weeks` is kept for stored records, the forms offer the other five. */
 export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "every-2-weeks", "every-3-weeks", "every-4-weeks", "monthly"] as const
 /**
@@ -60,7 +61,7 @@ export const GENERATION_TRIGGERS = ["on-demand", "cron"] as const
 /** Where a generation run stands (part B). */
 export const GENERATION_RUN_STATUSES = ["queued", "running", "succeeded", "failed"] as const
 
-export type ServiceDay = (typeof SERVICE_DAYS)[number]
+export type { ServiceDay }
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number]
 export type SeasonFrequency = (typeof SEASON_FREQUENCIES)[number]
 export type WeekRotation = (typeof WEEK_ROTATIONS)[number]

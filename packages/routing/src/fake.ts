@@ -17,9 +17,8 @@
 // and the jobs' tests prove pacing, the reserve, deferral, the reset and the
 // key refusal without a credential. `calls` counts every call it was asked,
 // so a test can prove one was never made.
-import type { Position2D } from "@waste/contracts/geojson"
+import { distinctConsecutive, haversineMetres, type Position2D } from "@waste/domain/geo"
 
-import { distinctConsecutive, haversine } from "./geodesy"
 import type { MeasureRequest, MeasureResult, OptimiseRequest, OptimiseResult, Provenance, ProviderAnswer, QuotaFamily, QuotaReading, RoutedLeg, RoutingProvider } from "./provider"
 
 /** 36 km/h flat: a leg's seconds are its metres over this, rounded. */
@@ -35,13 +34,10 @@ export const FAKE_SPEED_METRES_PER_SECOND = 10
 const MAX_WAYPOINTS = 50
 const MAX_LOCATIONS = 50
 
-/** Great-circle distance, whole metres. */
-export const haversineMetres = (a: Position2D, b: Position2D): number => Math.round(haversine(a, b))
-
 const PROVENANCE: Provenance = { engineVersion: "fake", graphDate: null }
 
 const legBetween = (from: Position2D, to: Position2D): RoutedLeg => {
-  const metres = haversineMetres(from, to)
+  const metres = Math.round(haversineMetres(from, to))
   return {
     geometry: { type: "LineString", coordinates: [from, to] },
     metres,
@@ -116,7 +112,7 @@ export class FakeProvider implements RoutingProvider {
           let nearest = -1
           let best = Number.POSITIVE_INFINITY
           for (let candidate = 0; candidate < remaining.length; candidate += 1) {
-            const distance = haversine(at, remaining[candidate].stop)
+            const distance = haversineMetres(at, remaining[candidate].stop)
             if (fits(remaining[candidate].index) && distance < best) {
               nearest = candidate
               best = distance

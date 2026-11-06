@@ -8,7 +8,7 @@
 // reads is judged on the project's day, the day the API's own clock rules
 // are judged on.
 import type { StopToRemove, SubscriptionPause } from "@waste/contracts/agreements"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 import { count } from "@waste/domain/text"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema } from "./business-form-types"
@@ -47,14 +47,14 @@ export const TERMINATE_FORM: BusinessFormSchema = dialog("Agreement", "Terminate
 
 /** What a pause offers on the project's day: its cancel before it begins, its resume while it runs, nothing once it has ended. */
 export function pauseOffers(pause: Pick<SubscriptionPause, "validFrom" | "validTo">, today: string): "cancel" | "resume" | null {
-  if (pause.validFrom > today) return "cancel"
-  if (pause.validTo !== null && pause.validTo <= today) return null
-  return "resume"
+  return PAUSE_OFFERS[periodOn(pause, today)]
 }
+
+const PAUSE_OFFERS: Record<PeriodStanding, "cancel" | "resume" | null> = { upcoming: "cancel", "in-force": "resume", ended: null }
 
 /** A pause as its line reads: its first and last day in, and what it is on the project's day. */
 export function pauseLine(pause: Pick<SubscriptionPause, "validFrom" | "validTo">, today: string): string {
-  const span = pause.validTo === null ? `from ${pause.validFrom} until resumed` : `${pause.validFrom} – ${addDays(pause.validTo, -1)}`
+  const span = pause.validTo === null ? `from ${pause.validFrom} until resumed` : `${pause.validFrom} – ${lastDayIn(pause.validTo)}`
   const offers = pauseOffers(pause, today)
   return `Paused ${span} · ${offers === "cancel" ? "planned" : offers === "resume" ? "running" : "ended"}`
 }

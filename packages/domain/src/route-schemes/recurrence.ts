@@ -15,36 +15,12 @@
 //   regeneration can upsert instead of duplicating.
 //
 // The closed lists live in ../planning/vocabulary since Issue #97, where the
-// database and the contracts read them too; `SERVICE_DAYS` is re-exported
-// here so its importers did not move.
+// database and the contracts read them too; the day arithmetic is ../days.
 
-import { RECURRENCE_FREQUENCIES, SERVICE_DAYS, type WEEK_ROTATIONS } from "../planning/vocabulary"
+import { addDays, daysBetween, isIsoDate, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
+import { RECURRENCE_FREQUENCIES, type WEEK_ROTATIONS } from "../planning/vocabulary"
 import { seasonsFromValues } from "./scheme-seasons"
 import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
-
-export { SERVICE_DAYS }
-
-export type ServiceDay = (typeof SERVICE_DAYS)[number]
-
-export const SERVICE_DAY_SHORT_LABELS: Record<ServiceDay, string> = {
-  monday: "Mon",
-  tuesday: "Tue",
-  wednesday: "Wed",
-  thursday: "Thu",
-  friday: "Fri",
-  saturday: "Sat",
-  sunday: "Sun",
-}
-
-export const SERVICE_DAY_LABELS: Record<ServiceDay, string> = {
-  monday: "Monday",
-  tuesday: "Tuesday",
-  wednesday: "Wednesday",
-  thursday: "Thursday",
-  friday: "Friday",
-  saturday: "Saturday",
-  sunday: "Sunday",
-}
 
 /**
  * daily (2026-09-16): every date in the effective window — the scheme serves
@@ -129,36 +105,10 @@ export type SchemeRecurrence = {
   seasons?: readonly SchemeSeason[]
 }
 
-const parseIso = (iso: string) => new Date(`${iso}T00:00:00Z`)
-const toIso = (date: Date) => date.toISOString().slice(0, 10)
-
-export function addDays(iso: string, days: number): string {
-  const date = parseIso(iso)
-  date.setUTCDate(date.getUTCDate() + days)
-  return toIso(date)
-}
-
 /** Today as ISO in the browser's local time — the "now" all date pickers seed from. */
 export function todayIso(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
-}
-
-export function serviceDayOf(iso: string): ServiceDay {
-  // getUTCDay: 0 = Sunday; SERVICE_DAYS is Monday-first.
-  return SERVICE_DAYS[(parseIso(iso).getUTCDay() + 6) % 7]
-}
-
-export function isoWeek(iso: string): number {
-  const date = parseIso(iso)
-  date.setUTCDate(date.getUTCDate() + 3 - ((date.getUTCDay() + 6) % 7))
-  const week1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 4))
-  return (
-    1 +
-    Math.round(
-      ((date.getTime() - week1.getTime()) / 864e5 - 3 + ((week1.getUTCDay() + 6) % 7)) / 7,
-    )
-  )
 }
 
 // Odd/even ISO-week rotations are calendar-anchored, not a strict fortnightly
@@ -173,16 +123,9 @@ export function isoWeekRotation(iso: string): WeekRotation {
   return isoWeek(iso) % 2 === 1 ? "odd" : "even"
 }
 
-/** The Monday of the ISO week the date falls in. */
-export function mondayOf(iso: string): string {
-  return addDays(iso, -((parseIso(iso).getUTCDay() + 6) % 7))
-}
-
 /** Whole ISO weeks from the effective-from week to the date's week (negative before it). */
 export function weeksFromEffectiveFrom(recurrence: Pick<SchemeRecurrence, "effectiveFrom">, iso: string): number {
-  const anchor = parseIso(mondayOf(recurrence.effectiveFrom)).getTime()
-  const week = parseIso(mondayOf(iso)).getTime()
-  return Math.round((week - anchor) / (7 * 864e5))
+  return Math.round(daysBetween(mondayOf(recurrence.effectiveFrom), mondayOf(iso)) / 7)
 }
 
 const ANCHORED_WEEK_INTERVALS: Partial<Record<RecurrenceFrequency, number>> = {
@@ -235,7 +178,7 @@ export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): bo
   ) {
     return false
   }
-  if (cadence.frequency === "monthly" && parseIso(iso).getUTCDate() > 7) return false
+  if (cadence.frequency === "monthly" && Number(iso.slice(8, 10)) > 7) return false
   return true
 }
 
@@ -272,15 +215,6 @@ export function routeIdentityKey(
   groupKey?: string,
 ): string {
   return groupKey ? `${schemeId}:${serviceDate}:${groupKey}` : `${schemeId}:${serviceDate}`
-}
-
-export function formatServiceDate(iso: string): string {
-  return parseIso(iso).toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  })
 }
 
 export function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
@@ -353,15 +287,6 @@ export const isRecurrenceFrequency = (
   value: unknown,
 ): value is RecurrenceFrequency =>
   typeof value === "string" && (RECURRENCE_FREQUENCIES as readonly string[]).includes(value)
-
-// Shape alone is not enough: "9999-99-99" matches the pattern but parses to
-// an Invalid Date, and "2026-02-30" silently rolls over to March — the
-// round trip catches both.
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-export const isIsoDate = (value: string) =>
-  ISO_DATE_PATTERN.test(value) &&
-  !Number.isNaN(parseIso(value).getTime()) &&
-  toIso(parseIso(value)) === value
 
 const isRotation = (value: unknown): value is WeekRotation =>
   value === "odd" || value === "even"

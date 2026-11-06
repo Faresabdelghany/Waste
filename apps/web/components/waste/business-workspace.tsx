@@ -105,14 +105,8 @@ import {
   withDerivedSchemeContext,
   type SchemeRowSummary,
 } from "@waste/domain/route-schemes/scheme-list"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  formatServiceDate,
-  recurrenceFromValues,
-  recurrenceSentence,
-  serviceDaysFromValues,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
   effectiveDayRules,
   matchPlansFromValues,
@@ -3794,7 +3788,7 @@ export function BusinessWorkspace({
       const nextValues = { ...record.submittedValues }
       if (nextFacts.Date) {
         nextFacts["Operating date"] = /^\d{4}-\d{2}-\d{2}$/.test(nextFacts.Date)
-          ? formatServiceDate(nextFacts.Date)
+          ? formatShortDay(nextFacts.Date)
           : nextFacts.Date
         delete nextFacts.Date
       }
@@ -4250,7 +4244,7 @@ export function BusinessWorkspace({
       "Submitted by": actorName,
       ...(project ? { Project: project.name } : {}),
       // The canonical date fact key routes share with generation (issue #23).
-      ...(data.date ? { "Operating date": formatServiceDate(data.date) } : {}),
+      ...(data.date ? { "Operating date": formatShortDay(data.date) } : {}),
       ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
       ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
       ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),

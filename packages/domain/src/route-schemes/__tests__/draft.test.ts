@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { candidateIssue, draftGroups, draftRoutesPerWeek, patchGuidedDraft, validateGuidedScheme } from "../draft"
 import type { CollectionGroup } from "../groups"
-import type { ServiceDay } from "../recurrence"
+import type { ServiceDay } from "../../days"
 import { quickSchemeDraftFromValues, type GuidedSchemeData } from "../quick-create"
 import { recurrenceIssues } from "../validation"
 

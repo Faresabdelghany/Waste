@@ -32,10 +32,8 @@
 // anything else on `resolved` a refusal, "This alert is resolved and does not
 // change" — the sentence the link command reads too, since a resolved alert
 // does not change through any door.
-import type { Transition } from "../execution/transitions"
+import type { Transition } from "../machine"
 import { isClosedTicketStatus, type AlertStatus, type ClosedTicketStatus, type TicketStatus } from "./vocabulary"
-
-export type { Transition }
 
 /** What moves a ticket: the office's six commands. `assign` moves the assignee and not the status, and a comment moves nothing, so neither is here. */
 export const TICKET_COMMANDS = ["start", "wait", "hold", "complete", "reject", "reopen"] as const

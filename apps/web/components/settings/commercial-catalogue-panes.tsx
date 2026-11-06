@@ -40,7 +40,7 @@ import { useCommercialPickers } from "@/components/waste/commands/commercial-pic
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/waste/commands/use-command-support"
 import { typed } from "@/lib/api/records/adapter"
 import { indexPriceList } from "@/lib/api/records/indexation"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { PRICING_REFERENCE_DATE, recordToPriceRow } from "@/lib/commercial/price-model"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"

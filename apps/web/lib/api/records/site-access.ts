@@ -17,11 +17,11 @@ import { AGREEMENT_PREFIX, isAgreementRecord, PROPERTY_PREFIX } from "@/lib/data
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord } from "@/lib/data/properties"
 import { CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CREDENTIAL_VALUE_KEY, credentialStatusOf, SITE_ACCESS_MODULE } from "@/lib/data/site-visits"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, wallClockIn } from "./clock"
-import { firstDayOut, lastDayIn } from "./planning"
 import { projectMoved, projectServerIdOf, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"

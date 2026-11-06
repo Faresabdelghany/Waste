@@ -39,12 +39,11 @@
 // is over — so the driver is not locked out of the next one, and a device's
 // `end-route` arriving afterwards finds nothing to end and is applied as
 // nothing (commands.ts), never refused.
+import type { Transition } from "../machine"
 import { CLOSING_REASONS, type ClosingReason, type PickupOutcome, type PickupStatus, type RouteStatus } from "./vocabulary"
 
 export type { PickupOutcome }
 
-/** What a machine answers: the next status, nothing to do, or a refusal with its sentence. */
-export type Transition<Status extends string> = { kind: "move"; to: Status } | { kind: "stay" } | { kind: "refuse"; sentence: string }
 
 /** What moves a route: the dispatcher's dispatch and cancel, the driver's start and end. */
 export const ROUTE_COMMANDS = ["dispatch", "start", "end", "cancel"] as const

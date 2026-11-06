@@ -19,7 +19,8 @@ import { schemesInPlanning } from "./lifecycle"
 import { vehicleTypeOfRecord } from "./matching"
 import type { OccurrencePreviewInput, SchemeCalendar } from "./occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import { isIsoDate, occurrencesPerWeek, type SchemeRecurrence } from "./recurrence"
+import { occurrencesPerWeek, type SchemeRecurrence } from "./recurrence"
+import { isIsoDate } from "../days"
 import {
   allocationConflictSources,
   recurrenceIssues,
