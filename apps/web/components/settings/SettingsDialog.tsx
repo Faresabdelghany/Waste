@@ -10,11 +10,9 @@ import {
   Couch,
   CaretLeft,
   CheckCircle,
-  ClipboardText,
   CreditCard,
   Database,
   Gear,
-  Leaf,
   LinkSimple,
   MagnifyingGlass,
   MapTrifold,
@@ -22,18 +20,14 @@ import {
   PaintBrush,
   Recycle,
   Receipt,
-  ShieldCheck,
   SlidersHorizontal,
   SquaresFour,
   Tag,
   Ticket,
-  Calculator,
-  Timer,
   EnvelopeSimple,
   UserCircle,
   UsersThree,
   Warning,
-  Wrench,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
@@ -59,35 +53,24 @@ import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/se
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
-import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { NotificationsSettingsOnApi } from "@/components/settings/notifications-settings-on-api"
-import { PrivacySettingsOnApi } from "@/components/settings/privacy-settings-on-api"
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
 import { MessageTemplatesSettings } from "@/components/settings/message-templates-settings"
-import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
-import { PreTripChecklistsSettings } from "@/components/settings/pre-trip-checklists-settings"
-import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
-import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
+import { TicketsSettings } from "@/components/settings/tickets-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
-import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
-import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
-import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
-import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "@/lib/data/pre-trip-checklists"
-import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
-import { TICKET_TYPES_SETTINGS_PANE_ID } from "@/lib/data/ticket-types"
+import { TICKETS_SETTINGS_PANE_ID, ticketsTabOf, type TicketsTab } from "@/lib/data/tickets-settings"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
-import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "@/lib/data/fleet-emissions"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -189,18 +172,10 @@ const settingsSections: Array<{
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       // Offered in fixture mode only: on the Pilot the Ticket SLA takes its place (lib/data/settings-panes.ts).
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
-      // A project's ticket SLA on the API (O4 of #290): offered with the adapter configured.
-      { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
-      // The ticket teams on the API (O30 of #290): offered with the adapter configured.
-      { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
-      // The company's ticket types, their fields and status permissions on the API (#545 of #544): offered with the adapter configured.
-      { id: TICKET_TYPES_SETTINGS_PANE_ID, label: "Ticket types", icon: Ticket },
+      // Everything about tickets on the API, a tab each (#548 of #544): the types, the teams, the deadlines, the charges and the counting rules; offered with the adapter configured.
+      { id: TICKETS_SETTINGS_PANE_ID, label: "Tickets", icon: Ticket },
       // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
-      // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
-      { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
-      // The vehicle types' pre-trip checklists on the API (O13 of #290): offered with the adapter configured.
-      { id: PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID, label: "Pre-trip checklists", icon: ClipboardText },
     ],
   },
   {
@@ -217,11 +192,6 @@ const settingsSections: Array<{
       // The browser's pane in fixture mode; on the Pilot the API's (#487), the projects' public pages and the Driver App.
       { id: PORTALS_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
       { id: PORTALS_ON_API_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
-      // The Sorting Guide on the API (#293): offered with the adapter configured, since it has no fixtures.
-      { id: SORTING_GUIDE_SETTINGS_PANE_ID, label: "Sorting guide", icon: Recycle },
-      // The browser's pane in fixture mode; on the Pilot the API's (#487), the company's audit history.
-      { id: PRIVACY_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
-      { id: PRIVACY_ON_API_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
   {
@@ -230,13 +200,8 @@ const settingsSections: Array<{
     items: [
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
-      { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
-      // A project's products for the office's work orders on the API (M14 of #293), as Ticket charges are.
-      { id: "commercial-work-order-charges", label: "Work order charges", icon: Wrench },
       // A project's Visit Rules for its recycling centres on the API (#393): offered with the adapter configured.
       { id: VISIT_RULES_SETTINGS_PANE_ID, label: "Recycling-centre charges", icon: Recycle },
-      // A project's mapping onto the office's chart, which its accounting exports book to (#291 C7).
-      { id: "commercial-accounting", label: "Accounting", icon: Calculator },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
       { id: PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, label: "Exception charges", icon: Warning },
     ],
@@ -1175,98 +1140,6 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
       },
     ],
   },
-  privacy: {
-    title: "Privacy, audit, and retention",
-    description: "Sensitive access, GPS governance, change history, evidence classes, retention, and compliance controls.",
-    groups: [
-      {
-        title: "GPS and employee monitoring",
-        controls: [
-          {
-            id: "privacy-purpose",
-            label: "Permitted GPS purpose",
-            description: "Dispatch, operational recovery, route evidence, and approved compliance use.",
-            scope: "Company",
-            type: "select",
-            value: "dispatch-proof",
-            options: [
-              { value: "dispatch-proof", label: "Dispatch + proof of service" },
-              { value: "dispatch", label: "Dispatch only" },
-              { value: "disabled", label: "Location disabled" },
-            ],
-          },
-          {
-            id: "privacy-retention-gps",
-            label: "GPS retention",
-            description: "Historic position records are removed or aggregated after this period.",
-            scope: "Company",
-            type: "select",
-            value: "90",
-            options: [
-              { value: "30", label: "30 days" },
-              { value: "90", label: "90 days" },
-              { value: "180", label: "180 days" },
-            ],
-          },
-          {
-            id: "privacy-review",
-            label: "Monitoring register review",
-            description: "Purpose and employee-notice reviews are overdue.",
-            scope: "Company",
-            type: "status",
-            value: "2 controls overdue",
-            tone: "danger",
-            action: "Complete review",
-          },
-          {
-            id: "privacy-access",
-            label: "Require purpose for sensitive access",
-            description: "GPS, financial, customer export, and restricted evidence views record a user-supplied purpose.",
-            scope: "Company",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-        ],
-      },
-      {
-        title: "Retention and audit",
-        controls: [
-          {
-            id: "privacy-ticket-retention",
-            label: "Closed ticket retention",
-            description: "Customer messages, internal comments, attachments, and audit use separate storage classes.",
-            scope: "Company",
-            type: "select",
-            value: "7y",
-            options: [
-              { value: "5y", label: "5 years" },
-              { value: "7y", label: "7 years" },
-              { value: "10y", label: "10 years" },
-            ],
-          },
-          {
-            id: "privacy-financial",
-            label: "Financial-record protection",
-            description: "Issued documents, credits, accounting rows, and settlement snapshots follow statutory retention.",
-            scope: "Company",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-          {
-            id: "privacy-history",
-            label: "Immutable audit history",
-            description: "Ordinary users cannot edit or delete before-and-after history, approvals, or evidence audit.",
-            scope: "Platform",
-            type: "status",
-            value: "Enforced",
-            tone: "healthy",
-          },
-        ],
-      },
-    ],
-  },
   security: {
     title: "API, SSO, and security",
     description: "Identity provider, sessions, controlled API clients, token scope, credentials, and security review.",
@@ -1384,34 +1257,14 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend.",
     groups: [],
   },
-  [EMISSION_FACTORS_SETTINGS_PANE_ID]: {
-    title: "Emission factors",
-    description: "Grams of CO₂e per unit of each fuel, over the period it is in force, which the fleet's routes are measured by.",
-    groups: [],
-  },
   [MESSAGE_TEMPLATES_SETTINGS_PANE_ID]: {
     title: "Message templates",
     description: "The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing.",
     groups: [],
   },
-  [PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID]: {
-    title: "Pre-trip checklists",
-    description: "What a driver checks on a vehicle of each type before or during the day, and which defects take it off the road.",
-    groups: [],
-  },
-  [TICKET_SLA_SETTINGS_PANE_ID]: {
-    title: "Ticket SLA",
-    description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
-    groups: [],
-  },
-  [TICKET_TEAMS_SETTINGS_PANE_ID]: {
-    title: "Ticket teams",
-    description: "The teams the company's tickets wait with, and each project's default team per kind.",
-    groups: [],
-  },
-  [TICKET_TYPES_SETTINGS_PANE_ID]: {
-    title: "Ticket types",
-    description: "The company's own types of case, each inside one kind, with the fields the office fills in and the roles that may move each status.",
+  [TICKETS_SETTINGS_PANE_ID]: {
+    title: "Tickets",
+    description: "Everything about the company's tickets in one place: its types, their teams, deadlines and charges, and the counting rules that open tickets.",
     groups: [],
   },
   [FINANCE_ON_API_SETTINGS_PANE_ID]: {
@@ -1427,11 +1280,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   [PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID]: {
     title: "Exception charges",
     description: "What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence.",
-    groups: [],
-  },
-  [SORTING_GUIDE_SETTINGS_PANE_ID]: {
-    title: "Sorting guide",
-    description: "What residents find when they search where a thing goes, on the project's public page.",
     groups: [],
   },
   [MASTER_DATA_SETTINGS_PANE_ID]: {
@@ -1503,24 +1351,9 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The sellable catalogue — add and edit products here. Prices are managed in Price Engine.",
     groups: [],
   },
-  "commercial-ticket-charges": {
-    title: "Ticket charges",
-    description: "The product each ticket kind's re-collection or service is charged at when its completion names none (#291 C3).",
-    groups: [],
-  },
-  "commercial-work-order-charges": {
-    title: "Work order charges",
-    description: "The product each of the office's work orders — a delivery, a removal, a swap, a repair, a wash — is charged at when it is completed (M14 of #293).",
-    groups: [],
-  },
   [VISIT_RULES_SETTINGS_PANE_ID]: {
     title: "Recycling-centre charges",
     description: "How a project's recycling-centre visits are charged: a household's free visits a year and the ladder after them, the free fractions, a business's visit and the likely-trade threshold (#393).",
-    groups: [],
-  },
-  "commercial-accounting": {
-    title: "Accounting",
-    description: "The office's chart of accounts a project's accounting exports book to (#291 C7).",
     groups: [],
   },
   "commercial-price-lists": {
@@ -1531,7 +1364,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
-  privacy: paneDefinitions.privacy,
   [PORTALS_ON_API_SETTINGS_PANE_ID]: {
     title: "Portals & branding",
     description: "What each project's residents find on its public pages, and which of its drivers use the Driver App.",
@@ -1547,20 +1379,15 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The e-mails you get when something needs you. Nothing is sent until you ask for it.",
     groups: [],
   },
-  [PRIVACY_ON_API_SETTINGS_PANE_ID]: {
-    title: "Privacy, audit & retention",
-    description: "Who changed what across the company, newest first, and the controls the platform enforces.",
-    groups: [],
-  },
 }
+
+/** Panes whose title stands alone, the description kept for the settings search only. */
+const PANES_WITHOUT_LEAD: ReadonlySet<string> = new Set([HOLIDAY_LISTS_SETTINGS_PANE_ID])
 
 /**
  * Panes that render their own full-height panel (header, toolbar, table)
  * instead of the centred control groups.
  */
-/** Panes whose title stands alone, the description kept for the settings search only. */
-const PANES_WITHOUT_LEAD: ReadonlySet<string> = new Set([HOLIDAY_LISTS_SETTINGS_PANE_ID])
-
 function isFullPanelPane(paneId: string): boolean {
   return (
     paneId === "asset-management" ||
@@ -1569,20 +1396,14 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
-    paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
-    paneId === TICKET_SLA_SETTINGS_PANE_ID ||
-    paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ||
-    paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
-    paneId === TICKET_TYPES_SETTINGS_PANE_ID ||
+    paneId === TICKETS_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
-    paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
     paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
     paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
-    paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1677,6 +1498,8 @@ export function SettingsWorkspace({
   // On the Pilot the account pane's profile is the person signed in, as `/me` answered (#282).
   const profile = configured ? profileOf(me, session?.email) : null
   const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
+  // The Tickets page's tab (#548 of #544): the one a link's pane names at first, then the last used, kept while the dialog stays open.
+  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => ticketsTabOf(initialPaneId))
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
       ? openedPaneId
@@ -1902,6 +1725,8 @@ export function SettingsWorkspace({
           <SettingsPane
             definition={profile !== null && activeItemId === "account" ? withSignedInProfile(activePane, profile) : activePane}
             paneId={activeItemId}
+            ticketsTab={ticketsTab}
+            onTicketsTabChange={setTicketsTab}
             profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
@@ -1918,6 +1743,8 @@ export function SettingsWorkspace({
 function SettingsPane({
   definition,
   paneId,
+  ticketsTab,
+  onTicketsTabChange,
   profile,
   values,
   dirtyControlIds,
@@ -1927,6 +1754,9 @@ function SettingsPane({
 }: {
   definition: SettingsPaneDefinition
   paneId: string
+  /** The tab Settings › Tickets opens at: the one a link to a pane it took the place of names (#548 of #544). */
+  ticketsTab: TicketsTab
+  onTicketsTabChange: (tab: TicketsTab) => void
   /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
   profile: AccountProfile | null
   values: Record<string, SettingValue>
@@ -1995,22 +1825,12 @@ function SettingsPane({
         <HolidayListsSettings />
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
-      ) : paneId === SORTING_GUIDE_SETTINGS_PANE_ID ? (
-        <SortingGuideSettings />
-      ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
-        <TicketSlaSettings />
-      ) : paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ? (
-        <PreTripChecklistsSettings />
-      ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
-        <TicketTeamsSettings />
-      ) : paneId === TICKET_TYPES_SETTINGS_PANE_ID ? (
-        <TicketTypesSettings />
+      ) : paneId === TICKETS_SETTINGS_PANE_ID ? (
+        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
-      ) : paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ? (
-        <PrivacySettingsOnApi />
       ) : paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ? (
         <NotificationsSettingsOnApi />
       ) : paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ? (
@@ -2021,8 +1841,6 @@ function SettingsPane({
         <PickupExceptionChargesSettings />
       ) : paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ? (
         <BulkySchedulesSettings />
-      ) : paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ? (
-        <EmissionFactorsSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

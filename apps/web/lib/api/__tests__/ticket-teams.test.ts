@@ -27,7 +27,7 @@ import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-10-28T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-28T08:00:00.000Z", updatedAt: "2026-10-28T08:00:00.000Z" }
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
@@ -134,7 +134,7 @@ describe("a ticket's team", () => {
     chargeProductId: null,
     closedAt: null,
     bookedRouteId: null,
-    bookedPickupId: null,
+    bookedPickupId: null, countedBy: null,
   }
 
   test("reads as the team's name once the teams are loaded, its id chip before, and No team for none", () => {
@@ -167,23 +167,49 @@ describe("a ticket's team", () => {
   })
 })
 
-describe("a project's default team per kind", () => {
+describe("a project's default team per kind and per type", () => {
   const webIdOf = (serverId: string) => (serverId === deskId ? deskRecord.id : `team-${serverId}`)
   const serverIdOf = (webId: string) => teamsState.serverIds.get(webId)
 
   test("is every kind a row, in the vocabulary's order, a team or none", () => {
-    const rows = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: "complaint", teamId: deskId }] }, webIdOf)
+    const rows = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: "complaint", ticketTypeId: null, teamId: deskId }] }, webIdOf)
     assert.deepEqual(rows.map((row) => row.kind), [...TICKET_KINDS])
     assert.equal(rows.find((row) => row.kind === "complaint")?.teamId, deskRecord.id)
     assert.equal(rows.find((row) => row.kind === "overflow")?.teamId, NO_TEAM)
     assert.equal(rows.find((row) => row.kind === "complaint")?.label, "Complaint")
   })
 
+  test("then each active type, and a retired one the set names, a row of its own by its name and its kind's (#548 of #544)", () => {
+    const BULKY = "01a0d2a4-a280-700a-8000-0000000000b1"
+    const OLD = "01a0d2a4-a280-700a-8000-0000000000b2"
+    const types = [
+      { id: BULKY, name: "Bulky waste collection", kind: "container-request" as const, status: "active" as const },
+      { id: OLD, name: "Old intake", kind: "complaint" as const, status: "inactive" as const },
+    ]
+    const rows = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, types)
+    assert.deepEqual(
+      rows.slice(TICKET_KINDS.length).map((row) => [row.ticketTypeId, row.label, row.teamId]),
+      [
+        [BULKY, "Bulky waste collection (Container request)", NO_TEAM],
+        [OLD, "Old intake (Complaint)", deskRecord.id],
+      ],
+    )
+    const body = teamDefaultsBodyOf(
+      rows.map((row) => (row.ticketTypeId === BULKY ? { ...row, teamId: yardRecord.id } : row)),
+      serverIdOf,
+    )
+    assert.deepEqual(body, { defaults: [{ kind: null, ticketTypeId: BULKY, teamId: yardId }, { kind: null, ticketTypeId: OLD, teamId: deskId }] })
+    assert.ok(TicketTeamDefaultsSet.safeParse(body).success)
+    // A type no list the role reads holds: by its id, no kind made up for it.
+    const unread = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, [])
+    assert.equal(unread.at(-1)?.label, OLD)
+  })
+
   test("its body names each kind with a team by server id, and refuses a team the API does not hold", () => {
     const rows = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [] }, webIdOf).map((row) => (row.kind === "overflow" ? { ...row, teamId: yardRecord.id } : row.kind === "complaint" ? { ...row, teamId: deskRecord.id } : row))
     const body = teamDefaultsBodyOf(rows, serverIdOf)
-    assert.deepEqual(body, { defaults: [{ kind: "overflow", teamId: yardId }, { kind: "complaint", teamId: deskId }] })
+    assert.deepEqual(body, { defaults: [{ kind: "overflow", ticketTypeId: null, teamId: yardId }, { kind: "complaint", ticketTypeId: null, teamId: deskId }] })
     assert.ok(TicketTeamDefaultsSet.safeParse(body).success)
-    assert.deepEqual(teamDefaultsBodyOf([{ kind: "other", label: "Other", teamId: "team-unknown" }], serverIdOf), { kind: "other", message: PICK_A_HELD_TEAM })
+    assert.deepEqual(teamDefaultsBodyOf([{ kind: "other", ticketTypeId: null, key: "kind:other", label: "Other", teamId: "team-unknown" }], serverIdOf), { key: "kind:other", message: PICK_A_HELD_TEAM })
   })
 })

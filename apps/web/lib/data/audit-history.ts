@@ -71,36 +71,10 @@ function whoOf(actor: AuditEvent["actor"]): string {
 
 /** The history of `subject`, one entry per request, newest first as the log answered it. */
 export function historyEntriesOf(events: readonly AuditEvent[], subject: { table: string; rowId: string }, reading: HistoryReading): HistoryEntry[] {
-  return entriesOf(events, reading, (event) => lineOf(event, subject, reading.nameOf))
-}
-
-/**
- * A line of the company's whole history (Settings › Privacy, audit &
- * retention): no row is the subject, so each line names the row it is about —
- * by its name where the store holds it — and a set's row the row it belongs
- * to. A create or a delete says so alone, as a row's own history does; a
- * change lists the columns that moved.
- */
-function companyLineOf(event: AuditEvent, nameOf: HistoryReading["nameOf"]): HistoryLine {
-  const changes = event.action === "update" ? Object.entries(event.changed).map(([column, [before, after]]) => ({ label: labelOf(column), before: valueOf(column, before, nameOf), after: valueOf(column, after, nameOf) })) : []
-  const own = nameOf(event.rowId)
-  if (event.parentTable !== null && event.parentId !== null && own === undefined) {
-    const parent = nameOf(event.parentId)
-    return { what: `${OF_A_SET[event.action]} ${tableWords(event.table)} of ${tableWords(event.parentTable)}${parent === undefined ? "" : ` ${parent}`}`, changes }
-  }
-  return { what: `${OWN[event.action]} ${tableWords(event.table)}${own === undefined ? "" : ` ${own}`}`, changes }
-}
-
-/** The company's whole history, one entry per request, newest first as the log answered it: every row's lines named by their row. */
-export function companyHistoryEntriesOf(events: readonly AuditEvent[], reading: HistoryReading): HistoryEntry[] {
-  return entriesOf(events, reading, (event) => companyLineOf(event, reading.nameOf))
-}
-
-function entriesOf(events: readonly AuditEvent[], reading: HistoryReading, lineFor: (event: AuditEvent) => HistoryLine): HistoryEntry[] {
   const entries = new Map<string, HistoryEntry>()
   for (const event of events) {
     const entry = entries.get(event.transactionId)
-    const line = lineFor(event)
+    const line = lineOf(event, subject, reading.nameOf)
     if (entry === undefined) {
       entries.set(event.transactionId, { key: event.transactionId, when: reading.when(event.recordedAt, event), who: whoOf(event.actor), reason: event.reason, lines: [line] })
     } else {

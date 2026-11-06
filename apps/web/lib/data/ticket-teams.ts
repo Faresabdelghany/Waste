@@ -6,7 +6,7 @@
 // defaults are one project's configuration and read and written directly, as
 // the SLA is (components/settings/ticket-teams-settings.tsx).
 import type { TicketTeamDefaults, TicketTeamDefaultsSet } from "@waste/contracts/ticket-teams"
-import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { allows, type Grants } from "../api/grants"
 import { statusLabel } from "../api/records/adapter"
@@ -14,6 +14,7 @@ import { accessModule } from "../api/records/organisation"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
+import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoice } from "./ticket-scope"
 
 /** Configure › Tickets & communication: the module the teams are the records of on the Pilot. */
 export const TICKET_TEAMS_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "templates" }
@@ -77,29 +78,31 @@ export function updateTicketTeamRecord(record: BusinessRecord, values: BusinessF
 /** The kind picker's value for no team: the kind's tickets open without one. */
 export const NO_TEAM = "no-team"
 
-/** One kind's row as the pane holds it: the kind, and the team's web id or `NO_TEAM`. */
-export type TeamDefaultRow = { kind: TicketKind; label: string; teamId: string }
+/** One kind's or one type's row as the pane holds it (#548 of #544): its scope, its key, and the team's web id or `NO_TEAM` — for a type, its kind's team. */
+export type TeamDefaultRow = TicketScope & { key: string; label: string; teamId: string }
 
-/** Every kind as a row, in the vocabulary's order, each with the team the project names for it or none. `webIdOf` turns a team's server id into the record id the picker offers. */
-export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string): TeamDefaultRow[] {
-  const byKind = new Map(defaults.defaults.map((entry) => [entry.kind, entry.teamId]))
-  return TICKET_KINDS.map((kind) => {
-    const teamId = byKind.get(kind)
-    return { kind, label: statusLabel(kind), teamId: teamId === undefined ? NO_TEAM : webIdOf(teamId) }
-  })
+/** Every kind as a row, in the vocabulary's order, then each type listed (`typesListed`), each with the team the project names for it or none. `webIdOf` turns a team's server id into the record id the picker offers. */
+export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (serverId: string) => string, types: readonly TypeChoice[] = []): TeamDefaultRow[] {
+  const byKey = new Map(defaults.defaults.map((entry) => [scopeKey(entry), entry.teamId]))
+  const row = (scope: TicketScope, label: string): TeamDefaultRow => {
+    const teamId = byKey.get(scopeKey(scope))
+    return { ...scope, key: scopeKey(scope), label, teamId: teamId === undefined ? NO_TEAM : webIdOf(teamId) }
+  }
+  const named = defaults.defaults.flatMap((entry) => (entry.ticketTypeId === null ? [] : [entry.ticketTypeId]))
+  return [...TICKET_KINDS.map((kind) => row({ kind, ticketTypeId: null }, statusLabel(kind))), ...typesListed(types, named).map((type) => row({ kind: null, ticketTypeId: type.id }, typeLabel(type)))]
 }
 
 /** What a row naming a team the API does not hold is told. */
 export const PICK_A_HELD_TEAM = "Pick a team the API holds"
 
-/** The body the rows become: each kind with a team, by server id; or the first kind whose team the API does not hold. */
-export function teamDefaultsBodyOf(rows: readonly TeamDefaultRow[], serverIdOf: (webId: string) => string | undefined): TicketTeamDefaultsSet | { kind: TicketKind; message: string } {
+/** The body the rows become: each kind or type with a team, by server id; or the first row whose team the API does not hold. */
+export function teamDefaultsBodyOf(rows: readonly TeamDefaultRow[], serverIdOf: (webId: string) => string | undefined): TicketTeamDefaultsSet | { key: string; message: string } {
   const defaults: TicketTeamDefaultsSet["defaults"] = []
   for (const row of rows) {
     if (row.teamId === NO_TEAM) continue
     const teamId = serverIdOf(row.teamId)
-    if (teamId === undefined) return { kind: row.kind, message: PICK_A_HELD_TEAM }
-    defaults.push({ kind: row.kind, teamId })
+    if (teamId === undefined) return { key: row.key, message: PICK_A_HELD_TEAM }
+    defaults.push({ kind: row.kind, ticketTypeId: row.ticketTypeId, teamId })
   }
   return { defaults }
 }

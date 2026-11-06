@@ -104,8 +104,8 @@ export const COMMENT_ON_TICKET = "comment"
 /** The reply quoting the stop's record, a command: with `complete` it closes the case `answered`. */
 export const REPLY_WITH_EVIDENCE = "reply-with-evidence"
 
-/** The sources an office opens a ticket from: every one but the consumer's two and a Service Provider's, which the API writes (`TicketCreate.source`). */
-export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch" && source !== "service-provider")
+/** The sources an office opens a ticket from: every one but the consumer's two, a Service Provider's, which the API writes, and a counting rule's, the worker's (`TicketCreate.source`). */
+export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch" && source !== "service-provider" && source !== "counting-rule")
 
 /** Whether a loaded row is a ticket: its id, or — a row made this session, under its minted id — its kind. */
 export const isTicketRecord = ofKind(TICKET_PREFIX, ["Ticket"])

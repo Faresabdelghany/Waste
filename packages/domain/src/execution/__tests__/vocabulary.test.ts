@@ -39,9 +39,9 @@ describe("the Execution vocabulary's own rules", () => {
     for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
   })
 
-  test("a bulky booking is booked, routed, collected or cancelled (O11 of #290), and a bulky collection is no work order a project prices by its service", () => {
+  test("a bulky booking is booked, routed, collected or cancelled (O11 of #290), and a bulky collection is no work order", () => {
     assert.deepEqual([...vocabulary.BULKY_BOOKING_STATUSES], ["booked", "routed", "collected", "cancelled"])
-    assert.equal(vocabulary.isWorkOrderService("bulky"), false)
+    assert.ok(!(vocabulary.WORK_ORDER_SERVICES as readonly string[]).includes("bulky"))
   })
 
   test("a route is cancelled for one of the office's eight reasons, or by a run that no longer plans it (O5 of #290): the office's codes are the list less the run's", () => {
@@ -60,8 +60,8 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"])
   })
 
-  test("the eighteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
-    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 18)
+  test("the seventeen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
+    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 17)
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }

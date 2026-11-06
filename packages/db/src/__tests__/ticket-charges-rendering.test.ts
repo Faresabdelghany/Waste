@@ -9,15 +9,20 @@
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger — a set of its project, read under `commercial.products`. The file
 // is found by its name, not its number, which it takes at its turn.
-// Migration 0075 (O13 of #290) grew the kinds by `vehicle-defect`, so the file
-// is held to the list as it was then (`asOfThisFile`) and
-// pre-trip-rendering.test.ts pins the replacement. No database.
+// Migration 0075 (O13 of #290) grew the kinds by `vehicle-defect` and the
+// pre-trip inspection's removal took it again, so today's list is this
+// file's; pre-trip-rendering.test.ts and pre-trip-removal-rendering.test.ts
+// pin the two replacements. The ticket types' own charges (#548 of #544)
+// gave the table a type beside the kind, so the table is spelled here as 0033
+// wrote it (`ticketKindProductAsOf0033`); ticket-type-settings-rendering.test.ts
+// pins that migration. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { BILLABLE_RESOLUTIONS, TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
+import { text, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { userAccount } from "../schema/access"
@@ -26,10 +31,13 @@ import { product } from "../schema/catalogue"
 import { container } from "../schema/containers"
 import { customer, property, sharedCollectionPoint } from "../schema/customers"
 import { pickup, route } from "../schema/execution"
-import { ticketKindProduct } from "../schema/finance"
 import { driver } from "../schema/fleet"
 import { company, project } from "../schema/organisation"
+import { oneOf } from "../schema/checks"
+import { id, projectScoped, timestamps } from "../schema/columns"
+import { companyReference, projectReference, tenantIndex, tenantReference, tenantUnique } from "../schema/references"
 import { ticket } from "../schema/resolution"
+import { wms } from "../schema/wms"
 import { auditTrail, TICKET_CHARGE_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, companyFk, createTable, index, list, oneOfCheck, projectFk, projectFkTo, ref, uniqueKey } from "./rendering"
@@ -41,10 +49,14 @@ const referenced = { company, project, userAccount, agreement, product, containe
 /** The ticket's new check: the resolution named not null, since `null in (...)` is null and a null check passes. */
 const CHARGE_SHAPE = `${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in (${list(...BILLABLE_RESOLUTIONS)}))`
 
-const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket: ticketAsOf("0033"), ticketKindProduct })
+/** The charges as 0033 wrote them: a kind each, before a ticket type could have its own (#548 of #544). */
+const ticketKindProductAsOf0033 = wms.table(
+  "ticket_kind_product",
+  { ...id, ...projectScoped, ...timestamps, ticketKind: text().notNull(), productId: uuid().notNull() },
+  (t) => [companyReference(t, company), tenantReference(t, [t.projectId], project), projectReference(t, [t.productId], product), oneOf(t.ticketKind, TICKET_KINDS), tenantUnique(t, t.projectId, t.ticketKind), tenantIndex(t, t.productId)],
+)
 
-/** A statement as this file spells it: the kind's list as it was before 0075 added `vehicle-defect`. */
-const asOfThisFile = (statement: string): string => statement.replace(list(...TICKET_KINDS), list(...TICKET_KINDS.filter((kind) => kind !== "vehicle-defect")))
+const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket: ticketAsOf("0033"), ticketKindProduct: ticketKindProductAsOf0033 })
 
 /** The migration, by its name: it takes its number at its turn. */
 async function migration(): Promise<string[]> {
@@ -75,7 +87,7 @@ describe("ticket work priced as drizzle-kit writes it", () => {
 
   test("the migration is exactly that, then the new table's fence, its updated_at trigger and its audit trigger, a set of its project", async () => {
     const audit = TICKET_CHARGE_AUDITED.flatMap(auditTrail)
-    assert.deepEqual(await migration(), [...(await generated()).map(asOfThisFile), ...handWrittenStatements(ticketKindProduct), ...audit].map(normalised))
+    assert.deepEqual(await migration(), [...(await generated()), ...handWrittenStatements(ticketKindProductAsOf0033), ...audit].map(normalised))
     assert.deepEqual(audit, [`CREATE TRIGGER "ticket_kind_product_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."ticket_kind_product" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id');`])
   })
 

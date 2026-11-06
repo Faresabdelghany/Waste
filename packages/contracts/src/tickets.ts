@@ -44,6 +44,7 @@
 // (@waste/domain/resolution/event-shapes, the `ProofOfService` precedent), so
 // a row that disagrees with its kind does not parse on the client either.
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
+import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { BILLABLE_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
@@ -59,7 +60,17 @@ import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } f
 import { Label, Paragraph } from "./text"
 import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
+/** What a Counting Rule's ticket records (#547 of #544): the rule, the period it counted — its first day and the first day after it, so a month, a quarter and a year starting on one day are three periods — and the emptyings counted when the limit was reached. */
+export const TicketCountedBy = z.object({
+  countingRuleId: Id,
+  periodFrom: IsoDate,
+  periodTo: IsoDate,
+  count: PositiveInt,
+})
+export type TicketCountedBy = z.infer<typeof TicketCountedBy>
+
 /** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
+
 export const TicketLinks = z.object({
   routeId: Id.nullable(),
   /** A pickup of the route the ticket names. */
@@ -148,6 +159,12 @@ export const ticketFields = {
    */
   bookedRouteId: Id.nullable().default(null),
   bookedPickupId: Id.nullable().default(null),
+  /**
+   * The Counting Rule that opened it (#547 of #544), the period it counted
+   * and the count that reached the rule's limit; null on every other ticket,
+   * and absent on an event the outbox took before the rules, read as none.
+   */
+  countedBy: TicketCountedBy.nullable().default(null),
 }
 
 export const Ticket = z.object(ticketFields).refine(labelMatches, labelIsTheNumber)
@@ -231,10 +248,10 @@ export const TicketCreate = z
     /** The type's custom fields' values, by key, each one the field takes; the fields the type requires to open included. */
     fieldValues: TicketFieldValuesBody.default({}).describe("None when absent."),
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
-    /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b). */
-    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider"])
+    /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b), nor `counting-rule`, what the worker writes for a counting rule's ticket (#547 of #544). */
+    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider", "counting-rule"])
       .default("office")
-      .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, and service-provider is what the API writes for a ticket a Service Provider's account raises."),
+      .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, service-provider is what the API writes for a ticket a Service Provider's account raises, and counting-rule the worker's for a counting rule's ticket."),
     /** When the issue or request happened; the request's clock when absent. */
     occurredAt: IsoDateTime.optional(),
     /** The due date; null for none, and the project's SLA target of the kind and priority when absent. */
@@ -338,20 +355,33 @@ export const TicketComplete = z
 export type TicketComplete = z.infer<typeof TicketComplete>
 
 /** One ticket kind's charge (#291 C3): the product a completed ticket of the kind is charged at when its completion names none. */
-export const TicketCharge = z.object({ kind: TicketKind, productId: Id })
+/** The product a completed ticket of one kind, or of one Ticket Type (#548 of #544), is charged at when its completion names none: exactly one of the two, the type's own winning over its kind's. */
+export const TicketCharge = z.object({ kind: TicketKind.nullable(), ticketTypeId: Id.nullable(), productId: Id })
 export type TicketCharge = z.infer<typeof TicketCharge>
 
-/** `GET /ticket-charges`: a project's charges, a kind at most once, in the kinds' order. */
+/** `GET /ticket-charges`: a project's charges, a kind or a type at most once, in the kinds' order, then the types'. */
 export const TicketCharges = z.object({ projectId: Id, charges: z.array(TicketCharge) })
 export type TicketCharges = z.infer<typeof TicketCharges>
 
-/** What a set naming a kind twice is told. */
-export const KIND_CHARGED_ONCE = "Each ticket kind is charged at one product; name a kind once"
+/** What a set naming a kind or a type twice is told. */
+export const KIND_CHARGED_ONCE = "Each ticket kind or type is charged at one product; name each once"
 
-/** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards; each product an offered product of the project, not sold by the month, which only the route can judge. */
+/** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards, a type left out at its kind's; each entry exactly one of a kind and a type, and each product an offered product of the project, not sold by the month, which only the route can judge. */
 export const TicketChargesSet = z
-  .strictObject({ projectId: Id, charges: z.array(TicketCharge.strict()).max(TicketKind.options.length) })
-  .refine((body) => new Set(body.charges.map((charge) => charge.kind)).size === body.charges.length, { message: KIND_CHARGED_ONCE, path: ["charges"] })
+  .strictObject({
+    projectId: Id,
+    charges: z
+      .array(z.strictObject({ kind: TicketKind.nullable().default(null), ticketTypeId: Id.nullable().default(null).describe("Null when absent: a kind's charge."), productId: Id }))
+      .max(TicketKind.options.length + TICKET_TYPE_SETTINGS_MAX),
+  })
+  // zod 4 runs a check on a body whose fields failed: read the entries with care.
+  .superRefine((body, context) => {
+    for (const [index, charge] of body.charges.entries()) {
+      if (charge !== undefined && (charge.kind === null) === (charge.ticketTypeId === null)) context.addIssue({ code: "custom", message: KIND_OR_TYPE, path: ["charges", index] })
+    }
+    const keys = body.charges.filter((charge) => charge !== undefined).map(kindOrTypeKey)
+    if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", message: KIND_CHARGED_ONCE, path: ["charges"] })
+  })
 export type TicketChargesSet = z.infer<typeof TicketChargesSet>
 
 /** `GET /ticket-charges`: the project the charges are read for. */

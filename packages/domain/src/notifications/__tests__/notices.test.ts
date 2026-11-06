@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { OUTBOX_KINDS } from "../../execution/vocabulary"
-import { alertNotice, customerNoticeOf, NOTICE_VALUES, REMINDER_BATCH, REMINDER_DAILY_CAP, REMINDER_HOUR, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
+import { alertNotice, countingTicketNotice, customerNoticeOf, NOTICE_VALUES, REMINDER_BATCH, REMINDER_DAILY_CAP, REMINDER_HOUR, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
 import { CUSTOMER_NOTICE_EVENTS } from "../vocabulary"
 
 describe("an alert's severity against a person's threshold", () => {
@@ -31,6 +31,13 @@ describe("the notices", () => {
       body: "Olivia Larsen, ticket T-1207 in Copenhagen Central is now yours.\n\nMissed collection at Parkvej 18\nPriority: high.\n\n— Kystbyen",
     })
     assert.match(ticketAssignedNotice({ number: 7, subject: "x", priority: "none", dueAt: "2026-10-30T12:00:00.000Z" }, { projectName: "P", companyName: "C", recipientName: "R" }).body, /Due 2026-10-30T12:00:00\.000Z\./)
+  })
+
+  test("a counting rule's ticket names its number, the team it waits with, and what was counted", () => {
+    assert.deepEqual(countingTicketNotice({ number: 88, subject: "Emptied too often", description: "13 completed emptyings at this property in March 2026 reached the counting rule." }, { projectName: "Copenhagen Central", companyName: "Kystbyen", teamName: "Customer service" }), {
+      subject: "Ticket T-88 for Customer service · Emptied too often",
+      body: "A counting rule opened ticket T-88 in Copenhagen Central, waiting with Customer service.\n\nEmptied too often\n13 completed emptyings at this property in March 2026 reached the counting rule.\n\n— Kystbyen",
+    })
   })
 })
 

@@ -9,12 +9,13 @@
 // kind's default; a ticket already open keeps its team. Offered on the Pilot
 // alone, beside the Ticket SLA.
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { FloppyDisk, PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTeamDefaults } from "@waste/contracts/ticket-teams"
 import { useReport } from "@/components/insight/use-report"
+import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -48,7 +49,8 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 
-export function TicketTeamsSettings() {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
+export function TicketTeamsSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const client = useApiClient()
   const configured = useApiConfigured()
   const { me } = useApiSession()
@@ -97,7 +99,8 @@ export function TicketTeamsSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
+      heading="Tickets"
+      tabs={tabs}
       title="Ticket teams"
       description="The teams the company's tickets wait with, and each project's default team per kind. A team's queue is its open tickets nobody works: anyone who works tickets takes one, member or not."
       toolbar={<p className="text-sm text-muted-foreground">A ticket&apos;s team is picked as it opens, or left to its kind&apos;s default below, and handed on from its details.</p>}
@@ -194,8 +197,9 @@ function TeamDefaults({
   const base = answered !== null && answered.projectId === project?.id ? answered : read.report
   const [edits, setEdits] = useState<{ base: TicketTeamDefaults; rows: TeamDefaultRow[] } | null>(null)
   const editing = edits !== null && edits.base === base
-  const rows = base === null ? [] : editing ? edits.rows : teamDefaultRowsOf(base, webIdOf)
-  const [refused, setRefused] = useState<{ kind: string; message: string } | null>(null)
+  const types = useTicketTypeChoices()
+  const rows = base === null ? [] : editing ? edits.rows : teamDefaultRowsOf(base, webIdOf, types)
+  const [refused, setRefused] = useState<{ key: string; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
   // A team that takes tickets, and the one a kind already names whatever its status, so the row reads what is saved.
   const optionsFor = (row: TeamDefaultRow) => teams.filter((team) => team.status === "Active" || team.id === row.teamId)
@@ -238,7 +242,7 @@ function TeamDefaults({
     <section className="border-t border-border">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold">Default team per kind</h3>
+          <h3 className="text-sm font-semibold">Default team per kind and type</h3>
           <Label htmlFor="ticket-team-defaults-project" className="sr-only">
             Project
           </Label>
@@ -276,11 +280,11 @@ function TeamDefaults({
           </Button>
         </div>
       </div>
-      <p className="px-4 pb-3 text-sm text-muted-foreground">A ticket opened without a team goes to its kind&apos;s team here. A retired team gives a new ticket none; tickets already open keep their team.</p>
+      <p className="px-4 pb-3 text-sm text-muted-foreground">A ticket opened without a team goes to its type&apos;s team here, else its kind&apos;s. A retired team gives a new ticket none; tickets already open keep their team.</p>
       <Table className="min-w-[520px]">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead>Kind</TableHead>
+            <TableHead>Kind or type</TableHead>
             <TableHead>Team</TableHead>
           </TableRow>
         </TableHeader>
@@ -289,15 +293,15 @@ function TeamDefaults({
             <EmptyRow colSpan={2} message={emptyMessage} />
           ) : (
             rows.map((row, index) => (
-              <TableRow key={row.kind} aria-label={row.label}>
+              <TableRow key={row.key} aria-label={row.label}>
                 <TableCell className="text-sm">{row.label}</TableCell>
                 <TableCell>
                   <Select value={row.teamId} onValueChange={(teamId) => change(index, teamId)} disabled={!canEdit || saving}>
-                    <SelectTrigger className="w-64" aria-label={`Team for ${row.label}`} aria-invalid={refused?.kind === row.kind}>
+                    <SelectTrigger className="w-64" aria-label={`Team for ${row.label}`} aria-invalid={refused?.key === row.key}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_TEAM}>No team</SelectItem>
+                      <SelectItem value={NO_TEAM}>{row.ticketTypeId === null ? "No team" : "As its kind"}</SelectItem>
                       {optionsFor(row).map((team) => (
                         <SelectItem key={team.id} value={team.id}>
                           {team.status === "Active" ? team.name : `${team.name} · ${team.status}`}
@@ -305,7 +309,7 @@ function TeamDefaults({
                       ))}
                     </SelectContent>
                   </Select>
-                  {refused?.kind === row.kind && <p className="mt-1 text-xs text-destructive">{refused.message}</p>}
+                  {refused?.key === row.key && <p className="mt-1 text-xs text-destructive">{refused.message}</p>}
                 </TableCell>
               </TableRow>
             ))

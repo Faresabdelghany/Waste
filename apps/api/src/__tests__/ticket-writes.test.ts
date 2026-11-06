@@ -102,7 +102,7 @@ describe("openTicket", () => {
     const { tx, statements } = scripted()
     const newId = minter()
     const { row, answered } = await openTicket(tx, { companyId: COMPANY, draft: draft(), createdBy: OLIVIA, sourceEventId: null, newId, now: () => OPENED, automation: { send: async () => null, by: null } })
-    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
+    assert.deepEqual(shape(statements), ["select ticket_type", "select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
 
     const [, , counter, ticketRow, created, outbox, assigned] = statements
     assert.deepEqual([ticketRow.values?.ticketTypeId, ticketRow.values?.fieldValues], [TYPE, {}], "a draft naming no type is of its kind's default, with no values (#545 of #544)")
@@ -134,7 +134,7 @@ describe("openTicket", () => {
     const { tx, statements } = scripted({ status: "new", ticketId: null })
     const SOURCE = "01a0d3a5-e5e0-7000-8000-000000000009"
     const { row } = await openTicket(tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: null, sourceEventId: SOURCE, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } })
-    assert.deepEqual(shape(statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
+    assert.deepEqual(shape(statements), ["select ticket_type", "select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event", "insert outbox_event", "select ticket", "select ticket_type_action", "select ticket"])
     const linked = statements[7]
     assert.deepEqual(linked.values, { ticketId: row.id }, "the alert now names the ticket")
     assert.deepEqual([statements[3].values?.createdBy, statements[3].values?.sourceEventId], [null, SOURCE], "an event's ticket: no person, the event's id")
@@ -148,7 +148,7 @@ describe("openTicket", () => {
       assert.match((error as { message: string }).message, /This alert is resolved and does not change/)
       return true
     })
-    assert.deepEqual(shape(resolved.statements), ["select ticket_team_default", "select ticket_type", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
+    assert.deepEqual(shape(resolved.statements), ["select ticket_type", "select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
 
     const taken = scripted({ status: "acknowledged", ticketId: "01a0d3a5-e5e0-7000-8000-00000000000a" })
     await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } }), (error: unknown) => {

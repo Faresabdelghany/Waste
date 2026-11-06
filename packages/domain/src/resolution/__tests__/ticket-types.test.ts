@@ -5,25 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  DEFAULT_TICKET_TYPE_NAMES,
-  fieldKeyOf,
-  fieldRequiredToOpen,
-  fieldSetIssue,
-  fieldValueIssue,
-  fieldValuesIssues,
-  mayGive,
-  mergedFieldValues,
-  missingFields,
-  needsBeforeCompleting,
-  onlyRolesMay,
-  TICKET_COMMAND_VERBS,
-  TICKET_FIELD_KEY,
-  TICKET_FIELD_KEY_MAX,
-  TICKET_TYPE_FIELDS_MAX,
-  typeOfAnotherKind,
-  type TicketFieldDefinition,
-} from "../ticket-types"
+import { DEFAULT_TICKET_TYPE_NAMES, fieldKeyOf, fieldRequiredToOpen, fieldSetIssue, fieldValueIssue, fieldValuesIssues, KIND_OR_TYPE, kindOrTypeKey, mayGive, mergedFieldValues, missingFields, needsBeforeCompleting, onlyRolesMay, settingFor, TICKET_COMMAND_VERBS, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, TICKET_TYPE_FIELDS_MAX, type TicketFieldDefinition, typeOfAnotherKind } from "../ticket-types"
 import { TICKET_COMMANDS } from "../transitions"
 import { TICKET_KINDS } from "../vocabulary"
 
@@ -163,5 +145,25 @@ describe("who may give a status command", () => {
     assert.deepEqual(Object.keys(TICKET_COMMAND_VERBS), [...TICKET_COMMANDS])
     assert.equal(onlyRolesMay(["Case handler", "Administrator"], "complete", "Bulky waste collection"), "Only Case handler or Administrator may complete a ticket of type Bulky waste collection")
     assert.equal(onlyRolesMay(["Dispatcher"], "hold", "Overflow"), "Only Dispatcher may put on hold a ticket of type Overflow")
+  })
+})
+
+describe("a setting a project keeps by kind or by type (#548 of #544)", () => {
+  const BULKY = "01a0d3a5-e5e0-7000-8000-000000000b01"
+  const rows = [
+    { kind: "container-request" as const, ticketTypeId: null, teamId: "desk" },
+    { kind: null, ticketTypeId: BULKY, teamId: "bulky" },
+  ]
+
+  test("a ticket takes its type's own, else its kind's, else none", () => {
+    assert.equal(settingFor(rows, { kind: "container-request", ticketTypeId: BULKY })?.teamId, "bulky")
+    assert.equal(settingFor(rows, { kind: "container-request", ticketTypeId: "01a0d3a5-e5e0-7000-8000-000000000b02" })?.teamId, "desk")
+    assert.equal(settingFor(rows, { kind: "container-request", ticketTypeId: null })?.teamId, "desk")
+    assert.equal(settingFor(rows, { kind: "complaint", ticketTypeId: null }), undefined)
+  })
+
+  test("a row is named by its kind or by its type", () => {
+    assert.deepEqual(rows.map(kindOrTypeKey), ["kind:container-request", `type:${BULKY}`])
+    assert.equal(KIND_OR_TYPE, "Name a kind or a ticket type, one of the two")
   })
 })

@@ -30,9 +30,10 @@
 import { ticketTypeRules, defaultTicketTypeOf, type TicketTypeRules } from "@waste/db/commands/ticket-types"
 import type { Tx } from "@waste/db/client"
 import { role } from "@waste/db/schema/access"
+import { ticketType } from "@waste/db/schema/resolution"
 import { fieldRequiredToOpen, fieldValuesIssues, mayGive, missingFields, needsBeforeCompleting, onlyRolesMay, typeOfAnotherKind, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
-import type { TicketKind } from "@waste/domain/resolution/vocabulary"
+import type { TicketKind, TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
@@ -124,3 +125,31 @@ export function requireFieldsToComplete(rules: TicketTypeRules, ticket: { label:
 
 /** The rules of the type the ticket is of, for a status command. */
 export const rulesOfTicket = (tx: Tx, companyId: string, ticket: { ticketTypeId: string }): Promise<TicketTypeRules> => rulesOf(tx, companyId, ticket.ticketTypeId)
+
+/**
+ * The ticket types a project's set of a setting names (#548 of #544) — its
+ * SLA's targets, its default teams, its ticket charges — each the company's,
+ * or a 400 at `<field>.N.ticketTypeId`. Answers the gate the route asks after
+ * its other 400s: a type the set did not name before, `kept`, is offered
+ * (409), and one it names already stands whatever its status.
+ */
+export async function requireSetTypes(tx: Tx, companyId: string, entries: readonly { ticketTypeId: string | null }[], field: string, kept: ReadonlySet<string>): Promise<() => void> {
+  const named = [...new Set(entries.flatMap((entry) => (entry.ticketTypeId === null ? [] : [entry.ticketTypeId])))]
+  if (named.length === 0) return () => undefined
+  const found = new Map(
+    (
+      await tx
+        .select({ id: ticketType.id, name: ticketType.name, status: ticketType.status })
+        .from(ticketType)
+        .where(and(eq(ticketType.companyId, companyId), inArray(ticketType.id, named)))
+    ).map((row) => [row.id, row]),
+  )
+  const issues = entries.flatMap((entry, index) => (entry.ticketTypeId === null || found.has(entry.ticketTypeId) ? [] : [{ path: `${field}.${index}.ticketTypeId`, message: NOT_A_TICKET_TYPE }]))
+  if (issues.length > 0) throw invalidRequest("body", issues)
+  return () => {
+    for (const id of named) {
+      const type = found.get(id)
+      if (type !== undefined && !kept.has(id)) refuseRetiredTicketType(type.status as TicketTypeStatus, type.name)
+    }
+  }
+}

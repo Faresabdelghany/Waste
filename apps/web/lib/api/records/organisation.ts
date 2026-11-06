@@ -29,7 +29,6 @@ import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
-import { PRIVACY_POLICY_KEY } from "@/lib/data/privacy-policy"
 import { BRANDING_KEY } from "@/lib/data/project-branding"
 import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
@@ -221,9 +220,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       projectIds: [id],
       recordKind: "Project",
       // Whether its hires and jobs wait for a person before a run (M14 of #293), a flag as the form's switch says it.
-      // Its privacy policy (#291 C19) as the wire's JSON, which Settings › Privacy reads and writes whole through its own route (lib/data/privacy-policy.ts).
       // Its branding on its public pages (M22 of #293) as the wire's JSON, which Settings › Portals & branding reads and writes whole through its own route (lib/data/project-branding.ts).
-      submittedValues: { ...submittedValues, holdForReview: project.holdForReview, [PRIVACY_POLICY_KEY]: JSON.stringify(project.privacyPolicy), [BRANDING_KEY]: JSON.stringify(project.branding) },
+      submittedValues: { ...submittedValues, holdForReview: project.holdForReview, [BRANDING_KEY]: JSON.stringify(project.branding) },
     }
   },
   toCreateBody: (record) => {
@@ -270,7 +268,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // A controlled action moves the record's status; the wire's two are what a patch may say.
       status: PROJECT_STATUSES.find((candidate) => candidate === statusToken(record.status)),
       ...projectCalendarBody(record),
-      // Settings › Sorting guide publishes the project under a slug and takes it down again (#293); no slug is unpublished.
+      // Settings › Portals & branding publishes the project under a slug and takes it down again (#293, #487); no slug is unpublished.
       publicSlug: typed(record, "publicSlug") ?? null,
       // Settings › Finance & invoicing (#291 C4); `before` was read with both, so an unmoved value moves nothing.
       paymentTermsDays: daysOf(typedPaymentTerms(record, "refused")),

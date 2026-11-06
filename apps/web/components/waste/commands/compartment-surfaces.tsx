@@ -22,7 +22,6 @@ import { useModuleRecords } from "@/components/waste/business-record-store"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { VehicleUnavailabilitySurface } from "@/components/waste/commands/availability-surfaces"
 import { VehicleMaintenanceSurface } from "@/components/waste/commands/maintenance-surfaces"
-import { VehicleDefectsSurface } from "@/components/waste/commands/pre-trip-surfaces"
 import { useCommandRunner, useModuleReady } from "@/components/waste/commands/use-command-support"
 import { compartmentDraftsOf, SET_COMPARTMENTS, type CompartmentDraft } from "@/lib/api/records/fleet"
 import { isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
@@ -140,13 +139,12 @@ export function VehicleCompartmentsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-/** A vehicle's details: its compartments, its periods out of use, what its pre-trip checks found (O13 of #290), then its maintenance (O20 of #290). */
+/** A vehicle's details: its compartments, its periods out of use, then its maintenance (O20 of #290). */
 export function VehicleRowSurface({ record }: RowSurfaceProps) {
   return (
     <div className="space-y-6">
       <VehicleCompartmentsSurface record={record} />
       <VehicleUnavailabilitySurface record={record} />
-      <VehicleDefectsSurface record={record} />
       <VehicleMaintenanceSurface record={record} />
     </div>
   )

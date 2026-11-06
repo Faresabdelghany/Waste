@@ -48,7 +48,7 @@
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
 
-/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
+/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a job (a completed bulky collection, O11 of #290, and the work orders charged before their charges were removed) and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
 export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit", "weight", "scale-ticket"] as const
 /** Why an event cannot be invoiced, each actionable; cleared by `reprice`. */
 export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"] as const
@@ -98,14 +98,6 @@ export type IndexSkipReason = (typeof INDEX_SKIP_REASONS)[number]
 export type PaymentReferenceScheme = (typeof PAYMENT_REFERENCE_SCHEMES)[number]
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 
-/** What an accounting export books (#291 C7): an issued invoice, a credit note, a payment, and an allocation of a payment that named no customer, each once ever. */
-export const ACCOUNTING_SOURCE_KINDS = ["invoice", "credit-note", "payment", "allocation"] as const
-export type AccountingSourceKind = (typeof ACCOUNTING_SOURCE_KINDS)[number]
-
-/** The files an export downloads as (#291 C7): our own documented CSV, and Danish SAF-T 2.1 (C7b). Not stored: the file is rendered from the frozen lines on each download. */
-export const ACCOUNTING_FORMATS = ["csv", "saf-t"] as const
-export type AccountingFormat = (typeof ACCOUNTING_FORMATS)[number]
-
 /** The statuses a Settlement is recalculated in: open, or calculated and not yet closed. A value of `SETTLEMENT_STATUSES`, not a vocabulary. */
 export const OPEN_SETTLEMENT_STATUSES = ["open", "calculated"] as const satisfies readonly SettlementStatus[]
 export type OpenSettlementStatus = (typeof OPEN_SETTLEMENT_STATUSES)[number]
@@ -131,6 +123,4 @@ export const FINANCE_VOCABULARIES = {
   INDEX_SKIP_REASONS,
   PAYMENT_REFERENCE_SCHEMES,
   PAYMENT_SOURCES,
-  ACCOUNTING_SOURCE_KINDS,
-  ACCOUNTING_FORMATS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

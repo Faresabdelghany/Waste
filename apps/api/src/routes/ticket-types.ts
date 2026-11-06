@@ -16,9 +16,9 @@
 // making another (the contracts refuse `isDefault: false`).
 //
 // The fields, the permissions and the actions are sets that travel with the type: replaced
-// whole, the type's own row stamped first, each replacement minting new ids,
-// as a pre-trip checklist's items are. A field left out is gone from the type
-// and its values stay on the tickets that hold them; each role a permission
+// whole, the type's own row stamped first, each replacement minting new ids.
+// A field left out is gone from the type and its values stay on the tickets
+// that hold them; each role a permission
 // names is one of the company's (400 at `permissions.N.roleIds.M`).
 //
 // The grant is `configure.templates`, the prototype's Tickets &

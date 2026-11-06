@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 18, ["OPEN_SETTLEMENT_STATUSES"])
+defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 16, ["OPEN_SETTLEMENT_STATUSES"])
 
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {
@@ -29,11 +29,6 @@ describe("the Finance vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.EXCLUSION_REASONS], ["all-events-blocked", "all-events-held", "all-events-blocked-or-held", "too-many-events"])
     assert.deepEqual([...vocabulary.INVOICE_KINDS], ["invoice", "credit-note"])
     assert.deepEqual([...vocabulary.CREDIT_REASONS], ["service-not-delivered", "quantity-correction", "price-correction", "duplicate", "other"])
-  })
-
-  test("an accounting export books four kinds of row and downloads as our CSV or Danish SAF-T (#291 C7)", () => {
-    assert.deepEqual([...vocabulary.ACCOUNTING_SOURCE_KINDS], ["invoice", "credit-note", "payment", "allocation"])
-    assert.deepEqual([...vocabulary.ACCOUNTING_FORMATS], ["csv", "saf-t"])
   })
 
   test("a settlement stands in three statuses, the open two a value of the list, and its history has three kinds", () => {

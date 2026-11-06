@@ -56,6 +56,12 @@
 // (`ticket_ticket_type_id_kind_fk`), so the two never disagree; and holds its
 // type's custom fields' values by key in `field_values`, an object
 // (`ticket_field_values_shape`), which the API checks against the type.
+// Since #547 of #544 a ticket a Counting Rule opened names the rule, the
+// period it counted — its first day and the first day after it, so a rule
+// whose period changes never mistakes a month's ticket for its quarter's —
+// and the count that reached the limit (`ticket_counting_shape`, all four with
+// the property counted at), one per rule, property and period
+// (`ticket_counting_key`).
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -109,6 +115,7 @@
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, PLAN_DAYS_AHEAD_MAX, type TicketActionParameters } from "@waste/domain/resolution/automation"
+import { COUNTING_LIMIT_MAX } from "@waste/domain/resolution/counting-rules"
 import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
 import {
   ALERT_KINDS,
@@ -117,6 +124,8 @@ import {
   ALERT_SOURCES,
   ALERT_STATUSES,
   BILLABLE_RESOLUTIONS,
+  COUNTING_PERIODS,
+  COUNTING_RULE_STATUSES,
   TICKET_ACTION_COMMANDS,
   TICKET_ACTION_KINDS,
   TICKET_ACTION_TRIGGERS,
@@ -135,13 +144,13 @@ import {
   type TicketActionKind,
 } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
-import { boolean, check, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
+import { boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { role, userAccount } from "./access"
 import { agreement } from "./agreements"
-import { product } from "./catalogue"
-import { literal, lowercase, oneOf, positive } from "./checks"
+import { containerType, product, wasteFraction } from "./catalogue"
+import { exactlyOne, literal, lowercase, oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container } from "./containers"
 import { customer, property, sharedCollectionPoint } from "./customers"
@@ -240,8 +249,8 @@ export const ticketType = wms.table(
 // reads; the input it takes; the choices a choice field offers, and only a
 // choice field (`ticket_type_field_choices_shape`); and when it must be
 // filled in. The set is replaced whole (`PUT /ticket-types/:id/fields`), each
-// replacement minting new ids, so the unique position is safe, as a pre-trip
-// checklist's is. Nothing references a field: a ticket holds its values by key.
+// replacement minting new ids, so the unique position is safe. Nothing
+// references a field: a ticket holds its values by key.
 export const ticketTypeField = wms.table(
   "ticket_type_field",
   {
@@ -372,6 +381,55 @@ export const ticketTypeAction = wms.table(
   ],
 )
 
+// A Counting Rule (#547 of #544): the completed emptyings at each property
+// over a calendar period — optionally of one waste fraction, of one container
+// type — counted by the worker as each emptying completes, and a ticket of
+// the rule's type, waiting with its team, opened on a property whose count
+// reaches the limit (@waste/domain/resolution/counting-rules). The company's
+// and no project's, like the Ticket Type it opens, so it counts every project
+// the company runs; configuration the office edits under
+// `configure.templates`, audited. Inactive until switched on, so it may be
+// simulated over past emptyings first. Each ticket it opened names it, so a
+// rule that has opened one is switched off, never deleted.
+export const countingRule = wms.table(
+  "counting_rule",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    name: text().notNull(),
+    status: text().notNull().default("inactive"),
+    period: text().notNull(),
+    /** How many emptyings in a period open the ticket. */
+    limit: integer().notNull(),
+    /** The one fraction counted; null counts every fraction. */
+    wasteFractionId: uuid(),
+    /** The one container type counted; null counts every type, and an address-only stop too. */
+    containerTypeId: uuid(),
+    ticketTypeId: uuid().notNull(),
+    /** The team the ticket waits with. */
+    teamId: uuid().notNull(),
+    /** Whether each member of the team is e-mailed the ticket as it opens. */
+    notifiesTeam: boolean().notNull().default(false),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.wasteFractionId], wasteFraction),
+    tenantReference(t, [t.containerTypeId], containerType),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantReference(t, [t.teamId], team),
+    tenantUnique(t, t.name),
+    tenantKey(t),
+    oneOf(t.status, COUNTING_RULE_STATUSES),
+    oneOf(t.period, COUNTING_PERIODS),
+    check(tableObjectName(t.id.table, "limit_range", "countingRule"), sql`${t.limit} between 1 and ${sql.raw(String(COUNTING_LIMIT_MAX))}`),
+    tenantIndex(t, t.wasteFractionId),
+    tenantIndex(t, t.containerTypeId),
+    tenantIndex(t, t.ticketTypeId),
+    tenantIndex(t, t.teamId),
+  ],
+)
+
 export const ticket = wms.table(
   "ticket",
   {
@@ -430,6 +488,13 @@ export const ticket = wms.table(
     bookedRouteId: uuid(),
     /** That stop: a container request's delivery, an overflow's emptying, a defect's repair or swap. The latest booking; a missed one's story is in the comments. */
     bookedPickupId: uuid(),
+    /** The Counting Rule that opened it (#547 of #544), with the period it counted and the count that reached the limit; all three or none. */
+    countingRuleId: uuid(),
+    /** The period counted: its first day, and the first day after it (ADR-0005), so a month, a quarter and a year starting on one day are three periods. */
+    countedFrom: date(),
+    countedTo: date(),
+    /** The emptyings counted in the period when the ticket opened. */
+    counted: integer(),
   },
   (t) => [
     companyReference(t, company),
@@ -456,6 +521,7 @@ export const ticket = wms.table(
     projectReference(t, [t.chargeProductId], product),
     // The booked stop is a stop of its route (O3c of #290), as the re-collection's is.
     projectReference(t, [t.bookedRouteId, t.bookedPickupId], pickup, [pickup.routeId, pickup.id]),
+    tenantReference(t, [t.countingRuleId], countingRule),
     tenantUnique(t, t.number),
     projectKey(t),
     oneOf(t.kind, TICKET_KINDS),
@@ -479,6 +545,14 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "charge_shape", "ticket"), sql`${t.chargeProductId} is null or (${t.resolution} is not null and ${t.resolution} in (${sql.raw(BILLABLE_RESOLUTIONS.map(literal).join(", "))}))`),
     // The booked stop and its route together or not at all: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "booked_shape", "ticket"), sql`(${t.bookedRouteId} is null) = (${t.bookedPickupId} is null)`),
+    // A counting rule's ticket names the rule, the period and the count together, and the property it counted at.
+    check(
+      tableObjectName(t.id.table, "counting_shape", "ticket"),
+      sql`(${t.countingRuleId} is null) = (${t.countedFrom} is null) and (${t.countingRuleId} is null) = (${t.countedTo} is null) and (${t.countingRuleId} is null) = (${t.counted} is null) and (${t.countingRuleId} is null or (${t.propertyId} is not null and ${t.countedTo} > ${t.countedFrom}))`,
+    ),
+    positive(t.counted),
+    // One ticket per rule, property and period; the rule's reference index too.
+    uniqueIndex(tableObjectName(t.id.table, "counting_key", "ticket")).on(t.companyId, t.countingRuleId, t.propertyId, t.countedFrom, t.countedTo).where(sql`${t.countingRuleId} is not null`),
     // A stop answers one ticket.
     uniqueIndex(tableObjectName(t.id.table, "booked_pickup_id_key", "ticket")).on(t.companyId, t.bookedPickupId).where(sql`${t.bookedPickupId} is not null`),
     // The values are held by key, so they are an object.
@@ -695,9 +769,11 @@ export const alert = wms.table(
 
 // The SLA (O4 of #290): the hours a project gives a ticket of a priority from
 // when it happened to its due date, for every kind (`kind` null) or for one kind, the
-// kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). A pair
-// is named once per project, every kind included, since the key treats nulls
-// as equal. Configuration the office edits under `configure.templates`, so
+// kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). Since
+// #548 of #544 a target may be one Ticket Type's instead (`ticket_type_id`),
+// the type's own winning over its kind's, never a kind's and a type's at once
+// (`ticket_sla_scope_shape`). A kind or a type and a priority are named once
+// per project, every kind included, since the key treats nulls as equal. Configuration the office edits under `configure.templates`, so
 // its rows are audited (sql/audit-trail.ts); `openTicket` reads them as it
 // opens a ticket, the API's and the consumer's alike.
 export const ticketSla = wms.table(
@@ -706,8 +782,10 @@ export const ticketSla = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    /** The kind the target is for; null for every kind without one of its own. */
+    /** The kind the target is for; null for every kind without one of its own, or where a type is named. */
     kind: text(),
+    /** The Ticket Type the target is for (#548 of #544), whose own wins over its kind's; null for a kind's or every kind's. */
+    ticketTypeId: uuid(),
     priority: text().notNull(),
     /** From when the ticket's issue happened to its due date, on the wall clock: 1 to a year. */
     hours: integer().notNull(),
@@ -715,9 +793,13 @@ export const ticketSla = wms.table(
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
-    tenantUnique(t, t.projectId, t.kind, t.priority).nullsNotDistinct(),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantUnique(t, t.projectId, t.kind, t.ticketTypeId, t.priority).nullsNotDistinct(),
     oneOf(t.kind, TICKET_KINDS),
     oneOf(t.priority, TICKET_PRIORITIES),
+    // A type is of one kind already: a target names its kind, its type, or neither.
+    check(tableObjectName(t.id.table, "scope_shape", "ticketSla"), sql`${t.kind} is null or ${t.ticketTypeId} is null`),
+    tenantIndex(t, t.ticketTypeId),
     check(tableObjectName(t.id.table, "hours_range", "ticketSla"), sql`${t.hours} between 1 and ${sql.raw(String(TICKET_SLA_HOURS_MAX))}`),
   ],
 )
@@ -725,6 +807,8 @@ export const ticketSla = wms.table(
 // The team a project's ticket of a kind goes to when its opener names none
 // (O30 of #290, row 7.20): one per kind and project, read by `openTicket` as
 // it opens a ticket, the office's and the consumer's alike, as the SLA is.
+// Since #548 of #544 a row may name one Ticket Type instead of a kind, the
+// type's own winning over its kind's: exactly one of the two.
 // Configuration under `configure.templates`, audited, a set of its project.
 export const ticketTeamDefault = wms.table(
   "ticket_team_default",
@@ -732,15 +816,21 @@ export const ticketTeamDefault = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    kind: text().notNull(),
+    /** The kind the default is for; null where a type is named. */
+    kind: text(),
+    /** The Ticket Type the default is for (#548 of #544); null where a kind is named. */
+    ticketTypeId: uuid(),
     teamId: uuid().notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.teamId], team),
-    tenantUnique(t, t.projectId, t.kind),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantUnique(t, t.projectId, t.kind, t.ticketTypeId).nullsNotDistinct(),
     oneOf(t.kind, TICKET_KINDS),
+    exactlyOne(t, "kind_or_type", [t.kind, t.ticketTypeId]),
     tenantIndex(t, t.teamId),
+    tenantIndex(t, t.ticketTypeId),
   ],
 )

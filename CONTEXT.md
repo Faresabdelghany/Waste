@@ -40,14 +40,6 @@ _Avoid_: Pending user, unconfirmed account
 A project the company has made readable to the public under its public slug (`kystbyen`), through the public door: anonymous pages a municipality links from its own website. An unpublished project has no public pages.
 _Avoid_: Public tenant, open project, portal (the portal is for signed-in customers)
 
-**Sorting Guide**:
-A project's public answer to "where does this go?": the Sorting Guide Items a resident searches by name or synonym, each naming the waste fraction it belongs in and how to present it.
-_Avoid_: Waste wizard, recycling dictionary, A–Z list
-
-**Sorting Guide Item**:
-One thing a Sorting Guide knows, such as a pizza box or a battery: its name, the other words it is known by, its waste fraction where it has one, and its instructions. It is a draft until published, and withdrawn rather than deleted.
-_Avoid_: Article, product (a Product is what is sold), entry
-
 **Collection Day**:
 A day a property's containers are collected, as generation plans it: the route that stands keeps its own day, and the rest follow the scheme's recurrence and holiday policy, a skipped holiday shown as such. What a published project's calendar by address and its feed tell a resident.
 _Avoid_: Pickup day (a Pickup is one stop on a route), bin day, tømmedag in copy that is not Danish
@@ -78,7 +70,7 @@ _Avoid_: Septic (a kind of it), well, cesspit
 
 **Tank Inspection**:
 What the office found when it inspected a Tank Installation — approved, remarks, defects or failed — with its findings and when it is next due. Appended, never rewritten.
-_Avoid_: Pre-trip check (a vehicle's), audit
+_Avoid_: Audit
 
 **Property Group**:
 A managed grouping of properties that share administration, reporting, service rules, or agreements.
@@ -146,20 +138,12 @@ _Avoid_: Working hours, roster, schedule
 When in the day a stop may be served: a Property's access hours and an Agreement's promised window, each optional, the stop's window being where the two overlap. Route optimisation holds a stop inside it.
 _Avoid_: Time slot, booking slot, opening hours (a station's)
 
-**Pre-trip Check**:
-A driver's walk-round of a Vehicle before or during the day, answering every item of the checklist its vehicle type holds — passed, or a defect with what was seen — and the odometer and engine hours where read. A check is kept as it was answered, whatever the checklist says later.
-_Avoid_: Inspection report, vehicle audit, service
-
-**Vehicle Defect**:
-A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
-_Avoid_: Fault, damage report, container defect (a container's)
-
 **Maintenance Plan**:
-A Vehicle's service at intervals — every so many days, kilometres or engine hours, whichever comes first — counted from its last service, the day and the readings then. It is due soon within two weeks, 1,000 km or 50 hours of a limit and overdue past one, judged against the newest odometer and engine hours a Pre-trip Check read; the office is alerted either way. A plan is retired, never deleted.
+A Vehicle's service at intervals — every so many days, kilometres or engine hours, whichever comes first — counted from its last service, the day and the readings then. It is due soon within two weeks, 1,000 km or 50 hours of a limit and overdue past one, judged against the odometer and engine hours of its last service, since nothing reads them between services; the office is alerted either way. A plan is retired, never deleted.
 _Avoid_: Service schedule, maintenance interval, PM
 
 **Maintenance Order**:
-Work the office opens on a Vehicle: a Maintenance Plan's service, or a one-off — a repair, a Vehicle Defect mended. It is completed once, on the day the work was done with the readings then, or cancelled; completing a plan's order is the plan's service done, and the plan counts from it.
+Work the office opens on a Vehicle: a Maintenance Plan's service, or a one-off — a repair. It is completed once, on the day the work was done with the readings then, or cancelled; completing a plan's order is the plan's service done, and the plan counts from it.
 _Avoid_: Work Order (a Work Order is a Pickup's), job card, repair ticket
 
 **Vehicle Allocation**:
@@ -183,12 +167,8 @@ An Unloading Station that holds what is tipped there and sends it on in Outbound
 _Avoid_: Depot, warehouse, transfer note (the document)
 
 **Treatment**:
-How a waste fraction is handled once collected: reuse, recycling (composting and digestion among it), energy recovery, or disposal. A Customer's recycling rate is read from it.
+How a waste fraction is handled once collected: reuse, recycling (composting and digestion among it), energy recovery, or disposal.
 _Avoid_: Disposal method, processing, destination
-
-**Emission Factor**:
-A published figure of CO₂e per unit in force over a period, with the source it is quoted from. A fuel has grams per litre, kilogram or kilowatt-hour burnt. A waste fraction has kilograms per tonne its Treatment emits, and per tonne it avoids where the Treatment displaces anything. Revised by adding the next period, never by editing a figure.
-_Avoid_: Carbon factor, emission rate
 
 **Drop-off Point**:
 A place residents bring waste to themselves, on a project's public map: a recycling centre (staffed, with opening hours, many fractions) or a bring bank (bins on a street, usually open always). It carries the fractions it takes, weekly hours, dated exceptions, and whether the project's holidays close it.
@@ -358,7 +338,7 @@ _Avoid_: Recommendation, upsell, automatic resize
 
 **Field Inspection**:
 An inspector's visit to a container or a property — exactly one — with what it came to (compliant, a minor or a major finding), what was found, a note and photos. The office corrects it while it is open and closes it once done; a closed inspection changes no more. It changes nothing it names: a finding is followed up by a ticket or a change the office makes.
-_Avoid_: Audit (the audit log is the history of rows), pre-trip check (a vehicle's), Site Visit (a recycling centre's), Ticket
+_Avoid_: Audit (the audit log is the history of rows), Site Visit (a recycling centre's), Ticket
 
 **Unload**:
 A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
@@ -395,8 +375,12 @@ A case that owns the resolution of a request, deviation, complaint, task, or ope
 _Avoid_: Alert, message
 
 **Ticket Type**:
-The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
+The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. A project may give a type its own SLA target, default Team and charge, which win over its kind's. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
 _Avoid_: Ticket kind (the built-in category a type belongs to), category, form
+
+**Counting Rule**:
+The company's rule counting the completed emptyings at each Property over a calendar month, quarter or year, optionally of one waste fraction or container type, by the service date of each stop's route. A property whose count reaches the rule's limit gets one Ticket of the rule's Ticket Type, waiting with its Team and naming the rule, the period and the count, at most once per rule and period; the rule never charges. It is simulated over past emptyings before it is switched on.
+_Avoid_: Threshold rule, frequency check, alert rule (an Alert's rules are the worker's own)
 
 **Message Template**:
 A project's text for one kind of message the office sends — an e-mail with a subject, or a text message — for service (sent only to a Customer who allows service messages) or for billing (sent whatever they chose), its values named as `{{placeholders}}`. Retired by its status, never deleted.
@@ -429,10 +413,6 @@ _Avoid_: Deadline, response time
 **Billable Event**:
 A validated occurrence that is eligible to become an invoice line.
 _Avoid_: Invoice line, route event
-
-**Work Order Charge**:
-The Product a Project bills each Work Order's service at — a delivery, a removal, a swap, a repair, a wash — charged when the Work Order is done, to the container's Agreement, a delivery's through the Subscription it books. A service the Project names no Product for is charged nothing, and a Work Order booked to answer a Ticket never is: the Ticket's charge is the one.
-_Avoid_: Service fee, job price
 
 **Hire**:
 What a Subscription to a Product sold by the day charges each of its containers: the days it stands on site, from the day it is delivered to the day it is taken back, by calendar month in arrears, each placement's Free Days not charged. A pause of the Subscription does not stop a Hire, since the container still stands there.
@@ -479,10 +459,6 @@ The effective-dated relationship that links an existing Service Area to one serv
 _Avoid_: Contract area assignment, create service area, service provider area
 
 ## Intelligence and automation
-
-**Sustainability Report**:
-One Customer's collected waste over a window, by site and fraction. Each stop's kilograms say how they were weighed: measured, apportioned from its route's Unloads, estimated, or unmeasured (counted, never zero). The report also gives the recycling rate and the CO₂e emitted and avoided. It is a reading of the stops and the Emission Factors, and stores nothing.
-_Avoid_: Carbon report, ESG report, tonnage report
 
 **Insight**:
 A governed analytical finding grounded in traceable operational data.

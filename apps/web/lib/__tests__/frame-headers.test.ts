@@ -25,7 +25,7 @@ async function headersOf(pathname: string): Promise<Record<string, string>> {
 
 describe("the frame headers", () => {
   test("every page refuses to be framed, the signed-in office's and the public ones alike", async () => {
-    for (const path of ["/", "/login", "/operate", "/settings", "/route-studio", "/driver", "/p/kystbyen/sorting", "/p/kystbyen/calendar", "/p/kystbyen/calendar/01a0d2a4-a280-700c-8000-00000000000b", "/p/kystbyen/calendar/embedded", "/p/kystbyen/calendar/embed/a/b"]) {
+    for (const path of ["/", "/login", "/operate", "/settings", "/route-studio", "/driver", "/p/kystbyen/drop-off", "/p/kystbyen/calendar", "/p/kystbyen/calendar/01a0d2a4-a280-700c-8000-00000000000b", "/p/kystbyen/calendar/embedded", "/p/kystbyen/calendar/embed/a/b"]) {
       assert.deepEqual(await headersOf(path), { "content-security-policy": "frame-ancestors 'none'", "x-frame-options": "DENY" }, path)
     }
   })

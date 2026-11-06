@@ -5,16 +5,15 @@ import { uniqueName } from "./env"
 // administrator makes a project of its own through the API, publishes it, and
 // registers three points there: an active recycling centre taking glass and
 // metal, an active bring bank taking glass and open always, and a draft
-// taking glass. A published guide item sorted as glass links to the map. A
-// visitor with no session then looks the item up, follows "Where to hand it
-// in" to the points taking glass — the centre and the bank, never the draft —
-// opens every point, and finds the map not found once the project is
-// unpublished. The shared tenant keeps the project, unpublished.
+// taking glass. A visitor with no session then asks the map for the points
+// taking glass — the centre and the bank, never the draft — opens every
+// point, and finds the map not found once the project is unpublished. The
+// shared tenant keeps the project, unpublished.
 
 type Named = { id: string; name: string }
 type Fraction = { id: string; key: string; name: string }
 
-test("a visitor with no account follows the sorting guide to the drop-off points that take an item's fraction, and unpublished the map is not found", async ({ api, browser }) => {
+test("a visitor with no account finds the drop-off points that take a fraction, and unpublished the map is not found", async ({ api, browser }) => {
   const created = await api.post("/projects", { data: { name: uniqueName("E2E drop-off"), kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen" } })
   expect(created.status()).toBe(201)
   const project = (await created.json()) as Named
@@ -42,15 +41,11 @@ test("a visitor with no account follows the sorting guide to the drop-off points
   })
   await point("BB-E2E", { name: "Glascontainer E2E", kind: "bring-bank", status: "active", openAlways: true, wasteFractionIds: [glass!.id] })
   await point("GS-DRAFT", { name: "Kladde E2E", wasteFractionIds: [glass!.id] })
-  const item = await api.post("/sorting-guide-items", { data: { projectId: project.id, name: "Syltetøjsglas", wasteFractionId: glass!.id, status: "published" } })
-  expect(item.status()).toBe(201)
 
   const visitor = await freshContext(browser)
   try {
     const reader = await visitor.newPage()
-    await reader.goto(`/p/${slug}/sorting?q=syltetøjsglas`)
-    await reader.getByRole("link", { name: "Where to hand it in" }).click()
-    await expect(reader).toHaveURL(new RegExp(`/p/${slug}/drop-off\\?fraction=glass$`))
+    await reader.goto(`/p/${slug}/drop-off?fraction=glass`)
     await expect(reader.getByRole("heading", { level: 1, name: "Drop-off points" })).toBeVisible()
     await expect(reader.getByText(`Points that take ${glass!.name}`)).toBeVisible()
     const cards = reader.getByRole("listitem")

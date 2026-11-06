@@ -32,8 +32,7 @@
 // shape (`@waste/domain/registry/waste-code`, the one the contracts and the
 // database read), and cleared by leaving the field blank. Since M13 of #293
 // it carries its treatment too — reuse, recycling, energy recovery or
-// disposal, what the customer sustainability report counts it as — or
-// "Not recorded", which the report counts as not recycled and warns of.
+// disposal — or "Not recorded".
 //
 // The four forms are the pane's own, not the generic registry's: the
 // registry's `configure.master` schema stays disabled, since the prototype
@@ -47,7 +46,6 @@ import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/regist
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
-import { CONSUMPTION_FIELDS, consumptionOf, consumptionSentence } from "./fleet-emissions"
 import { settingsModuleDomains } from "./business-domain"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
@@ -147,10 +145,6 @@ export type MasterDataFields = {
   status?: "active" | "inactive"
   /** A contaminant code's fractions, by web id; none is every fraction. */
   wasteFractionIds?: string[]
-  /** A vehicle type's consumption by fuel, in the wire's thousandths of the unit per km (M10 of #293); the fields the wire would refuse are `masterDataFieldErrors`'. */
-  consumption?: { fuel: (typeof CONSUMPTION_FIELDS)[number]["fuel"]; milliUnitsPerKm: number }[]
-  /** The consumption fields the wire would refuse, by field: read in the same pass as the set. */
-  consumptionErrors?: Record<string, string>
 }
 
 /** The names a row's facts show for the rows it names. */
@@ -166,7 +160,7 @@ const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "waste-fraction": ["name", "key", "wasteCode", "treatment", "densityKgPerCubicMetre"],
   "container-type": ["name", "volumeLitres", "serviceSeconds"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
-  "vehicle-type": ["name", "key", "description", "containerTypeIds", ...CONSUMPTION_FIELDS.map((field) => field.id)],
+  "vehicle-type": ["name", "key", "description", "containerTypeIds"],
   "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
   "decommission-reason": ["name", "key", "status"],
 }
@@ -232,7 +226,6 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
         key: text(values, "key") ?? "",
         description: text(values, "description") ?? null,
         containerTypeIds: ids === undefined ? [] : splitMultiValue(ids),
-        ...(({ entries, errors }) => ({ consumption: entries, consumptionErrors: errors }))(consumptionOf(values)),
       }
     }
     case "contaminant-code": {
@@ -279,7 +272,6 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   if (kind === "waste-fraction" && !within(fields.densityKgPerCubicMetre, DENSITY_KG_PER_CUBIC_METRE)) errors.densityKgPerCubicMetre = DENSITY_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
   if (kind === "container-type" && !within(fields.serviceSeconds, SERVICE_SECONDS)) errors.serviceSeconds = SERVICE_SECONDS_REFUSAL
-  if (kind === "vehicle-type") Object.assign(errors, fields.consumptionErrors ?? {})
   if (kind === "service-frequency") {
     if (!fields.projectId) errors.projectId = "Pick a project"
     for (const key of COUNT_KEYS) if (Number.isNaN(fields[key])) errors[key] = countRefusal(key)
@@ -372,7 +364,6 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
           Key: key,
           ...(fields.description ? { Description: fields.description } : {}),
           ...(names.length === 0 ? {} : { "Container types": names.join(", ") }),
-          Consumption: consumptionSentence(fields.consumption ?? []),
         },
       }
     }
@@ -423,7 +414,7 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
             type: "select" as const,
             defaultValue: NO_TREATMENT,
             options: [{ value: NO_TREATMENT, label: "Not recorded" }, ...WASTE_TREATMENTS.map((treatment) => ({ value: treatment, label: TREATMENT_LABELS[treatment] }))],
-            description: "What the customer sustainability report counts it as: reuse and recycling are recycled, the rest not.",
+            description: "How the fraction is handled once collected.",
           },
           {
             id: "densityKgPerCubicMetre",
@@ -525,16 +516,10 @@ export function masterDataEditSchema(kind: MasterDataKind): BusinessFormSchema {
     title: `Edit ${lower}`,
     description: `Update this ${lower}. Its key and its project do not move.`,
     submitLabel: "Save changes",
-    sections: [
-      ...schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields.map((field) => (field.id === "key" || field.id === "projectId" ? { ...field, readOnly: true } : field)),
-      })),
-      // What a vehicle of the type burns of each fuel it may run on (M10 of #293), set once the type exists: the set is its own route, so a create stays one request and never half-lands. Blank for a fuel it never runs on, whose routes are then unmeasured.
-      ...(kind === "vehicle-type"
-        ? [{ id: "consumption", title: "Consumption", description: "What a vehicle of this type burns per 100 km of each fuel it may run on. Leave a fuel blank where it never runs on it: its routes' emissions are then not measured.", fields: CONSUMPTION_FIELDS.map((field) => ({ id: field.id, label: field.label, type: "text" as const, placeholder: "e.g. 45.5" })) }]
-        : []),
-    ],
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => (field.id === "key" || field.id === "projectId" ? { ...field, readOnly: true } : field)),
+    })),
   }
 }
 

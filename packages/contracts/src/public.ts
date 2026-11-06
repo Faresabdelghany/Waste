@@ -85,7 +85,7 @@ export type PublicCollectionDays = z.infer<typeof PublicCollectionDays>
 /** How many days of opening a public drop-off point carries: this week, from today on the project's clock. */
 export const DROP_OFF_WEEK_DAYS = 7
 
-/** The public map's question: the fraction a resident brings, by the key the Sorting Guide names it by; every point on the map when absent. */
+/** The public map's question: the fraction a resident brings, by its key; every point on the map when absent. */
 export const DropOffPointsQuery = z.object({ fraction: Slug().optional() })
 export type DropOffPointsQuery = z.infer<typeof DropOffPointsQuery>
 
@@ -105,7 +105,7 @@ export const PublicDropOffPoint = z.object({
   kind: DropOffPointKind,
   address: z.string(),
   location: FlatPoint,
-  /** The fractions it takes, by name, as the guide names them. */
+  /** The fractions it takes, by name. */
   fractions: z.array(z.string()),
   publicNote: z.string().nullable(),
   /** The next `DROP_OFF_WEEK_DAYS` days from today, with exceptions and the project's holidays applied. */
@@ -115,7 +115,7 @@ export type PublicDropOffPoint = z.infer<typeof PublicDropOffPoint>
 
 /**
  * A published project's drop-off points on the map, by name: the project, the
- * fraction asked for as the guide names it (null when none was asked, or the
+ * fraction asked for, by its key and name (null when none was asked, or the
  * key names no fraction of the company's, which finds no point), the first
  * day of the week read, and the points.
  */

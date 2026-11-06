@@ -25,9 +25,7 @@
 // of #293), which Execution's pickup and proof name back — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger. The Drop-off Points (Issue #293, M3) come
-// next: four tables over the project, the fractions and nothing later; then
-// the fleet's emissions (M10 of #293): a fuel's factor, and a vehicle type's
-// consumption by fuel.
+// next: four tables over the project, the fractions and nothing later.
 export * from "./wms"
 export * from "./organisation"
 export * from "./access"
@@ -49,17 +47,14 @@ export * from "./resolution"
 export * from "./finance"
 export * from "./generation"
 export * from "./routing"
-export * from "./sorting-guide"
 export * from "./audit"
 export * from "./imports"
 export * from "./drop-off-points"
 export * from "./pickup-exceptions"
 // Bulky-waste booking (O11 of #290): the schedules of an area's collection days and the bookings that take a slot of one.
 export * from "./bulky"
-export * from "./emissions"
 // A customer's Applications and the office's Decisions on them (M7 of #293).
 export * from "./applications"
-export * from "./sustainability"
 // Recycling-centre visits (M4 of #293): the register, the ledger and the Visit Rules.
 export * from "./site-visits"
 // The coordination between the office and a Service Provider: proposals, follow-ups and notes (#474).
@@ -68,8 +63,6 @@ export * from "./service-provider-activities"
 export * from "./messaging"
 // A staff member's notification preferences (O16 of #290).
 export * from "./notifications"
-// Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
-export * from "./pre-trip"
 // A weighbridge's tickets (O27 of #290): read automatically, matched to a route and written as its Unload, or left for the office.
 export * from "./weighbridge"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.

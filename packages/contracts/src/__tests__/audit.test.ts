@@ -1,6 +1,6 @@
 // The audit log's contract (#291, slice 9): a row of it as the API answers it,
-// the query that reads a row's history or the company's, and the header a
-// write's reason travels in.
+// the query that reads a row's history, and the header a write's reason
+// travels in.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -37,13 +37,13 @@ describe("the audit contract", () => {
     assert.ok(!AuditEvent.safeParse({ ...event, transactionId: 48213 }).success, "a decimal string, since it may outgrow a double")
   })
 
-  test("a page is one row's history, with table and rowId together, or the company's, with neither", () => {
+  test("a page is one row's history, with table and rowId together", () => {
     assert.ok(AuditEventListQuery.safeParse({ table: "agreement", rowId: ROW }).success)
-    assert.ok(AuditEventListQuery.safeParse({}).success)
     const half = AuditEventListQuery.safeParse({ table: "agreement" })
     assert.ok(!half.success)
     assert.deepEqual(half.error.issues.map((issue) => issue.path), [["rowId"]])
     assert.ok(!AuditEventListQuery.safeParse({ rowId: ROW }).success)
+    assert.ok(!AuditEventListQuery.safeParse({}).success, "the company's whole history is not read")
   })
 
   test("the reason's header is one name, lowercase as a header is read", () => {

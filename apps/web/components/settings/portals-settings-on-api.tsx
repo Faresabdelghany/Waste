@@ -2,10 +2,10 @@
 
 // Settings › Administration › Portals & branding on the Pilot (#487): what
 // residents and drivers are given today, from the API's rows. Each project's
-// public pages — the collection days, the drop-off points and the sorting
-// guide (ADR-0010) — under the `publicSlug` it is published by, a write to
-// `configure.organization` as Settings › Sorting guide's; and the Driver
-// App's reach, the project's drivers with a login (`fleet.drivers`); and
+// public pages — the collection days and the drop-off points (ADR-0010) —
+// under the `publicSlug` it is published by, a write to
+// `configure.organization`; and the Driver App's reach, the project's
+// drivers with a login (`fleet.drivers`); and
 // each project's branding on those pages (M22 of #293): one colour behind
 // white text, held to WCAG 2.1 AA's contrast before the API is asked, a logo
 // and an accessibility statement it serves itself, written whole through
@@ -32,16 +32,15 @@ import { problemSentence } from "@/lib/api/problem"
 import { BRANDING_MODULE, replaceBranding } from "@/lib/api/project-branding"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
-import { driverAppReadingOf, publicPagesOf, publicSlugOf } from "@/lib/data/portals"
+import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "@/lib/data/portals"
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
-import { slugRefusalOf, slugSuggestionOf } from "@/lib/data/sorting-guide"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 const DRIVER_FIXTURES = getModuleDefinition({ workspaceId: "fleet", moduleId: "drivers" })?.records ?? []
 
 /** What the public door enforces for every published page, whatever is configured: true of `PUBLIC_DOOR_TABLES`. */
-export const PUBLIC_DOOR_RULE = "A public page reads only the columns the public door is granted: an address and its collection days, the drop-off points and the guide. No customer, ticket, invoice, price, service provider or driver reaches it."
+export const PUBLIC_DOOR_RULE = "A public page reads only the columns the public door is granted: an address and its collection days, and the drop-off points. No customer, ticket, invoice, price, service provider or driver reaches it."
 
 export function PortalsSettingsOnApi() {
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
@@ -166,7 +165,7 @@ function PublishDialog({ project, saving, onClose, onPublish }: { project: Busin
         >
           <DialogHeader>
             <DialogTitle>Publish {project.name}</DialogTitle>
-            <DialogDescription>Its collection days, drop-off points and sorting guide open to residents under this address.</DialogDescription>
+            <DialogDescription>Its collection days and drop-off points open to residents under this address.</DialogDescription>
           </DialogHeader>
           <div className="my-4 grid gap-1.5">
             <Label htmlFor="portal-slug">Public address</Label>

@@ -197,10 +197,10 @@ describe("billableEventShapeIssue", () => {
     assert.match(billableEventShapeIssue({ ...charge, sourceEventId: SOURCE }) ?? "", /billable_event_origin_shape/)
   })
 
-  test("holds a work order's job to its stop, the consumer's, and a hire to its subscription, the run's (M14 of #293)", () => {
+  test("holds a job to its stop, the consumer's, and a hire to its subscription, the run's (M14 of #293)", () => {
     const job: ComposedEvent = { ...manual, kind: "job", routeId: ROUTE, pickupId: PICKUP, createdBy: null, sourceEventId: SOURCE }
     assert.equal(billableEventShapeIssue(job), undefined)
-    assert.match(billableEventShapeIssue({ ...job, routeId: null, pickupId: null }) ?? "", /a work order's job names its stop[^(]*\(billable_event_kind_shape\)/)
+    assert.match(billableEventShapeIssue({ ...job, routeId: null, pickupId: null }) ?? "", /a job names its stop[^(]*\(billable_event_kind_shape\)/)
     assert.match(billableEventShapeIssue({ ...job, sourceEventId: null }) ?? "", /billable_event_origin_shape/)
     const hire: ComposedEvent = { ...manual, kind: "hire", subscriptionId: AGREEMENT, quantity: 4, netMinor: 40_000, vatMinor: 10_000, createdBy: null }
     assert.equal(billableEventShapeIssue(hire), undefined, "the days its quantity")

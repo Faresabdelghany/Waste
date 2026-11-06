@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { KIND_OR_TYPE } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { EACH_KIND_ONCE, EACH_MEMBER_ONCE, Team, TeamCreate, TeamMembersSet, TeamPatch, TicketTeamDefaultsSet } from "../ticket-teams"
@@ -39,11 +40,21 @@ describe("Team", () => {
 describe("TicketTeamDefaultsSet", () => {
   test("names one team per kind of the vocabulary, each kind once", () => {
     const body = { defaults: [{ kind: "complaint", teamId: ID }, { kind: "container-request", teamId: OTHER }] }
-    assert.deepEqual(TicketTeamDefaultsSet.parse(body), body)
+    assert.deepEqual(TicketTeamDefaultsSet.parse(body), { defaults: body.defaults.map((entry) => ({ ...entry, ticketTypeId: null })) })
     assert.deepEqual(TicketTeamDefaultsSet.parse({ defaults: [] }), { defaults: [] })
     assert.deepEqual(refusal(TicketTeamDefaultsSet.safeParse({ defaults: [{ kind: "complaint", teamId: ID }, { kind: "complaint", teamId: OTHER }] })), [{ path: "defaults", message: EACH_KIND_ONCE }])
     assert.equal(TicketTeamDefaultsSet.safeParse({ defaults: [{ kind: "deviation", teamId: ID }] }).success, false)
     assert.equal(TicketTeamDefaultsSet.safeParse({ defaults: TICKET_KINDS.map((kind) => ({ kind, teamId: ID })) }).success, true)
+  })
+
+  test("names a team per ticket type too (#548 of #544), each entry exactly one of a kind and a type, each once", () => {
+    const typed = { kind: null, ticketTypeId: OTHER, teamId: ID }
+    assert.deepEqual(TicketTeamDefaultsSet.parse({ defaults: [{ kind: "complaint", teamId: ID }, typed] }).defaults[1], typed)
+    assert.deepEqual(refusal(TicketTeamDefaultsSet.safeParse({ defaults: [{ kind: "complaint", ticketTypeId: OTHER, teamId: ID }, { teamId: ID }] })), [
+      { path: "defaults.0", message: KIND_OR_TYPE },
+      { path: "defaults.1", message: KIND_OR_TYPE },
+    ])
+    assert.deepEqual(refusal(TicketTeamDefaultsSet.safeParse({ defaults: [typed, { ...typed, teamId: OTHER }] })), [{ path: "defaults", message: EACH_KIND_ONCE }])
   })
 })
 

@@ -87,7 +87,7 @@ export const WasteFraction = z.object({
   name: Label,
   /** The European List of Waste entry the national waste-data system keys it by; null where nobody has set one. */
   wasteCode: WasteCode.nullable(),
-  /** How it is treated once collected (M13 of #293), what the sustainability report's recycling rate reads; null where nobody has set one. */
+  /** How it is treated once collected (M13 of #293); null where nobody has set one. */
   treatment: WasteTreatment.nullable(),
   /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
   densityKgPerCubicMetre: Density.nullable(),

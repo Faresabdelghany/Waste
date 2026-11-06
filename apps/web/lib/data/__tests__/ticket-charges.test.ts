@@ -6,7 +6,7 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import type { BusinessRecord } from "../business-modules"
 import { NO_ONE } from "../properties"
-import { picksOf, ticketChargesBody, TICKET_KIND_ROWS, ticketWorkProductOptions } from "../ticket-charges"
+import { chargeRowsOf, picksOf, TICKET_KIND_ROWS, ticketChargesBody, ticketWorkProductOptions, typesPicked } from "../ticket-charges"
 
 const PROJECT = "01a0d2a4-a280-7001-8000-000000000001"
 const BULKY = "01a0d2a4-a280-700a-8000-000000000005"
@@ -53,18 +53,35 @@ describe("a project's ticket charges on the web (#291 C3)", () => {
   test("reads the set into a pick per kind by the store's web ids, and writes the picks back by the server's, a kind at None charged at nothing", () => {
     const serverOf: Record<string, string> = { "product-bulky": BULKY, "product-residual": RESIDUAL }
     const webOf = Object.fromEntries(Object.entries(serverOf).map(([web, server]) => [server, web]))
-    const picks = picksOf({ projectId: PROJECT, charges: [{ kind: "overflow", productId: BULKY }, { kind: "complaint", productId: UNLOADED }] }, (serverId) => webOf[serverId])
-    assert.deepEqual(picks, { overflow: "product-bulky", complaint: UNLOADED }, "a product the store has not loaded is kept by its server id")
-    const body = ticketChargesBody(PROJECT, { ...picks, "missed-collection": "product-residual", "container-request": NO_ONE }, (webId) => serverOf[webId] ?? (webId === UNLOADED ? UNLOADED : undefined))
+    const picks = picksOf({ projectId: PROJECT, charges: [{ kind: "overflow", ticketTypeId: null, productId: BULKY }, { kind: "complaint", ticketTypeId: null, productId: UNLOADED }] }, (serverId) => webOf[serverId])
+    assert.deepEqual(picks, { "kind:overflow": "product-bulky", "kind:complaint": UNLOADED }, "a product the store has not loaded is kept by its server id")
+    const body = ticketChargesBody(PROJECT, { ...picks, "kind:missed-collection": "product-residual", "kind:container-request": NO_ONE }, (webId) => serverOf[webId] ?? (webId === UNLOADED ? UNLOADED : undefined))
     assert.deepEqual(body, {
       projectId: PROJECT,
       charges: [
-        { kind: "missed-collection", productId: RESIDUAL },
-        { kind: "overflow", productId: BULKY },
-        { kind: "complaint", productId: UNLOADED },
+        { kind: "missed-collection", ticketTypeId: null, productId: RESIDUAL },
+        { kind: "overflow", ticketTypeId: null, productId: BULKY },
+        { kind: "complaint", ticketTypeId: null, productId: UNLOADED },
       ],
     })
     assert.ok(TicketChargesSet.safeParse(body).success)
-    assert.deepEqual(ticketChargesBody(PROJECT, { overflow: "product-unknown" }, () => undefined), { path: "overflow", message: "Pick a product the API holds" })
+    assert.deepEqual(ticketChargesBody(PROJECT, { "kind:overflow": "product-unknown" }, () => undefined), { path: "kind:overflow", message: "Pick a product the API holds" })
+  })
+
+  test("lists each active type beneath the kinds, and a retired one the set names, a type at As its kind charged at its kind's (#548 of #544)", () => {
+    const CRANE = "01a0d3a5-e5e0-7000-8000-0000000000c1"
+    const OLD = "01a0d3a5-e5e0-7000-8000-0000000000c2"
+    const types = [
+      { id: CRANE, name: "Crane lift", kind: "container-request" as const, status: "active" as const },
+      { id: OLD, name: "Old lift", kind: "container-request" as const, status: "inactive" as const },
+    ]
+    assert.deepEqual(chargeRowsOf(types).slice(TICKET_KINDS.length).map((row) => [row.ticketTypeId, row.label]), [[CRANE, "Crane lift (Container request)"]])
+    const picks = picksOf({ projectId: PROJECT, charges: [{ kind: null, ticketTypeId: OLD, productId: BULKY }] }, () => "product-bulky")
+    assert.deepEqual(picks, { [`type:${OLD}`]: "product-bulky" })
+    const rows = chargeRowsOf(types, typesPicked(picks))
+    assert.deepEqual(rows.slice(TICKET_KINDS.length).map((row) => row.ticketTypeId), [CRANE, OLD])
+    const body = ticketChargesBody(PROJECT, { ...picks, [`type:${CRANE}`]: NO_ONE }, () => BULKY, rows)
+    assert.deepEqual(body, { projectId: PROJECT, charges: [{ kind: null, ticketTypeId: OLD, productId: BULKY }] })
+    assert.ok(TicketChargesSet.safeParse(body).success)
   })
 })

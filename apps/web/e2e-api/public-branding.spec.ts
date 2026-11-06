@@ -8,8 +8,8 @@ import { expect, freshContext, test } from "./fixtures"
 // every public page held to WCAG 2.1 A and AA by axe. The administrator
 // publishes the seeded Copenhagen Central under an address of the run's own
 // and sets its branding through the API. A visitor with no session then reads
-// each page — the Sorting Guide with an answer, the Collection Days search,
-// an address's days and the widget of both, the Drop-off Points — and finds
+// each page — the Collection Days search, an address's days and the widget
+// of both, the Drop-off Points — and finds
 // the project's name on its colour beside its logo and the accessibility
 // statement at the foot, with no violation axe can find. Its branding cleared,
 // the pages read as before, again with none. The logo's address is answered
@@ -53,7 +53,6 @@ test("a published project's pages carry its colour, logo and accessibility state
     const addressId = addressPath.split("/").at(-1) ?? ""
 
     const pages = [
-      `/p/${slug}/sorting?q=glas`,
       `/p/${slug}/calendar?q=Strandboulevarden`,
       `/p/${slug}/calendar/${addressId}`,
       `/p/${slug}/calendar/embed?q=Strandboulevarden`,

@@ -31,7 +31,6 @@ import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
-import { workOrderProduct } from "@waste/db/schema/finance"
 import { visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { project } from "@waste/db/schema/organisation"
 import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm"
@@ -52,10 +51,6 @@ const ProductPage = Page(Product)
 
 /** A product with free days is a hire's (M14 of #293), which the database holds to the day. */
 export const FREE_DAYS_KEEP_THE_DAY = "A product with free days is a hire product sold by the day; it keeps the day while it has them"
-
-/** What moving a product off the job is told while work orders are charged at it (M14 of #293). */
-export const workOrdersChargedAt = (count: number): string =>
-  `${count === 1 ? "A work order is" : `${count} work orders are`} charged at this product, so it stays sold by the job; charge ${count === 1 ? "it" : "them"} at another product first`
 
 /** What a unit change of a product a Visit Rule names is told (M4 of #293). */
 export const visitRulesChargeAt = (count: number): string =>
@@ -251,7 +246,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProduct",
         summary: "Change a product",
         description:
-          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`), and a product a work order is charged at stays sold by the job (409, `A work order is charged at this product, so it stays sold by the job; charge it at another product first`). Under the project's and the product's row locks.",
+          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`). Under the project's and the product's row locks.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The product as it now stands.", Product),
@@ -261,7 +256,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.products`."),
           404: describeProblem("No product with that id in the projects this account works in."),
-          409: describeProblem("The project already has another product with that name, or another with that invoice code, or a work order is charged at a product the patch moves off the job."),
+          409: describeProblem("The project already has another product with that name, or another with that invoice code."),
         },
       }),
       guard,
@@ -276,19 +271,11 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         const found = await findProduct(tx, principal, id)
         if (found === undefined) throw noSuchProduct(id)
-        // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's work order charges are replaced under too.
+        // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's Visit Rules are written under too.
         await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
         await lockRow(tx, product, { companyId: principal.companyId, id }, strengthFor(product, patch))
         const current = (await findProduct(tx, principal, id)) ?? found
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
-        // A work order charged at the product keeps it sold by the job (M14 of #293), or the work order would be charged nothing unseen.
-        if (patch.unit !== undefined && patch.unit !== "job" && current.unit === "job") {
-          const [named] = await tx
-            .select({ rows: count() })
-            .from(workOrderProduct)
-            .where(and(eq(workOrderProduct.companyId, principal.companyId), eq(workOrderProduct.projectId, current.projectId), eq(workOrderProduct.productId, id)))
-          if ((named?.rows ?? 0) > 0) throw problem(409, { detail: workOrdersChargedAt(named!.rows) })
-        }
         // A Visit Rule's step, its business per-visit product and its annual access keep the unit they were named with (M4 of #293): a visit charged by the month, or access sold per visit, would be charged unseen.
         if (patch.unit !== undefined && patch.unit !== current.unit) {
           const steps = tx

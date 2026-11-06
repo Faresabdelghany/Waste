@@ -13,7 +13,7 @@ import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import { PROPERTY_PARTY_ROLES } from "../../registry/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 20, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 22, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -26,14 +26,14 @@ describe("the Resolution vocabulary's own rules", () => {
   })
 
   test("the kinds are the prototype's five types, the repair ticket, the glossary's complaint and task, the consumer's two, and other", () => {
-    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "vehicle-defect", "other"])
+    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"])
     assert.deepEqual([...vocabulary.TICKET_PRIORITIES], ["critical", "high", "medium", "low", "none"])
     assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
     assert.deepEqual([...vocabulary.BILLABLE_RESOLUTIONS], ["recollected", "serviced"], "the work Finance charges for, a value of the resolutions")
   })
 
-  test("the sources spell the driver as Execution does, the dispatcher beside, and a Service Provider's workspace last (#291 slice 23b); the history has no edited kind and three readerships, the provider's last", () => {
-    assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider"])
+  test("the sources spell the driver as Execution does, the dispatcher beside, a Service Provider's workspace (#291 slice 23b) and a counting rule last (#547 of #544); the history has no edited kind and three readerships, the provider's last", () => {
+    assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider", "counting-rule"])
     for (const source of ["driver-app", "dispatch"] as const) assert.ok((EXECUTION_SOURCES as readonly string[]).includes(source), `${source} is Execution's spelling`)
     assert.equal((vocabulary.TICKET_SOURCES as readonly string[]).includes("driver"), false)
     assert.deepEqual([...vocabulary.TICKET_EVENT_KINDS], ["created", "assigned", "status-changed", "comment"])

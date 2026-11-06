@@ -7,10 +7,13 @@ import { after, before, describe, test } from "node:test"
 import { AuditEvent } from "@waste/contracts/audit"
 import { Page } from "@waste/contracts/pagination"
 import { TicketSla } from "@waste/contracts/ticket-sla"
+import { TicketType } from "@waste/contracts/ticket-types"
 import { Ticket } from "@waste/contracts/tickets"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
+import { retiredTicketType } from "../routes/statuses"
+import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -186,6 +189,39 @@ describe("a project's ticket SLA", { skip: database.skip || owner.skip }, () => 
     test("another project's targets are not this one's", async () => {
       const response = await olivia("/tickets", { method: "POST", body: { projectId: a.projects.cairo.id, subject: "Lid broken", description: "Seen on the round", kind: "overflow", priority: "high" } })
       assert.equal(Ticket.parse(await response.json()).dueAt, null)
+    })
+
+    test("a ticket type's own target wins over its kind's and every kind's, at its priority; at another it takes its kind's (#548 of #544)", async () => {
+      const bulky = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Bulky overflow", kind: "overflow" } }), TicketType)
+      const set = await read(
+        await put(olivia, a.projects.copenhagen.id, [
+          { kind: null, priority: "high", hours: 24 },
+          { kind: "overflow", priority: "high", hours: 4 },
+          { ticketTypeId: bulky.id, kind: null, priority: "high", hours: 72 },
+        ]),
+      )
+      assert.deepEqual(
+        set.targets.map((target) => [target.kind, target.ticketTypeId, target.hours]),
+        [
+          [null, null, 24],
+          ["overflow", null, 4],
+          [null, bulky.id, 72],
+        ],
+        "every kind, the kinds, then the types",
+      )
+      assert.equal((await open({ ticketTypeId: bulky.id, kind: "overflow", priority: "high" })).dueAt, at(72))
+      assert.equal((await open({ kind: "overflow", priority: "high" })).dueAt, at(4), "the kind's default type keeps the kind's")
+      // A type is the company's, never a kind's and a type's at once, and one named afresh is active.
+      assert.deepEqual((await refused(await put(olivia, a.projects.copenhagen.id, [{ ticketTypeId: a.projects.cairo.id, kind: null, priority: "low", hours: 8 }]), 400)).errors, [{ path: "targets.0.ticketTypeId", message: NOT_A_TICKET_TYPE }])
+      assert.deepEqual((await refused(await put(olivia, a.projects.copenhagen.id, [{ ticketTypeId: bulky.id, kind: "overflow", priority: "low", hours: 8 }]), 400)).errors?.map((error) => error.path), ["targets.0"])
+      const old = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Old overflow", kind: "overflow", status: "inactive" } }), TicketType)
+      assert.equal((await refused(await put(olivia, a.projects.copenhagen.id, [{ ticketTypeId: old.id, kind: null, priority: "low", hours: 8 }]), 409)).detail, retiredTicketType("Old overflow"))
+      await read(
+        await put(olivia, a.projects.copenhagen.id, [
+          { kind: null, priority: "high", hours: 24 },
+          { kind: "overflow", priority: "high", hours: 4 },
+        ]),
+      )
     })
   })
 

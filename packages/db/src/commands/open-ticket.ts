@@ -20,13 +20,15 @@
 // company's row lock, the route's rule (`next_route_number`) one at a time: a
 // ticket is one create, and the lock is held for the rest of the transaction,
 // which tens of tickets a day do not notice. A draft whose due date is
-// `BY_SLA` is due by the project's SLA target of its kind and priority,
-// counted from its `occurredAt` (`ticket_sla`, `slaTargetFor`), or never where
-// the project sets none (O4 of #290): the office's create when its body names
-// no due date, and every ticket the consumer opens — so a job the queue held
-// back hands its ticket no extra time. A draft that names no team waits with
-// the project's default team for its kind (`ticket_team_default`, O30 of
-// #290, row 7.20), while that team is active, and with none otherwise: the
+// `BY_SLA` is due by the project's SLA target of its type, else of its kind,
+// at its priority, counted from its `occurredAt` (`ticket_sla`,
+// `slaTargetFor`), or never where the project sets none (O4 of #290, #548 of
+// #544): the office's create when its body names no due date, and every
+// ticket the consumer opens — so a job the queue held back hands its ticket
+// no extra time. A draft that names no team waits with the project's default
+// team for its type, else for its kind (`ticket_team_default`, O30 of #290,
+// row 7.20, #548 of #544), the first of them whose team is active, and with
+// none otherwise: the
 // office's create when its body names none, and every ticket the consumer, a
 // work order or a weighbridge deviation opens. A draft that names no Ticket
 // Type is of its kind's default type (#545 of #544, `defaultTicketTypeOf`),
@@ -46,11 +48,12 @@
 // kind is a bug in a route or a job and thrown as one, never left for
 // `ticket_event_kind_shape` to answer as a 500 naming a constraint.
 import type { TicketFieldValues } from "@waste/contracts/ticket-types"
-import type { Ticket, TicketLinks } from "@waste/contracts/tickets"
+import type { Ticket, TicketCountedBy, TicketLinks } from "@waste/contracts/tickets"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import { dueBySla, slaTargetFor } from "@waste/domain/resolution/sla"
+import { settingFor } from "@waste/domain/resolution/ticket-types"
 import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
-import { and, eq, isNull, or } from "drizzle-orm"
+import { and, eq, isNull, or, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId as processId, type IdMinter } from "../ids"
@@ -87,6 +90,8 @@ export type TicketDraft = {
   links: TicketLinks
   /** The alert the ticket answers, linked in the same transaction; null for none. */
   alertId: string | null
+  /** What a Counting Rule's ticket records (#547 of #544); absent on every other. */
+  countedBy?: TicketCountedBy
 }
 
 export type OpenTicketInput = {
@@ -164,9 +169,11 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
  */
 export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket; opened: Ticket }> {
   const { companyId, draft, createdBy, sourceEventId } = input
-  const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, draft) : draft.dueAt
-  const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, draft) : draft.teamId
+  // The type first: its own deadline and team win over its kind's (#548 of #544).
   const ticketTypeId = draft.ticketTypeId ?? (await defaultTicketTypeOf(tx, companyId, draft.kind, input.newId))
+  const typed = { ...draft, ticketTypeId }
+  const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, typed) : draft.dueAt
+  const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, typed) : draft.teamId
   const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
     .insert(ticket)
@@ -190,6 +197,10 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       createdBy,
       sourceEventId,
       ...draft.links,
+      countingRuleId: draft.countedBy?.countingRuleId ?? null,
+      countedFrom: draft.countedBy?.periodFrom ?? null,
+      countedTo: draft.countedBy?.periodTo ?? null,
+      counted: draft.countedBy?.count ?? null,
       resolution: null,
       recollectionRouteId: null,
       closedAt: null,
@@ -216,27 +227,32 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   return { row: latest, answered: ticketOf(latest), opened }
 }
 
-/** The due date the project's SLA gives a ticket of the draft's kind and priority, from when it happened: its kind's target, else every kind's; null where neither is set. */
-async function dueBySlaOf(tx: Tx, companyId: string, draft: Pick<TicketDraft, "projectId" | "kind" | "priority" | "occurredAt">): Promise<Date | null> {
+/** The draft's kind and type, for the rows a project keeps of either. */
+type Typed = Pick<TicketDraft, "projectId" | "kind"> & { ticketTypeId: string }
+
+/** The rows of a kind-or-type setting the draft's kind or type names. */
+const ownOrKinds = (columns: { kind: Parameters<typeof eq>[0]; ticketTypeId: Parameters<typeof eq>[0] }, draft: Typed): SQL | undefined => or(eq(columns.ticketTypeId, draft.ticketTypeId), and(isNull(columns.ticketTypeId), eq(columns.kind, draft.kind)))
+
+/** The due date the project's SLA gives a ticket of the draft's type, kind and priority, from when it happened: its type's target, else its kind's, else every kind's; null where none is set. */
+async function dueBySlaOf(tx: Tx, companyId: string, draft: Typed & Pick<TicketDraft, "priority" | "occurredAt">): Promise<Date | null> {
   const targets = await tx
-    .select({ kind: ticketSla.kind, priority: ticketSla.priority, hours: ticketSla.hours })
+    .select({ kind: ticketSla.kind, ticketTypeId: ticketSla.ticketTypeId, priority: ticketSla.priority, hours: ticketSla.hours })
     .from(ticketSla)
-    .where(and(eq(ticketSla.companyId, companyId), eq(ticketSla.projectId, draft.projectId), eq(ticketSla.priority, draft.priority), or(isNull(ticketSla.kind), eq(ticketSla.kind, draft.kind))))
+    .where(and(eq(ticketSla.companyId, companyId), eq(ticketSla.projectId, draft.projectId), eq(ticketSla.priority, draft.priority), or(and(isNull(ticketSla.kind), isNull(ticketSla.ticketTypeId)), ownOrKinds(ticketSla, draft))))
   const target = slaTargetFor(
-    targets.map((row) => ({ kind: row.kind as TicketKind | null, priority: row.priority as TicketPriority, hours: row.hours })),
-    draft.kind,
+    targets.map((row) => ({ kind: row.kind as TicketKind | null, ticketTypeId: row.ticketTypeId, priority: row.priority as TicketPriority, hours: row.hours })),
+    draft,
     draft.priority,
   )
   return target === undefined ? null : dueBySla(draft.occurredAt, target.hours)
 }
 
-/** The project's default team for the draft's kind, while it takes tickets; null where the project names none or its team is retired. */
-async function defaultTeamOf(tx: Tx, companyId: string, draft: Pick<TicketDraft, "projectId" | "kind">): Promise<string | null> {
-  const [found] = await tx
-    .select({ teamId: ticketTeamDefault.teamId })
+/** The project's default team for the draft's type, else its kind, the first that takes tickets; null where the project names none or each named is retired. */
+async function defaultTeamOf(tx: Tx, companyId: string, draft: Typed): Promise<string | null> {
+  const rows = await tx
+    .select({ kind: ticketTeamDefault.kind, ticketTypeId: ticketTeamDefault.ticketTypeId, teamId: ticketTeamDefault.teamId })
     .from(ticketTeamDefault)
     .innerJoin(team, and(eq(team.companyId, ticketTeamDefault.companyId), eq(team.id, ticketTeamDefault.teamId)))
-    .where(and(eq(ticketTeamDefault.companyId, companyId), eq(ticketTeamDefault.projectId, draft.projectId), eq(ticketTeamDefault.kind, draft.kind), eq(team.status, "active")))
-    .limit(1)
-  return found?.teamId ?? null
+    .where(and(eq(ticketTeamDefault.companyId, companyId), eq(ticketTeamDefault.projectId, draft.projectId), ownOrKinds(ticketTeamDefault, draft), eq(team.status, "active")))
+  return settingFor(rows.map((row) => ({ ...row, kind: row.kind as TicketKind | null })), draft)?.teamId ?? null
 }

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { SLA_KIND_OR_TYPE, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
 import { TICKET_SLA_TARGETS_MAX, TicketSla, TicketSlaSet } from "../ticket-sla"
@@ -13,8 +14,8 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const sla = {
   projectId: ID,
   targets: [
-    { id: ID, kind: null, priority: "high", hours: 24 },
-    { id: ID, kind: "overflow", priority: "high", hours: 4 },
+    { id: ID, kind: null, ticketTypeId: null, priority: "high", hours: 24 },
+    { id: ID, kind: "overflow", ticketTypeId: null, priority: "high", hours: 4 },
   ],
 }
 
@@ -45,13 +46,21 @@ describe("TicketSlaSet", () => {
 
   test("a kind and a priority are named once, every kind counting as one; the second is refused where it stands", () => {
     const twice = { targets: [...body.targets, { kind: "overflow", priority: "high", hours: 8 }] }
-    assert.deepEqual(refusal(TicketSlaSet.safeParse(twice)), [{ path: "targets.2", message: "Name each kind and priority once: a ticket is due by one target" }])
+    assert.deepEqual(refusal(TicketSlaSet.safeParse(twice)), [{ path: "targets.2", message: "Name each kind or ticket type and priority once: a ticket is due by one target" }])
     const everyKindTwice = { targets: [{ kind: null, priority: "low", hours: 1 }, { kind: null, priority: "low", hours: 2 }] }
     assert.deepEqual(refusal(TicketSlaSet.safeParse(everyKindTwice)).map((issue) => issue.path), ["targets.1"])
   })
 
-  test("holds at most every kind and each kind at each priority", () => {
-    assert.equal(TICKET_SLA_TARGETS_MAX, (TICKET_KINDS.length + 1) * TICKET_PRIORITIES.length)
+  test("a target may be one ticket type's (#548 of #544), never a kind's and a type's at once; a type and a priority are named once", () => {
+    const typed = { kind: null, ticketTypeId: ID, priority: "high", hours: 72 }
+    assert.deepEqual(TicketSlaSet.parse({ targets: [...body.targets, typed] }).targets[2], typed)
+    assert.deepEqual(TicketSlaSet.parse({ targets: [{ kind: "overflow", priority: "low", hours: 8 }] }).targets[0].ticketTypeId, null, "absent, a kind's or every kind's")
+    assert.deepEqual(refusal(TicketSlaSet.safeParse({ targets: [{ ...typed, kind: "overflow" }] })), [{ path: "targets.0", message: SLA_KIND_OR_TYPE }])
+    assert.deepEqual(refusal(TicketSlaSet.safeParse({ targets: [typed, { ...typed, hours: 4 }] })).map((issue) => issue.path), ["targets.1"])
+  })
+
+  test("holds at most every kind, each kind and the types a set may name, at each priority", () => {
+    assert.equal(TICKET_SLA_TARGETS_MAX, (TICKET_KINDS.length + 1 + TICKET_TYPE_SETTINGS_MAX) * TICKET_PRIORITIES.length)
     const all = TICKET_PRIORITIES.flatMap((priority) => [null, ...TICKET_KINDS].map((kind) => ({ kind, priority, hours: 24 })))
     assert.equal(TicketSlaSet.safeParse({ targets: all }).success, true)
   })

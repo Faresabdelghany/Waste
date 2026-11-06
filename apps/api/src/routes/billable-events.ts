@@ -31,8 +31,8 @@
 // status gate — a product the body names afresh is offered (#79). `reprice`
 // is blocked-only: on a `ready`, `invoiced`, `cancelled` or `reversed` event
 // it is 409 in the status's words; a ticket's event takes the `productId` the
-// office picked, and a work order's job one sold by the job (M14 of #293),
-// and any other kind refuses one (400); the resolver runs over
+// office picked, and a job one sold by the job (a bulky collection's, O11 of
+// #290), and any other kind refuses one (400); the resolver runs over
 // the event's agreement, the product, and the conditions a pickup event
 // carries (its route's scheme's planning area, its container's type, its
 // fraction on the day, read off the pickup), and the row is written priced or
@@ -55,6 +55,7 @@ import type { Tx } from "@waste/db/client"
 import { hireConditionsOf, priceHire, type HireToPrice } from "@waste/db/commands/hire-charges"
 import { priceRecurringCharge, type ChargeToPrice } from "@waste/db/commands/recurring-charges"
 import { agreement } from "@waste/db/schema/agreements"
+import { product } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { billableEvent } from "@waste/db/schema/finance"
@@ -63,6 +64,7 @@ import type { BillableEventLinks } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/vocabulary"
+import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -76,12 +78,11 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
 import { eventColumns, eventOf, eventScope, eventsFrom, findEvent, noSuchEvent, statusIs, statusOf, UNNAMED, type EventReading } from "./billing-shapes"
-import { requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
+import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
 import { refuseUnofferedProduct, unofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
-import { requireJobProduct } from "./work-order-charges"
 
 const MODULE = "commercial.events"
 
@@ -120,8 +121,11 @@ export const REVERSAL_NOT_CANCELLED = "A reversal is not cancelled; it is the co
 /** What a hold of a `reversal` is told (M14 of #293): the correction goes to the next run as it stands. */
 export const REVERSAL_NOT_HELD = "A reversal is not held; it is the correction"
 
-/** What a reprice naming a product on anything but a ticket's event is told, at `productId`. */
-export const ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT = "Only a ticket's event or a work order's job takes a product here"
+/** What a reprice naming a product on anything but a ticket's event or a job is told, at `productId`. */
+export const ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT = "Only a ticket's event or a job takes a product here"
+
+/** A job is charged at a product sold by the job (M14 of #293). */
+export const A_JOB_IS_SOLD_BY_THE_JOB = "A job is charged at a product sold by the job"
 
 /** What a hand-priced manual event under a draft agreement is told: the row's state, after every 400. */
 export const DRAFT_AGREEMENT_BY_HAND = "The agreement is a draft; an event priced by hand needs a signed agreement"
@@ -131,6 +135,22 @@ export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced
 
 /** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */
 export const AMOUNT_TOO_LARGE = `The amount comes to more than ${INT4_MAX} minor units, the most an event holds`
+
+/**
+ * A product a job is charged at, as a reprice's body names it (M14 of #293):
+ * a product of the project (400) sold by the job (400). Answers its status,
+ * which the caller gates with `refuseUnofferedProduct` once every 400 is asked.
+ */
+async function requireJobProduct(tx: Tx, scope: Scope, id: string): Promise<ProductStatus> {
+  const [found] = await tx
+    .select({ status: product.status, unit: product.unit })
+    .from(product)
+    .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
+  if (found.unit !== "job") throw invalidRequest("body", [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
+  return found.status as ProductStatus
+}
 
 /** A recurring charge as `reprice` prices it again: its stored period and charged days, never its agreement's cadence now (#291 C2). */
 function chargeOf(row: EventReading, agreementId: string, productId: string): ChargeToPrice {
@@ -166,8 +186,9 @@ const priceColumns = (price: PricedAmounts | null) => ({
  * What a pickup event's occurrence was, read off the pickup: its route's
  * scheme's planning area (the price row's zone), its container's type, its
  * fraction on the day. The scheme and the container are left joins, as the
- * worker reads a stop: a work order's job (M14 of #293) may be on the
- * office's ad-hoc route, which has no scheme. One statement; a pickup the row
+ * worker reads a stop: a job — a bulky collection's (O11 of #290) — may be on
+ * the office's ad-hoc route, which has no scheme, at an address with no
+ * container. One statement; a pickup the row
  * names and the table does not have is a broken key, not a client's doing,
  * and is thrown.
  */
@@ -355,11 +376,11 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
-          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a work order's job blocked `no-product` (M14 of #293) a product of the project sold by the job (400, `A work order's job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a work order's job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. A weight charge (O28 of #290) is priced again as the consumer priced it: its stored kilograms at the day's price per tonne, under its stop's conditions, the unit price and the net the weighed load's amount. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). A job or a hire priced now is held for review as it would have been charged priced, where its project holds them (`holdForReview`, M14 of #293). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
+          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a job blocked `no-product` (a bulky collection's, O11 of #290) a product of the project sold by the job (400, `A job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. A weight charge (O28 of #290) is priced again as the consumer priced it: its stored kilograms at the day's price per tonne, under its stop's conditions, the unit price and the net the weighed load's amount. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). A job or a hire priced now is held for review as it would have been charged priced, where its project holds them (`holdForReview`, M14 of #293). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
-          400: describeProblem("The path does not hold an id, or the body names a member the command does not take, names a product on an event that is not a ticket's, or names a product that is not the project's."),
+          400: describeProblem("The path does not hold an id, or the body names a member the command does not take, names a product on an event that is not a ticket's or a job, names a product that is not the project's, or names a job a product not sold by the job."),
           ...commandProblems("edit"),
           409: describeProblem("The event is not blocked, or the product named is not offered, or the price comes to more than an event's amount holds; the detail says which."),
         },
@@ -456,7 +477,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "holdBillableEvent",
         summary: "Hold a ready event for review",
         description:
-          "The `hold` command (M14 of #293): a `ready` event is stamped `held` with the caller, the request's clock and the office's `reason`, and a billing run passes over it — its preview counts it as held — until it is released. A project that holds its hires and work-order jobs for review (`holdForReview`) has them held as they are charged, with no person. A `held` event answers 200 as it stands, without a write. A `blocked` event goes to no run until it is priced (409, `Billable event <id> is blocked; it goes to no run until it is priced, so there is nothing to hold`), and an `invoiced`, `cancelled` or `reversed` one is refused in the status's words (409), as is a `reversal` whatever its status (409, `A reversal is not held; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+          "The `hold` command (M14 of #293): a `ready` event is stamped `held` with the caller, the request's clock and the office's `reason`, and a billing run passes over it — its preview counts it as held — until it is released. A project that holds its hires and jobs for review (`holdForReview`) has them held as they are charged, with no person. A `held` event answers 200 as it stands, without a write. A `blocked` event goes to no run until it is priced (409, `Billable event <id> is blocked; it goes to no run until it is priced, so there is nothing to hold`), and an `invoiced`, `cancelled` or `reversed` one is refused in the status's words (409), as is a `reversal` whatever its status (409, `A reversal is not held; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event, held.", BillableEvent),

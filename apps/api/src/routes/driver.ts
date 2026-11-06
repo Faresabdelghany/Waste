@@ -75,11 +75,7 @@
 //                   `end-route` closing the open pickups as `skipped ·
 //                   route-ended` from its own `returning`, and
 //                   `record-positions` appends one `session_position` row
-//                   per fix (O8 of #290), and `pre-trip-check` appends the
-//                   check and, where it found defects, records them, opens
-//                   the office's ticket and grounds the vehicle on a
-//                   critical one (O13 of #290, routes/pre-trip-checks.ts),
-//                   and `record-fill` sets the stop's fill estimate (M23 of
+//                   per fix (O8 of #290), and `record-fill` sets the stop's fill estimate (M23 of
 //                   #293), the latest standing.
 //                   Every applied command then moves
 //                   `session.last_seen_at` to the request's clock;
@@ -171,7 +167,6 @@ import { driverCommand, pickup, proofOfService, route, session, sessionPosition,
 import { tankInstallation } from "@waste/db/schema/tanks"
 import { validOn } from "@waste/db/query/valid-on"
 import type { TankKind, TankOutlet } from "@waste/contracts/tanks"
-import { preTripCheck } from "@waste/db/schema/pre-trip"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
@@ -211,7 +206,6 @@ import {
   routeWithSessions,
 } from "./execution-shapes"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
-import { appendPreTripCheck, checklistOfVehicle, checklistsOf, readPreTripCheck } from "./pre-trip-checks"
 import {
   sessionColumns,
   sessionOf,
@@ -241,7 +235,7 @@ const DriverRouteListQuery = PageRequest.extend({ status: RouteStatus.optional()
 const DriverReceiptListQuery = PageRequest.extend({ routeId: Id.optional() })
 
 /** The primary keys a race between two uploads of one batch can meet: the receipt's, and that of the row a command makes with the same id. */
-const REPLAY_KEYS = [primaryKeyOf(driverCommand), primaryKeyOf(session), primaryKeyOf(proofOfService), primaryKeyOf(unload), primaryKeyOf(preTripCheck)]
+const REPLAY_KEYS = [primaryKeyOf(driverCommand), primaryKeyOf(session), primaryKeyOf(proofOfService), primaryKeyOf(unload)]
 
 /** What a command is told when its id is already another device's command's — one of the keys above taken, and no receipt of this driver's under it: never replayed, since a replay would hand that command's rows to a device that did not send it, and recorded nowhere, since the receipt's key is that id. */
 export const ANOTHER_DEVICES_COMMAND = "That command id belongs to another device's command"
@@ -338,10 +332,8 @@ async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Pro
       .orderBy(asc(unloadingStation.id)),
     tx.select({ id: wasteFraction.id, key: wasteFraction.key, name: wasteFraction.name }).from(wasteFraction).where(eq(wasteFraction.companyId, companyId)).orderBy(asc(wasteFraction.id)),
   ])
-  // The checklist of each vehicle's type, which a `pre-trip-check` answers (O13 of #290).
-  const checklists = await checklistsOf(tx, companyId, [...new Set(vehicles.map((row) => row.vehicleTypeId))])
   return {
-    vehicles: vehicles.map((row) => ({ id: row.id, label: vehicleLabel(row), kind: row.kind as VehicleKind, requiredLicenceClass: row.requiredLicenceClass as LicenceClass, checklist: checklists.get(row.vehicleTypeId) ?? [] })),
+    vehicles: vehicles.map((row) => ({ id: row.id, label: vehicleLabel(row), kind: row.kind as VehicleKind, requiredLicenceClass: row.requiredLicenceClass as LicenceClass })),
     // A station's column is `geometry(Point, 4326)`, flat: what it holds is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
     unloadingStations: stations.map((row) => ({ ...row, location: row.location as FlatPoint })),
     wasteFractions,
@@ -632,14 +624,6 @@ async function readLookups(tx: Tx, applier: Applier, envelope: DriverCommandEnve
     }
   }
 
-  if (envelope.kind === "pre-trip-check") {
-    const { vehicleId } = fields
-    if (typeof vehicleId === "string") {
-      lookups.vehicle = await findVehicleState(tx, companyId, routeRow.projectId, vehicleId)
-      if (lookups.vehicle !== undefined) lookups.checklist = await checklistOfVehicle(tx, companyId, vehicleId)
-    }
-  }
-
   if (envelope.kind === "record-unload") {
     const { unloadingStationId, wasteFractionId } = fields
     lookups.stationKnown = typeof unloadingStationId === "string" && (await knownToCompany(tx, unloadingStation, companyId, unloadingStationId))
@@ -658,9 +642,8 @@ const PROOF_COMMANDS: readonly DriverCommandKind[] = ["arrive", "complete-pickup
 /**
  * The row a command made, read back and tagged with what it is: a session
  * for `start-route`, a proof for the evidence and outcome commands, an unload
- * for `record-unload`, the route for `end-route`, the check for
- * `pre-trip-check` (O13 of #290), the stop for `record-fill` (M23 of
- * #293), nothing for `pause` and
+ * for `record-unload`, the route for `end-route`, the stop for
+ * `record-fill` (M23 of #293), nothing for `pause` and
  * `resume`, which make no row. What a write says is what the next read says,
  * so the apply path and the replay path both answer through this. A receipt
  * that names no route (a rejection for one the driver does not reach) has
@@ -681,10 +664,6 @@ async function resultOf(tx: Tx, companyId: string, kind: DriverCommandKind, id: 
       .query.where(and(eq(unload.companyId, companyId), eq(unload.id, id)))
       .limit(1)
     return row === undefined ? undefined : { resource: "unload", value: await unloadAnswered(tx, companyId, row) }
-  }
-  if (kind === "pre-trip-check") {
-    const check = await readPreTripCheck(tx, companyId, id)
-    return check === undefined ? undefined : { resource: "pre-trip-check", value: check }
   }
   if (kind === "record-fill") {
     // The stop as it stands, read through the receipt that names it: a later estimate's replay answers the stop as the later one left it, as every read does.
@@ -1015,15 +994,6 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .update(pickup)
           .set({ fillLevel: effect.fill })
           .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeRow.id), eq(pickup.id, effect.pickupId)))
-        break
-      case "append-pre-trip-check":
-        await appendPreTripCheck(
-          tx,
-          { companyId, projectId, routeId: routeRow.id, routeNumber: routeRow.number, driverId: applier.profile.id, driverName: applier.profile.name, recordedBy: applier.principal.user.id, deviceId: envelope.deviceId, now: () => applier.now, send: applier.send },
-          effect.check,
-          effect.defects,
-          effect.grounds,
-        )
         break
       case "event":
         made.events.push(effect)

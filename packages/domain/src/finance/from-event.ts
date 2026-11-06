@@ -46,19 +46,15 @@
 // container put on a route by hand, an address-only stop — is no pickup
 // charge either: its completion and its correction to `completed` are
 // nothing here, the extra collection's billable event being a follow-up's.
-// A work order the office booked (M14 of #293: a delivery, a removal, a swap,
-// a repair, a wash) is a `job` event where its project names a product for
-// the service (`work_order_product`), charged to the container's agreement —
-// a delivery's the stop's subscription's — and priced as a pickup is; nothing
-// where the project names none, as before; never where the stop was booked to
-// answer a ticket (O3c of #290), whose completion the ticket's charge (#291 C3)
-// already is; and blocked where the product is retired or not sold by the job
-// (`no-product`) or no agreement is reachable (`no-subscription`), for the
-// office to act on rather than a silent charge or a silent nothing. A bulky
-// collection (O11 of #290) is charged the same way, at the product its
-// booking froze, to the agreement the booking names: the worker reads both
-// off the booking into the same facts. Its product may also be sold by the
-// item (#449), and is then charged the booking's item count, not one.
+// A work order the office booked (O3 of #290: a delivery, a removal, a swap,
+// a repair, a wash) is nothing here either. A bulky collection (O11 of #290)
+// is the office's stop that is charged: a `job` event at the product its
+// booking froze, charged to the agreement the booking names — the worker
+// reads both off the booking — and priced as a pickup is; blocked where the
+// product is retired or sold by neither the job nor the item (`no-product`)
+// or no agreement is reachable (`no-subscription`), for the office to act on
+// rather than a silent charge or a silent nothing. A product sold by the item
+// (#449) is charged the booking's item count, not one.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -128,7 +124,7 @@
 // the stamps, and the row's own id.
 import { bulkyQuantity, isBulkyProductUnit } from "../execution/bulky"
 import type { PickupExceptionJudgement } from "../execution/pickup-exceptions"
-import { isWorkOrderService, type OutboxKind, type PickupOrigin, type PickupOutcome, type PickupService } from "../execution/vocabulary"
+import type { OutboxKind, PickupOrigin, PickupOutcome, PickupService } from "../execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
 import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
 import { HIRE_UNIT } from "./hire"
@@ -216,11 +212,9 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   liveEvent: LiveEventFacts | null
   /** The stop's service: an emptying, or a work order the office booked (O3 of #290). */
   service: PickupService
-  /** Whether the stop was booked to answer a ticket (O3c of #290): the ticket's charge is the one, never a job's. */
-  bookedForTicket: boolean
-  /** Whether the container stood under a public placement on the service date (M12 of #293): a litter or dog bin the project's contract pays for, with no subscription and so no payer, whose collection, work order and exception are charged to nobody. */
+  /** Whether the container stood under a public placement on the service date (M12 of #293): a litter or dog bin the project's contract pays for, with no subscription and so no payer, whose collection and exception are charged to nobody. */
   publicService: boolean
-  /** The `job` product the project names for a work order's service, or a bulky collection's booking's, with the agreement it charges and its pricing (M14 of #293, O11 of #290); null where none is named. */
+  /** A bulky collection's charge (O11 of #290): its booking's product, with the agreement it charges and its pricing; null for every other stop, and for a booking cancelled. */
   job: JobChargeFacts<Row> | null
   /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
   exception: ExceptionFacts<Row> | null
@@ -228,21 +222,20 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   liveException: LiveEventFacts | null
 }
 
-/** A work order's charge as the worker read it: the project's product for the service, and the agreement it charges — the container's, a delivery's the stop's subscription's — with its pricing, null where none is reachable. */
+/** A bulky collection's charge as the worker read it (O11 of #290): the product its booking froze, and the agreement the booking names with its pricing, null where none is reachable. */
 export type JobChargeFacts<Row extends PriceRow = PriceRow> = {
   product: { id: string; status: ProductStatus; unit: ProductUnit; vatPercent: number | null }
   agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string } | null
-  subscriptionId: string | null
   /** The list that agreement is priced under, with its rows for the product on the service date; null where neither the agreement nor the project names one. */
   priceList: PricedList<Row> | null
-  /** A bulky collection's booking's items (#449), which a product sold by the item is charged by; null for a work order. */
-  items: readonly { quantity: number }[] | null
+  /** The booking's items (#449), which a product sold by the item is charged by. */
+  items: readonly { quantity: number }[]
 }
 
 /** The product a completed ticket charges for, as the worker read it (#291 C3), with what its price is resolved from. */
 export type TicketChargeFacts<Row extends PriceRow = PriceRow> = {
-  /** Who named it: the person who completed the ticket, or the project's charge for the ticket's kind. */
-  source: "completion" | "kind"
+  /** Who named it: the person who completed the ticket, or the project's charge for the ticket's type or, where it has none, its kind (#548 of #544). */
+  source: "completion" | "type" | "kind"
   product: { id: string; status: ProductStatus; unit: ProductUnit; vatPercent: number | null }
   /** The agreement the ticket reaches, as the resolver reads it. */
   agreement: { status: AgreementStatus; customerKind: CustomerKind; customerId: string }
@@ -395,23 +388,19 @@ export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !charge
 
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
 
-/** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. A bulky collection may also be charged at one sold by the item (#449). */
-export const chargesJob = (job: JobChargeFacts): boolean =>
-  (job.items === null ? job.product.unit === "job" : isBulkyProductUnit(job.product.unit)) && job.product.status === "active"
+/** Whether a bulky collection may be charged at its booking's product (O11 of #290): one sold by the job or by the item (#449), while it is offered — a retired one is the office's to replace, never a silent charge. */
+export const chargesJob = (job: JobChargeFacts): boolean => isBulkyProductUnit(job.product.unit) && job.product.status === "active"
 
-/** The office's services charged as a job once done: the work orders, and a bulky collection (O11 of #290) at its booking's product. */
-export const chargedAsJob = (service: PickupService): boolean => isWorkOrderService(service) || service === "bulky"
-
-/** A completed work order's event (M14 of #293): nothing for an emptying, a stop booked for a ticket or a service the project prices nothing for; blocked where the product will not do or no agreement is reachable; otherwise priced by the resolver as a pickup is. */
+/** A completed bulky collection's event (O11 of #290): nothing for any other office stop, a work order included, or for a booking cancelled; blocked where the product will not do or no agreement is reachable; otherwise priced by the resolver as a pickup is. */
 function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
-  if (!chargedAsJob(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
+  if (facts.service !== "bulky" || facts.job === null) return undefined
   const { job } = facts
-  // A bulky booking's product sold by the item is charged its items' count (#449); every other job is one.
-  const quantity = job.items === null ? 1 : bulkyQuantity(job.product.unit, job.items)
+  // A product sold by the item is charged the booking's items' count (#449); one sold by the job is the booking once.
+  const quantity = bulkyQuantity(job.product.unit, job.items)
   const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
   // The agreement first, as a pickup's placement is: with none reachable a product would price under nothing, so the block says what to fix.
   if (job.agreement === null) return { ...base, agreementId: null, subscriptionId: null, productId: chargesJob(job) ? job.product.id : null, price: null, blockReason: "no-subscription" }
-  if (!chargesJob(job)) return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: null, price: null, blockReason: "no-product" }
+  if (!chargesJob(job)) return { ...base, agreementId: job.agreement.id, subscriptionId: null, productId: null, price: null, blockReason: "no-product" }
   const outcome = priceOccurrence(
     {
       agreement: { status: job.agreement.status },
@@ -429,14 +418,14 @@ function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: Pr
     },
     labels,
   )
-  return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: job.product.id, price: outcome.price, blockReason: outcome.blockReason }
+  return { ...base, agreementId: job.agreement.id, subscriptionId: null, productId: job.product.id, price: outcome.price, blockReason: outcome.blockReason }
 }
 
-/** A completed pickup's event: nothing for a stop of public service, a work order's job for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
+/** A completed pickup's event: nothing for a stop of public service, a bulky collection's job for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
 function pickupDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
   // Public service is the contract's, not a lift's: nothing to record, rather than a blocked `no-subscription` event in Finance's queue.
   if (facts.publicService) return undefined
-  // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's. Its work order is a job (M14 of #293).
+  // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's, and a work order is no charge either. A bulky collection is a job (O11 of #290).
   if (facts.origin === "office") return jobDraft(facts, labels)
   const links: BillableEventLinks = { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId }
   const base = { kind: "pickup" as const, serviceDate: facts.serviceDate, quantity: 1, links }

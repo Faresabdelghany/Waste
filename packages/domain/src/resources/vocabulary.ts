@@ -25,8 +25,6 @@
 // `DECOMMISSION_REASON_STATUSES` (O30 of #290) is whether a reason the office
 // keeps for scrapping a container is still offered; the reasons themselves
 // are the company's rows, not a list here (resources/decommission-reasons.ts).
-// `VEHICLE_DEFECT_STATUSES` (O13 of #290) is where a defect a pre-trip check
-// found stands (resources/pre-trip.ts).
 // `SENSOR_NETWORKS` and `SENSOR_STATUSES` (O26 of #290, row 9.10) are what a
 // fill-level Sensor reports over and whether it still reports: the three
 // networks the prototype offers, and a sensor retired once it is taken off
@@ -88,12 +86,6 @@ export const DECOMMISSION_REASON_STATUSES = ["active", "inactive"] as const
 export const SENSOR_NETWORKS = ["lorawan", "sigfox", "nb-iot"] as const
 /** A Sensor's state (O26 of #290): reporting, or retired, when its readings are refused and it is paired to no new container; a retired one keeps its pairings and readings. */
 export const SENSOR_STATUSES = ["active", "retired"] as const
-/** The unit a fuel is burnt and its emission factor given in (M10 of #293): a litre of a liquid fuel, a kilogram of gas, a kilowatt-hour of electricity. */
-export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
-/** Why a route's emissions are not measured, in the order they are judged: no active Plan, a Plan not yet measured, no vehicle planned, a vehicle with no fuel, no consumption for its type and fuel, no factor in force for its fuel. */
-export const EMISSION_GAPS = ["no-plan", "plan-unmeasured", "no-vehicle", "no-fuel", "no-consumption", "no-factor"] as const
-/** Where a Vehicle Defect a pre-trip check found stands (O13 of #290): open until the office marks it mended. */
-export const VEHICLE_DEFECT_STATUSES = ["open", "resolved"] as const
 /** Whether a vehicle's maintenance plan is in use (O20 of #290): a retired plan is kept for the orders that name it, and raises nothing. */
 export const MAINTENANCE_PLAN_STATUSES = ["active", "retired"] as const
 /** Where a Maintenance Order stands (O20 of #290): open until it is done or called off. */
@@ -135,9 +127,6 @@ export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS
 export type DecommissionReasonStatus = (typeof DECOMMISSION_REASON_STATUSES)[number]
 export type SensorNetwork = (typeof SENSOR_NETWORKS)[number]
 export type SensorStatus = (typeof SENSOR_STATUSES)[number]
-export type EnergyUnit = (typeof ENERGY_UNITS)[number]
-export type EmissionGap = (typeof EMISSION_GAPS)[number]
-export type VehicleDefectStatus = (typeof VEHICLE_DEFECT_STATUSES)[number]
 export type MaintenancePlanStatus = (typeof MAINTENANCE_PLAN_STATUSES)[number]
 export type MaintenanceOrderStatus = (typeof MAINTENANCE_ORDER_STATUSES)[number]
 
@@ -167,9 +156,6 @@ export const RESOURCES_VOCABULARIES = {
   DECOMMISSION_REASON_STATUSES,
   SENSOR_NETWORKS,
   SENSOR_STATUSES,
-  ENERGY_UNITS,
-  EMISSION_GAPS,
-  VEHICLE_DEFECT_STATUSES,
   MAINTENANCE_PLAN_STATUSES,
   MAINTENANCE_ORDER_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>
