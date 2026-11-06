@@ -146,12 +146,13 @@ const stockPlace: BusinessFormField = { id: "toKind", label: "Arrives in", type:
 const lastDay = (required: boolean, description: string): BusinessFormField => ({ id: "lastDay", label: "Last day in service", type: "date", required, description })
 
 /** One command's dialog. */
-const commandForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]): BusinessFormSchema => ({
+const commandForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string): BusinessFormSchema => ({
   key: "resources.containers",
   mode: "action",
   recordKind: "Stock movement",
   title,
   description,
+  ...(warning === undefined ? {} : { warning }),
   submitLabel,
   sections: [{ id: "command", title, fields }],
   execution: { kind: "append-event", completionMessage: `${title} recorded.` },
@@ -182,7 +183,7 @@ export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, B
     occurredAt,
     reference,
   ]),
-  return: commandForm("Return", "Out of service into stock: the placement ends and the return is recorded together.", "Return", [warehouse(), stockPlace, lastDay(true, "The placement ends after this day."), occurredAt, reason(false), reference]),
+  return: commandForm("Return", "Out of service into stock: the placement ends and the return is recorded together.", "Return", [warehouse(), stockPlace, lastDay(true, "The placement ends after this day."), occurredAt, reason(false), reference], "The container's placement ends."),
   transfer: commandForm("Transfer", "From one place in stock to another, recorded on arrival.", "Transfer", [warehouse("Where it arrives."), stockPlace, occurredAt, reason(false), reference]),
   decommission: commandForm("Decommission", "To scrap, from stock or from service. A retired container does not come back.", "Decommission", [
     // The company's reasons, kept in Settings › Master data (O30 of #290); the note says more where the reason does not.
@@ -191,7 +192,7 @@ export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, B
     lastDay(false, "For a container in service: its placement ends after this day."),
     occurredAt,
     reference,
-  ]),
+  ], "A retired container does not come back."),
   adjust: commandForm("Adjust", "The correction door: where the ledger should have the container, never into or out of service.", "Adjust", [
     { id: "toKind", label: "The ledger should have it in", type: "select", required: true, options: ADJUSTMENT_TARGETS.map((value) => ({ value, label: PLACE_LABELS[value] })) },
     { ...warehouse(), required: false, visibleWhen: { fieldId: "toKind", notIn: ["scrap"] }, requiredWhen: { fieldId: "toKind", notIn: ["scrap"] } },

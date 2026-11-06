@@ -104,7 +104,7 @@ export function Field({
   children,
 }: {
   label: string
-  /** What the value is, where it says something about it — never how to fill it in. */
+  /** What the value is, or why it cannot change — never how to fill it in. */
   note?: string
   required?: boolean
   wide?: boolean
@@ -728,7 +728,7 @@ function ContainerTypeDialog({
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <DialogSection title="Configuration">
-            <Field label="Kind" required>
+            <Field label="Kind" required note={isEditing ? "Kind cannot be changed after creation." : undefined}>
               <Select
                 value={draft.kind}
                 disabled={isEditing}

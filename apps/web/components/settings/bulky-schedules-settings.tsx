@@ -22,7 +22,7 @@ import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -206,7 +206,8 @@ export function BulkySchedulesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+        {/* An edit says why the area, its days and the start do not move; an add says nothing. */}
+        <DialogContent className="sm:max-w-xl" {...(editing === null || editing.schedule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && (
             <ScheduleDialogForm
               editing={editing}
@@ -254,6 +255,7 @@ function ScheduleDialogForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit schedule" : "Add schedule"}</DialogTitle>
+        {keyed && <DialogDescription>The area, its days and the start are the schedule&apos;s own: end it and add another to change them.</DialogDescription>}
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">

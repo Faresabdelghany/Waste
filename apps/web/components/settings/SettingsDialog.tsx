@@ -1979,7 +1979,7 @@ function SettingsPane({
                   ? `${dirtyControlIds.length} unsaved change${dirtyControlIds.length === 1 ? "" : "s"} · save to keep ${dirtyControlIds.length === 1 ? "it" : "them"} on this device.`
                   : configurationHistory[0]
                     ? `Saved on this device at ${configurationHistory[0].at} · ${configurationHistory[0].controls.length} change${configurationHistory[0].controls.length === 1 ? "" : "s"}.`
-                    : "Changes are saved on this device when you select Save changes."}
+                    : null}
               </p>
               <Button disabled={!isDirty} onClick={onSave}>
                 Save changes

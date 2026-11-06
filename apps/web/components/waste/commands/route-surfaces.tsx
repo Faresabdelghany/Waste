@@ -923,11 +923,11 @@ type StopsMode = "move" | "split" | "merge"
 /** The command each mode sends. */
 const STOPS_COMMAND_OF: Readonly<Record<StopsMode, string>> = { move: MOVE_STOPS, split: SPLIT_ROUTE, merge: MERGE_ROUTE }
 
-/** What each mode's dialog says. */
-const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; send: string }>> = {
+/** What each mode's dialog says: its title, its button, and what it ends, where it ends something. */
+const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; send: string; warning?: string }>> = {
   move: { title: "Move stops", send: "Move stops" },
   split: { title: "Split route", send: "Split route" },
-  merge: { title: "Merge route", send: "Merge route" },
+  merge: { title: "Merge route", send: "Merge route", warning: "The picked route's open stops come here after the last stop, and it is cancelled as merged." },
 }
 
 /** The stops ticked and the other route picked, for a move, a split or a merge; the API judges each stop where it goes. */
@@ -947,9 +947,10 @@ function MoveStopsDialog({ mode, stops, routes, busy, onClose, onSend }: { mode:
   }
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent {...(words.warning === undefined ? { "aria-describedby": undefined } : {})}>
         <DialogHeader>
           <DialogTitle>{words.title}</DialogTitle>
+          {words.warning !== undefined && <DialogDescription className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground">{words.warning}</DialogDescription>}
         </DialogHeader>
         {picksStops && (
           <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto border-y border-border/60 text-sm" data-testid="move-stops">

@@ -20,7 +20,7 @@ import type { ContaminantCode, PickupExceptionRule } from "@waste/contracts/pick
 import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -201,7 +201,8 @@ export function PickupExceptionChargesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+        {/* An edit says why what the rule matches and its start do not move; an add says nothing. */}
+        <DialogContent className="sm:max-w-xl" {...(editing === null || editing.rule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && project !== null && (
             <RuleDialogForm
               editing={editing}
@@ -256,6 +257,7 @@ function RuleDialogForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit rule" : "Add rule"}</DialogTitle>
+        {keyed && <DialogDescription>What the rule matches and its start are its own: end it and add another to change them.</DialogDescription>}
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">

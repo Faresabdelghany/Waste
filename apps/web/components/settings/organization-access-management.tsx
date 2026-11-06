@@ -470,14 +470,6 @@ function TeamRowActions({
   )
 }
 
-/**
- * The Teams tab (O30 of #290, moved from Settings › Tickets): the company's
- * teams a ticket waits with — added, edited, retired and reactivated through
- * the record store, which on the Pilot reaches `/teams` through
- * lib/api/records/ticket-teams.ts. Which team a ticket opened without one
- * takes stays Settings › Tickets' Default teams tab. Offered on the Pilot
- * alone, since the teams are the API's.
- */
 /** The Teams tab's search, filter, view and page, which the pane holds as it holds the Users' and the Roles', so leaving the tab and coming back finds them as they were. */
 type TeamsTable = {
   query: string
@@ -490,6 +482,14 @@ type TeamsTable = {
   pagination: ReturnType<typeof useTablePagination<BusinessRecord>>
 }
 
+/**
+ * The Teams tab (O30 of #290, moved from Settings › Tickets): the company's
+ * teams a ticket waits with — added, edited, retired and reactivated through
+ * the record store, which on the Pilot reaches `/teams` through
+ * lib/api/records/ticket-teams.ts. Which team a ticket opened without one
+ * takes stays Settings › Tickets' Default teams tab. Offered on the Pilot
+ * alone, since the teams are the API's.
+ */
 function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[]; table: TeamsTable }) {
   const session = useApiSession()
   const access = ticketTeamsAccessOf(session.me?.role.grants)

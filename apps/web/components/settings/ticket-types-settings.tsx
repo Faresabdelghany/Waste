@@ -14,7 +14,7 @@
 // Offered on the Pilot alone, beside the Ticket teams.
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowDown, ArrowLeft, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
@@ -268,6 +269,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
   const [actions, setActions] = useState<TicketTypeAction[]>(() => typeActionsOf(record))
   const kind = record.submittedValues?.kind as TicketKind
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [tab, setTab] = useState("details")
 
   const changeField = (index: number, change: (draft: FieldDraft) => FieldDraft) => {
     setFields((current) => current.map((draft, at) => (at === index ? change(draft) : draft)))
@@ -311,7 +313,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
 
   const tabClass = "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background"
   return (
-    <Tabs defaultValue="details" className="flex min-w-0 flex-1 flex-col gap-0">
+    <Tabs value={tab} onValueChange={setTab} className="flex min-w-0 flex-1 flex-col gap-0">
       <header className="flex flex-col border-b border-border/40">
         <TicketTypeHeader
           onBack={onBack}
@@ -350,6 +352,17 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
               <span className="ml-1.5 text-[10px] text-muted-foreground">{actions.length}</span>
             </TabsTrigger>
           </TabsList>
+          {/* Outside the tabs' fieldset, so a role that only reads the page can open it too. */}
+          {tab === "permissions" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button type="button" variant="unstyled" className="ml-2 align-middle text-muted-foreground hover:text-foreground" aria-label="About status permissions">
+                  <Info className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs">A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone.</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </header>
       <div className="flex-1 p-4">
@@ -369,11 +382,17 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
               <Textarea id="ticket-type-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What the type is for, for the office." />
             </div>
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-              <span className="font-medium">Active</span>
+              <span>
+                <span className="font-medium">Active</span>
+                {isDefault && <span className="block text-xs text-muted-foreground">Make another type of the kind the default to change it.</span>}
+              </span>
               <Switch checked={active} onCheckedChange={setActive} disabled={isDefault} aria-label="Active" />
             </label>
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-              <span className="font-medium">Default for its kind</span>
+              <span>
+                <span className="font-medium">Default for its kind</span>
+                {isDefault && <span className="block text-xs text-muted-foreground">Make another type of the kind the default to change it.</span>}
+              </span>
               <Switch checked={makeDefault} onCheckedChange={setMakeDefault} disabled={isDefault} aria-label="Default for its kind" />
             </label>
           </TabsContent>

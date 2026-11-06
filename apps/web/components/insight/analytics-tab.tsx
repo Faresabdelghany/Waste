@@ -123,7 +123,6 @@ export function AnalyticsTab({ current, previous, against, viewed, projectName, 
       <div className="flex flex-col gap-3 p-3 lg:p-4">
         <ReportCard
           title="Tonnage"
-          subtitle="Net weight of the unloads that count — approved and not yet reviewed; rejected loads beside them"
           loading={tonnage.loading}
           testId="tonnage"
           actions={
@@ -193,7 +192,7 @@ export function AnalyticsTab({ current, previous, against, viewed, projectName, 
         </ReportCard>
 
         <div className="grid gap-3 lg:grid-cols-2">
-          <ReportCard title="Weighed at the kerb" subtitle="Collected pickups' latest weight readings, by fraction" loading={tonnage.loading} testId="pickup-weights">
+          <ReportCard title="Weighed at the kerb" loading={tonnage.loading} testId="pickup-weights">
             {weightsShown && shown !== null && !tonnage.problem ? (
               shown.pickupWeights.length === 0 ? (
                 <ReportNotice empty="No collected pickup was weighed in this period." />
@@ -226,7 +225,7 @@ export function AnalyticsTab({ current, previous, against, viewed, projectName, 
             )}
           </ReportCard>
 
-          <ReportCard title="Invoiced" subtitle="Invoices and credit notes issued in this period, by currency" loading={revenue.loading} testId="revenue">
+          <ReportCard title="Invoiced" loading={revenue.loading} testId="revenue">
             {revenueShown && revenue.shown !== null && !revenue.problem ? (
               revenue.shown.currencies.length === 0 ? (
                 <ReportNotice empty="Nothing was invoiced in this period." />

@@ -38,6 +38,7 @@ export const APPROVE_SIZE_FORM: BusinessFormSchema = {
   recordKind: RIGHT_SIZING_RECORD_KIND,
   title: "Approve right-sizing",
   description: "The subscription ends on the day and one with the new product begins there, its containers carried over. The price follows the product. Book the container's swap as a work order.",
+  warning: "The subscription ends on the day, and one with the new product begins there.",
   submitLabel: "Approve",
   sections: [
     {

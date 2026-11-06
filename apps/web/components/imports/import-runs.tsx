@@ -36,7 +36,7 @@ export function ImportRuns({ version, projects }: { version: number; projects: r
   const projectName = (id: string | null) => (id === null ? "The company" : (projects.find((project) => project.id === id)?.name ?? "Another project"))
 
   return (
-    <ReportCard title="Recent imports" subtitle="The latest runs, newest first" loading={read.loading && runs !== null} testId="import-runs">
+    <ReportCard title="Recent imports" loading={read.loading && runs !== null} testId="import-runs">
       {runs !== null && read.problem !== null && (
         <p role="alert" className="border-b border-border/70 px-4 py-2 text-xs text-destructive">
           The list was not read again: {problemSentence(read.problem)}

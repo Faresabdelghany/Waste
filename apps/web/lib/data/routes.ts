@@ -51,18 +51,19 @@ export type RouteCommandWithForm = "assign" | "reschedule" | "cancel" | "add-sto
 export type PickupCommandWithForm = "remove" | "correct"
 
 /** One command's dialog. */
-const commandForm = (key: BusinessFormSchema["key"], recordKind: string, title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]): BusinessFormSchema => ({
+const commandForm = (key: BusinessFormSchema["key"], recordKind: string, title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string): BusinessFormSchema => ({
   key,
   mode: "action",
   recordKind,
   title,
   description,
+  ...(warning === undefined ? {} : { warning }),
   submitLabel,
   sections: [{ id: "command", title, fields }],
   execution: { kind: "append-event", completionMessage: `${title} recorded.` },
 })
 
-const routeForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]) => commandForm("route-studio.routes", "Route", title, description, submitLabel, fields)
+const routeForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string) => commandForm("route-studio.routes", "Route", title, description, submitLabel, fields, warning)
 
 /** What an added stop collects at (#111): a container, or an address — a property or a shared collection point — with its fraction. */
 export const STOP_AT_CONTAINER = "container"
@@ -87,7 +88,7 @@ const NOT_A_BOOKING = { fieldId: "stopAt", notIn: [STOP_AT_BULKY_BOOKING] } as c
 const A_DELIVERY = { fieldId: "service", equals: "deliver" } as const
 const A_SWAP = { fieldId: "service", equals: "swap" } as const
 const BACK_TO_STOCK = { fieldId: "service", oneOf: ["remove", "swap"] } as const
-const pickupForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]) => commandForm("route-studio.pickups", "Pickup", title, description, submitLabel, fields)
+const pickupForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string) => commandForm("route-studio.pickups", "Pickup", title, description, submitLabel, fields, warning)
 
 /** The office's cancel reason codes as a select offers them (O5 of #290): "Vehicle breakdown" for `vehicle-breakdown`. */
 export const CANCEL_REASON_OPTIONS: readonly BusinessFormOption[] = OFFICE_CANCEL_REASON_CODES.map((value) => ({ value, label: statusLabel(value) }))
@@ -130,7 +131,7 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
   cancel: routeForm("Cancel route", "The route will not run. Its open stops are skipped, an active route's session ends, and the reason becomes its deviation.", "Cancel route", [
     { id: "reasonCode", label: "Why", type: "select", required: true, options: CANCEL_REASON_OPTIONS },
     { id: "reason", label: "Reason", type: "textarea", required: true, description: "What happened, in your words: it becomes the route's note." },
-  ]),
+  ], "The route will not run: its open stops are skipped, and an active route's session ends."),
   "add-stop": routeForm(
     "Add stop",
     "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name, and a bulky booking at its place on the day it was booked for. A delivery, a removal or a swap moves the container in its ledger when the driver completes the stop. Generation never moves or skips it.",
@@ -205,7 +206,7 @@ export const pickupReasonLabel = (reason: string) => (DRIVER_REASON_LABELS as Re
 export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, BusinessFormSchema>> = {
   remove: pickupForm("Remove stop", "The stop comes off a route that has not started: skipped, removed by the dispatcher, never deleted.", "Remove stop", [
     { id: "reason", label: "Reason", type: "textarea", required: true },
-  ]),
+  ], "The stop comes off the route, skipped."),
   correct: pickupForm("Correct outcome", "The audited correction after the fact: the stop's outcome moves and a correction proof is appended.", "Correct outcome", [
     { id: "outcome", label: "Outcome", type: "select", required: true, options: PICKUP_OUTCOMES.map((value) => ({ value, label: statusLabel(value) })) },
     { id: "reason", label: "Reason", type: "select", options: PICKUP_REASONS.map((value) => ({ value, label: pickupReasonLabel(value) })), visibleWhen: MISSED, requiredWhen: MISSED },

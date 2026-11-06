@@ -603,16 +603,18 @@ export function BusinessRecordFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
-        // A form says no instructions — no subtitle, no section or field descriptions, in any mode — only the review step its confirmation.
-        {...(step !== "review" ? { "aria-describedby": undefined } : {})}
+        // A form says no instructions — no subtitle, no section or field descriptions, in any mode — only the review step its confirmation and an action its warning.
+        {...(step !== "review" && schema.warning === undefined ? { "aria-describedby": undefined } : {})}
       >
         <DialogHeader className="shrink-0 border-b border-border px-6 py-5 pr-12">
           <DialogTitle>
             {step === "review" ? `Review ${schema.recordKind.toLowerCase()}` : schema.title}
           </DialogTitle>
-          {step === "review" && (
+          {step === "review" ? (
             <DialogDescription>Confirm the resolved scope, linked records, and calculated outcome before applying this action.</DialogDescription>
-          )}
+          ) : schema.warning !== undefined ? (
+            <DialogDescription className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground">{schema.warning}</DialogDescription>
+          ) : null}
         </DialogHeader>
 
         {step === "form" ? (

@@ -38,9 +38,6 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 const DRIVER_FIXTURES = getModuleDefinition({ workspaceId: "fleet", moduleId: "drivers" })?.records ?? []
 
-/** What the public door enforces for every published page, whatever is configured: true of `PUBLIC_DOOR_TABLES`. */
-export const PUBLIC_DOOR_RULE = "A public page reads only the columns the public door is granted: an address and its collection days, and the drop-off points. No customer, ticket, invoice, price, service provider or driver reaches it."
-
 export function PortalsSettingsOnApi() {
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
   const drivers = useModuleRecords("fleet", "drivers", DRIVER_FIXTURES)
@@ -79,7 +76,6 @@ export function PortalsSettingsOnApi() {
 
   return (
     <AssetPanelShell heading="Administration" title="Portals & branding" description="What each project's residents find on its public pages, and which of its drivers use the Driver App." toolbar={null}>
-      <p className="border-b border-border px-4 py-3 text-xs text-muted-foreground">{PUBLIC_DOOR_RULE}</p>
       <RecordsSection shown={projects.length} total={projects.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[720px]">

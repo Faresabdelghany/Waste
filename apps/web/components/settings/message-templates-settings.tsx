@@ -114,7 +114,7 @@ export function MessageTemplatesSettings() {
     <AssetPanelShell
       heading="Operations"
       title="Message templates"
-      description={`The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing. A text names its values as ${PLACEHOLDERS.join(", ")}.`}
+      description={`The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing. A service message reaches only a customer who allows them; a billing message is sent whatever the customer chose. A text names its values as ${PLACEHOLDERS.join(", ")}.`}
       action={
         <Button size="sm" disabled={!access.create || project === null || read.report === null} onClick={() => open({ ...NEW_TEMPLATE })}>
           <Plus className="h-4 w-4" weight="bold" />
@@ -141,6 +141,7 @@ export function MessageTemplatesSettings() {
         </div>
       }
     >
+      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">Messages go through a log-only sender for now: nothing reaches anyone yet.</p>
       <RecordsSection shown={templates.length} total={templates.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[640px]" data-testid="message-templates">

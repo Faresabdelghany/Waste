@@ -386,9 +386,7 @@ function CountingRuleDialog({
             </header>
             {!access.simulate ? (
               <p className="px-3 py-3 text-xs text-muted-foreground">A simulation reads the stops, which your role does not.</p>
-            ) : simulation === null ? (
-              <p className="px-3 py-3 text-xs text-muted-foreground">The properties that would have received a ticket under these terms, and when, in the projects you work in.</p>
-            ) : (
+            ) : simulation === null ? null : (
               <div className="space-y-2 px-3 py-3">
                 <p className="text-sm">{simulationSentence(simulation.answer)}</p>
                 {simulation.answer.shown.length > 0 && (

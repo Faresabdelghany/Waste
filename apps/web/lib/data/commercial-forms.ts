@@ -362,6 +362,7 @@ export const EVENT_COMMAND_FORMS: Readonly<Record<EventCommand, BusinessFormSche
     recordKind: EVENT_RECORD_KIND,
     title: "Cancel event",
     description: "A ready or blocked event that should never be invoiced. It stays in the list, cancelled, with your reason.",
+    warning: "A cancelled event is never invoiced.",
     submitLabel: "Cancel event",
     sections: [
       {
@@ -462,6 +463,7 @@ export function creditNoteForm(invoice: Pick<BusinessRecord, "name">, detail: Pi
     recordKind: CREDIT_NOTE_RECORD_KIND,
     title: "New credit note",
     description: `Correct ${invoice.name} by quantity: every line by what remains of it, or the lines you name. The events behind the lines stay invoiced; what should have been charged instead is a new event.`,
+    warning: "An issued credit note cannot be withdrawn.",
     submitLabel: "Issue credit note",
     sections: [
       {

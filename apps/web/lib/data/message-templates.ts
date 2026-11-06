@@ -20,11 +20,6 @@ export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates"
 
 export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email: "E-mail", sms: "Text message" }
 export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }
-/** What each purpose means for consent, as the form says it beside the picker. */
-export const PURPOSE_HINTS: Readonly<Record<MessageTemplatePurpose, string>> = {
-  service: "Sent only to customers who allow service messages.",
-  billing: "Sent whatever the customer chose about service messages.",
-}
 
 /** The placeholders a text may name, as a person types them. */
 export const PLACEHOLDERS = MESSAGE_VARIABLES.map((name) => `{{${name}}}`)

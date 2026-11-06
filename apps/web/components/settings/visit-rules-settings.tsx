@@ -23,7 +23,7 @@ import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -206,7 +206,8 @@ export function VisitRulesSettings() {
       </RecordsSection>
 
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
+        {/* An edit says why the start does not move; an add says nothing. */}
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" {...(editing === null || editing.rule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && (
             <VisitRuleDialogForm
               editing={editing}
@@ -285,6 +286,7 @@ function VisitRuleDialogForm({
     <form onSubmit={onSubmit} className="space-y-5">
       <DialogHeader>
         <DialogTitle>{keyed ? "Edit Visit Rule" : "Add Visit Rule"}</DialogTitle>
+        {keyed && <DialogDescription>The start is the rule&apos;s own: end it and add another to change it.</DialogDescription>}
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">

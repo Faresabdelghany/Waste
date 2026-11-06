@@ -14,7 +14,7 @@ import { toast } from "sonner"
 import { useReport } from "@/components/insight/use-report"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useApiSession } from "@/components/waste/api-session-store"
@@ -100,9 +100,10 @@ export function MessagesSurface({ record }: RowSurfaceProps) {
       />
       {draft !== null && (
         <Dialog open onOpenChange={(open) => !open && setDraft(null)}>
-          <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Send a message to {record.name}</DialogTitle>
+              <DialogDescription>Messages go through a log-only sender for now: nothing reaches anyone yet.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">
