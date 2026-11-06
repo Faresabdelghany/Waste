@@ -39,6 +39,7 @@ import { vehicleAdapter } from "@/lib/api/records/fleet"
 import { roleAdapter, userAdapter } from "@/lib/api/records/organisation"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
+import { accessUnknownSentence } from "@/lib/api/session"
 import { VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -69,7 +70,8 @@ const NO_RECORDS: readonly BusinessRecord[] = []
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
 export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const configured = useApiConfigured()
-  const { me } = useApiSession()
+  const session = useApiSession()
+  const { me } = session
   const access = ticketTypesAccessOf(me?.role.grants)
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, NO_RECORDS)
@@ -112,13 +114,13 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
 
   const emptyMessage = !configured
     ? "The ticket types are kept on the API: sign in on the Pilot to read and write them."
-    : types.pending
+    : accessUnknownSentence(session) ?? (types.pending
       ? "Reading the ticket types from the API…"
       : types.notGranted
         ? "The ticket types are not shown to your role."
         : types.problem
           ? `The ticket types could not be read from the API: ${types.problem.detail ?? types.problem.title}`
-          : "No ticket type yet."
+          : "No ticket type yet.")
 
   return (
     <AssetPanelShell

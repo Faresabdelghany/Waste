@@ -33,10 +33,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch, post, remove } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
+import { accessUnknownSentence } from "@/lib/api/session"
 import {
   COUNTING_PERIOD_OPTIONS,
   countingRuleBodyOf,
@@ -84,8 +85,9 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` moves the page to its Teams tab, where a rule's team is added. */
 export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } = {}) {
   const client = useApiClient()
-  const { me } = useApiSession()
-  const access = countingRulesAccessOf(me?.role.grants)
+  const configured = useApiConfigured()
+  const session = useApiSession()
+  const access = countingRulesAccessOf(session.me?.role.grants)
   // Read again after every write: the key carries how many there have been.
   const [writes, setWrites] = useState(0)
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))
@@ -96,13 +98,16 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const [editing, setEditing] = useState<CountingRule | "new" | null>(null)
   const rows = rules.report ?? []
 
-  const emptyMessage = !access.view
+  // Until `/me` answers, the grants are unknown: never said to be the role's.
+  const emptyMessage = !configured
+    ? "The counting rules are kept on the API: sign in on the Pilot to read and write them."
+    : accessUnknownSentence(session) ?? (!access.view
     ? "The counting rules are not shown to your role."
     : rules.problem !== null
       ? `The counting rules could not be read from the API: ${problemSentence(rules.problem)}`
       : rules.report === null
         ? "Reading the counting rules from the API…"
-        : "No counting rule yet."
+        : "No counting rule yet.")
 
   return (
     <AssetPanelShell

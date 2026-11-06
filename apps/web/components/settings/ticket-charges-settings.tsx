@@ -23,6 +23,7 @@ import { useModuleRecords, useServerResolver } from "@/components/waste/business
 import { problemSentence, type Problem } from "@/lib/api/problem"
 import { isLocalRefusal } from "@/lib/api/records/adapter"
 import { problemOfError } from "@/lib/api/records/server-records"
+import { accessUnknownSentence } from "@/lib/api/session"
 import { readTicketCharges, replaceTicketCharges } from "@/lib/api/ticket-charges"
 import { getModuleDefinition } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
@@ -48,7 +49,8 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, [])
 
   // The projects the person works in, as the Deadlines and Teams tabs list them: the API answers another's charges with a 400.
-  const { me } = useApiSession()
+  const session = useApiSession()
+  const { me } = session
   const mine = new Set((me?.projects ?? []).map((candidate) => candidate.id))
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-") && mine.has(resolve.serverIdOf(record.id) ?? ""))
   // The page names its project by the API's id; this tab lists the organisation's records, by the web's.
@@ -115,13 +117,13 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
 
   const emptyMessage = !configured
     ? "Ticket charges are kept by the API: on the Pilot this pane sets the product each ticket kind is charged at."
-    : project === null
+    : accessUnknownSentence(session) ?? (project === null
       ? "No project to set charges for."
       : shown === null
         ? "Reading the ticket charges from the API…"
         : "problem" in shown
           ? `The ticket charges could not be read from the API: ${problemSentence(shown.problem)}`
-          : undefined
+          : undefined)
 
   return (
     <AssetPanelShell
