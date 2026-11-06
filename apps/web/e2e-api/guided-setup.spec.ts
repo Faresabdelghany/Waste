@@ -1,4 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test"
+import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
+import { formatDayMonth } from "@waste/domain/days"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
@@ -254,7 +256,8 @@ test("Generate on the scheme's page asks the API for a run, and the page watches
   expect({ status: finished.status, trigger: finished.trigger, routeSchemeId: finished.routeSchemeId }).toEqual({ status: "succeeded", trigger: "on-demand", routeSchemeId: scheme.id })
 
   // Asked on the project's clock, Copenhagen's, whatever the browser's (#255).
-  const asked = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Copenhagen" }).format(new Date(finished.createdAt))
+  const createdAt = new Date(finished.createdAt)
+  const asked = `${formatDayMonth(dayInTimezone(createdAt, "Europe/Copenhagen"))}, ${timeInTimezone(createdAt, "Europe/Copenhagen")}`
   await expect(row.getByRole("cell").first()).toHaveText(asked)
 
   // What the run made is on the page once it has finished, with no reload (#247): the tabs count it, the table lists it,

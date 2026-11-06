@@ -15,12 +15,12 @@
 import type { DriverAbsence, VehicleUnavailability } from "@waste/contracts/availability"
 import { periodPhrase } from "@waste/domain/resources/availability"
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate } from "@waste/domain/days"
+import { firstDayOut } from "@waste/domain/periods"
 
 import { create, listAll, remove } from "../client"
 import { said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
 import { refusal } from "./places"
-import { firstDayOut } from "./planning"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 /** The two modules whose rows the periods belong to; spelled here, since fleet.ts imports this module. */

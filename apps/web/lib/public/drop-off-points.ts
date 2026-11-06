@@ -27,11 +27,6 @@ export function openingTextOf(day: PublicOpeningDay): string {
   return day.windows.map((window) => `${window.opensAt}–${window.closesAt}`).join(COPY.windowsJoin)
 }
 
-/** A day as a short label: `Mon 21 Dec`, on no one's clock but the date's own. */
-export function shortDayOf(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`))
-}
-
 /** A point as the map pins it. */
 export type MapPoint = { id: string; name: string; kind: PublicDropOffPoint["kind"]; lng: number; lat: number }
 

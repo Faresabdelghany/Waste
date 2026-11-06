@@ -17,7 +17,7 @@ import { normaliseCredentialValue } from "@waste/domain/visits/charges"
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
 import { allows, type Grants } from "@/lib/api/grants"
-import { firstDayOut, lastDayIn } from "@/lib/api/records/planning"
+import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
@@ -59,10 +59,10 @@ export const visitStatusOf = (visit: Pick<SiteVisit, "outcome" | "voidedAt">): s
 /** A credential's status on a day: blocked first, then ended, not yet started, or in force. */
 export function credentialStatusOf(credential: Pick<AccessCredential, "blockedAt" | "validFrom" | "validTo">, today: string): string {
   if (credential.blockedAt !== null) return "Blocked"
-  if (credential.validTo !== null && credential.validTo <= today) return "Ended"
-  if (credential.validFrom > today) return "Upcoming"
-  return "In force"
+  return CREDENTIAL_STANDING[periodOn(credential, today)]
 }
+
+const CREDENTIAL_STANDING: Record<PeriodStanding, string> = { upcoming: "Upcoming", "in-force": "In force", ended: "Ended" }
 
 /** "1st", "2nd", "3rd", "11th", "22nd": a visit's place in its year. */
 export function ordinal(n: number): string {

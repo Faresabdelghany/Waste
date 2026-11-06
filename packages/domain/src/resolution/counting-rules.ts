@@ -18,7 +18,7 @@
 // simulation hands the periods it cuts its window into to the statement, so
 // no `date_trunc` restates it in SQL. Pure string arithmetic over calendar
 // days, which have no clock.
-import { addDays, isIsoDate } from "../route-schemes/recurrence"
+import { addDays, daysBetween, isIsoDate, MONTH_LABELS } from "../days"
 import type { CountingPeriod } from "./vocabulary"
 
 /** The highest limit a rule may set: a daily collection over a year is 366, and nothing counts higher. */
@@ -32,8 +32,6 @@ export const SIMULATION_TICKETS_SHOWN = 500
 
 /** A span of days, half-open: `from` the first day in, `to` the first day out. */
 export type CountingWindow = { from: string; to: string }
-
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const
 
 const requireDay = (day: string, caller: string): void => {
   if (!isIsoDate(day)) throw new Error(`${caller}: "${day}" is not a YYYY-MM-DD day`)
@@ -69,7 +67,7 @@ export function periodName(from: string, period: CountingPeriod): string {
   const month = Number(from.slice(5, 7))
   switch (period) {
     case "month":
-      return `${MONTH_NAMES[month - 1]} ${year}`
+      return `${MONTH_LABELS[month - 1]} ${year}`
     case "quarter":
       return `Q${Math.floor((month - 1) / 3) + 1} ${year}`
     case "year":
@@ -99,7 +97,7 @@ export function periodsOver(window: CountingWindow, period: CountingPeriod): Cou
 
 /** How many days a window holds; zero for one that runs backwards. */
 export function windowDays(window: CountingWindow): number {
-  return Math.max(0, Math.round((Date.parse(`${window.to}T00:00:00Z`) - Date.parse(`${window.from}T00:00:00Z`)) / 86_400_000))
+  return Math.max(0, daysBetween(window.from, window.to))
 }
 
 /** What a simulation's window that will not do is told; undefined for one that will. */

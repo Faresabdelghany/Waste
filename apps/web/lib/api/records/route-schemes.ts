@@ -75,7 +75,8 @@ import type {
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
 import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
-import { addDays, parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
@@ -193,10 +194,6 @@ function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRef
   }
   return out
 }
-
-/** The form's last day in force from the wire's first day out (half-open, ADR-0005), and back. */
-const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
-const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
 
 const isServiceType = (value: string): value is ServiceType => (SERVICE_TYPES as readonly string[]).includes(value)

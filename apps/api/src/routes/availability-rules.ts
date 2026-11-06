@@ -14,7 +14,7 @@ import { validOver } from "@waste/db/query/valid-on"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { absentDriver, absentForDispatch, awayOver as earliestOver, unavailableForDispatch, unavailableVehicle, type AvailabilityNeed, type AwayPeriod } from "@waste/domain/resources/availability"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut } from "@waste/domain/periods"
 import { and, asc, eq, inArray, ne } from "drizzle-orm"
 
 import { problem } from "../problem"
@@ -23,10 +23,10 @@ import type { Period } from "./periods"
 import type { Scope } from "./references"
 
 /** One day, as a route's operating date or a group's run day is. */
-export const oneDay = (day: string): Period => ({ validFrom: day, validTo: addDays(day, 1) })
+export const oneDay = (day: string): Period => ({ validFrom: day, validTo: firstDayOut(day) })
 
 /** The days from `first` through `last`, both in: an allocation's window as its project reads it. */
-export const daysThrough = (first: string, last: string): Period => ({ validFrom: first, validTo: addDays(last, 1) })
+export const daysThrough = (first: string, last: string): Period => ({ validFrom: first, validTo: firstDayOut(last) })
 
 /** A period as the routes read it back: its id and whose it is beside the period itself. */
 export type AwayRow = AwayPeriod & { id: string; ownerId: string }

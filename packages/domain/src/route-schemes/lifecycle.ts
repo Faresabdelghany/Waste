@@ -33,7 +33,8 @@ import {
   schemeValidationGroups,
 } from "./groups"
 import { vehicleTypeOfRecord } from "./matching"
-import { isIsoDate, recurrenceFromValues, serviceDaysFromValues } from "./recurrence"
+import { recurrenceFromValues, serviceDaysFromValues } from "./recurrence"
+import { isIsoDate } from "../days"
 import {
   allocationConflictSources,
   servedFrequencyPromises,

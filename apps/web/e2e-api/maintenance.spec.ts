@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 
 import { chainLanded, expect, test } from "./fixtures"
 import { toasts } from "./routes-support"

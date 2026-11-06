@@ -30,10 +30,8 @@
 //
 // `proofShape(kind, row)` is the whole rule over a row; `proofShapeIssue` says
 // which column disagrees, for the API's sentence before the check's code.
+import type { Presence } from "../presence"
 import { CODED_PROOF_KINDS, type ExecutionSource, type ProofKind } from "./vocabulary"
-
-/** Whether a column is given, absent, or either, for a kind. */
-export type Presence = "required" | "none" | "any"
 
 /** What one kind of proof carries. */
 export type ProofShape = {

@@ -59,10 +59,6 @@ export function KeptNotice({ readAt }: { readAt: string | null | undefined }) {
   )
 }
 
-export function operatingDay(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
-}
-
 /** "3 of 12 stops done". */
 export function progressLine(progress: RouteProgress): string {
   const done = progress.total - progress.planned

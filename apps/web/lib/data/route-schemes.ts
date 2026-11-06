@@ -10,10 +10,12 @@ import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, sche
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@waste/domain/route-schemes/groups"
 import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { isIsoDate, serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import { typed } from "@/lib/api/records/adapter"
+import { dayIn } from "@/lib/api/records/clock"
 import type { ModuleState } from "@/lib/api/records/server-records"
 
 import type { BusinessFormValues } from "./business-form-types"
@@ -91,18 +93,6 @@ export function timezoneOfProject(projects: readonly BusinessRecord[], projectId
   return typeof timezone === "string" && timezone !== "" ? timezone : undefined
 }
 
-/** Today on a project's clock, `YYYY-MM-DD`, as the API reads it; the browser's own day for a project that names no timezone the runtime knows. */
-export function projectToday(timezone: string | undefined, now: Date = new Date()): string {
-  if (timezone) {
-    try {
-      return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
-    } catch {
-      // An unknown zone reads as the browser's day, below.
-    }
-  }
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
-}
-
 /**
  * The day a collection group's driver is held to their licence on where the
  * API holds it (#178): the scheme's first day or the project's today,
@@ -110,7 +100,7 @@ export function projectToday(timezone: string | undefined, now: Date = new Date(
  * a draft with no first day yet is judged on today.
  */
 export function licenceDayOf(effectiveFrom: string, timezone: string | undefined, now: Date = new Date()): JudgedDay {
-  const today = projectToday(timezone, now)
+  const today = dayIn(now, timezone)
   return schemeLicenceDay(isIsoDate(effectiveFrom) ? effectiveFrom : today, today)
 }
 

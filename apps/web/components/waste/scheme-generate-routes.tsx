@@ -34,12 +34,8 @@ import {
 } from "@waste/domain/route-schemes/generation"
 import { schemeGenerationCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { recordGenerationRun } from "@waste/domain/route-schemes/lifecycle"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  addDays,
-  formatServiceDate,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 const ACTION_LABELS: Record<PlannedRouteAction, string> = {
@@ -251,7 +247,7 @@ export function SchemeGenerateRoutesDialog({
                           {ACTION_LABELS[planned.action]}
                         </Badge>
                         <span className="w-24 font-medium">
-                          {formatServiceDate(planned.actualDate)}
+                          {formatShortDay(planned.actualDate)}
                         </span>
                         <span className="w-9 text-xs text-muted-foreground">
                           {SERVICE_DAY_SHORT_LABELS[planned.day]}

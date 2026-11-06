@@ -56,12 +56,8 @@ import {
 } from "@waste/domain/route-schemes/matching"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { allowedContainerTypes } from "@waste/domain/route-schemes/scope"
-import {
-  SERVICE_DAY_LABELS,
-  SERVICE_DAY_SHORT_LABELS,
-  sortServiceDays,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { licenceDayOf, timezoneOfProject } from "@/lib/data/route-schemes"
 import { cn } from "@/lib/utils"
 

@@ -8,23 +8,10 @@
 import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT } from "../record-values"
 import { calendarFromRecord } from "./calendar"
-import { SERVICE_DAYS, SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "./recurrence"
-
-// Hand-rolled month labels (like SERVICE_DAY_SHORT_LABELS) rather than
-// Intl "en-GB", whose ICU-dependent "Sept" would disagree with the "Sep"
-// used across fixture copy and drift between runtimes.
-const MONTH_SHORT_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-] as const
-
-function dayMonth(iso: string): string {
-  const day = Number(iso.slice(8, 10))
-  return `${day} ${MONTH_SHORT_LABELS[Number(iso.slice(5, 7)) - 1]}`
-}
+import { formatDayMonth, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "../days"
 
 function dayMonthYear(iso: string): string {
-  return `${dayMonth(iso)} ${iso.slice(0, 4)}`
+  return `${formatDayMonth(iso)} ${iso.slice(0, 4)}`
 }
 
 /** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise — any weekday set (service days, a weekend). */
@@ -52,7 +39,7 @@ export function formatValidity(validFrom: string, validTo: string): string {
   if (!validFrom) return `Until ${dayMonthYear(validTo)}`
   const start =
     validFrom.slice(0, 4) === validTo.slice(0, 4)
-      ? dayMonth(validFrom)
+      ? formatDayMonth(validFrom)
       : dayMonthYear(validFrom)
   return `${start} – ${dayMonthYear(validTo)}`
 }

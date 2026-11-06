@@ -18,13 +18,13 @@ import type { FillReading, Sensor, SensorPairing } from "@waste/contracts/sensor
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, listPage, patch, type ApiClient } from "../client"
 import { hasPrefix, inheritedPresentation, isLocalRefusal, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
 import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, tokenOf, withStatus } from "./places"
-import { firstDayOut, lastDayIn } from "./planning"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
 /** The workspace module the sensors are the rows of. */

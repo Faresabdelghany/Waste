@@ -103,7 +103,8 @@ import { holidayListCountry, holidayListEntries, holidayListName, holidayListYea
 import { knownHolidaysOfYear, type HolidayEntry } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/route-schemes/holiday-names"
 import { projectHolidayListName, projectWeekend } from "@waste/domain/route-schemes/project-calendar"
-import { formatServiceDate, isIsoDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
@@ -670,7 +671,7 @@ function HolidayListPage({
   const yearOptions = [...new Set([...years, thisYear])].sort((a, b) => b - a)
   const ofYear = year === ALL_YEARS ? entries : entries.filter((entry) => entry.date.startsWith(`${year}-`))
   const needle = query.trim().toLowerCase()
-  const shown = needle === "" ? ofYear : ofYear.filter((entry) => [entry.date, formatServiceDate(entry.date), shownHolidayName(entry, country)].join(" ").toLowerCase().includes(needle))
+  const shown = needle === "" ? ofYear : ofYear.filter((entry) => [entry.date, formatShortDay(entry.date), shownHolidayName(entry, country)].join(" ").toLowerCase().includes(needle))
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(shown)
   const copied = year === ALL_YEARS ? [] : nextYearEntries(record, Number(year))
   const suggested = (date: string) => (isIsoDate(date) ? holidayNamesForCountry(country)(date) : undefined)
@@ -691,7 +692,7 @@ function HolidayListPage({
     if (problem) return setIssue(problem)
     onSaveEntries(
       entries.map((entry) => (entry.date === editingDate ? editDraft : entry)),
-      `${formatServiceDate(editDraft.date)} updated`,
+      `${formatShortDay(editDraft.date)} updated`,
     )
     cancelEdit()
   }
@@ -699,7 +700,7 @@ function HolidayListPage({
     const problem = holidayListEntryIssue(entries, addDraft.date)
     if (problem) return setIssue(problem)
     const entry = { date: addDraft.date, name: addDraft.name.trim() || suggested(addDraft.date) || "" }
-    onSaveEntries([...entries, entry], `${entry.name || "Holiday"} added on ${formatServiceDate(entry.date)}`)
+    onSaveEntries([...entries, entry], `${entry.name || "Holiday"} added on ${formatShortDay(entry.date)}`)
     setAddDraft(EMPTY_ENTRY)
     setIssue(null)
     // Show the year the holiday went into.
@@ -845,7 +846,7 @@ function HolidayListPage({
                       <TableCell>
                         <Input type="date" value={editDraft.date} aria-label="Holiday date" onChange={(event) => setEditDraft({ ...editDraft, date: event.target.value })} className="h-8" />
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{isIsoDate(editDraft.date) ? formatServiceDate(editDraft.date).slice(0, 3) : "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{isIsoDate(editDraft.date) ? formatShortDay(editDraft.date).slice(0, 3) : "—"}</TableCell>
                       <TableCell>
                         <Input
                           value={editDraft.name}
@@ -874,7 +875,7 @@ function HolidayListPage({
                   ) : (
                     <TableRow key={entry.date} data-testid="holiday-row">
                       <TableCell className="text-sm font-medium tabular-nums text-foreground">{entry.date}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatServiceDate(entry.date)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatShortDay(entry.date)}</TableCell>
                       <TableCell className="text-sm">{entry.name ? entry.name : <span className="text-muted-foreground">{shownHolidayName(entry, country)}</span>}</TableCell>
                       <TableCell className="whitespace-nowrap pr-3 text-right">
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => startEdit(entry)} aria-label={`Edit ${entry.date}`}>

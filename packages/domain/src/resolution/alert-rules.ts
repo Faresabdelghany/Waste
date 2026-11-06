@@ -47,6 +47,7 @@
 // a rule: a Plan holds only the unload visits on the way (O15 of #290), not
 // the tip at the end, and most routes have no Plan, so the count it would
 // judge against is not there to be relied on.
+import { daysBetween } from "../days"
 import { emptyingSentence, type FillEmptyingOutcome } from "../execution/fill-emptying"
 import { nextDueLine } from "../resources/maintenance"
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "./vocabulary"
@@ -102,9 +103,6 @@ const NO_SUBJECT = { routeId: null, vehicleId: null, driverId: null, containerId
 /** Whole kilograms as a person reads them: 18,400. */
 const kilograms = (kg: number): string => String(kg).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 
-const DAY_MS = 24 * 60 * 60 * 1000
-const daysUntil = (today: string, day: string): number => Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS)
-
 /** The alert a rule raises for one occurrence. */
 export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
   switch (occurrence.rule) {
@@ -135,7 +133,7 @@ export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
         driverId: occurrence.driverId,
       }
     case "licence-expiring": {
-      const expired = daysUntil(occurrence.today, occurrence.licenceExpiry) < 0
+      const expired = daysBetween(occurrence.today, occurrence.licenceExpiry) < 0
       return {
         rule: occurrence.rule,
         kind: "resource",

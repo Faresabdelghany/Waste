@@ -30,12 +30,13 @@
 // (`@waste/db/query/collection-days`), so a resident and a customer are told
 // one thing. A day's key — the group and the service date — is a route's
 // identity (ADR-0002), stable across reads.
-import { formatOccurrenceShortDate, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
-import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
+import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
+import { addDays, formatShortDay, serviceDayOf } from "../days"
+import { inForceOn, type Period } from "../periods"
+import type { SchemeRecurrence } from "../route-schemes/recurrence"
 import { planRoutes, skippedHoliday, type ExistingRoute, type GenerationGroup, type GenerationWindow } from "./generation"
 
 /** A period, half-open: `validTo` the first day out of force, null while it runs. */
-type Period = { validFrom: string; validTo: string | null }
 
 /**
  * A container a group collects at the property: its fraction's name, its
@@ -43,8 +44,6 @@ type Period = { validFrom: string; validTo: string | null }
  * on whose days generation plans it no stop — none where it has no pause.
  */
 export type ServedContainer = Period & { fraction: string; pauses?: readonly Period[] }
-
-const covers = (period: Period, day: string): boolean => period.validFrom <= day && (period.validTo === null || period.validTo > day)
 
 /** A group that collects at least one of the property's containers. */
 export type ServingGroup = GenerationGroup & { containers: readonly ServedContainer[] }
@@ -84,13 +83,13 @@ export type CollectionDaysInput = {
 export const lookbackOf = (window: GenerationWindow): string => addDays(window.from, -SHIFT_SEARCH_DAYS)
 
 /** The note a day the office moved carries, where the planner says nothing of its own. */
-export const movedByOffice = (date: string): string => `Moved to ${formatOccurrenceShortDate(date)}`
+export const movedByOffice = (date: string): string => `Moved to ${formatShortDay(date)}`
 
 const byName = (a: string, b: string): number => a.localeCompare(b)
 
 /** The fractions of a group's containers in force and not paused on the service date, by name, once each. */
 function fractionsOn(group: ServingGroup, serviceDate: string): string[] {
-  const inForce = group.containers.filter((container) => covers(container, serviceDate) && !(container.pauses ?? []).some((pause) => covers(pause, serviceDate)))
+  const inForce = group.containers.filter((container) => inForceOn(container, serviceDate) && !(container.pauses ?? []).some((pause) => inForceOn(pause, serviceDate)))
   return [...new Set(inForce.map((container) => container.fraction))].sort(byName)
 }
 

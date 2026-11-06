@@ -42,11 +42,9 @@
 // in force", the end named as the office reads a period, by its last day in
 // (ADR-0005); the web offers no Apply index on a price ended on the project's
 // day.
-import type { Transition } from "../execution/transitions"
-import { addDays } from "../route-schemes/recurrence"
+import type { Transition } from "../machine"
+import { lastDayIn } from "../periods"
 import { type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "./vocabulary"
-
-export type { Transition }
 
 /** What moves a settlement: the three commands. */
 export const SETTLEMENT_COMMANDS = ["calculate", "close", "reopen"] as const
@@ -106,7 +104,7 @@ export function settlementTransition({ status, label, firstDay, lastDay }: Settl
 export const priceEndedBy = (validTo: string | null, day: string): boolean => validTo !== null && validTo <= day
 
 /** An indexation asked of a provider price that has ended: named by its last day in, the day its details read as Valid to — never the wire's first day out (#281). */
-export const priceEnded = (validTo: string): string => `This price was valid to ${addDays(validTo, -1)}; index the price in force`
+export const priceEnded = (validTo: string): string => `This price was valid to ${lastDayIn(validTo)}; index the price in force`
 
 /** A decision asked of an unload that was corrected: the new row is the one to review. */
 export const correctedUnload = (correctionUnloadId: string): string => `This unload was corrected by unload ${correctionUnloadId}; review that one`

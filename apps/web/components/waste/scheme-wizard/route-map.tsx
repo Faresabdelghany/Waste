@@ -26,7 +26,7 @@ import { roadOverlay, roadOverlayPath, roadPath } from "@/lib/map-planning/road-
 import type { LngLatBounds } from "@waste/domain/map-planning/geo"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
 import type { PreviewStop, RoutePreview } from "@waste/domain/map-planning/route-preview"
-import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 
 import type { WizardRoute } from "./wizard-model"
 

@@ -28,13 +28,8 @@ import {
   stopSelectionMode,
   type StopMatchExclusion,
 } from "./matching"
-import {
-  SERVICE_DAYS,
-  SERVICE_DAY_SHORT_LABELS,
-  serviceDaysFromValues,
-  sortServiceDays,
-  type ServiceDay,
-} from "./recurrence"
+import { serviceDaysFromValues, sortServiceDays } from "./recurrence"
+import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "../days"
 import {
   dayPlansFromValues,
   dayPlansToValues,

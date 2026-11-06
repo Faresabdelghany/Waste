@@ -18,7 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import type { GenerationRun } from "@waste/contracts/generation"
-import { addDays, formatServiceDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay } from "@waste/domain/days"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -199,7 +200,7 @@ export function SchemeGenerateDialog({
       const { run, started } = outcome.answer
       onAnswered(outcome.answer)
       onOpenChange(false)
-      const window = `${formatServiceDate(run.windowFrom)} → ${formatServiceDate(run.windowTo)}`
+      const window = `${formatShortDay(run.windowFrom)} → ${formatShortDay(run.windowTo)}`
       if (started) toast.success(`Generation queued — ${record.name}`, { description: `${window}. The run list follows it until the worker has finished.` })
       else toast.info(`A generation of ${record.name} is already queued`, { description: `${TRIGGER_LABELS[run.trigger]}, ${window}. The run list follows that run; ask again once it has finished.` })
     })
@@ -274,7 +275,7 @@ export function SchemeGenerationRunsSection({ generation }: { generation: Scheme
                 <TableCell className="whitespace-nowrap tabular-nums">{dayAndTimeOn(run.createdAt, timezone)}</TableCell>
                 <TableCell>{TRIGGER_LABELS[run.trigger]}</TableCell>
                 <TableCell className="whitespace-nowrap">
-                  {formatServiceDate(run.windowFrom)} → {formatServiceDate(run.windowTo)}
+                  {formatShortDay(run.windowFrom)} → {formatShortDay(run.windowTo)}
                 </TableCell>
                 <TableCell>
                   {unreported.has(run.id) && !isFinished(run) ? (

@@ -11,7 +11,7 @@
 // collects a Bulky Booking.
 import type { OutboxKind } from "../execution/vocabulary"
 import { EVERY_MESSAGE_FILLS, MESSAGE_VARIABLES, placeholdersOf, type MessageVariable } from "../messaging/template"
-import { addDays } from "../route-schemes/recurrence"
+import { addDays } from "../days"
 import type { AlertSeverity, TicketPriority } from "../resolution/vocabulary"
 import type { CustomerNoticeEvent } from "./vocabulary"
 import { ALERT_SEVERITIES } from "../resolution/vocabulary"

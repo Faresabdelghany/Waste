@@ -18,7 +18,7 @@
 // The optimiser is sent each stop's service; its cost is the drive alone, so
 // a stop's seconds never change the order, and they stay out of a Plan's
 // fingerprint (`@waste/domain/routing/fingerprint`).
-import { roundHalfAwayFromZero } from "../finance/money"
+import { roundHalfAwayFromZero } from "../rounding"
 import type { PickupService, PickupStatus, WorkOrderService } from "./vocabulary"
 
 /** A fraction's density, kg per m³: the bounds the database and the wire hold it to. */

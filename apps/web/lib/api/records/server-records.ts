@@ -71,7 +71,7 @@ import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
-import { dayIn } from "./planning"
+import { dayIn } from "./clock"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed"
 

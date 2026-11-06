@@ -24,7 +24,7 @@
 import { RouteEta, RouteTrack, RouteTrackQuery, TRACK_POINTS_MAX, type LiveEta, type Position } from "@waste/contracts/positions"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
-import { instantOnDay } from "@waste/db/commands/days"
+import { instantOnDay } from "@waste/domain/clock"
 import { routeTiming } from "@waste/db/commands/stop-timing"
 import { pickup, session, sessionPosition } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"

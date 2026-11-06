@@ -19,7 +19,8 @@
 // gone by is refused rather than quietly lost (`exceptionsToSave`).
 import type { DropOffPointKind } from "@waste/domain/resources/vocabulary"
 import { exceptionIssues, hoursIssues, type OpeningException, type WeeklyWindow } from "@waste/domain/resources/drop-off-points"
-import { isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, serviceDaysRangeLabel, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 
 /** A point's two kinds as the form offers them and the table names them. */
 export const DROP_OFF_KIND_OPTIONS: readonly { value: DropOffPointKind; label: string }[] = [

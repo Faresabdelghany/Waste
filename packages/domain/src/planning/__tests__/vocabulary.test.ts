@@ -1,6 +1,6 @@
 // The Planning vocabulary, held to the shape every vocabulary module keeps
 // (src/__tests__/vocabulary.ts), and to three things of its own: the days are
-// Monday first, since recurrence.ts indexes them against getUTCDay; the lists
+// Monday first, since days.ts indexes them against getUTCDay; the lists
 // that moved here from the route-scheme modules are still what those modules
 // export, so the move changed no value a stored record carries; and the one
 // list that is the tokens of a display tuple the prototype still reads by
@@ -15,7 +15,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { SCHEME_EDIT_POLICIES } from "../../route-schemes/creation"
 import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../../route-schemes/occurrences"
-import { SERVICE_DAYS } from "../../route-schemes/recurrence"
+import { SERVICE_DAYS } from "../../days"
 import { SCHEME_SERVICE_TYPES } from "../../route-schemes/scope"
 import * as vocabulary from "../vocabulary"
 
@@ -25,7 +25,7 @@ defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 
 const tokenOf = (display: string): string => display.toLowerCase().replaceAll(" ", "-")
 
 describe("the Planning vocabulary's own rules", () => {
-  test("the seven days are Monday first, since recurrence.ts indexes them against getUTCDay", () => {
+  test("the seven days are Monday first, since days.ts indexes them against getUTCDay", () => {
     assert.deepEqual([...vocabulary.SERVICE_DAYS], ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
   })
 

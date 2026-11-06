@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ALERT_COMMANDS, ALERT_DOES_NOT_CHANGE, alertTransition, closedTicket, TICKET_COMMAND_TARGETS, TICKET_COMMANDS, ticketTransition, type AlertCommand, type TicketCommand, type Transition } from "../transitions"
+import { ALERT_COMMANDS, ALERT_DOES_NOT_CHANGE, alertTransition, closedTicket, TICKET_COMMAND_TARGETS, TICKET_COMMANDS, ticketTransition, type AlertCommand, type TicketCommand } from "../transitions"
+import type { Transition } from "../../machine"
 import { ALERT_STATUSES, CLOSED_TICKET_STATUSES, OPEN_TICKET_STATUSES, TICKET_STATUSES, type AlertStatus, type TicketStatus } from "../vocabulary"
 
 const LABEL = "T-8831"

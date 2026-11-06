@@ -21,6 +21,7 @@
 // The rules here are the device's and the purge's; what the door judges of a
 // command's points — the clock bounds and the session's start, point by
 // point — is `decide`'s (commands.ts).
+import { haversineMetres } from "../geo"
 import type { FlatPoint } from "./commands"
 
 /** One fix as the device kept it: when, where, how well it knew, and the speed and heading where the phone gave them, in whole units. */
@@ -53,18 +54,8 @@ export const POSITION_RULES = {
 
 export const POSITION_RETENTION_DAYS = 30
 
-const EARTH_RADIUS_M = 6_371_008.8
-const radians = (degrees: number): number => (degrees * Math.PI) / 180
-
-/** The great-circle distance between two points, in metres: haversine over the mean Earth radius, near enough at a kerb's scale. */
-export function metresBetween(a: FlatPoint, b: FlatPoint): number {
-  const [lonA, latA] = a.coordinates
-  const [lonB, latB] = b.coordinates
-  const dLat = radians(latB - latA)
-  const dLon = radians(lonB - lonA)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(latA)) * Math.cos(radians(latB)) * Math.sin(dLon / 2) ** 2
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
-}
+/** The great-circle distance between two points, in metres, near enough at a kerb's scale. */
+export const metresBetween = (a: FlatPoint, b: FlatPoint): number => haversineMetres(a.coordinates, b.coordinates)
 
 /** Whether the device keeps this fix after the last kept one (null: none kept yet this session). */
 export function keepsFix(last: PositionFix | null, next: PositionFix): boolean {

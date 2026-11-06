@@ -10,7 +10,8 @@
 import { useEffect, useState } from "react"
 
 import type { Occurrence } from "@waste/contracts/route-schemes"
-import { addDays, formatServiceDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay } from "@waste/domain/days"
 import { SCHEME_SEASONS_KEY } from "@waste/domain/route-schemes/scheme-seasons"
 
 import { Badge } from "@/components/ui/badge"
@@ -76,7 +77,7 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
           Next collections
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          The dates the scheme plans from {formatServiceDate(from)} to {formatServiceDate(to)}.
+          The dates the scheme plans from {formatShortDay(from)} to {formatShortDay(to)}.
         </p>
       </div>
       {serverId === undefined ? (
@@ -106,14 +107,14 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
               {pageRows.map((row) => (
                 <TableRow key={`${row.plannedDate}:${row.date}`}>
                   <TableCell className="tabular-nums text-muted-foreground">{row.n ?? "—"}</TableCell>
-                  <TableCell>{formatServiceDate(row.date)}</TableCell>
+                  <TableCell>{formatShortDay(row.date)}</TableCell>
                   <TableCell className="tabular-nums">{row.week}</TableCell>
                   {seasonal && <TableCell className="text-muted-foreground">{row.season ?? "—"}</TableCell>}
                   <TableCell>
                     <Badge variant={row.status === "planned" ? "secondary" : "outline"}>{STATUS_LABELS[row.status]}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {[row.status === "shifted" ? `from ${formatServiceDate(row.plannedDate)}` : null, row.note ?? null].filter(Boolean).join(" · ") || "—"}
+                    {[row.status === "shifted" ? `from ${formatShortDay(row.plannedDate)}` : null, row.note ?? null].filter(Boolean).join(" · ") || "—"}
                   </TableCell>
                 </TableRow>
               ))}

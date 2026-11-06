@@ -23,8 +23,8 @@
 // calendars.
 
 import type { HolidayPolicy } from "../planning/vocabulary"
-import { formatOccurrenceShortDate, type SchemeCalendar } from "../route-schemes/occurrences"
-import { serviceDayOf, SERVICE_DAY_LABELS, type ServiceDay } from "../route-schemes/recurrence"
+import type { SchemeCalendar } from "../route-schemes/occurrences"
+import { formatShortDay, SERVICE_DAY_LABELS, type ServiceDay, serviceDayOf } from "../days"
 
 /** What a generated route's scheme says of a holiday and of its weekdays; null for the office's ad-hoc route, which has no scheme. */
 export type OperatingDayScheme = { holidayPolicy: HolidayPolicy; serviceDays: readonly ServiceDay[] }
@@ -50,7 +50,7 @@ export function operatingDayReading(calendar: SchemeCalendar, day: string, schem
 
 /** The day said for what it is: "Fri 25 Dec is Christmas Day, a holiday on the project's calendar", "Sat 10 Oct is a Saturday of the project's weekend". */
 export function nonWorkingDay(day: string, reading: NonWorkingDay): string {
-  const shown = formatOccurrenceShortDate(day)
+  const shown = formatShortDay(day)
   return reading.kind === "holiday" ? `${shown} is ${reading.name}, a holiday on the project's calendar` : `${shown} is a ${SERVICE_DAY_LABELS[reading.weekday]} of the project's weekend`
 }
 

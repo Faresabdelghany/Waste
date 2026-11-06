@@ -10,11 +10,11 @@
 import type { MoveCreate, MoveOutcome } from "@waste/contracts/moves"
 import { PROPERTY_PARTY_ROLES } from "@waste/domain/registry/vocabulary"
 import { splitList } from "@waste/domain/record-values"
+import { lastDayIn } from "@waste/domain/periods"
 
 import { command, type ApiClient } from "../api/client"
 import { allows, type Grants } from "../api/grants"
 import type { LocalRefusal } from "../api/records/adapter"
-import { lastDayIn } from "../api/records/planning"
 import { formatMinor } from "../commercial/money"
 import type { BusinessRecord } from "./business-modules"
 import { PARTY_FIELDS } from "./properties"

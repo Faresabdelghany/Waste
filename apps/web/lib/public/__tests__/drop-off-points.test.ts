@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { DropOffPointsQuery, type PublicDropOffPoint } from "@waste/contracts/public"
 
-import { boundsOf, dropOffHrefOf, FRACTION_KEY_MAX, fractionKeyOf, mapPointsOf, openingTextOf, pointsCollectionOf, shortDayOf } from "../drop-off-points"
+import { boundsOf, dropOffHrefOf, FRACTION_KEY_MAX, fractionKeyOf, mapPointsOf, openingTextOf, pointsCollectionOf } from "../drop-off-points"
 
 const point = (id: string, coordinates: [number, number]): PublicDropOffPoint => ({
   id,
@@ -41,7 +41,7 @@ describe("fractionKeyOf and dropOffHrefOf", () => {
   })
 })
 
-describe("openingTextOf and shortDayOf", () => {
+describe("openingTextOf", () => {
   test("a day's opening in words: all day, closed, or its windows", () => {
     assert.equal(openingTextOf({ date: "2026-12-21", windows: [], allDay: true, note: null }), "Open all day")
     assert.equal(openingTextOf({ date: "2026-12-22", windows: [], allDay: false, note: null }), "Closed")
@@ -58,10 +58,6 @@ describe("openingTextOf and shortDayOf", () => {
       }),
       "08:00–11:00 and 13:00–17:00",
     )
-  })
-
-  test("a day as a short label, on the date's own calendar", () => {
-    assert.equal(shortDayOf("2026-12-21"), "Mon 21 Dec")
   })
 })
 

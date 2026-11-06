@@ -90,7 +90,7 @@ import { planningAreaOutline } from "@waste/domain/map-planning/areas"
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import type { PlanningAreaPurpose, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { IMPLICIT_GROUP_ID } from "@waste/domain/route-schemes/groups"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut } from "@waste/domain/periods"
 
 import type { Tx } from "../client"
 import { collectionCalendar } from "../schema/collection-calendars"
@@ -328,7 +328,7 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
         companyId: COMPANY_ID,
         projectId: DEMO_PROJECT_IDS[spec.project],
         validFrom: spec.validFrom,
-        validTo: addDays(spec.validThrough, 1),
+        validTo: firstDayOut(spec.validThrough),
         name: spec.name,
       })),
       routeSchemes: SCHEMES.map((spec) => ({

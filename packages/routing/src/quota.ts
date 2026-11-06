@@ -56,7 +56,7 @@
 // the Standard plan's own figures (STANDARD_PLAN); the clock, the sleep, the
 // jitter and the log lines are injected, so the tests run it against the
 // fake's scripted states on a clock they move.
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 import type { RoutingQuotaStanding } from "@waste/domain/routing/quota"
 import type { RoutingJobClass } from "@waste/domain/routing/vocabulary"
 

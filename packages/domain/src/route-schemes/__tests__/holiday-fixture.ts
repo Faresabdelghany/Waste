@@ -3,7 +3,8 @@
 // and the weekly recurrence the round-2 / round-3 briefs pin their values on.
 
 import type { SchemeCalendar } from "../occurrences"
-import type { SchemeRecurrence, ServiceDay } from "../recurrence"
+import type { SchemeRecurrence } from "../recurrence"
+import type { ServiceDay } from "../../days"
 
 // The Danish public holidays of Sep 2026 – Dec 2027 (plus Christmas Eve and
 // New Year's Eve) — the regression fixture the redesign brief pins its

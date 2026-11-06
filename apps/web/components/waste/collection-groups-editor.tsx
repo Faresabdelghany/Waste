@@ -51,12 +51,8 @@ import {
   resolveStopMatches,
   type StopMatchRule,
 } from "@waste/domain/route-schemes/matching"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  serviceDaysFromValues,
-  sortServiceDays,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 /** The planning area picker's value for a rule group matching within the scheme's area. */

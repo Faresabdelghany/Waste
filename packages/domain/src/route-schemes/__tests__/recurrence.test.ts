@@ -1,22 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  RECURRENCE_WEEKLY_RATES,
-  SERVICE_DAYS,
-  addDays,
-  isoWeek,
-  matchesRecurrence,
-  mondayOf,
-  occurrencesPerWeek,
-  recurrenceCadenceLabel,
-  recurrenceFromValues,
-  serviceDayOf,
-  serviceDaysRangeLabel,
-  weeksFromEffectiveFrom,
-  type RecurrenceFrequency,
-  type ServiceDay,
-} from "../recurrence"
+import { RECURRENCE_WEEKLY_RATES, matchesRecurrence, occurrencesPerWeek, recurrenceCadenceLabel, recurrenceFromValues, serviceDaysRangeLabel, weeksFromEffectiveFrom, type RecurrenceFrequency } from "../recurrence"
+import { addDays, mondayOf, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../../days"
 
 describe("serviceDaysRangeLabel", () => {
   test("three or more consecutive days collapse to a range", () => {
@@ -110,14 +96,6 @@ describe("daily and every-3-weeks", () => {
     assert.equal(matchesRecurrence(recurrence, "2026-10-13"), false)
     assert.equal(matchesRecurrence(recurrence, "2026-10-27"), true)
     assert.equal(RECURRENCE_WEEKLY_RATES["every-3-weeks"], 1 / 3)
-  })
-})
-
-describe("isoWeek", () => {
-  test("known weeks", () => {
-    assert.equal(isoWeek("2026-09-14"), 38)
-    assert.equal(isoWeek("2026-12-28"), 53)
-    assert.equal(isoWeek("2027-01-04"), 1)
   })
 })
 

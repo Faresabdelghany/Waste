@@ -16,7 +16,7 @@
 // so two projects' invoices never share a reference under one creditor. The
 // FIK line the document prints, `+71<reference+creditor<`, is built from the
 // frozen reference and the company's creditor number at print time.
-import { addDays } from "../route-schemes/recurrence"
+import { addDays } from "../days"
 import type { PaymentReferenceScheme } from "./vocabulary"
 
 /** A new project's terms: due thirty days after issue, the column's default. */

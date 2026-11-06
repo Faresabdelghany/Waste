@@ -21,7 +21,9 @@
 // a planned stop routes it, a completed one collected it, and a stop skipped
 // or failed leaves it booked again, the office's to move and route anew.
 import { generateOccurrences, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
-import { addDays, type ServiceDay, type WeekRotation } from "../route-schemes/recurrence"
+import type { WeekRotation } from "../route-schemes/recurrence"
+import { addDays, type ServiceDay } from "../days"
+import { lastDayIn } from "../periods"
 import type { RecurrenceFrequency } from "../planning/vocabulary"
 import type { ProductUnit } from "../registry/vocabulary"
 import type { BulkyBookingStatus, PickupStatus } from "./vocabulary"
@@ -70,7 +72,7 @@ export type BulkyDay = { day: string; slots: number; booked: number; left: numbe
  * by day.
  */
 export function bulkyDays(schedule: BulkySchedule, calendar: SchemeCalendar, window: { from: string; to: string }, booked: ReadonlyMap<string, number>): BulkyDay[] {
-  const lastIn = schedule.validTo === null ? null : addDays(schedule.validTo, -1)
+  const lastIn = schedule.validTo === null ? null : lastDayIn(schedule.validTo)
   // A shift may carry an occurrence into the window from a date outside it, so the walk reaches as far either side as a shift may.
   const reachFrom = addDays(window.from, -SHIFT_SEARCH_DAYS)
   const reachTo = addDays(window.to, SHIFT_SEARCH_DAYS)

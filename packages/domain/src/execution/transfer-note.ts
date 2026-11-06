@@ -5,14 +5,14 @@
 // the hazardous flag, the station, the company that holds and carries the
 // waste, and the vehicle and driver it came on — in its project's language,
 // Danish for a Danish project and English for any other, every string
-// WinAnsi, the PDF standard fonts' encoding, spelled through the invoice
-// document's helpers so the two documents write a day, a number and a
-// character alike.
+// WinAnsi, the PDF standard fonts' encoding, spelled through
+// ../document-text, as the invoice's is, so the two documents write a day and
+// a character alike.
 //
 // The note's number is the unload's id: the ledger row is never rewritten,
 // so the note it makes stands as long as the row does, and a weight review's
 // correction is a new row with a note of its own.
-import { documentDate, winAnsi, type DocumentLanguage } from "../finance/invoice-document"
+import { documentDate, winAnsi, type DocumentLanguage } from "../document-text"
 import { wasteCodePrinted } from "../registry/waste-code"
 
 /** The rows a note is made of, the instant already on the project's clock. */

@@ -16,7 +16,7 @@ import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
 import { holidayListOf } from "@waste/domain/planning/generation"
 import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import type { DropOffPointKind } from "@waste/domain/resources/vocabulary"
-import { NO_HOLIDAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
+import { type HolidayList, NO_HOLIDAYS } from "@waste/domain/days"
 import { and, asc, eq, exists, gte, inArray, lte, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"

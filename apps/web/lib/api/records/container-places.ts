@@ -48,9 +48,11 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { isPropertyRecord, isSharedPointRecord, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { firstDayOut, inForceOn } from "@waste/domain/periods"
 
 import { typed, type MappingContext, type Resolver } from "./adapter"
-import { dayIn, firstDayOut, planningAreaAdapter } from "./planning"
+import { planningAreaAdapter } from "./planning"
+import { dayIn } from "./clock"
 import { nameVia, referencedServerId } from "./references"
 
 /**
@@ -68,7 +70,7 @@ export const CONTAINER_PLACE_MODULES: readonly ModuleLocation[] = [AGREEMENTS_MO
 export type ContainerPlace = { facts: Record<string, string>; values: Record<string, string> }
 
 /** Whether a placement serves on the day: its period half-open, as the wire spells it. */
-export const servesOn = (placement: ContainerServicePlacement, day: string) => placement.validFrom <= day && (placement.validTo === null || day < placement.validTo)
+export const servesOn = (placement: ContainerServicePlacement, day: string) => inForceOn(placement, day)
 
 /** A half-open period: its first day, and its first day out or null while open. */
 type Period = { from: string; until: string | null }

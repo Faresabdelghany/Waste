@@ -30,7 +30,8 @@ import {
 } from "../generation"
 import { runPlanAhead } from "../plan-ahead"
 import { DEFAULT_WEEKEND } from "../project-calendar"
-import { NO_HOLIDAYS, type SchemeCalendar } from "../occurrences"
+import type { SchemeCalendar } from "../occurrences"
+import { NO_HOLIDAYS } from "../../days"
 
 /* --------------------------------- fixtures -------------------------------- */
 
@@ -513,7 +514,7 @@ describe("edit policy · single", () => {
     assert.equal(routeDeviationNote(monday), THIS_COLLECTION_ONLY_NOTE)
     assert.equal(
       plan.message,
-      "Saved for this collection only — 1 route updated through Mon 28 Sept and left as edited by later runs. The scheme itself is unchanged.",
+      "Saved for this collection only — 1 route updated through Mon 28 Sep and left as edited by later runs. The scheme itself is unchanged.",
     )
     // The deviation lives on the route; the scheme's configuration and its generation history stand.
     assert.equal(plan.scheme.submittedValues?.plannedStartTime, undefined)
@@ -720,7 +721,7 @@ describe("edit policy · single", () => {
     assert.equal(routeEditedForThisCollectionOnly(tuesday!), true)
     assert.equal(
       plan.message,
-      "Saved for this collection only — 1 route updated, 1 route cancelled through Tue 29 Sept and left as edited by later runs. The scheme itself is unchanged.",
+      "Saved for this collection only — 1 route updated, 1 route cancelled through Tue 29 Sep and left as edited by later runs. The scheme itself is unchanged.",
     )
     // The scheme still collects on Mondays; the next run puts neither route back.
     const afterEdit = routes.map((route) => plan.routes.find((written) => written.id === route.id) ?? route)

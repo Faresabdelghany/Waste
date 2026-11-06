@@ -30,14 +30,14 @@
 // page's schemes are judged on (today, for a page of schemes in force).
 import type { CollectionGroup, SchemeGeneration, SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/db/commands/days"
+import { dayInTimezone } from "@waste/domain/clock"
+import { lastDayIn } from "@waste/domain/periods"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription } from "@waste/db/schema/agreements"
 import { product, serviceFrequency } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { project } from "@waste/db/schema/organisation"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { schemeSeasonsOf } from "@waste/domain/route-schemes/scheme-seasons"
 import { schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/route-schemes/validation"
 import { intervalCollectionsPerWeek } from "@waste/domain/service-frequencies"
@@ -78,7 +78,7 @@ function plansOf(scheme: SchemeToReconcile): Array<{ day: ServiceDay; containerI
 /** The day a scheme is judged on: its start or today, whichever is later, held inside its period. */
 export function reconciledOn(scheme: Pick<SchemeToReconcile, "validFrom" | "validTo">, today: string): string {
   const from = today > scheme.validFrom ? today : scheme.validFrom
-  return scheme.validTo !== null && from >= scheme.validTo ? addDays(scheme.validTo, -1) : from
+  return scheme.validTo !== null && from >= scheme.validTo ? lastDayIn(scheme.validTo) : from
 }
 
 /** The promises of the containers asked for, as their placements in force on `day` say them. */

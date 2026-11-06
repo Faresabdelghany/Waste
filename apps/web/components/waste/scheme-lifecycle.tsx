@@ -21,7 +21,7 @@ import { archiveScheme, PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL, succeedSch
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
-import { addDays, formatServiceDate } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import type { SchemeEndingCounts } from "@waste/contracts/route-schemes"
 
@@ -125,7 +125,7 @@ export function SchemeSuccessorDialog({ record, today, open, onOpenChange }: Dia
           : successor.status === "validated"
             ? "No generation run could be queued: open it and press Generate before its first day."
             : "It is a draft: validate it, then press Generate before its first day."
-      toast.success(`New version of ${record.name} from ${formatServiceDate(validFrom)}`, {
+      toast.success(`New version of ${record.name} from ${formatShortDay(validFrom)}`, {
         description: `This version now ends the day before. ${planning} ${endingSentence(routes)}`,
       })
     })
@@ -182,7 +182,7 @@ export function SchemeArchiveDialog({ record, today, open, onOpenChange, onArchi
       onOpenChange(false)
       await refreshRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, record.id)
       for (const [workspaceId, moduleId] of ROUTE_MODULES) await refreshModule(workspaceId, moduleId)
-      toast.success(`${record.name} archived`, { description: `It no longer runs from ${formatServiceDate(effectiveFrom)}; ${endingSentence(outcome.answer.routes)} Its routes, stops and history are kept.` })
+      toast.success(`${record.name} archived`, { description: `It no longer runs from ${formatShortDay(effectiveFrom)}; ${endingSentence(outcome.answer.routes)} Its routes, stops and history are kept.` })
       onArchived()
     })
   }

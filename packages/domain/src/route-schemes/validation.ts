@@ -5,19 +5,8 @@
 // and the generation engine can read a scheme's per-day plans back from its
 // submittedValues.
 
-import {
-  occurrencesPerWeek,
-  RECURRENCE_FREQUENCY_LABELS,
-  RECURRENCE_WEEKLY_RATES,
-  SERVICE_DAYS,
-  SERVICE_DAY_SHORT_LABELS,
-  addDays,
-  isIsoDate,
-  serviceDayOf,
-  sortServiceDays,
-  type RecurrenceFrequency,
-  type ServiceDay,
-} from "./recurrence"
+import { occurrencesPerWeek, RECURRENCE_FREQUENCY_LABELS, RECURRENCE_WEEKLY_RATES, sortServiceDays, type RecurrenceFrequency } from "./recurrence"
+import { addDays, isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
 import { seasonsCoverYear, seasonSpanLabel, type SchemeSeason } from "./seasons"
 
 /** Container selection carried by the wizard: one shared list, or one per day. */

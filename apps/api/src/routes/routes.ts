@@ -96,7 +96,7 @@ import type { OfficeCancelReasonCode, PickupStatus, RouteStatus } from "@waste/d
 import type { HolidayPolicy } from "@waste/domain/planning/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
-import type { ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import type { ServiceDay } from "@waste/domain/days"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
 import type { RoutingIdentity } from "@waste/routing/provider"

@@ -16,7 +16,7 @@
 // the same weekdays and set beside each other like for like.
 import type { Rate, ReportInterval, ServiceInterval, ServiceReport, ServiceScheme, TonnageReport, TonnageRow } from "@waste/contracts/reports"
 import { windowDays } from "@waste/domain/insight/intervals"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 
 import type { CsvCell } from "@/lib/data/csv"
 

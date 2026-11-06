@@ -12,7 +12,7 @@
 // `maintenance-due` rule clears its alert on its next tick.
 import type { MaintenanceDueState, MaintenanceOrder, MaintenancePlan } from "@waste/contracts/maintenance"
 import { nextDueLine, planIssue } from "@waste/domain/resources/maintenance"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate } from "@waste/domain/days"
 
 import { command, create, listAll, patch } from "../client"
 import { said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"

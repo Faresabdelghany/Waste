@@ -14,7 +14,7 @@
 // period's run — is taken by the next run, back to `catchUpFrom`, the day
 // `BILLING_CATCH_UP_MONTHS` months before the period's first. Past that, an
 // event waits for a run the office asks over its own period.
-import { isIsoDate } from "../route-schemes/recurrence"
+import { isIsoDate } from "../days"
 
 /** A billing period as the contracts spell one: both days inclusive. */
 export type BillingPeriod = { periodFrom: string; periodTo: string }

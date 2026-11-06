@@ -14,8 +14,7 @@
 // Times are `HH:MM` on the project's clock, a window opening before it closes
 // on the same day: a recycling centre has no overnight hours. Several windows
 // a day are allowed (a lunch break), never overlapping.
-import type { HolidayList } from "../route-schemes/occurrences"
-import { addDays, serviceDayOf, type ServiceDay } from "../route-schemes/recurrence"
+import { addDays, type HolidayList, type ServiceDay, serviceDayOf } from "../days"
 import type { DropOffPointStatus } from "./vocabulary"
 
 /** The status a point is on the public map in; a draft is the office's alone and a closed one is kept for the record. */

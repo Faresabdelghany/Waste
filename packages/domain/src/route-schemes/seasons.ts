@@ -21,6 +21,7 @@
 //
 // Pure date math over ISO `yyyy-mm-dd` strings and `mm-dd` month-days.
 
+import { MONTH_SHORT_LABELS } from "../days"
 import type { SeasonFrequency, WeekRotation } from "../planning/vocabulary"
 
 /** The most seasons a scheme may have: a form's list, and more than a year's quarters and halves need. The contracts bound a body by it. */
@@ -106,12 +107,10 @@ export function overlappingSeasons(seasons: readonly Pick<SchemeSeason, "startsO
   return undefined
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
 /** "1 May": a month-day as the forms show it. */
 export function formatMonthDay(monthDay: MonthDay): string {
   const [month, day] = monthDay.split("-").map(Number)
-  return `${day} ${MONTHS[month - 1]}`
+  return `${day} ${MONTH_SHORT_LABELS[month - 1]}`
 }
 
 /** The last day in the season, the day before `endsOn`: what a reader calls its end. */

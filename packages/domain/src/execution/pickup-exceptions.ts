@@ -29,7 +29,8 @@
 // office stop's exception in the place's history.
 //
 // Dates are ISO days; the module reads no clock, as every date rule here.
-import { addDays } from "../route-schemes/recurrence"
+import { addDays } from "../days"
+import { inForceOn } from "../periods"
 import { PICKUP_EXCEPTION_REASONS, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "./vocabulary"
 
 /** A stop as an exception reads it; `place` is its Property's or its Shared Collection Point's id. */
@@ -76,8 +77,6 @@ export const isChargeable = (stop: PickupExceptionStop): boolean => isPickupExce
 const matchesShape = (rule: PickupExceptionRuleFacts, stop: PickupExceptionStop): boolean =>
   rule.outcome === stop.status && (rule.reason === null || rule.reason === stop.reason) && (rule.contaminantCodeId === null || rule.contaminantCodeId === stop.contaminantCodeId)
 
-const inForce = (rule: PickupExceptionRuleFacts, day: string): boolean => rule.validFrom <= day && (rule.validTo === null || day < rule.validTo)
-
 /** How specific a rule is: a code counts over a reason, so a coded rule beats a reasoned one. */
 const specificity = (rule: PickupExceptionRuleFacts): number => (rule.contaminantCodeId === null ? 0 : 2) + (rule.reason === null ? 0 : 1)
 
@@ -85,7 +84,7 @@ const specificity = (rule: PickupExceptionRuleFacts): number => (rule.contaminan
 export function ruleFor(rules: readonly PickupExceptionRuleFacts[], stop: PickupExceptionStop): PickupExceptionRuleFacts | undefined {
   if (!isPickupException(stop)) return undefined
   return rules
-    .filter((rule) => inForce(rule, stop.serviceDate) && matchesShape(rule, stop))
+    .filter((rule) => inForceOn(rule, stop.serviceDate) && matchesShape(rule, stop))
     .sort((a, b) => specificity(b) - specificity(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0]
 }
 

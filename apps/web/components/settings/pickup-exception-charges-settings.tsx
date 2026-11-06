@@ -27,7 +27,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { dayIn, lastDayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
+import { lastDayIn } from "@waste/domain/periods"
 import {
   allowanceSentence,
   ANY,

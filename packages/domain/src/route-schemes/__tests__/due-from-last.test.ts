@@ -4,17 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { addMonths, tankDueOn, tankWaits } from "../due-from-last"
-
-describe("addMonths", () => {
-  test("moves by calendar months, and a day the month lacks lands on its last day", () => {
-    assert.equal(addMonths("2026-03-15", 12), "2027-03-15")
-    assert.equal(addMonths("2026-11-30", 3), "2027-02-28", "30 February is not a day: its month's last is")
-    assert.equal(addMonths("2027-11-30", 3), "2028-02-29", "a leap year's February has a 29th")
-    assert.equal(addMonths("2026-01-31", 1), "2026-02-28")
-    assert.equal(addMonths("2026-12-31", 24), "2028-12-31")
-  })
-})
+import { tankDueOn, tankWaits } from "../due-from-last"
 
 describe("tankDueOn", () => {
   test("is the last emptying plus the installation's interval", () => {

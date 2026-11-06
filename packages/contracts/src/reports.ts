@@ -49,6 +49,7 @@
 // A rate is 0..1, or null where there was nothing to divide by — a rate of
 // nothing is not zero (`rate`).
 import { REPORT_INTERVALS, WASTE_DATA_WARNINGS } from "@waste/domain/insight/vocabulary"
+import { daysInclusive } from "@waste/domain/days"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
@@ -77,8 +78,8 @@ export const REPORT_WINDOW_TOO_LONG = `A report's window is at most ${REPORT_WIN
  * rather than being told a second, wrong sentence.
  */
 export const reportWindowFits = (window: { from: string; to: string }): boolean => {
-  const span = Date.parse(window.to) - Date.parse(window.from)
-  return Number.isNaN(span) || span / 86_400_000 + 1 <= REPORT_WINDOW_MAX_DAYS
+  const span = daysInclusive(window.from, window.to)
+  return Number.isNaN(span) || span <= REPORT_WINDOW_MAX_DAYS
 }
 const reportWindowFitsAt = { message: REPORT_WINDOW_TOO_LONG, path: ["to"] }
 

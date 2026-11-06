@@ -27,7 +27,7 @@ import type { Tx } from "@waste/db/client"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
