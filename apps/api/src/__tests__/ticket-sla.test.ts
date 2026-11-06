@@ -8,7 +8,7 @@ import { AuditEvent } from "@waste/contracts/audit"
 import { Page } from "@waste/contracts/pagination"
 import { TicketSla } from "@waste/contracts/ticket-sla"
 import { TicketType } from "@waste/contracts/ticket-types"
-import { Ticket } from "@waste/contracts/tickets"
+import { Ticket, TicketEvent } from "@waste/contracts/tickets"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
@@ -25,6 +25,7 @@ const database = databaseUnderTest()
 /** The owner sweeps the ticket history the suite writes, which `wms_api` may not delete. */
 const owner = ownerUnderTest()
 const TicketPage = Page(Ticket)
+const EventPage = Page(TicketEvent)
 const AuditPage = Page(AuditEvent)
 
 const NOON = new Date("2026-10-24T12:00:00.000Z")
@@ -216,6 +217,37 @@ describe("a project's ticket SLA", { skip: database.skip || owner.skip }, () => 
       assert.deepEqual((await refused(await put(olivia, a.projects.copenhagen.id, [{ ticketTypeId: bulky.id, kind: "overflow", priority: "low", hours: 8 }]), 400)).errors?.map((error) => error.path), ["targets.0"])
       const old = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Old overflow", kind: "overflow", status: "inactive" } }), TicketType)
       assert.equal((await refused(await put(olivia, a.projects.copenhagen.id, [{ ticketTypeId: old.id, kind: null, priority: "low", hours: 8 }]), 409)).detail, retiredTicketType("Old overflow"))
+      await read(
+        await put(olivia, a.projects.copenhagen.id, [
+          { kind: null, priority: "high", hours: 24 },
+          { kind: "overflow", priority: "high", hours: 4 },
+        ]),
+      )
+    })
+
+    test("a priority its type's actions set as it opens is due by that priority's target; an opener's own date stays its own", async () => {
+      const loud = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Loud overflow", kind: "overflow" } }), TicketType)
+      const actions = await olivia(`/ticket-types/${loud.id}/actions`, { method: "PUT", body: { actions: [{ trigger: "opened", kind: "set-priority", priority: "high" }] } })
+      assert.equal(actions.status, 200, JSON.stringify(await actions.clone().json()))
+      const raised = await open({ ticketTypeId: loud.id, kind: "overflow", priority: "low" })
+      assert.equal(raised.priority, "high")
+      assert.equal(raised.dueAt, at(4), "the kind's target at the priority the action set, from when it happened")
+      const lines = EventPage.parse(await (await olivia(`/tickets/${raised.id}/events?limit=20`)).json()).items.filter((event) => event.recordedBy === null)
+      assert.deepEqual(
+        lines.map((event) => event.body),
+        ["Automation of Loud overflow on opening: priority set to high, due within the SLA's 4 hours."],
+      )
+      assert.equal((await open({ ticketTypeId: loud.id, kind: "overflow", priority: "low", dueAt: at(1) })).dueAt, at(1), "a date the opener gave is never re-judged")
+      await read(await put(olivia, a.projects.copenhagen.id, [{ kind: null, priority: "low", hours: 2 }]))
+      const lowered = await olivia(`/ticket-types/${loud.id}/actions`, { method: "PUT", body: { actions: [{ trigger: "opened", kind: "set-priority", priority: "medium" }] } })
+      assert.equal(lowered.status, 200, JSON.stringify(await lowered.clone().json()))
+      const undated = await open({ ticketTypeId: loud.id, kind: "overflow", priority: "low" })
+      assert.equal(undated.dueAt, null, "a priority with no target leaves it with no due date")
+      const said = EventPage.parse(await (await olivia(`/tickets/${undated.id}/events?limit=20`)).json()).items.filter((event) => event.recordedBy === null)
+      assert.deepEqual(
+        said.map((event) => event.body),
+        ["Automation of Loud overflow on opening: priority set to medium; the SLA sets no target at medium, so it has no due date."],
+      )
       await read(
         await put(olivia, a.projects.copenhagen.id, [
           { kind: null, priority: "high", hours: 24 },

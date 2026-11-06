@@ -173,6 +173,9 @@ export const actionsOf = <A extends Pick<TicketAction, "trigger">>(actions: read
 /** A line of a ticket's history an action leaves: "Automation of Bulky waste collection on completion: assigned to team Container desk." */
 export const automationNote = (typeName: string, trigger: TicketActionTrigger, said: string): string => `Automation of ${typeName} ${TRIGGER_WORDS[trigger]}: ${said}`
 
+/** Whether a history line no person recorded is the automation's: every line a run leaves begins `Automation`. */
+export const isAutomationLine = (body: string | null): boolean => body !== null && body.startsWith("Automation ")
+
 /** What a chain past its last level leaves. */
 export const AUTOMATION_STOPPED = `Automation stopped: a chain of rules ran past ${AUTOMATION_DEPTH_MAX} levels, as two types' rules would if they set each other off`
 

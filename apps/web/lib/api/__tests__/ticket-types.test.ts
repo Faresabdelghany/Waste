@@ -24,6 +24,7 @@ import {
   fieldValuesAfterEdit,
   fieldValuesFromForm,
   formValuesOfFields,
+  TICKET_TYPE_PERMISSIONS_KEY,
   ticketTypeFormFields,
   typeActionsOf,
   typeFieldFormId,
@@ -35,7 +36,7 @@ import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { ticketTeamsModule } from "../records/ticket-teams"
-import { isTicketTypeRecord, ticketTypeAdapter } from "../records/ticket-types"
+import { isTicketTypeRecord, ticketTypeAdapter, typeLetsRole } from "../records/ticket-types"
 import { TICKET_FIELD_VALUES_KEY, ticketAdapter } from "../records/tickets"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
@@ -83,6 +84,18 @@ describe("a ticket type", () => {
     assert.deepEqual([bulkyRecord.status, bulkyRecord.facts.Kind, bulkyRecord.facts.Fields, bulkyRecord.facts.Default], ["Active", "Container request", "Requested date, Bags, Gate open", "No"])
     assert.deepEqual(typeFieldsOf(bulkyRecord), bulky.fields)
     assert.deepEqual(typePermissionsOf(bulkyRecord), [{ command: "complete", roleIds: [handler.id] }])
+  })
+
+  test("a move is offered to a role the type lets make it: a command ticked for roles is theirs alone, an unticked one everyone's", () => {
+    const otherRole = "01a0d2a4-a280-7004-8000-000000000002"
+    assert.equal(typeLetsRole(bulkyRecord, "complete", handlerId, context.resolve), true)
+    assert.equal(typeLetsRole(bulkyRecord, "complete", otherRole, context.resolve), false, "the API would refuse it")
+    assert.equal(typeLetsRole(bulkyRecord, "reject", otherRole, context.resolve), true, "no role ticked")
+    // A role named by its id chip, its row not read, is the same role.
+    const chipped = { submittedValues: { ...bulkyRecord.submittedValues, [TICKET_TYPE_PERMISSIONS_KEY]: JSON.stringify([{ command: "complete", roleIds: [`role-${otherRole}`] }]) } }
+    assert.equal(typeLetsRole(chipped, "complete", otherRole, NOTHING_RESOLVED), true)
+    assert.equal(typeLetsRole(undefined, "complete", otherRole, context.resolve), true, "a type not read is left to the API")
+    assert.equal(typeLetsRole(bulkyRecord, "complete", undefined, context.resolve), true, "so is a role not yet known")
   })
 
   test("a create is the contracts' body: the name, the kind, the description, the status and whether it is the default", () => {

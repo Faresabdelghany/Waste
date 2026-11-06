@@ -166,7 +166,7 @@ import {
   subscriptionProductOptions,
 } from "@/lib/data/agreements"
 import type { TimelineTask } from "@/lib/data/project-details"
-import { recordCountLabel } from "@/lib/table-copy"
+import { awaitedRowsSentence, recordCountLabel } from "@/lib/table-copy"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
 import { PageActions, PageTopBar } from "@/components/page-layout"
@@ -1775,6 +1775,8 @@ export function BusinessWorkspace({
   }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
   // The module has rows, so an empty list means the search or filters hide them: only then is another search worth suggesting.
   const narrowed = visibleScopedRecords.length > 0
+  // On the Pilot the store hands out no sample rows while the API's are awaited: the empty table says they are loading, or why they are not.
+  const rowsAwaited = apiConfigured ? awaitedRowsSentence(activeModuleOnApi) : null
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],
@@ -5345,7 +5347,7 @@ export function BusinessWorkspace({
             ) : isQueueView ? (
               <div className="divide-y divide-border/60 p-1">
                 {filteredRecords.length === 0 ? (
-                  <NoRecordsShown narrowed={narrowed} />
+                  <NoRecordsShown narrowed={narrowed} waiting={rowsAwaited} />
                 ) : (
                   filteredRecords.map((record) => (
                     <TaskRowBase
@@ -5378,6 +5380,7 @@ export function BusinessWorkspace({
               <BusinessRecordCardsView
                 records={filteredRecords}
                 narrowed={narrowed}
+                waiting={rowsAwaited}
                 entityLabel={activeModule.entityLabel}
                 onOpenRecord={openRecord}
                 onCreateRecord={
@@ -5390,6 +5393,7 @@ export function BusinessWorkspace({
               <BusinessRecordBoardView
                 records={filteredRecords}
                 narrowed={narrowed}
+                waiting={rowsAwaited}
                 lifecycle={activeModule.lifecycle}
                 entityLabel={activeModule.entityLabel}
                 onOpenRecord={openRecord}
@@ -5512,7 +5516,7 @@ export function BusinessWorkspace({
                       {filteredRecords.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={visibleTableColumnCount}>
-                            <NoRecordsShown narrowed={narrowed} />
+                            <NoRecordsShown narrowed={narrowed} waiting={rowsAwaited} />
                           </TableCell>
                         </TableRow>
                       ) : (

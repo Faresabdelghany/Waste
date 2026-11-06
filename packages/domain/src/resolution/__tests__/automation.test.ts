@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, actionIssue, actionsOf, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, automationNote, commandTrigger, notPlannable, PLAN_DAYS_AHEAD_MAX, plannedService, TICKET_TYPE_ACTIONS_MAX, triggerOf, type TicketAction } from "../automation"
+import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, actionIssue, actionsOf, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, automationNote, commandTrigger, isAutomationLine, notPlannable, PLAN_DAYS_AHEAD_MAX, plannedService, TICKET_TYPE_ACTIONS_MAX, triggerOf, type TicketAction } from "../automation"
 import { TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_STATUSES } from "../vocabulary"
 
 const NONE = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null }
@@ -81,5 +81,11 @@ describe("the lines a run leaves", () => {
     assert.match(AUTOMATION_STOPPED, new RegExp(`past ${AUTOMATION_DEPTH_MAX} levels`))
     assert.match(AUTOMATION_SPENT, new RegExp(`set ${AUTOMATION_ACTIONS_MAX} actions going`))
     assert.ok(AUTOMATION_ACTIONS_MAX >= TICKET_TYPE_ACTIONS_MAX, "one trigger of one type never meets the budget")
+  })
+
+  test("are told apart from the other lines no person recorded", () => {
+    for (const line of [automationNote("Overflow", "opened", "priority set to high."), AUTOMATION_STOPPED, AUTOMATION_SPENT]) assert.ok(isAutomationLine(line), line)
+    assert.equal(isAutomationLine("Driver could not reach the bin: gate locked."), false)
+    assert.equal(isAutomationLine(null), false)
   })
 })
