@@ -19,6 +19,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import type { PriceResolution, RowVerdict } from "@waste/contracts/price-lists"
+import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -186,6 +187,8 @@ export function ExplainPrice({ initial = {}, label = "Explain price" }: { initia
                 </TableBody>
               </Table>
             </div>
+            {/* Part of the answer Explain price was asked for, not an instruction: why the row that won, won. */}
+            <p className="text-xs leading-5 text-muted-foreground">{RESOLUTION_RULE}</p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("question")}>
                 Change the question

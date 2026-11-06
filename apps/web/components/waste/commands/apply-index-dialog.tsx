@@ -16,7 +16,7 @@ import { toast } from "sonner"
 import type { IndexLine, IndexResult } from "@waste/contracts/finance"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -100,9 +100,11 @@ export function ApplyIndexDialog({
 
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-3xl" data-testid="apply-index" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-3xl" data-testid="apply-index">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          {/* What Apply ends, said before it is pressed. */}
+          <DialogDescription className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground">Each price in force on the day ends on it, and a new one carries the indexed price.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           {scope?.field}

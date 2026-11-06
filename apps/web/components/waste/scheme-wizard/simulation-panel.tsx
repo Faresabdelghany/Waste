@@ -181,11 +181,14 @@ export function SimulationPanel({
           <h3 id="scheme-simulation-heading" className="font-medium">
             Simulate next {countValue} occurrences
           </h3>
-          {simulation.window && (
-            <p className="text-xs text-muted-foreground">
-              {formatOccurrenceShortDate(simulation.window.from)} – {formatOccurrenceDate(simulation.window.to)}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            The draft as it stands against the change below, over the draft&apos;s next{" "}
+            {count(countValue, "collection")}
+            {simulation.window
+              ? ` · ${formatOccurrenceShortDate(simulation.window.from)} – ${formatOccurrenceDate(simulation.window.to)}`
+              : ""}
+            .
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Label htmlFor="scheme-simulation-count" className="text-sm">
