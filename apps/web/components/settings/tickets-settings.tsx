@@ -46,7 +46,7 @@ export function TicketsSettings({ tab, onTabChange, typeId, onTypeChange, onOpen
     case "types":
       return <TicketTypesSettings tabs={tabs} openTypeId={typeId} onOpenType={onTypeChange} />
     case "default-teams":
-      return <TicketDefaultTeamsSettings tabs={tabs} {...pick} />
+      return <TicketDefaultTeamsSettings tabs={tabs} {...pick} onOpenTeams={onOpenTeams} />
     case "deadlines":
       return <TicketSlaSettings tabs={tabs} {...pick} />
     case "charges":

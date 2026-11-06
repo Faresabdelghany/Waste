@@ -478,26 +478,28 @@ function TeamRowActions({
  * takes stays Settings › Tickets' Default teams tab. Offered on the Pilot
  * alone, since the teams are the API's.
  */
-function TeamsPanel({ tabs, teams, rows }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[] }) {
+/** The Teams tab's search, filter, view and page, which the pane holds as it holds the Users' and the Roles', so leaving the tab and coming back finds them as they were. */
+type TeamsTable = {
+  query: string
+  onQueryChange: (query: string) => void
+  statuses: string[]
+  onStatusesChange: (statuses: string[]) => void
+  view: TableView
+  onViewChange: (view: TableView) => void
+  filtered: readonly BusinessRecord[]
+  pagination: ReturnType<typeof useTablePagination<BusinessRecord>>
+}
+
+function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[]; table: TeamsTable }) {
   const session = useApiSession()
   const access = ticketTeamsAccessOf(session.me?.role.grants)
   const { upsertRecord } = useBusinessRecordStore()
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
-  const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [view, setView] = useState<TableView>(defaultTeamView)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const matches = rows.filter(
-    (team) =>
-      (statuses.length === 0 || statuses.includes(team.status)) &&
-      (normalizedQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedQuery)),
-  )
-  const filtered = view.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
-  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
+  const { query, onQueryChange: setQuery, statuses, onStatusesChange: setStatuses, view, onViewChange: setView, filtered } = table
+  const { page, setPage, pageCount, pageRows, totalCount } = table.pagination
 
   // The accounts a member may be: the company's own people, never a provider's.
   const relationOptions = (field: BusinessFormField): readonly BusinessFormOption[] =>
@@ -648,7 +650,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
-  const teamRows: readonly BusinessRecord[] = configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS
+  const teamRows: readonly BusinessRecord[] = useMemo(
+    () => (configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS),
+    [configured, teams.records],
+  )
 
   const [userQuery, setUserQuery] = useState("")
   const [userStatuses, setUserStatuses] = useState<string[]>([])
@@ -659,6 +664,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   const [roleTypes, setRoleTypes] = useState<string[]>([])
   const [roleScopes, setRoleScopes] = useState<string[]>([])
   const [roleView, setRoleView] = useState<TableView>(defaultRoleView)
+
+  const [teamQuery, setTeamQuery] = useState("")
+  const [teamStatuses, setTeamStatuses] = useState<string[]>([])
+  const [teamView, setTeamView] = useState<TableView>(defaultTeamView)
 
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [companyId, setCompanyId] = useState(FIXTURE_COMPANY_ID)
@@ -839,6 +848,16 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
     pageRows: rolesPageRows,
     totalCount: rolesTotalCount,
   } = useTablePagination(filteredRoles)
+  const normalizedTeamQuery = teamQuery.trim().toLowerCase()
+  const filteredTeams = useMemo(() => {
+    const matches = teamRows.filter(
+      (team) =>
+        (teamStatuses.length === 0 || teamStatuses.includes(team.status)) &&
+        (normalizedTeamQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedTeamQuery)),
+    )
+    return teamView.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
+  }, [normalizedTeamQuery, teamRows, teamStatuses, teamView])
+  const teamsPagination = useTablePagination(filteredTeams)
 
   const selectedCompany = companies.find(
     (company) => company.id === companyId,
@@ -1008,7 +1027,21 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   return (
     <>
       {activeTab === "teams" ? (
-        <TeamsPanel tabs={tabs} teams={teams} rows={teamRows} />
+        <TeamsPanel
+          tabs={tabs}
+          teams={teams}
+          rows={teamRows}
+          table={{
+            query: teamQuery,
+            onQueryChange: setTeamQuery,
+            statuses: teamStatuses,
+            onStatusesChange: setTeamStatuses,
+            view: teamView,
+            onViewChange: setTeamView,
+            filtered: filteredTeams,
+            pagination: teamsPagination,
+          }}
+        />
       ) : activeTab === "users" ? (
         <PanelShell
           tabs={tabs}
