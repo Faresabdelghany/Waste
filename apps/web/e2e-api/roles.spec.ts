@@ -33,7 +33,7 @@ test("Roles: a system role's matrix is read-only in the API's sentence; a new ro
   const boxes = page.getByRole("checkbox", { name: /^Can (view|edit|create|delete) — / })
   await expect(boxes.first()).toBeDisabled()
   await expect(page.getByRole("button", { name: "Save permissions" })).toHaveCount(0)
-  await page.getByRole("button", { name: "Roles", exact: true }).click()
+  await page.getByRole("button", { name: "Back to roles" }).click()
 
   // New role, from the Dispatcher's permissions: the copy as typed and the matrix it starts from, posted in one RoleCreate.
   const name = uniqueName("E2E Night Dispatch")

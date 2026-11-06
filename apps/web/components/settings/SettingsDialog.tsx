@@ -48,7 +48,7 @@ import { Switch } from "@/components/ui/switch"
 import { ThemeCustomizer } from "@/components/settings/theme-customizer"
 import { OrganizationAccessManagement } from "@/components/settings/organization-access-management"
 import { CompanyProjectsManagement } from "@/components/settings/company-projects-management"
-import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
+import { AssetManagementSettings, AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
@@ -1386,24 +1386,9 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
  * Panes that render their own full-height panel (header, toolbar, table)
  * instead of the centred control groups.
  */
-function isFullPanelPane(paneId: string): boolean {
-  return (
-    paneId === "asset-management" ||
-    paneId === "access" ||
-    paneId === "company" ||
-    paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
-    paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
-    paneId === MASTER_DATA_SETTINGS_PANE_ID ||
-    paneId === TICKETS_SETTINGS_PANE_ID ||
-    paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
-    paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
-    paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ||
-    paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
-    paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
-    paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
-    paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
-    paneId.startsWith("commercial-")
-  )
+/** The sidebar section a pane is listed under, which heads the pane as its bar (Personal, Operations…). */
+function sectionLabelOf(paneId: string): string | null {
+  return settingsSections.find((section) => section.items.some((item) => item.id === paneId))?.label ?? null
 }
 
 type SettingsWorkspaceProps = {
@@ -1738,13 +1723,7 @@ export function SettingsWorkspace({
         className="mx-2 mb-2 min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-sidebar bg-background sm:my-2 sm:ml-0"
         id="settings-content"
       >
-        <div
-          className={
-            isFullPanelPane(activeItemId)
-              ? "flex min-h-full w-full flex-col"
-              : "mx-auto min-h-full w-full max-w-5xl px-5 py-7 sm:px-10 sm:py-10 lg:px-14"
-          }
-        >
+        <div className="flex min-h-full w-full flex-col">
           <SettingsPane
             definition={profile !== null && activeItemId === "account" ? withSignedInProfile(activePane, profile) : activePane}
             paneId={activeItemId}
@@ -1811,39 +1790,13 @@ function SettingsPane({
   const editable = definition.groups.some((group) => group.controls.some((control) => control.type === "input" || control.type === "select" || control.type === "switch"))
 
   return (
-    <div
-      className={isFullPanelPane(paneId) ? "flex min-w-0 flex-1 flex-col" : "space-y-7"}
-    >
-      {paneId === "company" ? (
+    <div className="flex min-w-0 flex-1 flex-col">
+      {paneId === "company" && (
         <>
           <h1 className="sr-only">Companies</h1>
           <p className="sr-only">
             Manage companies, company information, and projects.
           </p>
-        </>
-      ) : isFullPanelPane(paneId) ? null : (
-        <>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">
-                {definition.title}
-              </h1>
-            </div>
-            {paneId === "account" &&
-              (profile === null ? (
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src="/avatar-profile.jpg" />
-                  <AvatarFallback>OL</AvatarFallback>
-                </Avatar>
-              ) : (
-                // The person signed in, by their initials: no photo is theirs on the Pilot (#282).
-                <Avatar className="h-12 w-12">
-                  <AvatarFallback>{profile.initials}</AvatarFallback>
-                </Avatar>
-              ))}
-          </div>
-
-          <Separator />
         </>
       )}
 
@@ -1880,7 +1833,25 @@ function SettingsPane({
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (
-        <>
+        <AssetPanelShell
+          heading={sectionLabelOf(paneId)}
+          title={definition.title}
+          description={definition.description}
+          action={
+            paneId === "account" &&
+            (profile === null ? (
+              <Avatar className="h-6 w-6">
+                <AvatarImage src="/avatar-profile.jpg" />
+                <AvatarFallback>OL</AvatarFallback>
+              </Avatar>
+            ) : (
+              // The person signed in, by their initials: no photo is theirs on the Pilot (#282).
+              <Avatar className="h-6 w-6">
+                <AvatarFallback>{profile.initials}</AvatarFallback>
+              </Avatar>
+            ))
+          }
+        >
           {paneId === "account" && <ThemeCustomizer />}
 
           {definition.groups.map((group, groupIndex) => (
@@ -1986,7 +1957,7 @@ function SettingsPane({
               </Button>
             </div>
           )}
-        </>
+        </AssetPanelShell>
       )}
     </div>
   )
