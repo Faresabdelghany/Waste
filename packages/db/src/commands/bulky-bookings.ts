@@ -26,6 +26,7 @@ import { holidayListOf } from "@waste/domain/planning/generation"
 import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import type { WeekRotation } from "@waste/domain/route-schemes/recurrence"
 import { addDays, type ServiceDay } from "@waste/domain/days"
+import { inForceOn } from "@waste/domain/periods"
 import { and, asc, count, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -150,10 +151,8 @@ async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from
     reaching.some(
       (row) =>
         row.schedule.id === id &&
-        row.schedule.validFrom <= day &&
-        (row.schedule.validTo === null || row.schedule.validTo > day) &&
-        row.boundaryFrom <= day &&
-        (row.boundaryTo === null || row.boundaryTo > day),
+        inForceOn(row.schedule, day) &&
+        inForceOn({ validFrom: row.boundaryFrom, validTo: row.boundaryTo }, day),
     )
   const governing = (day: string): string | undefined => scheduleIds.find((id) => governs(id, day))
 

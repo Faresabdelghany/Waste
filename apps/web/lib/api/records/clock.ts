@@ -6,7 +6,8 @@
 // domain's (@waste/domain/clock); what is the web's is the fallback: a project
 // the store does not hold, or a zone Intl does not know, reads on the
 // browser's clock rather than throwing.
-import { dayInTimezone, instantOnDay, wallClockIn as wallClockOf } from "@waste/domain/clock"
+import { dayInTimezone, instantOnDay, type WallClock, wallClockIn as wallClockOf } from "@waste/domain/clock"
+import { formatDayMonth } from "@waste/domain/days"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 
@@ -46,13 +47,21 @@ export function dayIn(now: Date, timezone: string | undefined): string {
   return localDay(now)
 }
 
-/** The form's wall-clock time (`YYYY-MM-DDTHH:mm`) an instant reads on the project's clock. */
-export function wallClockIn(instant: string, timezone: string | undefined): string {
+/** The wall clock an instant reads on the project's clock, or on the browser's where the zone is not one. */
+function wallOn(instant: string, timezone: string | undefined): WallClock {
   const date = new Date(instant)
   const zone = knownZone(timezone)
-  if (zone === undefined) return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  const wall = wallClockOf(date, zone)
-  return `${wall.year}-${pad(wall.month)}-${pad(wall.day)}T${pad(wall.hour)}:${pad(wall.minute)}`
+  if (zone !== undefined) return wallClockOf(date, zone)
+  return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds() }
+}
+
+const dayOfWall = (wall: WallClock): string => `${wall.year}-${pad(wall.month)}-${pad(wall.day)}`
+const timeOfWall = (wall: WallClock): string => `${pad(wall.hour)}:${pad(wall.minute)}`
+
+/** The form's wall-clock time (`YYYY-MM-DDTHH:mm`) an instant reads on the project's clock. */
+export function wallClockIn(instant: string, timezone: string | undefined): string {
+  const wall = wallOn(instant, timezone)
+  return `${dayOfWall(wall)}T${timeOfWall(wall)}`
 }
 
 /** The instant a form's wall-clock time is on the project's clock; an instant with its own offset stands as it is; undefined for text that is neither. */
@@ -73,12 +82,13 @@ export function instantOn(value: string, timezone: string | undefined): string |
 export const shownOn = (instant: string, timezone: string | undefined): string => wallClockIn(instant, timezone).replace("T", " ")
 
 /** An instant as a list reads it on the project's clock, its day and time without the year: `24 Oct, 04:32` (#255). */
-export const dayAndTimeOn = (instant: string, timezone: string | undefined): string =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: knownZone(timezone) }).format(new Date(instant))
+export function dayAndTimeOn(instant: string, timezone: string | undefined): string {
+  const wall = wallOn(instant, timezone)
+  return `${formatDayMonth(dayOfWall(wall))}, ${timeOfWall(wall)}`
+}
 
 /** The time of day an instant reads on the project's clock: `04:32` (#255). */
-export const timeOn = (instant: string, timezone: string | undefined): string =>
-  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: knownZone(timezone) }).format(new Date(instant))
+export const timeOn = (instant: string, timezone: string | undefined): string => timeOfWall(wallOn(instant, timezone))
 
 /** The timezone of the project a record is in — its typed `projectId`, else its scope — from the organisation the store loaded; undefined when the store holds no such project. */
 export function projectTimezoneOf(record: Pick<BusinessRecord, "submittedValues" | "projectIds">, context: MappingContext): string | undefined {

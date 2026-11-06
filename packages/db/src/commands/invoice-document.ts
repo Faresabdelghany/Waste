@@ -6,7 +6,8 @@
 // read from the company or the payer as they stand now — so the domain's
 // model (@waste/domain/finance/invoice-document) and the renderer
 // (@waste/documents) make the same file of it whenever they are asked.
-import { documentLanguageOf, type InvoiceDocumentInput } from "@waste/domain/finance/invoice-document"
+import type { InvoiceDocumentInput } from "@waste/domain/finance/invoice-document"
+import { documentLanguageOf } from "@waste/domain/document-text"
 import type { CreditReason } from "@waste/domain/finance/vocabulary"
 import { and, eq } from "drizzle-orm"
 

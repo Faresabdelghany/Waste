@@ -93,6 +93,9 @@
 // #547 of #544 added @waste/domain/resolution/counting-rules: counting-rules.ts
 // holds a rule's limit to the domain's cap and a simulation's window to the
 // domain's rule, in its sentence.
+// The domain's base layer (F2 of #574) added @waste/domain/days: bulky.ts,
+// reports.ts and route-schemes.ts count a window's days through the domain's
+// daysBetween and daysInclusive.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -105,6 +108,7 @@ definePurityTests({
     "@waste/domain/access/branding",
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
+    "@waste/domain/days",
     "@waste/domain/execution/bulky",
     "@waste/domain/execution/haul-out",
     "@waste/domain/execution/positions",

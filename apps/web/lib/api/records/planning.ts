@@ -186,10 +186,10 @@ export const NEXT_VERSION_GEOMETRY_KEY = "nextVersionGeometry"
 /** One boundary version as the record lists it: its first day, its last day in force (null while open) and how it stands on the project's day. */
 export type BoundaryVersionRow = { id: string; validFrom: string; lastDay: string | null; standing: "in force" | "upcoming" | "ended" }
 
-/** An area's versions as the record lists them, by the day each starts, read against the project's day. */
 /** How a version row names its standing. */
 const STANDING_WORDS: Record<PeriodStanding, BoundaryVersionRow["standing"]> = { upcoming: "upcoming", "in-force": "in force", ended: "ended" }
 
+/** An area's versions as the record lists them, by the day each starts, read against the project's day. */
 export function boundaryVersionRows(boundaries: readonly PlanningAreaBoundary[], day: string): BoundaryVersionRow[] {
   return [...boundaries]
     .sort((a, b) => a.validFrom.localeCompare(b.validFrom))

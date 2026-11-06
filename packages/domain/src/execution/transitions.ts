@@ -44,7 +44,6 @@ import { CLOSING_REASONS, type ClosingReason, type PickupOutcome, type PickupSta
 
 export type { PickupOutcome }
 
-
 /** What moves a route: the dispatcher's dispatch and cancel, the driver's start and end. */
 export const ROUTE_COMMANDS = ["dispatch", "start", "end", "cancel"] as const
 export type RouteCommand = (typeof ROUTE_COMMANDS)[number]

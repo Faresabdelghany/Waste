@@ -15,6 +15,10 @@ describe("an instant on the project's clock", () => {
     assert.equal(dayAndTimeOn("2026-10-23T22:30:00Z", "Europe/Copenhagen"), "24 Oct, 00:30", "past midnight in the project, the project's day")
   })
 
+  test("spells September as Sep, whatever the runtime's ICU would", () => {
+    assert.equal(dayAndTimeOn("2026-09-24T02:32:07.421Z", "Europe/Copenhagen"), "24 Sep, 04:32")
+  })
+
   test("its time of day alone, on the same clock", () => {
     assert.equal(timeOn(ASKED, "Europe/Copenhagen"), "04:32")
     assert.equal(timeOn(ASKED, "Africa/Cairo"), "05:32")
