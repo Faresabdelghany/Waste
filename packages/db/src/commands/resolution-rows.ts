@@ -67,6 +67,7 @@ export const ticketColumns = {
   bookedPickupId: ticket.bookedPickupId,
   countingRuleId: ticket.countingRuleId,
   countedFrom: ticket.countedFrom,
+  countedTo: ticket.countedTo,
   counted: ticket.counted,
   createdAt: ticket.createdAt,
   updatedAt: ticket.updatedAt,
@@ -119,7 +120,7 @@ export function ticketOf(row: TicketRow): Ticket {
     closedAt: instantOf(row.closedAt),
     bookedRouteId: row.bookedRouteId,
     bookedPickupId: row.bookedPickupId,
-    countedBy: row.countingRuleId === null || row.countedFrom === null || row.counted === null ? null : { countingRuleId: row.countingRuleId, periodFrom: row.countedFrom, count: row.counted },
+    countedBy: row.countingRuleId === null || row.countedFrom === null || row.countedTo === null || row.counted === null ? null : { countingRuleId: row.countingRuleId, periodFrom: row.countedFrom, periodTo: row.countedTo, count: row.counted },
     ...stampsOf(row),
   }
 }

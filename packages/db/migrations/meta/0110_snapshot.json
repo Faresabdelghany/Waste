@@ -1,5 +1,5 @@
 {
-  "id": "b49bfaa6-53cf-4d39-b579-f17584370d59",
+  "id": "e91252a9-2893-4b22-a47b-c70715e3e05a",
   "prevId": "0cb9017b-dd08-4766-acf0-67800b0f4f5f",
   "version": "7",
   "dialect": "postgresql",
@@ -15855,6 +15855,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "counted_to": {
+          "name": "counted_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "counted": {
           "name": "counted",
           "type": "integer",
@@ -15886,6 +15892,12 @@
             },
             {
               "expression": "counted_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "counted_to",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -16772,7 +16784,7 @@
         },
         "ticket_counting_shape": {
           "name": "ticket_counting_shape",
-          "value": "(\"wms\".\"ticket\".\"counting_rule_id\" is null) = (\"wms\".\"ticket\".\"counted_from\" is null) and (\"wms\".\"ticket\".\"counting_rule_id\" is null) = (\"wms\".\"ticket\".\"counted\" is null) and (\"wms\".\"ticket\".\"counting_rule_id\" is null or \"wms\".\"ticket\".\"property_id\" is not null)"
+          "value": "(\"wms\".\"ticket\".\"counting_rule_id\" is null) = (\"wms\".\"ticket\".\"counted_from\" is null) and (\"wms\".\"ticket\".\"counting_rule_id\" is null) = (\"wms\".\"ticket\".\"counted_to\" is null) and (\"wms\".\"ticket\".\"counting_rule_id\" is null) = (\"wms\".\"ticket\".\"counted\" is null) and (\"wms\".\"ticket\".\"counting_rule_id\" is null or (\"wms\".\"ticket\".\"property_id\" is not null and \"wms\".\"ticket\".\"counted_to\" > \"wms\".\"ticket\".\"counted_from\"))"
         },
         "ticket_counted_positive": {
           "name": "ticket_counted_positive",

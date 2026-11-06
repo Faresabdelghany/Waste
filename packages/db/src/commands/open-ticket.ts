@@ -194,6 +194,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       ...draft.links,
       countingRuleId: draft.countedBy?.countingRuleId ?? null,
       countedFrom: draft.countedBy?.periodFrom ?? null,
+      countedTo: draft.countedBy?.periodTo ?? null,
       counted: draft.countedBy?.count ?? null,
       resolution: null,
       recollectionRouteId: null,

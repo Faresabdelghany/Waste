@@ -11,6 +11,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { CountingRule, CountingSimulation } from "@waste/contracts/counting-rules"
+import { Ticket } from "@waste/contracts/tickets"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { openTicket } from "@waste/db/commands/open-ticket"
@@ -22,6 +23,7 @@ import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { ruleHasTickets } from "../routes/counting-rules"
+import { countedPropertyKept } from "../routes/tickets"
 import { NOT_A_TEAM } from "../routes/references"
 import { retiredTeam, retiredTicketType } from "../routes/statuses"
 import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
@@ -163,12 +165,12 @@ describe("counting rules", { skip: database.skip || owner.skip }, () => {
       }
     })
 
-    test("a rule that opened no ticket is removed; one that did is kept, switched off instead", async () => {
+    test("a rule that opened no ticket is removed; one that did is kept, switched off instead, and its ticket stays its property's", async () => {
       const wrong = await newRule("Set up wrongly")
       assert.equal((await olivia(`/counting-rules/${wrong.id}`, { method: "DELETE" })).status, 204)
       await refused(await olivia(`/counting-rules/${wrong.id}`), 404)
       const used = await newRule("Has opened one")
-      await withCompany(pool.db, a.companyId, (tx: Tx) =>
+      const { answered } = await withCompany(pool.db, a.companyId, (tx: Tx) =>
         openTicket(tx, {
           companyId: a.companyId,
           draft: {
@@ -185,7 +187,7 @@ describe("counting rules", { skip: database.skip || owner.skip }, () => {
             teamId,
             links: { routeId: null, pickupId: null, containerId: null, propertyId: ex.properties.parkvej.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null },
             alertId: null,
-            countedBy: { countingRuleId: used.id, periodFrom: "2026-03-01", count: 3 },
+            countedBy: { countingRuleId: used.id, periodFrom: "2026-03-01", periodTo: "2026-04-01", count: 3 },
           },
           createdBy: null,
           sourceEventId: newId(),
@@ -195,6 +197,12 @@ describe("counting rules", { skip: database.skip || owner.skip }, () => {
         }),
       )
       assert.equal((await refused(await olivia(`/counting-rules/${used.id}`, { method: "DELETE" }), 409)).detail, ruleHasTickets("Has opened one"))
+      // Its ticket is the property's count: moved to another property or to none, it is refused; its own fields still move.
+      for (const propertyId of [ex.properties.havnegade.id, null]) {
+        assert.equal((await refused(await olivia(`/tickets/${answered.id}`, { method: "PATCH", body: { links: { propertyId } } }), 409)).detail, countedPropertyKept(answered.label))
+      }
+      const renamed = await ok(await olivia(`/tickets/${answered.id}`, { method: "PATCH", body: { subject: "Emptied often at Parkvej", links: { propertyId: ex.properties.parkvej.id } } }), Ticket)
+      assert.deepEqual([renamed.subject, renamed.links.propertyId, renamed.countedBy?.periodTo], ["Emptied often at Parkvej", ex.properties.parkvej.id, "2026-04-01"])
     })
 
     test("another company's rule is not one here, and a role without the templates' grant reads and writes none", async () => {

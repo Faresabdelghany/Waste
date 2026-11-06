@@ -4123,7 +4123,8 @@ column wms.ticket 35 ticket_type_id uuid not-null
 column wms.ticket 36 field_values jsonb not-null default='{}'::jsonb
 column wms.ticket 37 counting_rule_id uuid
 column wms.ticket 38 counted_from date
-column wms.ticket 39 counted integer
+column wms.ticket 39 counted_to date
+column wms.ticket 40 counted integer
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_booked_route_id_booked_pickup_id_fk FOREIGN KEY (company_id, project_id, booked_route_id, booked_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
@@ -4135,7 +4136,7 @@ constraint wms.ticket ticket_company_id_fk FOREIGN KEY (company_id) REFERENCES w
 constraint wms.ticket ticket_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.ticket ticket_counted_positive CHECK ((counted > 0))
 constraint wms.ticket ticket_counting_rule_id_fk FOREIGN KEY (company_id, counting_rule_id) REFERENCES wms.counting_rule(company_id, id)
-constraint wms.ticket ticket_counting_shape CHECK ((((counting_rule_id IS NULL) = (counted_from IS NULL)) AND ((counting_rule_id IS NULL) = (counted IS NULL)) AND ((counting_rule_id IS NULL) OR (property_id IS NOT NULL))))
+constraint wms.ticket ticket_counting_shape CHECK ((((counting_rule_id IS NULL) = (counted_from IS NULL)) AND ((counting_rule_id IS NULL) = (counted_to IS NULL)) AND ((counting_rule_id IS NULL) = (counted IS NULL)) AND ((counting_rule_id IS NULL) OR ((property_id IS NOT NULL) AND (counted_to > counted_from)))))
 constraint wms.ticket ticket_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
 constraint wms.ticket ticket_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
@@ -4170,7 +4171,7 @@ index wms.ticket ticket_booked_pickup_id_key CREATE UNIQUE INDEX ticket_booked_p
 index wms.ticket ticket_booked_route_id_idx CREATE INDEX ticket_booked_route_id_idx ON wms.ticket USING btree (company_id, booked_route_id)
 index wms.ticket ticket_charge_product_id_idx CREATE INDEX ticket_charge_product_id_idx ON wms.ticket USING btree (company_id, charge_product_id)
 index wms.ticket ticket_container_id_idx CREATE INDEX ticket_container_id_idx ON wms.ticket USING btree (company_id, container_id)
-index wms.ticket ticket_counting_key CREATE UNIQUE INDEX ticket_counting_key ON wms.ticket USING btree (company_id, counting_rule_id, property_id, counted_from) WHERE (counting_rule_id IS NOT NULL)
+index wms.ticket ticket_counting_key CREATE UNIQUE INDEX ticket_counting_key ON wms.ticket USING btree (company_id, counting_rule_id, property_id, counted_from, counted_to) WHERE (counting_rule_id IS NOT NULL)
 index wms.ticket ticket_created_by_idx CREATE INDEX ticket_created_by_idx ON wms.ticket USING btree (company_id, created_by)
 index wms.ticket ticket_customer_id_idx CREATE INDEX ticket_customer_id_idx ON wms.ticket USING btree (company_id, customer_id)
 index wms.ticket ticket_driver_id_idx CREATE INDEX ticket_driver_id_idx ON wms.ticket USING btree (company_id, driver_id)
@@ -5202,5 +5203,5 @@ journal 1793952129739 6eb121585a7a7e828ec2053f9ef25e4fff6a8832084876f40b57282d81
 journal 1793952137785 117c4f4b466e7cfa44613d86140cc89b92a390cfbae4e01dcbc093477e121dcb
 journal 1793952146294 6e4653033ff4f3f7b9e3200818c56d138bc8d38fb4c806dd93f058898d8c72a3
 journal 1793952149939 ae5d9ea5151ab1c6d9546163ac5bcdaf3fcaa731d85bb01586b3684f506ae4d2
-journal 1793953784195 0d4678fd1b37e7c32e93d1b383f42579c5185e3728d27e7a088efa77e648b8a6
+journal 1793954181730 4695abc819cd6ddcbf7028781d8cded88ec465531dc76ed40e859747885ab300
 pgboss-version 42

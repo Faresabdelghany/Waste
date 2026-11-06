@@ -147,7 +147,7 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" |
     ...(asOf >= "0033" ? ['"charge_product_id" uuid'] : []),
     `"closed_at" ${INSTANT}`,
     ...(asOf >= "0035" ? ['"booked_route_id" uuid', '"booked_pickup_id" uuid'] : []),
-    ...(asOf === "counting" ? ['"counting_rule_id" uuid', '"counted_from" date', '"counted" integer'] : []),
+    ...(asOf === "counting" ? ['"counting_rule_id" uuid', '"counted_from" date', '"counted_to" date', '"counted" integer'] : []),
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
     oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0075" && asOf !== "pre-trip-removal" && asOf !== "counting" ? ["vehicle-defect"] : []), "other"),
@@ -242,10 +242,10 @@ const alertTable = (asOf: "0009" | "0034" | "loads"): string =>
 /** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
 const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
-/** A counting rule's ticket names the rule, the period and the count together, with the property counted at (#547 of #544). */
+/** A counting rule's ticket names the rule, the period whole and the count together, with the property counted at (#547 of #544). */
 const COUNTING_SHAPE = (() => {
-  const [rule, from, counted, property] = ["counting_rule_id", "counted_from", "counted", "property_id"].map((column) => ref("ticket", column))
-  return `(${rule} is null) = (${from} is null) and (${rule} is null) = (${counted} is null) and (${rule} is null or ${property} is not null)`
+  const [rule, from, to, counted, property] = ["counting_rule_id", "counted_from", "counted_to", "counted", "property_id"].map((column) => ref("ticket", column))
+  return `(${rule} is null) = (${from} is null) and (${rule} is null) = (${to} is null) and (${rule} is null) = (${counted} is null) and (${rule} is null or (${property} is not null and ${to} > ${from}))`
 })()
 
 /** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035, 0070 and 0075 (O4, O3c, O30 and O13 of #290) the pre-trip inspection's removal and the counting rules changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
@@ -276,7 +276,7 @@ const ADDED_FOR_TICKET_TYPES = [TYPE_FK, TYPE_INDEX]
 
 /** What the counting rules' migration (#547 of #544) added to the ticket beside the columns and the checks: the key to its rule, and one ticket per rule, property and period. */
 const COUNTING_RULE_FK = tenantFk("ticket", "counting_rule_id", "counting_rule")
-const COUNTING_KEY = partialUniqueIndex("ticket", "ticket_counting_key", ["company_id", "counting_rule_id", "property_id", "counted_from"], `${ref("ticket", "counting_rule_id")} is not null`)
+const COUNTING_KEY = partialUniqueIndex("ticket", "ticket_counting_key", ["company_id", "counting_rule_id", "property_id", "counted_from", "counted_to"], `${ref("ticket", "counting_rule_id")} is not null`)
 const ADDED_FOR_COUNTING_RULES = [COUNTING_RULE_FK, COUNTING_KEY]
 
 const expected = [

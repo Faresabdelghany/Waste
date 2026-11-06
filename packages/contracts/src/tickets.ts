@@ -59,14 +59,16 @@ import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } f
 import { Label, Paragraph } from "./text"
 import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
-/** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
-/** What a Counting Rule's ticket records (#547 of #544): the rule, the first day of the period it counted, and the emptyings counted when the limit was reached. */
+/** What a Counting Rule's ticket records (#547 of #544): the rule, the period it counted — its first day and the first day after it, so a month, a quarter and a year starting on one day are three periods — and the emptyings counted when the limit was reached. */
 export const TicketCountedBy = z.object({
   countingRuleId: Id,
   periodFrom: IsoDate,
+  periodTo: IsoDate,
   count: PositiveInt,
 })
 export type TicketCountedBy = z.infer<typeof TicketCountedBy>
+
+/** What a ticket is about: nine ids the database checks, each null where the ticket names none. */
 
 export const TicketLinks = z.object({
   routeId: Id.nullable(),

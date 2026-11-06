@@ -20,13 +20,18 @@
 // and the count (`countedBy`); `createdBy` null and a minted
 // `source_event_id`, as an automation's follow-up has, since one emptying may
 // reach two rules. Its type's opening actions run in the same transaction.
-// Where the rule says so, each active member of the team is e-mailed it
-// (`countingTicketNotice`), keyed by the ticket, whatever their own choices.
+// Where the rule says so, each active member of the team who works in the
+// ticket's project is e-mailed it (`countingTicketNotice`), keyed by the
+// ticket, whatever their own choices.
 //
-// One property's tickets of one rule and period are opened one at a time: a
-// transaction advisory lock on the three, then the ticket looked for, then
-// the count, so two emptyings completing together under two workers open
-// one; `ticket_counting_key` is the database's word for the same.
+// One property is counted by one event at a time: a transaction advisory lock
+// on the property, taken before any rule is counted and so before any
+// ticket's number takes the company's row, then each rule's ticket looked
+// for, then the count — so two emptyings completing together under two
+// workers open one ticket per rule, and two rules reached at once never wait
+// on each other's locks. `ticket_counting_key` is the database's word for the
+// same. A ticket records its period whole, its first day and the first day
+// after it, so a rule whose period changes counts its new periods afresh.
 //
 // It starts fresh: the emptyings relayed before it ran are not counted as
 // news, though each is counted all the same by the next emptying at its
@@ -38,7 +43,7 @@ import { countedAt } from "@waste/db/commands/counting-rules"
 import { queueStaffMessage } from "@waste/db/commands/messaging"
 import { BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 import { newId } from "@waste/db/ids"
-import { userAccount } from "@waste/db/schema/access"
+import { projectAccess, userAccount } from "@waste/db/schema/access"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { route } from "@waste/db/schema/execution"
@@ -48,7 +53,7 @@ import { withCompany } from "@waste/db/tenant"
 import { countingTicketNotice } from "@waste/domain/notifications/notices"
 import { countingTicketText, periodOf } from "@waste/domain/resolution/counting-rules"
 import type { CountingPeriod, TicketKind } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm"
+import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm"
 
 import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
@@ -71,13 +76,28 @@ async function nameOf(tx: Tx, table: typeof wasteFraction | typeof containerType
   return found?.name ?? null
 }
 
-/** E-mails each active member of the team the ticket, keyed by the ticket so each hears of it once. */
+/** E-mails each active member of the team who works in the ticket's project — every project, or one Project Access names — keyed by the ticket so each hears of it once. */
 async function noticeTeam(tx: Tx, send: JobContext["send"], companyId: string, opened: { id: string; projectId: string; number: number; subject: string; description: string }, teamId: string, teamName: string): Promise<void> {
   const members = await tx
     .select({ userAccountId: teamMember.userAccountId })
     .from(teamMember)
     .innerJoin(userAccount, and(eq(userAccount.companyId, teamMember.companyId), eq(userAccount.id, teamMember.userAccountId)))
-    .where(and(eq(teamMember.companyId, companyId), eq(teamMember.teamId, teamId), isNull(userAccount.deactivatedAt)))
+    .where(
+      and(
+        eq(teamMember.companyId, companyId),
+        eq(teamMember.teamId, teamId),
+        isNull(userAccount.deactivatedAt),
+        or(
+          eq(userAccount.allProjects, true),
+          exists(
+            tx
+              .select({ one: sql`1` })
+              .from(projectAccess)
+              .where(and(eq(projectAccess.companyId, companyId), eq(projectAccess.userAccountId, teamMember.userAccountId), eq(projectAccess.projectId, opened.projectId))),
+          ),
+        ),
+      ),
+    )
     .orderBy(asc(teamMember.userAccountId))
   if (members.length === 0) return
   const [names] = await tx
@@ -95,11 +115,10 @@ async function noticeTeam(tx: Tx, send: JobContext["send"], companyId: string, o
 /** One rule's count at the stop's property: the ticket it opened, or undefined where the count is short or the period's ticket is open already. */
 async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">, companyId: string, stop: Pickup & { propertyId: string }, serviceDate: string, rule: Rule): Promise<string | undefined> {
   const period = periodOf(serviceDate, rule.period as CountingPeriod)
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`counting-rule:${companyId}:${rule.id}:${stop.propertyId}:${period.from}`}, 0))`)
   const [already] = await tx
     .select({ id: ticket.id })
     .from(ticket)
-    .where(and(eq(ticket.companyId, companyId), eq(ticket.countingRuleId, rule.id), eq(ticket.propertyId, stop.propertyId), eq(ticket.countedFrom, period.from)))
+    .where(and(eq(ticket.companyId, companyId), eq(ticket.countingRuleId, rule.id), eq(ticket.propertyId, stop.propertyId), eq(ticket.countedFrom, period.from), eq(ticket.countedTo, period.to)))
     .limit(1)
   if (already !== undefined) return undefined
   const count = await countedAt(tx, companyId, rule, stop.propertyId, period)
@@ -132,7 +151,7 @@ async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">,
       ...(teamTakesTickets ? { teamId: rule.teamId } : {}),
       links: { ...NO_LINKS, propertyId: stop.propertyId },
       alertId: null,
-      countedBy: { countingRuleId: rule.id, periodFrom: period.from, count },
+      countedBy: { countingRuleId: rule.id, periodFrom: period.from, periodTo: period.to, count },
     },
     createdBy: null,
     sourceEventId: newId(),
@@ -177,6 +196,8 @@ export async function countEmptying(event: RelayedEvent, { api, log, now, send }
           ),
         )
         .orderBy(asc(countingRule.id))
+      // The property's lock, before any rule is counted or any ticket numbered.
+      if (rules.length > 0) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`counting-property:${event.companyId}:${propertyId}`}, 0))`)
       for (const rule of rules) {
         const ticketId = await countFor(tx, { send, now }, event.companyId, { ...stop, propertyId }, onRoute.serviceDate, rule)
         if (ticketId !== undefined) opened.push({ countingRuleId: rule.id, ticketId })

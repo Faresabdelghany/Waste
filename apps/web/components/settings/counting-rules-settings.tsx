@@ -8,8 +8,9 @@
 // reads its set. A rule is made inactive and may be simulated over past
 // emptyings before it is switched on (`POST /counting-rules/simulation`): the
 // properties that would have received a ticket, and when. The pickers offer
-// the API's own lists — the active ticket types and teams, the fractions and
-// container types — by server id; the rows and bodies are
+// the API's own lists by server id — the active ticket types and teams, the
+// fractions and container types — and a retired type or team a rule names
+// still reads by its name; the rows and bodies are
 // lib/data/counting-rules.ts's. Offered on the Pilot alone.
 
 import { useState } from "react"
@@ -59,15 +60,15 @@ type Choices = { types: readonly TicketType[]; teams: readonly Team[]; fractions
 
 const NO_CHOICES: Choices = { types: [], teams: [], fractions: [], containerTypes: [] }
 
-/** The name of a reference among the choices, or its id where the list holds it no longer (a retired type, a team out of the list). */
+/** The name of a reference among the choices, or its id where no list the role reads holds it. */
 const nameIn = (rows: readonly { id: string; name: string }[], id: string | null): string | null => (id === null ? null : (rows.find((row) => row.id === id)?.name ?? id))
 
 /** The lists a rule picks from, each read under its own grant: a list the role may not read offers nothing, and a rule's reference reads as its id. */
 async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices> {
   const settle = async <T,>(read: Promise<T[]>): Promise<T[]> => read.catch(() => [])
   const [types, teams, fractions, containerTypes] = await Promise.all([
-    settle(listAll<TicketType>(client, "/ticket-types", { status: "active" })),
-    settle(listAll<Team>(client, "/teams", { status: "active" })),
+    settle(listAll<TicketType>(client, "/ticket-types")),
+    settle(listAll<Team>(client, "/teams")),
     settle(listAll<WasteFraction>(client, "/waste-fractions")),
     settle(listAll<ContainerType>(client, "/container-types")),
   ])
@@ -167,16 +168,20 @@ export function CountingRulesSettings() {
   )
 }
 
+/** The rows a picker offers a new reference: the active ones, where a list has a status (a status gates a new reference). */
+const offered = <Row extends { id: string; name: string; status?: string }>(rows: readonly Row[]): readonly Row[] => rows.filter((row) => row.status === undefined || row.status === "active")
+
 /** A select over a list by id, with an "every one" choice where the list may be left open. */
-function PickRow({ id, label, value, rows, every, invalid, disabled, onChange }: { id: string; label: string; value: string | null; rows: readonly { id: string; name: string }[]; every?: string; invalid?: boolean; disabled?: boolean; onChange: (value: string | null) => void }) {
-  // A reference the list no longer holds still reads, by its id.
-  const held = value !== null && !rows.some((row) => row.id === value) ? [...rows, { id: value, name: value }] : rows
+function PickRow({ id, label, value, rows, every, invalid, disabled, onChange }: { id: string; label: string; value: string | null; rows: readonly { id: string; name: string; status?: string }[]; every?: string; invalid?: boolean; disabled?: boolean; onChange: (value: string | null) => void }) {
+  // The reference the rule holds still reads, retired or not, by its name where the list has it and by its id where it does not.
+  const choices = offered(rows)
+  const held = value !== null && !choices.some((row) => row.id === value) ? [...choices, { id: value, name: nameIn(rows, value) ?? value }] : choices
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Select value={value ?? (every === undefined ? "" : EVERY)} onValueChange={(picked) => onChange(picked === EVERY ? null : picked)} disabled={disabled}>
         <SelectTrigger id={id} aria-label={label} aria-invalid={invalid}>
-          <SelectValue placeholder={rows.length === 0 ? "None to pick" : "Pick one"} />
+          <SelectValue placeholder={choices.length === 0 ? "None to pick" : "Pick one"} />
         </SelectTrigger>
         <SelectContent>
           {every !== undefined && <SelectItem value={EVERY}>{every}</SelectItem>}

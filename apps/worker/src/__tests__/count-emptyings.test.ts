@@ -7,12 +7,14 @@
 // property gets one ticket per rule and period, a redelivery opens nothing,
 // and a stop that is not a completed emptying counts nothing.
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { ticketColumns, ticketOf } from "@waste/db/commands/resolution-rows"
 import type { Send } from "@waste/db/jobs"
+import { role, userAccount } from "@waste/db/schema/access"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { message } from "@waste/db/schema/messaging"
 import { countingRule, team, teamMember, ticket, ticketType } from "@waste/db/schema/resolution"
@@ -47,7 +49,15 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
     await withCompany(pool.db, companyId, async (tx) => {
       await tx.insert(wasteFraction).values({ id: glassId, companyId, key: "glass", name: "Glass" })
       await tx.insert(team).values({ id: teamId, companyId, name: "Customer service" })
-      await tx.insert(teamMember).values({ companyId, teamId, userAccountId: tenant.officeUserId })
+      // Lars works every project; Nora is of the team but works in none of them, so she is never told.
+      const roleId = testId()
+      const nora = testId()
+      await tx.insert(role).values({ id: roleId, companyId, key: null, name: "Desk", scope: "Assigned projects", description: "Answers the counted tickets", system: false })
+      await tx.insert(userAccount).values({ id: nora, companyId, authUserId: randomUUID(), email: `nora@${companyId.slice(-8)}.example`, fullName: "Nora Vik", roleId })
+      await tx.insert(teamMember).values([
+        { companyId, teamId, userAccountId: tenant.officeUserId },
+        { companyId, teamId, userAccountId: nora },
+      ])
       await tx.insert(ticketType).values({ id: typeId, companyId, name: "Emptied too often", kind: "other" })
       const rule = { companyId, ticketTypeId: typeId, teamId, status: "active" }
       await tx.insert(countingRule).values([
@@ -89,7 +99,7 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
     const first = await countEmptying(await emptied(), context())
     const [opened] = await ticketsOf(rules.anyBin)
     assert.deepEqual(first.opened, [{ countingRuleId: rules.anyBin, ticketId: opened.id }])
-    assert.deepEqual(opened.countedBy, { countingRuleId: rules.anyBin, periodFrom: "2026-01-01", count: 1 })
+    assert.deepEqual(opened.countedBy, { countingRuleId: rules.anyBin, periodFrom: "2026-01-01", periodTo: "2027-01-01", count: 1 })
     assert.equal(opened.description, '1 completed emptying in 240 L bin containers at this property in 2026 reached the counting rule "Bin emptied this year", whose limit is 1 a year.')
     assert.deepEqual((await ticketsOf(rules.often)).length + (await ticketsOf(rules.glass)).length + (await ticketsOf(rules.off)).length, 0)
   })
@@ -104,7 +114,7 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
       ["other", typeId, teamId, "counting-rule", "open", "none", null, null, null],
     )
     assert.deepEqual(opened.links, { routeId: null, pickupId: null, containerId: null, propertyId: tenant.properties.parkvej.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null })
-    assert.deepEqual(opened.countedBy, { countingRuleId: rules.often, periodFrom: "2026-10-01", count: 3 })
+    assert.deepEqual(opened.countedBy, { countingRuleId: rules.often, periodFrom: "2026-10-01", periodTo: "2026-11-01", count: 3 })
     assert.equal(opened.subject, "Emptied often")
     assert.equal(opened.description, '3 completed emptyings at this property in October 2026 reached the counting rule "Emptied often", whose limit is 3 a month.')
     assert.equal(opened.occurredAt, at("07:12").toISOString())
@@ -124,6 +134,19 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
     assert.deepEqual((await countEmptying(fourth, context())).opened, [])
     assert.deepEqual((await countEmptying(await emptied({ container: "bin1", status: "completed" }, "pickup-corrected"), context())).opened, [])
     assert.equal((await ticketsOf(rules.often)).length, 1)
+  })
+
+  test("a rule whose period changes counts its new periods afresh: October's ticket does not stand for the fourth quarter's", async () => {
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(countingRule).set({ period: "quarter", limit: 5 }).where(eq(countingRule.id, rules.often)))
+    try {
+      const next = await countEmptying(await emptied(), context())
+      const quarter = (await ticketsOf(rules.often)).find((one) => one.countedBy?.periodTo === "2027-01-01")
+      assert.ok(quarter !== undefined, "the quarter's ticket")
+      assert.deepEqual(next.opened, [{ countingRuleId: rules.often, ticketId: quarter.id }])
+      assert.deepEqual([quarter.countedBy?.periodFrom, quarter.description.startsWith("6 completed emptyings at this property in Q4 2026")], ["2026-10-01", true])
+    } finally {
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(countingRule).set({ period: "month", limit: 3 }).where(eq(countingRule.id, rules.often)))
+    }
   })
 
   test("a failed stop counts nothing, and an address-only emptying counts for the month's rule but never for a container type's", async () => {

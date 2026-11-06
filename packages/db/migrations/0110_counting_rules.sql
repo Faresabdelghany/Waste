@@ -28,6 +28,7 @@ CREATE TABLE "wms"."counting_rule" (
 ALTER TABLE "wms"."ticket" DROP CONSTRAINT "ticket_source_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD COLUMN "counting_rule_id" uuid;--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD COLUMN "counted_from" date;--> statement-breakpoint
+ALTER TABLE "wms"."ticket" ADD COLUMN "counted_to" date;--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD COLUMN "counted" integer;--> statement-breakpoint
 ALTER TABLE "wms"."counting_rule" ADD CONSTRAINT "counting_rule_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "wms"."company"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."counting_rule" ADD CONSTRAINT "counting_rule_waste_fraction_id_fk" FOREIGN KEY ("company_id","waste_fraction_id") REFERENCES "wms"."waste_fraction"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -39,8 +40,8 @@ CREATE INDEX "counting_rule_container_type_id_idx" ON "wms"."counting_rule" USIN
 CREATE INDEX "counting_rule_ticket_type_id_idx" ON "wms"."counting_rule" USING btree ("company_id","ticket_type_id");--> statement-breakpoint
 CREATE INDEX "counting_rule_team_id_idx" ON "wms"."counting_rule" USING btree ("company_id","team_id");--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_counting_rule_id_fk" FOREIGN KEY ("company_id","counting_rule_id") REFERENCES "wms"."counting_rule"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "ticket_counting_key" ON "wms"."ticket" USING btree ("company_id","counting_rule_id","property_id","counted_from") WHERE "wms"."ticket"."counting_rule_id" is not null;--> statement-breakpoint
-ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_counting_shape" CHECK (("wms"."ticket"."counting_rule_id" is null) = ("wms"."ticket"."counted_from" is null) and ("wms"."ticket"."counting_rule_id" is null) = ("wms"."ticket"."counted" is null) and ("wms"."ticket"."counting_rule_id" is null or "wms"."ticket"."property_id" is not null));--> statement-breakpoint
+CREATE UNIQUE INDEX "ticket_counting_key" ON "wms"."ticket" USING btree ("company_id","counting_rule_id","property_id","counted_from","counted_to") WHERE "wms"."ticket"."counting_rule_id" is not null;--> statement-breakpoint
+ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_counting_shape" CHECK (("wms"."ticket"."counting_rule_id" is null) = ("wms"."ticket"."counted_from" is null) and ("wms"."ticket"."counting_rule_id" is null) = ("wms"."ticket"."counted_to" is null) and ("wms"."ticket"."counting_rule_id" is null) = ("wms"."ticket"."counted" is null) and ("wms"."ticket"."counting_rule_id" is null or ("wms"."ticket"."property_id" is not null and "wms"."ticket"."counted_to" > "wms"."ticket"."counted_from")));--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_counted_positive" CHECK ("wms"."ticket"."counted" > 0);--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_source_one_of" CHECK ("wms"."ticket"."source" in ('office', 'phone', 'email', 'portal', 'driver-app', 'dispatch', 'import', 'integration', 'service-provider', 'counting-rule'));
 --> statement-breakpoint
