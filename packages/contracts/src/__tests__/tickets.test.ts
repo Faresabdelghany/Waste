@@ -80,6 +80,7 @@ const ticket = {
   closedAt: null,
   bookedRouteId: null,
   bookedPickupId: null,
+  countedBy: null,
   ...STAMPS,
 }
 
@@ -148,6 +149,11 @@ describe("Ticket", () => {
     assert.deepEqual(Ticket.parse(typed), typed, "its type and its fields' values (#545 of #544)")
     const { ticketTypeId: _type, fieldValues: _values, ...beforeTypes } = ticket
     assert.deepEqual(Ticket.parse(beforeTypes), { ...ticket, ticketTypeId: null }, "an event the outbox took before the types names none, and reads as no type and no values")
+    const counted = { ...ticket, source: "counting-rule", countedBy: { countingRuleId: THIRD, periodFrom: "2026-10-01", count: 12 } }
+    assert.deepEqual(Ticket.parse(counted), counted, "the counting rule that opened it, the period and the count (#547 of #544)")
+    assert.equal(Ticket.safeParse({ ...counted, countedBy: { countingRuleId: THIRD, periodFrom: "2026-10-01", count: 0 } }).success, false, "a count is positive")
+    const { countedBy: _counted, ...beforeRules } = ticket
+    assert.deepEqual(Ticket.parse(beforeRules), ticket, "an event the outbox took before the rules names none, and reads as none")
     assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 
@@ -216,7 +222,7 @@ describe("TicketCreate", () => {
   })
 
   test("never comes from the driver's device or the dispatcher's cancellation: those are the consumer's", () => {
-    for (const source of ["driver-app", "dispatch", "service-provider"]) assert.deepEqual(refusal(TicketCreate.safeParse({ ...body, source })).map((issue) => issue.path), ["source"], source)
+    for (const source of ["driver-app", "dispatch", "service-provider", "counting-rule"]) assert.deepEqual(refusal(TicketCreate.safeParse({ ...body, source })).map((issue) => issue.path), ["source"], source)
     for (const source of ["office", "phone", "email", "portal", "import", "integration"]) assert.equal(TicketCreate.safeParse({ ...body, source }).success, true, source)
   })
 

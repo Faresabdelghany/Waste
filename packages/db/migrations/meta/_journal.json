@@ -771,6 +771,13 @@
       "when": 1793952149939,
       "tag": "0109_drop_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1793953784195,
+      "tag": "0110_counting_rules",
+      "breakpoints": true
     }
   ]
 }

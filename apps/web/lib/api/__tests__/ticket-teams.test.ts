@@ -134,7 +134,7 @@ describe("a ticket's team", () => {
     chargeProductId: null,
     closedAt: null,
     bookedRouteId: null,
-    bookedPickupId: null,
+    bookedPickupId: null, countedBy: null,
   }
 
   test("reads as the team's name once the teams are loaded, its id chip before, and No team for none", () => {

@@ -46,7 +46,7 @@
 // kind is a bug in a route or a job and thrown as one, never left for
 // `ticket_event_kind_shape` to answer as a 500 naming a constraint.
 import type { TicketFieldValues } from "@waste/contracts/ticket-types"
-import type { Ticket, TicketLinks } from "@waste/contracts/tickets"
+import type { Ticket, TicketCountedBy, TicketLinks } from "@waste/contracts/tickets"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import { dueBySla, slaTargetFor } from "@waste/domain/resolution/sla"
 import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
@@ -87,6 +87,8 @@ export type TicketDraft = {
   links: TicketLinks
   /** The alert the ticket answers, linked in the same transaction; null for none. */
   alertId: string | null
+  /** What a Counting Rule's ticket records (#547 of #544); absent on every other. */
+  countedBy?: TicketCountedBy
 }
 
 export type OpenTicketInput = {
@@ -190,6 +192,9 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       createdBy,
       sourceEventId,
       ...draft.links,
+      countingRuleId: draft.countedBy?.countingRuleId ?? null,
+      countedFrom: draft.countedBy?.periodFrom ?? null,
+      counted: draft.countedBy?.count ?? null,
       resolution: null,
       recollectionRouteId: null,
       closedAt: null,
