@@ -12,7 +12,7 @@ import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
@@ -90,10 +90,9 @@ export function WarehouseStockSurface({ record }: RowSurfaceProps) {
       />
       {drafts !== null && (
         <Dialog open onOpenChange={(open) => !open && setDrafts(null)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Stock minimums of {record.name}</DialogTitle>
-              <DialogDescription>The fewest containers of each type this warehouse should hold in stock; a container in maintenance does not count. Leave a type blank for no minimum.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               {drafts.map((draft, index) => (

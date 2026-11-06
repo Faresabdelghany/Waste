@@ -11,7 +11,7 @@ import { useState, type FormEvent } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useApiSession } from "@/components/waste/api-session-store"
@@ -62,10 +62,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
         else if (!busy) close()
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
-          <DialogDescription>Enter the password you signed in with, then the one you will use from now on.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           {/* The account the password belongs to, for the browser's password manager. */}

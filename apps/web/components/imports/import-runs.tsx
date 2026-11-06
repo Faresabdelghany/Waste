@@ -101,7 +101,7 @@ function RefusalsDialog({ run, onClose }: { run: ImportRun | null; onClose: () =
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Refused rows</DialogTitle>
-          <DialogDescription>{run === null ? "" : `${run.fileName}: fix these rows in the file and import it again. The rows already written come back unchanged.`}</DialogDescription>
+          <DialogDescription>{run?.fileName}</DialogDescription>
         </DialogHeader>
         {read.report === null ? (
           <ReportNotice problem={read.problem} />

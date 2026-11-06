@@ -199,9 +199,7 @@ function BalanceDaySurface() {
           <DialogContent className="sm:max-w-2xl" data-testid="balance-day">
             <DialogHeader>
               <DialogTitle>Balance day</DialogTitle>
-              <DialogDescription>
-                The routes of {day.operatingDate} that have not started. A stop moves only onto a route of the same service provider whose vehicle carries its fraction and whose day reaches its window. The times after are estimates until the routes are measured again.
-              </DialogDescription>
+              <DialogDescription>{day.operatingDate}</DialogDescription>
             </DialogHeader>
             {answered !== null ? (
               <p className="text-sm" data-testid="balance-day-result">
@@ -339,7 +337,7 @@ function DispatchDaySurface() {
           <DialogContent className="sm:max-w-xl" data-testid="dispatch-day">
             <DialogHeader>
               <DialogTitle>Dispatch day</DialogTitle>
-              <DialogDescription>The planned routes running on {day.operatingDate}. Each one ticked goes to its planned driver; a route without one is refused and stays planned.</DialogDescription>
+              <DialogDescription>{day.operatingDate}</DialogDescription>
             </DialogHeader>
             {answered !== null ? (
               <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="dispatch-day-results">
@@ -835,22 +833,22 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
           {page.tickets.content}
         </TabsContent>
         <TabsContent value="sessions" forceMount className={tabContent}>
-          <RoutePageSection title="Sessions" description="Each time a driver started this route on the Driver App.">
+          <RoutePageSection title="Sessions">
             {sessionsBlock}
           </RoutePageSection>
         </TabsContent>
         <TabsContent value="plans" forceMount className={tabContent}>
-          <RoutePageSection title="Plans" description="The orders the route was measured in; the active one sets its distance and duration.">
+          <RoutePageSection title="Plans">
             {plansBlock}
           </RoutePageSection>
         </TabsContent>
         <TabsContent value="messages" forceMount className={tabContent}>
-          <RoutePageSection title="Messages" description="The thread with the route's driver.">
+          <RoutePageSection title="Messages">
             {messagesBlock}
           </RoutePageSection>
         </TabsContent>
         <TabsContent value="activity" forceMount className={tabContent}>
-          <RoutePageSection title="Driver app commands" description="What the driver's device sent for this route, and how the API took it.">
+          <RoutePageSection title="Driver app commands">
             {logBlock}
           </RoutePageSection>
           {page.history !== undefined && <div className="px-5 pb-6 empty:hidden">{page.history}</div>}
@@ -908,12 +906,11 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
 }
 
 /** A tab of the route's page beyond Overview: its heading over the read it shows. */
-function RoutePageSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function RoutePageSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
       <div className="border-b border-border px-5 py-4">
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="p-5">{children}</div>
     </section>
@@ -927,10 +924,10 @@ type StopsMode = "move" | "split" | "merge"
 const STOPS_COMMAND_OF: Readonly<Record<StopsMode, string>> = { move: MOVE_STOPS, split: SPLIT_ROUTE, merge: MERGE_ROUTE }
 
 /** What each mode's dialog says. */
-const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; description: string; send: string }>> = {
-  move: { title: "Move stops", description: "Tick the open stops to move and pick the route they go to: a route of this project that has not started. Each is taken off here and added there after its last stop.", send: "Move stops" },
-  split: { title: "Split route", description: "Tick the open stops to split off: they go onto a new route of the same day, with this route's depot, unloading station and start. Leave this route some of its stops.", send: "Split route" },
-  merge: { title: "Merge route", description: "Pick the route to merge into this one: its open stops come here after the last stop, and it is cancelled as merged.", send: "Merge route" },
+const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; send: string }>> = {
+  move: { title: "Move stops", send: "Move stops" },
+  split: { title: "Split route", send: "Split route" },
+  merge: { title: "Merge route", send: "Merge route" },
 }
 
 /** The stops ticked and the other route picked, for a move, a split or a merge; the API judges each stop where it goes. */
@@ -950,10 +947,9 @@ function MoveStopsDialog({ mode, stops, routes, busy, onClose, onSend }: { mode:
   }
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{words.title}</DialogTitle>
-          <DialogDescription>{words.description}</DialogDescription>
         </DialogHeader>
         {picksStops && (
           <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto border-y border-border/60 text-sm" data-testid="move-stops">
@@ -1005,10 +1001,9 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
   }
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Reorder stops</DialogTitle>
-          <DialogDescription>The open stops in the order the driver will visit them. The order becomes the route&apos;s Plan; the stops already decided keep their place.</DialogDescription>
         </DialogHeader>
         <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="reorder-stops">
           {order.map((id, index) => (

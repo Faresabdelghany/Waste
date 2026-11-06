@@ -200,11 +200,7 @@ export function SchemeGenerateRoutesDialog({
           <>
             <DialogHeader>
               <DialogTitle>Generate routes</DialogTitle>
-              <DialogDescription>
-                {scheme.name} · one dated Planned route per collection group
-                per service day, one pickup per container in that group&apos;s
-                plan. Re-running the same window updates instead of duplicating.
-              </DialogDescription>
+              <DialogDescription>{scheme.name}</DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -320,15 +316,6 @@ export function SchemeGenerateRoutesDialog({
               <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
                 {containerDriftWarning(generation.plan.containerDrift)} — the
                 routes above follow the new set.
-              </p>
-            )}
-
-            {generation && (
-              <p className="text-xs text-muted-foreground">
-                Scheme version {generation.plan.schemeVersion} is pinned on every
-                generated route. Ready, Active, Completed, and Cancelled routes
-                are never touched. Holidays follow the scheme&apos;s holiday
-                policy — the same dates the guided setup previewed.
               </p>
             )}
 

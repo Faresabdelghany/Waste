@@ -91,7 +91,6 @@ export function DashboardOnApi() {
       <header className="shrink-0 border-b border-border/70">
         <PageTopBar>
           <Breadcrumbs items={[{ label: "Dashboard" }]} />
-          <p className="hidden text-[11px] text-muted-foreground sm:block">Service, tickets, tonnage, invoicing and the waste-data filing, counted by the API</p>
         </PageTopBar>
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">

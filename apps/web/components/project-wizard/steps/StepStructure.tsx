@@ -65,8 +65,6 @@ export function StepStructure({ data, updateData }: StepStructureProps) {
   return (
     <div className="flex flex-col space-y-4">
       <div className="space-y-4 bg-muted p-2 rounded-3xl">
-        <p className="text-sm text-muted-foreground px-4 pt-2">Choose the workflow that fits your team best.</p>
-
         <div className="grid gap-1">
           {structures.map((option) => (
             <div
@@ -100,9 +98,6 @@ export function StepStructure({ data, updateData }: StepStructureProps) {
       <div className="flex items-center justify-between rounded-lg">
         <div className="space-y-0.5">
             <Label className="text-base">Add starter stops</Label>
-            <p className="text-sm text-muted-foreground">
-                Automatically add default stops based on your route type.
-            </p>
         </div>
         <Switch
             checked={data.addStarterTasks}

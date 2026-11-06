@@ -79,9 +79,7 @@ function SignInPanel({ apiConfigured }: { apiConfigured: boolean }) {
   return (
     <section className="flex flex-col gap-3 rounded-xl border p-4">
       <h1 className="text-lg font-semibold">Sign in to drive</h1>
-      <p className="text-sm text-muted-foreground">
-        {apiConfigured ? "The Driver App shows the routes dispatched to you once you sign in." : "The Driver App works against the Waste API, and this deployment is not connected to one."}
-      </p>
+      {!apiConfigured && <p className="text-sm text-muted-foreground">The Driver App works against the Waste API, and this deployment is not connected to one.</p>}
       {apiConfigured && (
         <Button asChild className="h-11">
           <Link href={`${SIGN_IN_PATH}?next=${encodeURIComponent("/driver")}`}>Sign in</Link>

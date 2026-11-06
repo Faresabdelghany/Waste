@@ -42,7 +42,7 @@ type DialogProps = { open: boolean; onOpenChange: (open: boolean) => void }
 
 type ReasonProps = {
   title: string
-  description: string
+  description?: string
   confirm: string
   noteRequired: boolean
   /** Whether the form takes a photo: a stop's exception does, which the stop's details show; the route's own problem does not, since no office surface reads a photo of a route. */
@@ -54,10 +54,10 @@ type ReasonProps = {
 export function ReasonDialog({ open, onOpenChange, title, description, ...form }: DialogProps & ReasonProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent {...(description === undefined ? { "aria-describedby": undefined } : {})}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          {description !== undefined && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         {/* Mounted with each opening: a cancelled form, or a photo still being prepared when it closed, leaves nothing for the next. */}
         <ReasonForm {...form} onClose={() => onOpenChange(false)} />
@@ -151,11 +151,10 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={submit} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Record an unload</DialogTitle>
-            <DialogDescription>Where the load went and what it weighed.</DialogDescription>
           </DialogHeader>
           <NativeSelect id={`${id}-station`} label="Unloading station" value={stationId} onChange={setStationId}>
             {me.unloadingStations.map((candidate) => (
@@ -196,7 +195,6 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
               value={weighed ? String(netKg ?? "") : net}
               onChange={(event) => setNet(event.target.value)}
             />
-            {weighed && <p className="text-xs text-muted-foreground">Gross less tare.</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-ticket`}>Weighbridge ticket (optional)</Label>

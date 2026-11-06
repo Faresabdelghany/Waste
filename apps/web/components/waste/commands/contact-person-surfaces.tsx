@@ -13,7 +13,7 @@ import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -98,10 +98,9 @@ export function ContactPersonsSurface({ record }: RowSurfaceProps) {
       />
       {draft !== null && (
         <Dialog open onOpenChange={(open) => !open && setDraft(null)}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>{draft.contactId === undefined ? `New contact person for ${record.name}` : `Contact person of ${record.name}`}</DialogTitle>
-              <DialogDescription>Someone who speaks for the organisation, reached on an e-mail or a phone or both. One who has left is made inactive, never deleted.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               {field("name", "Name")}

@@ -243,7 +243,7 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
             <DialogHeader>
               <DialogTitle>Run billing</DialogTitle>
               <DialogDescription>
-                What a run over {preview.body.periodFrom} – {preview.body.periodTo} would do. Nothing is written until you run it.
+                {preview.body.periodFrom} – {preview.body.periodTo}
               </DialogDescription>
             </DialogHeader>
             <dl className="grid grid-cols-2 gap-2 text-sm">

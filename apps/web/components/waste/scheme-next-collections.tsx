@@ -76,7 +76,7 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
           Next collections
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          The dates the scheme plans from {formatServiceDate(from)} to {formatServiceDate(to)}, as generation plans them. Its generated routes are listed here once routes are read from the API.
+          The dates the scheme plans from {formatServiceDate(from)} to {formatServiceDate(to)}.
         </p>
       </div>
       {serverId === undefined ? (

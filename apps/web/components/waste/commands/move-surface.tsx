@@ -15,7 +15,7 @@ import { toast } from "sonner"
 import type { MoveOutcome } from "@waste/contracts/moves"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -44,7 +44,6 @@ export function MovePropertySection({ record }: { record: BusinessRecord }) {
   return (
     <section className="space-y-2" data-testid="property-move" aria-label="Move">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Move</h3>
-      <p className="text-sm text-muted-foreground">A tenant moving out and another in, or the property sold: the roles, the subscriptions and the bins handed on from a day.</p>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <ArrowsLeftRight className="h-4 w-4" />
         Move occupant…
@@ -114,12 +113,9 @@ function MoveDialog({ record, onClose }: { record: BusinessRecord; onClose: () =
 
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-2xl" data-testid="move-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="move-dialog" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Move occupant of {record.name}</DialogTitle>
-          <DialogDescription>
-            From the day, the customer moving out holds none of their roles here and their subscriptions here end; the customer moving in holds the same roles under a new agreement with the same products, and the bins stay in service. Review first; nothing is written until Move.
-          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -157,7 +153,6 @@ function MoveDialog({ record, onClose }: { record: BusinessRecord; onClose: () =
                   ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Not listed? Add them in Contacts first.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="move-payer">Invoiced to</Label>
@@ -180,7 +175,6 @@ function MoveDialog({ record, onClose }: { record: BusinessRecord; onClose: () =
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="move-number">New agreement number</Label>
             <Input id="move-number" value={agreementNumber} placeholder="AGR-3001" onChange={(event) => setAgreementNumber(event.target.value)} />
-            <p className="text-xs text-muted-foreground">Needed when the customer moving out subscribes here; a property nobody subscribes at moves its parties alone.</p>
           </div>
         </div>
         {told !== null && (

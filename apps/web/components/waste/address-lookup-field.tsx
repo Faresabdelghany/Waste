@@ -98,10 +98,7 @@ export function AddressLookupField({
         <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
           <span className="flex items-start gap-2">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" weight="fill" />
-            <span>
-              Found in the address register
-              <span className="block text-xs text-muted-foreground">Typing over the service address makes it your own again.</span>
-            </span>
+            <span>Found in the address register</span>
           </span>
           <Button type="button" variant="ghost" size="sm" onClick={onLetGo} aria-label="Let the register's address go">
             <X className="h-4 w-4" />

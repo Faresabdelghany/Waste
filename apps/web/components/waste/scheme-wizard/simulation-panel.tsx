@@ -158,10 +158,6 @@ export function SimulationPanel({
   if (!open) {
     return (
       <div className="flex items-center justify-between rounded-2xl border border-dashed border-border px-5 py-3">
-        <span className="text-sm text-muted-foreground">
-          Try a change to the recurrence and see which collections it adds, removes, or moves
-          before you make it.
-        </span>
         <Button
           variant="outline"
           className="rounded-xl"
@@ -185,14 +181,11 @@ export function SimulationPanel({
           <h3 id="scheme-simulation-heading" className="font-medium">
             Simulate next {countValue} occurrences
           </h3>
-          <p className="text-xs text-muted-foreground">
-            The draft as it stands against the change below, over the draft&apos;s next{" "}
-            {count(countValue, "collection")}
-            {simulation.window
-              ? ` · ${formatOccurrenceShortDate(simulation.window.from)} – ${formatOccurrenceDate(simulation.window.to)}`
-              : ""}
-            .
-          </p>
+          {simulation.window && (
+            <p className="text-xs text-muted-foreground">
+              {formatOccurrenceShortDate(simulation.window.from)} – {formatOccurrenceDate(simulation.window.to)}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Label htmlFor="scheme-simulation-count" className="text-sm">

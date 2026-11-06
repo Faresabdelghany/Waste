@@ -60,15 +60,6 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, en
     <div className="bg-muted relative rounded-3xl size-full" data-name="Card">
       <div className="size-full">
         <div className="content-stretch flex flex-col gap-4 items-start overflow-clip pb-4 pt-6 px-4 relative size-full">
-          
-          {/* Header Text */}
-          <div className="relative shrink-0 w-full">
-            <div className="flex flex-row items-center justify-center size-full">
-              <div className="flex items-center justify-center px-2 py-0 relative w-full">
-                <p className="basis-0 font-normal grow leading-5 min-h-px min-w-px relative shrink-0 text-muted-foreground text-sm">{`Choose how you'd like to set up your ${entityLabel}`}</p>
-              </div>
-            </div>
-          </div>
 
           {/* Cards Container */}
           <div className="content-stretch flex gap-1 items-start px-0 py-2 relative shrink-0 w-full">

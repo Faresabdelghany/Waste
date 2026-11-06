@@ -259,9 +259,6 @@ function StepProjectDate({ data, updateData }: GuidedStepProps) {
 
   return (
     <div className="max-w-md space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Pick the operating scope and the date this route runs.
-      </p>
       <div className="space-y-2">
         <Label>Project</Label>
         <Select
@@ -299,9 +296,6 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Select the service provider responsible for executing this route.
-      </p>
       <div className="space-y-2">
         {serviceProviders.map((serviceProvider) => {
           const isSelected = data.serviceProviderId === serviceProvider.id
@@ -347,9 +341,6 @@ function StepFleetLocations({ data, updateData }: GuidedStepProps) {
 
   return (
     <div className="max-w-md space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Set where the route starts and unloads, and which vehicle and driver run it.
-      </p>
       <div className="space-y-2">
         <Label>Home depot</Label>
         <Select
@@ -466,10 +457,6 @@ function StepContainers({ data, updateData }: GuidedStepProps) {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Choose what this route collects, then add the containers it serves.
-      </p>
-
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Waste fraction</Label>
