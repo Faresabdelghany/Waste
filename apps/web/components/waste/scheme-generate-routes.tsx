@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useBusinessRecordStore, useStoreRecords } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords } from "@/components/waste/business-record-store"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { containerDriftWarning } from "@waste/domain/route-schemes/container-drift"
@@ -71,15 +71,15 @@ export function SchemeGenerateRoutesDialog({
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), 1))
   const [toDate, setToDate] = useState(() => addDays(todayIso(), 7))
 
-  const existingRoutes = useStoreRecords("route-studio", "routes")
-  const existingPickups = useStoreRecords("route-studio", "pickups")
-  const schemeRecords = useStoreRecords("route-studio", "schemes")
-  const calendarRecords = useStoreRecords(
+  const existingRoutes = useModuleRecords("route-studio", "routes").records
+  const existingPickups = useModuleRecords("route-studio", "pickups").records
+  const schemeRecords = useModuleRecords("route-studio", "schemes").records
+  const calendarRecords = useModuleRecords(
     COLLECTION_CALENDARS_MODULE.workspaceId,
     COLLECTION_CALENDARS_MODULE.moduleId,
-  )
-  const projectRecords = useStoreRecords("configure", "organization")
-  const containers = useStoreRecords("resources", "containers")
+  ).records
+  const projectRecords = useModuleRecords("configure", "organization").records
+  const containers = useModuleRecords("resources", "containers").records
   const { upsertRecord } = useBusinessRecordStore()
 
   // The whole result is deterministic per (scheme, window, stored records),

@@ -33,13 +33,12 @@ import type { UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { weightReviewTransition } from "@waste/domain/finance/transitions"
 import { WEIGHT_REVIEW_STATUSES, type WeightReviewDecision, type WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 
-import { FIXTURE_COMPANY_ID } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { inheritedPresentation, said, stampFacts, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, said, stampFacts, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
@@ -138,7 +137,7 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
       name: unload.weighbridgeTicket === null ? `${fraction} at ${station}` : `${unload.weighbridgeTicket} · ${fraction}`,
       context: `${route} · ${station}`,
       status: REVIEW_LABELS[unload.weightReview.status],
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(unload, context.now),
       value: kilograms(unload.netKg),
       description: refusal === null ? `${fraction} unloaded at ${station} off ${route}.` : `${fraction} refused at ${station} off ${route}: ${REFUSAL_LABELS[refusal.reason].toLowerCase()}.`,
@@ -162,7 +161,6 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
       },
       related: [route, station],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: UNLOAD_RECORD_KIND,
       submittedValues: { routeId: webIdOf("route", unload.routeId), reviewStatus: unload.weightReview.status, tolerance: toleranceOf(load), ...(refusal === null ? {} : { refusalReason: refusal.reason }), netKg: String(unload.netKg), ...(unload.grossKg === null ? {} : { grossKg: String(unload.grossKg) }), ...(unload.tareKg === null ? {} : { tareKg: String(unload.tareKg) }) },

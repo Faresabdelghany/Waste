@@ -27,7 +27,6 @@ import { compartmentDraftsOf, SET_COMPARTMENTS, type CompartmentDraft } from "@/
 import { isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
-const NO_RECORDS = [] as const
 const blank = (): CompartmentDraft => ({ name: "", capacityKg: "", volumeLitres: "", wasteFractionIds: [] })
 
 /** A compartment as its line reads: "Body · 8000 kg · 16000 L · Residual, Mixed". */
@@ -46,7 +45,7 @@ function compartmentLine(draft: CompartmentDraft, index: number, fractionName: (
 export function VehicleCompartmentsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(VEHICLES_MODULE)
   const { busy, run } = useCommandRunner(VEHICLES_MODULE, record.id)
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, NO_RECORDS)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
   const fractions = master.records.filter((row) => masterDataKindOf(row) === "waste-fraction")
   const fractionName = (webId: string) => fractions.find((row) => row.id === webId)?.name ?? webId
   const stored = compartmentDraftsOf(record)

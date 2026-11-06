@@ -1,25 +1,15 @@
 // The licence rule reads typed fields (issue #37): a driver record's
 // licenceClass and optional licenceExpiry, a vehicle record's
-// requiredLicenceClass. The domain cannot see a form field id or the fixture
-// registry, so this test is the bridge: the two fleet forms offer exactly
-// LICENCE_CLASSES on those fields, every fixture vehicle carries its class,
-// every fixture driver but the new hire carries a class and a calendar-day
-// expiry, and the quick form's driver select over the fixture fleet says what
-// Guided Setup step 3 says.
+// requiredLicenceClass. The domain cannot see a form field id, so this test
+// is the bridge: the two fleet forms offer exactly LICENCE_CLASSES on those
+// fields, and the quick form's driver select says what Guided Setup step 3
+// says.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  LICENCE_CLASSES,
-  NO_LICENCE_ON_RECORD,
-  driverProfile,
-  isLicenceClass,
-  vehicleProfile,
-} from "@waste/domain/route-schemes/fleet-profiles"
-import { isIsoDate } from "@waste/domain/days"
+import { LICENCE_CLASSES, NO_LICENCE_ON_RECORD, type FleetRecord } from "@waste/domain/route-schemes/fleet-profiles"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
-import { getModuleDefinition } from "../business-modules"
 import { driverFormOptions } from "../driver-form-options"
 
 const fieldsOf = (workspaceId: "fleet", moduleId: string) => {
@@ -31,11 +21,6 @@ const fieldOf = (fields: ReturnType<typeof fieldsOf>, id: string) => {
   const found = fields.find((field) => field.id === id)
   assert.ok(found, `${id} is not a field of the form`)
   return found
-}
-const recordsOf = (moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId: "fleet", moduleId })
-  assert.ok(module, `fleet.${moduleId} is not a module`)
-  return module.records
 }
 
 describe("the driver form", () => {
@@ -72,55 +57,18 @@ describe("the vehicle form", () => {
   })
 })
 
-describe("the fixture fleet", () => {
-  const vehicles = recordsOf("vehicles")
-  const drivers = recordsOf("drivers")
+describe("the quick form's driver select", () => {
+  const vehicle = (id: string, name: string, requiredLicenceClass: string, resourceKind = "powered-vehicle"): FleetRecord => ({ id, name, context: "", facts: {}, submittedValues: { requiredLicenceClass, resourceKind } })
+  const driver = (id: string, name: string, licenceClass: string, licenceExpiry: string): FleetRecord => ({ id, name, context: "", facts: {}, submittedValues: { licenceClass, licenceExpiry } })
+  const vehicles = [vehicle("vehicle-wh31", "WH-31 · CN 42 031", "C"), vehicle("trailer-wh12", "WH-T12 · TR 12 012", "CE", "trailer")]
+  const drivers = [
+    driver("driver-mads", "Mads Jensen", "CE", "2028-12-31"),
+    driver("driver-freja", "Freja Nielsen", "CE", "2029-03-31"),
+    driver("driver-lars", "Lars Møller", "C", "2026-09-05"),
+    driver("driver-jonas", "Jonas Lind", "", ""),
+  ]
 
-  test("every fixture vehicle carries a typed required licence class the profile reads", () => {
-    assert.ok(vehicles.length > 0)
-    for (const vehicle of vehicles) {
-      const typed = vehicle.submittedValues?.requiredLicenceClass
-      assert.ok(isLicenceClass(typed), `${vehicle.id} carries no licence class`)
-      assert.equal(vehicleProfile(vehicle).licenceClass, typed)
-    }
-  })
-
-  test("the trailer needs CE, the powered vehicles C", () => {
-    const byId = new Map(vehicles.map((vehicle) => [vehicle.id, vehicleProfile(vehicle)]))
-    assert.equal(byId.get("trailer-wh12")?.licenceClass, "CE")
-    for (const id of ["vehicle-wh24", "vehicle-wh31", "vehicle-nr08", "vehicle-nr12"]) {
-      assert.equal(byId.get(id)?.licenceClass, "C", id)
-    }
-  })
-
-  test("every fixture driver but the new hire carries a typed class and a calendar-day expiry", () => {
-    const withLicence = drivers.filter((driver) => driver.id !== "driver-jonas")
-    assert.ok(withLicence.length >= 3)
-    for (const driver of withLicence) {
-      const profile = driverProfile(driver)
-      assert.ok(isLicenceClass(profile.licenceClass), `${driver.id} carries no licence class`)
-      assert.ok(
-        profile.licenceExpiry !== null && isIsoDate(profile.licenceExpiry),
-        `${driver.id} carries no calendar-day expiry`,
-      )
-      assert.equal(profile.licenceClass, driver.submittedValues?.licenceClass)
-      assert.equal(profile.licenceExpiry, driver.submittedValues?.licenceExpiry)
-    }
-    const byId = new Map(withLicence.map((driver) => [driver.id, driverProfile(driver)]))
-    assert.equal(byId.get("driver-mads")?.licenceClass, "CE")
-    assert.equal(byId.get("driver-freja")?.licenceClass, "CE")
-    assert.equal(byId.get("driver-lars")?.licenceClass, "C")
-    assert.equal(byId.get("driver-lars")?.licenceExpiry, "2026-09-05")
-  })
-
-  test("the new hire has no licence on record and is never eligible", () => {
-    const jonas = drivers.find((driver) => driver.id === "driver-jonas")
-    assert.ok(jonas)
-    assert.equal(driverProfile(jonas).licenceClass, null)
-    assert.equal(driverProfile(jonas).licenceExpiry, null)
-  })
-
-  test("the quick form's driver select over the fixture fleet says what Guided Setup step 3 says", () => {
+  test("lists every driver against the planned vehicle, one who may not take it disabled with the reason, as Guided Setup step 3 does", () => {
     const options = driverFormOptions({ plannedVehicleId: "vehicle-wh31" }, drivers, vehicles)
     const byValue = new Map(options.map((option) => [option.value, option]))
     assert.deepEqual(byValue.get("driver-freja"), { value: "driver-freja", label: "Freja Nielsen · CE" })

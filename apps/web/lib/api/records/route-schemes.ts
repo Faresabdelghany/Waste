@@ -82,13 +82,13 @@ import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/pla
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
-import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
+import { PLAN_AHEAD_DAYS_KEY, ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 import { create, get, listAll, patch, post, withQuery } from "../client"
 import {
-  inheritedPresentation,
+  NO_PRESENTATION,
   isLocalRefusal,
   ofKind,
   stampFacts,
@@ -246,9 +246,6 @@ function placeOf(context: MappingContext, record: BusinessRecord, key: string, p
   if (webId === undefined) return null
   return serverIdFor(context, prefix, webId) ?? refusal(key, `The API holds no ${what} ${webId}`)
 }
-
-/** Where a scheme keeps how many days from tomorrow the nightly job plans it (O21 of #290): a whole number of days, as text. */
-export const PLAN_AHEAD_DAYS_KEY = "planAheadDays"
 
 /** What a window outside 1..28 is refused with before the API. */
 export const PLAN_AHEAD_DAYS_REFUSAL = "The nightly job plans 1 to 28 days ahead"
@@ -564,7 +561,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       name: scheme.name,
       context: project?.name ?? "Project",
       status: statusLabel(scheme.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(scheme, context.now),
       value: "—",
       facts: {
@@ -582,7 +579,6 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         ...(scheme.archivedAt === null ? {} : { Archived: scheme.archivedAt.slice(0, 10), [REGISTRY_VISIBILITY_FACT]: SOFT_DELETED }),
         ...(scheme.seasons.length === 0 ? {} : { Seasons: scheme.seasons.map((season) => season.name).join(", ") }),
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       ...(provider.id === undefined ? {} : { serviceProviderId: provider.id }),
       recordKind: "Route Scheme",

@@ -1,9 +1,9 @@
-// When a write goes out on the Pilot (Issues #239, #210, #243). In fixture
-// mode, and to a module on fixtures, to the browser's bucket at once. To a
-// switched module only once the API has read it: before that — still
-// loading, its load failed, or the role does not view it — the store refuses
-// it (`writeRouteOf`), since the browser's bucket is never shown for a
-// switched module. The workspace's own doors — a generic form's create or
+// When a write goes out (Issues #239, #210, #243). To a module on fixtures,
+// to the browser's bucket at once. To a switched module only once the API
+// has read it: before that — still loading, its load failed, the role does
+// not view it, or no API is configured to keep it — the store refuses it
+// (`writeRouteOf`), since the browser keeps no copy of a switched module.
+// The workspace's own doors — a generic form's create or
 // edit, a governed action — hold such a write by the same rule before they
 // act (`writeGate`: a governed action records its audit event and says it
 // was done, a scheme's edit asks its policy, before any answer), and an edit
@@ -14,7 +14,7 @@
 // (`answered`), so the dialog waiting on it is freed.
 import { UNREACHABLE_STATUS } from "../client"
 import { genericProblem, type Problem } from "../problem"
-import { IDLE, refusalProblem, type ModuleState, type WriteOutcome } from "./server-records"
+import { IDLE, keptOnApi, refusalProblem, type ModuleState, type WriteOutcome } from "./server-records"
 
 export type WriteGate = { kind: "write" } | { kind: "held"; description: string }
 
@@ -23,8 +23,8 @@ export type WriteGate = { kind: "write" } | { kind: "held"; description: string 
  * `label` names the module, `when` what the person can do once it is read,
  * `editing` the row an edit changes.
  */
-export function writeGate({ apiConfigured, target, label, when, editing }: { apiConfigured: boolean; target: ModuleState | null; label: string; when: string; editing?: { id: string; name: string } }): WriteGate {
-  if (!apiConfigured || target === null) return { kind: "write" }
+export function writeGate({ target, label, when, editing }: { target: ModuleState | null; label: string; when: string; editing?: { id: string; name: string } }): WriteGate {
+  if (target === null) return { kind: "write" }
   const unread = unreadModule(target, label, when)
   if (unread !== null) return { kind: "held", description: unread }
   if (editing !== undefined && !target.serverIds.has(editing.id)) {
@@ -45,6 +45,8 @@ function unreadModule(target: ModuleState, label: string, when: string): string 
     case "idle":
     case "loading":
       return `${label} is being read from the API; ${when} once it is.`
+    case "kept-on-api":
+      return keptOnApi(label)
   }
 }
 
@@ -56,16 +58,16 @@ export type WriteRoute = { kind: "browser" } | { kind: "api" } | { kind: "refuse
 
 /**
  * Where the store sends a write (#243), whoever asks for it: the browser's
- * bucket in fixture mode and for a module on fixtures; the API for a
- * switched module it has read (`target`, undefined for one never asked for)
- * while someone is signed in; else nowhere — refused in the words the
- * workspace's gate says, never kept in the browser, where a switched module
- * would not show it. A write to a module the role does not view comes only
+ * bucket for a module on fixtures; the API for a switched module it has read
+ * (`target`, undefined for one never asked for) while someone is signed in;
+ * else nowhere — refused in the words the workspace's gate says, never kept
+ * in the browser, which keeps no copy of a switched module. A write to a module the role does not view comes only
  * from another write's sync (no pane of it is shown): it is refused unsaid,
  * as the person saw nothing of it before.
  */
 export function writeRouteOf({ apiConfigured, switched, target, signedIn, label }: { apiConfigured: boolean; switched: boolean; target: ModuleState | undefined; signedIn: boolean; label: string }): WriteRoute {
-  if (!apiConfigured || !switched) return { kind: "browser" }
+  if (!switched) return { kind: "browser" }
+  if (!apiConfigured) return { kind: "refused", problem: genericProblem(UNREACHABLE_STATUS, keptOnApi(label)), said: true }
   if (!signedIn) return { kind: "refused", problem: sessionEnded(), said: true }
   const state = target ?? IDLE
   const unread = unreadModule(state, label, "it can be saved")

@@ -20,7 +20,7 @@ import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { activityLabel, activityReading } from "@waste/domain/service-providers/activities"
 import { splitList } from "@waste/domain/record-values"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ACTIVITY_KIND_KEY, ACTIVITY_PREFIX, ACTIVITY_RECORD_KIND, ACTIVITY_STATUS_KEY, closeBodyOf, daysText, kindLabel, PROVIDER_ACTIVITIES_MODULE, rejectBodyOf } from "@/lib/data/provider-activities"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 
@@ -80,7 +80,6 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
     related: [],
     ...stampFacts(activity, context.now),
     facts: { ...facts, Reading: reading },
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: ACTIVITY_RECORD_KIND,
     submittedValues: {

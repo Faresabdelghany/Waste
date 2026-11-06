@@ -14,7 +14,7 @@ import { FloppyDisk } from "@phosphor-icons/react/dist/ssr"
 
 import type { TicketTeamDefaults } from "@waste/contracts/ticket-teams"
 import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting, type ProjectPick } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,11 +26,8 @@ import { problemSentence } from "@/lib/api/problem"
 import { webIdOf } from "@/lib/api/records/adapter"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { accessUnknownSentence } from "@/lib/api/session"
-import type { BusinessRecord } from "@/lib/data/business-modules"
 import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TICKET_TEAM_PREFIX, TICKET_TEAMS_MODULE, type TeamDefaultRow } from "@/lib/data/ticket-teams"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
-
-const NO_RECORDS: readonly BusinessRecord[] = []
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs.
@@ -39,7 +36,7 @@ const NO_RECORDS: readonly BusinessRecord[] = []
 export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?: ReactNode; pick: ProjectPick; onOpenTeams?: () => void }) {
   const session = useApiSession()
   const access = ticketTeamsAccessOf(session.me?.role.grants)
-  const teamRecords = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  const teamRecords = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   const teamIds = useServerModuleState(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)?.serverIds
   const teams = teamRecords.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record))
   // No team takes tickets yet: each kind's picker offers "No team" alone, so the way to the teams is said here.

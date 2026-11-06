@@ -13,7 +13,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { AllocationCreate, BankLines, PaymentCreate, type Payment, type PaymentDetail } from "@waste/contracts/payments"
 import { bankFileOf } from "@waste/domain/finance/payments"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { createPaymentRecord, PAYMENT_FORM } from "../../data/commercial-forms"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
@@ -28,8 +28,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-10-12T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const RECORDED = { recordedAt: "2026-10-12T08:00:00.000Z" }
-const fixturesOf = (workspaceId: Parameters<typeof getModuleDefinition>[0]["workspaceId"], moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const paymentFixtures = fixturesOf("commercial", "payments")
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "fik-71", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
@@ -37,19 +35,19 @@ const ADMIN = "01a0d2a4-a280-7003-8000-000000000001"
 const invoice: Invoice = { ...RECORDED, id: "01a0d2a4-a280-7080-8000-000000000001", projectId: copenhagen.id, number: 26007188, label: "INV-26007188", kind: "invoice", customerId: osterbro.id, currency: "DKK", issuedOn: "2026-09-30", dueOn: "2026-10-30", periodFrom: "2026-09-01", periodTo: "2026-09-30", billingRunId: "01a0d2a4-a280-7070-8000-000000000001", creditsInvoiceId: null, creditReason: null, creditNote: null, netMinor: 66650, vatMinor: 16663, grossMinor: 83313, issuedBy: ADMIN, paymentReference: "000000260071881", paidMinor: 30000, outstandingMinor: 53313, paymentStatus: "partially-paid" }
 const creditNote: Invoice = { ...invoice, id: "01a0d2a4-a280-7080-8000-000000000002", number: 26007189, label: "CN-26007189", kind: "credit-note", billingRunId: null, creditsInvoiceId: invoice.id, creditReason: "duplicate", paymentReference: null, paidMinor: 0, outstandingMinor: 0, paymentStatus: null, netMinor: -10000, vatMinor: -2500, grossMinor: -12500 }
 
-const NO_CONTEXT = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const NO_CONTEXT = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT(fixturesOf("configure", "organization")))
-const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT(fixturesOf("customers", "contacts")))
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT())
+const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT())
 const asRead = (document: Invoice) => ({ ...document, createdAt: document.recordedAt, updatedAt: document.recordedAt })
 const base: ServerRecordsState = new Map([
   ["configure.organization", moduleOf([copenhagenRecord], [copenhagen.id])],
   ["configure.access", moduleOf([{ ...copenhagenRecord, id: `user-${ADMIN}`, name: "Fares Abdelghany", recordKind: "User" }], [ADMIN])],
   ["customers.contacts", moduleOf([osterbroRecord], [osterbro.id])],
 ])
-const invoiceRecords = [invoice, creditNote].map((document) => invoiceAdapter.toRecord(asRead(document), { ...NO_CONTEXT(fixturesOf("commercial", "invoices")), resolve: resolverOver(base) }))
+const invoiceRecords = [invoice, creditNote].map((document) => invoiceAdapter.toRecord(asRead(document), { ...NO_CONTEXT(), resolve: resolverOver(base) }))
 const state: ServerRecordsState = new Map([...base, ["commercial.invoices", moduleOf(invoiceRecords, [invoice.id, creditNote.id])]])
-const context = (fixtures: readonly BusinessRecord[] = paymentFixtures): MappingContext => ({ fixtures, resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (): MappingContext => ({ resolve: resolverOver(state), now: NOW })
 const [invoiceRecord, creditNoteRecord] = invoiceRecords
 
 const payment: PaymentDetail = {
@@ -90,7 +88,7 @@ describe("the payments module", () => {
 
   test("lists the payments: a matched one by its payer, an unmatched one by the bank's text, each by what its allocations apply", async () => {
     const { fetch, calls } = scripted([() => pageOf([payment, loose])])
-    const result = await loadModule(clientOver(fetch), paymentsModule, { fixtures: paymentFixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), paymentsModule, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/payments?limit=200"])
     const [matched, unmatched] = result.records
     assert.equal(matched.id, `payment-${payment.id}`)
@@ -120,7 +118,7 @@ describe("the payments module", () => {
     assert.deepEqual(paymentAdapter.toCreateBody!(createPaymentRecord({ ...values, invoiceId: "", customerId: osterbroRecord.id }, 3), context()), { projectId: copenhagen.id, amountMinor: 25000, currency: "DKK", paidOn: "2026-10-12", customerId: osterbro.id, reference: "Kontant" }, "without an invoice, in the project's currency")
 
     const { fetch, calls } = scripted([() => json({ ...payment, source: "manual" }, 201, { location: `/payments/${payment.id}` })])
-    const outcome = await writeRecord(clientOver(fetch), paymentsModule, moduleOf([], []), record, { fixtures: paymentFixtures, state })
+    const outcome = await writeRecord(clientOver(fetch), paymentsModule, moduleOf([], []), record, { state })
     assert.equal(calls[0].url, "http://api.test/payments")
     assert.equal(outcome.kind, "created")
   })
@@ -135,7 +133,7 @@ describe("the payments module", () => {
     const current = moduleOf([record], [loose.id])
     const matchedDetail: PaymentDetail = { ...loose, customerId: osterbro.id, allocatedMinor: 55000, unallocatedMinor: 0, allocations: [{ ...payment.allocations[0], id: "01a0d2a4-a280-7091-8000-000000000002", paymentId: loose.id, amountMinor: 55000 }] }
     const { fetch, calls } = scripted([() => json(matchedDetail, 201), () => problem(409, "Invoice INV-26007188 owes only 533.13 DKK"), () => json({ ...matchedDetail, allocatedMinor: 0, unallocatedMinor: 55000 }, 201)])
-    const options = { fixtures: paymentFixtures, state, now: NOW }
+    const options = { state, now: NOW }
     const done = await commandRecord(clientOver(fetch), paymentsModule, current, record, "allocate", { invoiceId: invoiceRecord.id }, options)
     assert.equal(done.kind, "done")
     assert.equal(calls[0].url, `http://api.test/payments/${loose.id}/allocations`)

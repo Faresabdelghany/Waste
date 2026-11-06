@@ -14,11 +14,11 @@ import { formatShortDay } from "@waste/domain/days"
 
 import { BULKY_BOOKINGS_MODULE, BULKY_DAY_KEY, BULKY_ITEMS_KEY, BULKY_SERVER_ID_KEY, BULKY_STATUS_KEY, BULKY_STATUS_LABELS, itemsSentence } from "@/lib/data/bulky"
 import { AGREEMENT_PREFIX, isAgreementRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, post, type ApiClient } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -69,12 +69,11 @@ export function toBulkyBookingRecord(booking: BulkyBooking, context: MappingCont
     name: `Bulky collection · ${place} · ${formatShortDay(booking.day)}`,
     context: `${customer} · ${place}`,
     status: BULKY_STATUS_LABELS[booking.status],
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(booking, context.now),
     value: booking.day,
     description: items,
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: BULKY_BOOKING_RECORD_KIND,
     submittedValues: {

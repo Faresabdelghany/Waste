@@ -16,8 +16,8 @@ import { APPEAL_TEXT_NEEDED, GRANT_STARTS } from "@waste/domain/registry/applica
 
 import { COMMAND_SURFACES, genericEditOffered } from "@/components/waste/commands/command-surfaces"
 
-import { applicationCommandsOffered, APPLICATIONS_MODULE, decideBodyOf, decisionLetterHref, decisionLetterOf, LAST_DAY_SENTENCE, letterOffered, NOT_A_DAY, recordedDecisionOf } from "../../data/applications"
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { applicationCommandsOffered, decideBodyOf, decisionLetterHref, decisionLetterOf, LAST_DAY_SENTENCE, letterOffered, NOT_A_DAY, recordedDecisionOf } from "../../data/applications"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
 import { applicationAdapter, ONE_PLACE, toApplicationCreateBody, toApplicationPatchBody, toApplicationRecord } from "../records/applications"
 import { isServerBacked } from "../records/modules"
@@ -28,9 +28,6 @@ import { loaded, resolverOver, type ServerRecordsState } from "../records/server
 const NOW = new Date("2026-11-20T12:00:00Z")
 const STAMPS = { createdAt: "2026-11-02T09:00:00.000Z", updatedAt: "2026-11-02T09:30:00.000Z" }
 
-const fixtures = getModuleDefinition(APPLICATIONS_MODULE)?.records ?? []
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const anna: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Anna Andersen", registrationNumber: null, email: null, phone: null, billingAddress: "Rosenvej 4\n2100 København Ø", serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
@@ -65,13 +62,13 @@ const grant: Decision = {
 const decided: Application = { ...received, status: "decided", decision: grant }
 const refusal: Decision = { ...grant, id: "01a0d2a4-a280-7041-8000-000000000002", outcome: "refused", conditions: "Your garden is too small.", validFrom: null, validTo: null, appealText: "Write to the municipality within four weeks." }
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const customerRecord = customerAdapter.toRecord(anna, { fixtures: customerFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const customerRecord = customerAdapter.toRecord(anna, { resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: [customerRecord], serverIds: new Map([[customerRecord.id, anna.id]]) }, 1)],
 ])
-const context: MappingContext = { fixtures, resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 const withValues = (record: BusinessRecord, values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 

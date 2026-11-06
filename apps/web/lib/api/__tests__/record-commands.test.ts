@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 
 import type { Role, User } from "@waste/contracts/access"
 
-import { getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { command } from "../client"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "../records/adapter"
@@ -22,8 +22,7 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-const fixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "access" })?.records ?? []
-const context = (resolve = NOTHING_RESOLVED): MappingContext => ({ fixtures, resolve, now: NOW })
+const context = (resolve = NOTHING_RESOLVED): MappingContext => ({ resolve, now: NOW })
 
 const administrator: Role = {
   id: "01a0d2a4-a280-7004-8000-000000000001",
@@ -68,7 +67,7 @@ const current = loaded(
   1,
 )
 const state: ServerRecordsState = new Map([["configure.access", current]])
-const options = { fixtures, state, now: NOW }
+const options = { state, now: NOW }
 
 describe("deactivate and reactivate", () => {
   test("deactivate posts to the row's own command path with no body, and the answer replaces the row, deactivated", async () => {
@@ -202,7 +201,7 @@ describe("a command that says something", () => {
   const thingModule: ServerModule = { workspaceId: "configure", moduleId: "things", resources: [thingAdapter] }
   const thingRecord = thingAdapter.toRecord(thing, context())
   const held = loaded({ records: [thingRecord], serverIds: new Map([[thingRecord.id, thing.id]]) }, 1)
-  const withUsers = { fixtures, state: new Map([["configure.access", current], ["configure.things", held]]), now: NOW }
+  const withUsers = { state: new Map([["configure.access", current], ["configure.things", held]]), now: NOW }
 
   test("the dialog's input becomes the body through toBody, its web ids resolved, and run posts it", async () => {
     const { fetch, calls } = scripted([() => json({ ...thing, tag: "urgent", forUserId: viewer.id })])

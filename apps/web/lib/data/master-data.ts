@@ -47,7 +47,7 @@ import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/regist
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
 import { settingsModuleDomains } from "./business-domain"
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
+import { type BusinessRecord, type ModuleLocation } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
 
 export {
@@ -566,7 +566,6 @@ export function createMasterDataRecord(kind: MasterDataKind, values: BusinessFor
     related: [],
     source: "Settings",
     freshness: "Now",
-    companyId: FIXTURE_COMPANY_ID,
     projectIds: shown.projectIds,
     recordKind: shown.recordKind,
     submittedValues: masterDataTypedValues(kind, values),

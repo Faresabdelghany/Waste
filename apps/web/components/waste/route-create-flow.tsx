@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Stepper } from "@/components/ui/stepper"
 import { CreateModeChooser, type CreateMode } from "@/components/waste/create-mode-chooser"
-import { useStoreRecords } from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/waste/business-record-store"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
@@ -254,7 +254,7 @@ interface GuidedStepProps {
 // Step 1 — Project & date
 
 function StepProjectDate({ data, updateData }: GuidedStepProps) {
-  const projects = useStoreRecords("configure", "organization")
+  const projects = useModuleRecords("configure", "organization").records
 
   return (
     <div className="max-w-md space-y-6">
@@ -291,7 +291,7 @@ function StepProjectDate({ data, updateData }: GuidedStepProps) {
 // Step 2 — Responsibility (service provider list)
 
 function StepResponsibility({ data, updateData }: GuidedStepProps) {
-  const serviceProviders = useStoreRecords("service-providers", "service-providers")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers").records
 
   return (
     <div className="space-y-4">
@@ -335,8 +335,8 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
 // Step 3 — Fleet & locations
 
 function StepFleetLocations({ data, updateData }: GuidedStepProps) {
-  const vehicles = useStoreRecords("fleet", "vehicles")
-  const drivers = useStoreRecords("fleet", "drivers")
+  const vehicles = useModuleRecords("fleet", "vehicles").records
+  const drivers = useModuleRecords("fleet", "drivers").records
 
   return (
     <div className="max-w-md space-y-6">
@@ -419,7 +419,7 @@ function StepFleetLocations({ data, updateData }: GuidedStepProps) {
 // Step 4 — Containers
 
 function StepContainers({ data, updateData }: GuidedStepProps) {
-  const containers = useStoreRecords("resources", "containers")
+  const containers = useModuleRecords("resources", "containers").records
   const [propertyFilter, setPropertyFilter] = useState("all")
   const [search, setSearch] = useState("")
 
@@ -598,11 +598,11 @@ function StepRouteReview({
   data: GuidedRouteData
   onEditStep: (step: number) => void
 }) {
-  const projects = useStoreRecords("configure", "organization")
-  const serviceProviders = useStoreRecords("service-providers", "service-providers")
-  const vehicles = useStoreRecords("fleet", "vehicles")
-  const drivers = useStoreRecords("fleet", "drivers")
-  const containers = useStoreRecords("resources", "containers")
+  const projects = useModuleRecords("configure", "organization").records
+  const serviceProviders = useModuleRecords("service-providers", "service-providers").records
+  const vehicles = useModuleRecords("fleet", "vehicles").records
+  const drivers = useModuleRecords("fleet", "drivers").records
+  const containers = useModuleRecords("resources", "containers").records
 
   const nameOf = (records: BusinessRecord[], id?: string) =>
     records.find((record) => record.id === id)?.name ?? "Not specified"

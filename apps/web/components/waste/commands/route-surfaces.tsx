@@ -73,7 +73,6 @@ import { ADD_STOP, applyBalance, ASSIGN_ROUTE, balanceMoveLine, callsignOf, CANC
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
 import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import { BALANCE_DAY_FORM, contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
@@ -260,7 +259,7 @@ function DispatchDaySurface() {
   const { refreshModule } = useBusinessRecordStore()
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(ROUTES_MODULE)
-  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, getModuleDefinition(ROUTES_MODULE)?.records ?? [])
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const routeState = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const [step, setStep] = useState<"closed" | "day" | "routes">("closed")
   const [day, setDay] = useState<{ projectId: string; operatingDate: string } | null>(null)
@@ -443,10 +442,6 @@ const DONE_SAYS: Readonly<Record<string, string>> = {
 
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] } | { kind: "stops"; mode: StopsMode }
 
-/** A route's commands, its stops in sequence, its sessions and the device's command log, in its details. */
-/** No fixture bookings: the module is the API's alone. */
-const NO_BOOKINGS: readonly BusinessRecord[] = []
-
 /** The grant a route's messages are written under (O24 of #290): the routes' own. */
 const ROUTE_MESSAGES_MODULE_KEY = "route-studio.routes"
 
@@ -493,10 +488,10 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   const pickers = useRelationPickers()
   const { me } = useApiSession()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
-  const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId, NO_BOOKINGS)
+  const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId)
   const moduleReady = useModuleReady(ROUTES_MODULE)
   // The routes a move goes to or a merge takes in (O23 of #290): the project's others that have not started.
-  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, getModuleDefinition(ROUTES_MODULE)?.records ?? [])
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   // The version is bumped after each command the API took: the stops and the log are the route's own reads.
   const { busy, version, run: send } = useCommandRunner(ROUTES_MODULE, record.id)
   const { refreshRecord } = useBusinessRecordStore()
@@ -1052,14 +1047,11 @@ export function ProofObject({ proof, links }: { proof: Pick<ProofOfService, "id"
   )
 }
 
-/** No fixture lends a contaminant code: the master data's fixtures are coarse sets of no kind. */
-const NO_MASTER_FIXTURES: readonly BusinessRecord[] = []
-
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   // The contaminant codes a correction may tag the stop with (M5 of #293): the master data's rows of that kind.
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, NO_MASTER_FIXTURES)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
   const codes = master.records.filter((row) => masterDataKindOf(row) === "contaminant-code")
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)

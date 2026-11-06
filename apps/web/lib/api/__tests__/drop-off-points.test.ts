@@ -11,7 +11,7 @@ import type { WasteFraction } from "@waste/contracts/catalogue"
 import { DropOffPointCreate, DropOffPointExceptionsSet, DropOffPointHoursSet, DropOffPointPatch, type DropOffPoint } from "@waste/contracts/drop-off-points"
 import type { Project } from "@waste/contracts/organisation"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { DROP_OFF_EXCEPTIONS_KEY, DROP_OFF_FRACTIONS_KEY, DROP_OFF_HOURS_KEY, dropOffPointAdapter, dropOffPointsModule } from "../records/drop-off-points"
 import { wasteFractionAdapter } from "../records/master-data"
@@ -24,25 +24,19 @@ import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-10-24T20:00:00Z")
 const STAMPS = { createdAt: "2026-10-20T09:00:00.000Z", updatedAt: "2026-10-21T09:30:00.000Z" }
 
-const fixturesOf = (workspaceId: "resources" | "configure", moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId, moduleId })
-  if (!module) throw new Error(`no module ${workspaceId}.${moduleId}`)
-  return module.records
-}
-
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const glass: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000005", ...STAMPS, key: "glass", name: "Glass", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const metal: WasteFraction = { ...glass, id: "01a0d2a4-a280-7005-8000-000000000007", key: "metal", name: "Metal" }
 
-const noResolve = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const fractionRecords = [glass, metal].map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve(fixturesOf("configure", "master"))))
+const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
+const fractionRecords = [glass, metal].map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["configure.master", loaded({ records: fractionRecords, serverIds: new Map(fractionRecords.map((record, index) => [record.id, [glass, metal][index]!.id])) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context: MappingContext = { fixtures: [], resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve, now: NOW }
 
 const amager: DropOffPoint = {
   id: "01a0d2a4-a280-7999-8000-000000000001",
@@ -99,7 +93,7 @@ describe("a drop-off point", () => {
     const made: BusinessRecord = {
       ...recordOf(amager),
       id: "drop-off-points-drop-off-point-1700000000000",
-      projectIds: [FIXTURE_PROJECT_IDS.copenhagen],
+      projectIds: [copenhagenRecord.id],
       submittedValues: {
         projectId: copenhagenRecord.id,
         kind: "bring-bank",

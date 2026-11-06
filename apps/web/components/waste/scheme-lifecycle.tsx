@@ -17,21 +17,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { problemSentence } from "@/lib/api/problem"
-import { archiveScheme, PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL, succeedScheme } from "@/lib/api/records/route-schemes"
+import { archiveScheme, PLAN_AHEAD_DAYS_REFUSAL, succeedScheme } from "@/lib/api/records/route-schemes"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
-import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
+import { PLAN_AHEAD_DAYS_KEY, planAheadDaysOf, ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
+import { PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { addDays, formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import type { SchemeEndingCounts } from "@waste/contracts/route-schemes"
 
 import { useBusinessRecordStore, whenSaved } from "./business-record-store"
-
-/** The scheme's Plan Ahead window in days, as the record carries it; the week where it says none. */
-export function planAheadDaysOf(record: BusinessRecord): number {
-  const days = Number(record.submittedValues?.[PLAN_AHEAD_DAYS_KEY])
-  return planAheadDaysAllowed(days) ? days : PLAN_AHEAD_DAYS_DEFAULT
-}
 
 /** What ending the scheme did to its routes, in one sentence for the toast. */
 export function endingSentence(routes: SchemeEndingCounts): string {

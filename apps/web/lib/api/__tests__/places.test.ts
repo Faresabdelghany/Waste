@@ -26,9 +26,9 @@ import {
 } from "@waste/contracts/places"
 import { DEPOT_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
@@ -48,14 +48,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const fixturesOf = (workspaceId: "resources" | "configure" | "service-providers", moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId, moduleId })
-  if (!module) throw new Error(`no module ${workspaceId}.${moduleId}`)
-  return module.records
-}
-const placeFixtures = fixturesOf("resources", "depots")
-const warehouseFixtures = fixturesOf("resources", "warehouses")
-
 // The seeded rows as the API answers them (packages/db/src/seed).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
@@ -72,25 +64,28 @@ const west: Warehouse = { id: "01a0d2a4-a280-7011-8000-000000000001", ...STAMPS,
 const nordhavnWarehouse: Warehouse = { ...west, id: "01a0d2a4-a280-7011-8000-000000000002", code: "WAREHOUSE-NORDHAVN", name: "Nordhavn Warehouse", address: "Kaj 14, Nordhavn", depotId: nordhavnDepot.id }
 
 // The modules loaded before the places: the organisation, the providers, the master data.
-const noResolve = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const harborRecord = projectAdapter.toRecord(harbor, noResolve(fixturesOf("configure", "organization")))
-const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve(fixturesOf("service-providers", "service-providers")))
+const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
+const harborRecord = projectAdapter.toRecord(harbor, noResolve)
+const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve)
 const fractions = [residual, glass, mixed]
-const fractionRecords = fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve(fixturesOf("configure", "master"))))
+const fractionRecords = fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve))
+const copenhagenWebId = webIdOf("project", copenhagen.id)
+const harborWebId = webIdOf("project", harbor.id)
+const nordrenWebId = webIdOf("service-provider", nordren.id)
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord, harborRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id], [harborRecord.id, harbor.id]]) }, 1)],
   ["service-providers.service-providers", loaded({ records: [nordrenRecord], serverIds: new Map([[nordrenRecord.id, nordren.id]]) }, 1)],
   ["configure.master", loaded({ records: fractionRecords, serverIds: new Map(fractionRecords.map((record, index) => [record.id, fractions[index].id])) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (fixtures: readonly BusinessRecord[] = placeFixtures, resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
 
 const fractionWebId = (fraction: WasteFraction) => `fraction-${fraction.id}`
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
 /** A record the generic workspace has just made under a module's form: the minted id, the form's kind, the lifecycle's first status. */
-const made = (moduleId: string, recordKind: string, status: string, submittedValues: BusinessRecord["submittedValues"], projectIds: string[] = [FIXTURE_PROJECT_IDS.copenhagen]): BusinessRecord => ({
+const made = (moduleId: string, recordKind: string, status: string, submittedValues: BusinessRecord["submittedValues"], projectIds: string[] = [copenhagenWebId]): BusinessRecord => ({
   id: `${moduleId}-${recordKind.toLowerCase().replaceAll(" ", "-")}-1700000000000`,
   name: typeof submittedValues?.name === "string" ? submittedValues.name : "New row",
   context: "",
@@ -103,7 +98,6 @@ const made = (moduleId: string, recordKind: string, status: string, submittedVal
   related: [],
   source: "Office workspace",
   freshness: "Now",
-  companyId: FIXTURE_COMPANY_ID,
   projectIds,
   recordKind,
   submittedValues,
@@ -121,7 +115,7 @@ describe("the places modules", () => {
 
   test("the depots module lists the depots and the stations together, each under its own prefix", async () => {
     const { fetch, calls } = scripted([() => pageOf([nordhavnDepot]), () => pageOf([arc])])
-    const result = await loadModule(clientOver(fetch), placesModule, { fixtures: placeFixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), placesModule, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => call.url),
       ["http://api.test/depots?limit=200", "http://api.test/unloading-stations?limit=200"],
@@ -150,9 +144,8 @@ describe("a depot", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.value, "05:00–22:00")
     assert.equal(record.recordKind, "Operational Location")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [copenhagenWebId])
     assert.equal(record.serviceProviderId, undefined)
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
     assert.equal(record.source, "Waste API")
     assert.deepEqual(record.facts, {
       Kind: "Depot",
@@ -164,7 +157,7 @@ describe("a depot", () => {
       Project: "Copenhagen Central",
     })
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: copenhagenWebId,
       locationType: "depot",
       name: "Nordhavn Depot",
       code: "DEPOT-NORDHAVN",
@@ -181,12 +174,12 @@ describe("a depot", () => {
 
   test("a provider's depot names it by the web id the store knows it under, and shows in the provider's scope", () => {
     const provided = depotAdapter.toRecord({ ...nordhavnDepot, ownership: "service-provider", serviceProviderId: nordren.id, vehicleCapacity: 12, opensAt: null, closesAt: null }, context())
-    assert.equal(provided.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+    assert.equal(provided.serviceProviderId, nordrenWebId)
     assert.equal(provided.facts.Ownership, "NordRen ApS")
     assert.equal(provided.facts.Hours, undefined)
     assert.equal(provided.facts["Vehicle capacity"], "12")
     assert.equal(provided.value, "")
-    assert.equal(provided.submittedValues?.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+    assert.equal(provided.submittedValues?.serviceProviderId, nordrenWebId)
     assert.equal(provided.submittedValues?.vehicleCapacity, "12")
     assert.equal(provided.submittedValues?.operatingHours, "")
   })
@@ -205,7 +198,7 @@ describe("a depot", () => {
 
   test("the record the form writes becomes a DepotCreate the contract accepts: the hours read out of the text, the point from the two numbers, the status the lifecycle's first", () => {
     const valby = made("depots", "Operational Location", "Draft", {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: copenhagenWebId,
       locationType: "depot",
       name: "Valby Depot",
       code: "DEP-VALBY",
@@ -239,7 +232,7 @@ describe("a depot", () => {
 
   test("is refused here, naming the field, for what the API would refuse: no location, one opening time, an ownership a depot cannot have, a provider that does not fit the ownership, a capacity that is no count, a project the store does not hold", () => {
     const valby = (over: Record<string, string>) =>
-      made("depots", "Operational Location", "Draft", { projectId: FIXTURE_PROJECT_IDS.copenhagen, locationType: "depot", name: "Valby Depot", code: "DEP-VALBY", address: "Valby", latitude: "55.66", longitude: "12.5", ownership: "company", serviceProviderId: "", operatingHours: "", ...over })
+      made("depots", "Operational Location", "Draft", { projectId: copenhagenWebId, locationType: "depot", name: "Valby Depot", code: "DEP-VALBY", address: "Valby", latitude: "55.66", longitude: "12.5", ownership: "company", serviceProviderId: "", operatingHours: "", ...over })
     const body = (over: Record<string, string>) => depotAdapter.toCreateBody?.(valby(over), context())
     assert.deepEqual(body({ latitude: "", longitude: "" }), { path: "latitude", message: "A depot has a location: give the latitude and longitude" })
     assert.deepEqual(body({ longitude: "" }), { path: "longitude", message: "A depot has a location: give the latitude and longitude" })
@@ -249,14 +242,14 @@ describe("a depot", () => {
     assert.deepEqual(body({ operatingHours: "Mon–Fri 05:00–22:00, Sat 06:00–12:00" }), { path: "operatingHours", message: TWO_TIMES_OR_NOTHING })
     assert.deepEqual(body({ ownership: "external" }), { path: "ownership", message: 'The API has no ownership "external" for a depot; it knows company, service-provider' })
     assert.deepEqual(body({ ownership: "service-provider" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
-    assert.deepEqual(body({ serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
+    assert.deepEqual(body({ serviceProviderId: nordrenWebId }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
     assert.deepEqual(body({ ownership: "service-provider", serviceProviderId: "service-provider-nowhere" }), { path: "serviceProviderId", message: "Pick a service provider the API holds" })
     assert.deepEqual(body({ vehicleCapacity: "0" }), { path: "vehicleCapacity", message: "Vehicle capacity is a whole number, 1 or more" })
     assert.deepEqual(body({ projectId: "project-nowhere" }), { path: "projectId", message: "Pick a project" })
     assert.deepEqual(body({ code: "" }), { path: "code", message: "A depot needs a code" })
     assert.deepEqual(body({ name: "" }), { path: "name", message: "A depot needs a name" })
     assert.deepEqual(body({ address: "" }), { path: "address", message: "A depot needs an address" })
-    const provided = body({ ownership: "service-provider", serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren })
+    const provided = body({ ownership: "service-provider", serviceProviderId: nordrenWebId })
     assert.ok(DepotCreate.safeParse(provided).success)
     assert.equal((provided as { serviceProviderId: string }).serviceProviderId, nordren.id)
   })
@@ -266,7 +259,7 @@ describe("a depot", () => {
     const body = depotAdapter.toPatchBody(record, renamed, context())
     assert.deepEqual(body, { name: "Nordhavn Base", opensAt: null, closesAt: null })
     assert.ok(DepotPatch.safeParse(body).success)
-    const handedOver: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, ownership: "service-provider", serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren } }
+    const handedOver: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, ownership: "service-provider", serviceProviderId: nordrenWebId } }
     assert.deepEqual(depotAdapter.toPatchBody(record, handedOver, context()), { ownership: "service-provider", serviceProviderId: nordren.id })
     const seasonal: BusinessRecord = { ...record, status: "Seasonal" }
     assert.deepEqual(depotAdapter.toPatchBody(record, seasonal, context()), { status: "seasonal" })
@@ -278,18 +271,18 @@ describe("a depot", () => {
   test("what is set once does not move: the code, the project, the kind of location; and a depot keeps a location", () => {
     const patch = (over: Record<string, string>) => depotAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ code: "DEP-NORD" }), { path: "code", message: "The code is set once: a depot that needs another code is another depot" })
-    assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A depot stays in its project" })
+    assert.deepEqual(patch({ projectId: harborWebId }), { path: "projectId", message: "A depot stays in its project" })
     assert.deepEqual(patch({ locationType: "unloading" }), { path: "locationType", message: "A location keeps its kind: a depot does not become an unloading station" })
     assert.deepEqual(patch({ latitude: "", longitude: "" }), { path: "latitude", message: "A depot keeps a location: give the latitude and longitude" })
-    assert.deepEqual(patch({ serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }, "the rule is held against the row the patch leaves behind")
+    assert.deepEqual(patch({ serviceProviderId: nordrenWebId }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }, "the rule is held against the row the patch leaves behind")
   })
 
   test("through the store's write, a create posts to /depots and the API's 409 comes back as its sentence", async () => {
-    const valby = made("depots", "Operational Location", "Draft", { projectId: FIXTURE_PROJECT_IDS.copenhagen, locationType: "depot", name: "Valby Depot", code: "DEP-VALBY", address: "Valby", latitude: "55.66", longitude: "12.5", ownership: "company", serviceProviderId: "", operatingHours: "" })
+    const valby = made("depots", "Operational Location", "Draft", { projectId: copenhagenWebId, locationType: "depot", name: "Valby Depot", code: "DEP-VALBY", address: "Valby", latitude: "55.66", longitude: "12.5", ownership: "company", serviceProviderId: "", operatingHours: "" })
     const created: Depot = { ...nordhavnDepot, id: "019995e0-0000-7000-8000-0000000000d1", code: "DEP-VALBY", name: "Valby Depot", address: "Valby", location: at(12.5, 55.66), opensAt: null, closesAt: null, status: "draft" }
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/depots/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), placesModule, current, valby, { fixtures: placeFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), placesModule, current, valby, { state, now: NOW })
     assert.equal(`${calls[0].init.method} ${calls[0].url}`, "POST http://api.test/depots")
     assert.deepEqual(bodyOf(calls[0]), { projectId: copenhagen.id, code: "DEP-VALBY", name: "Valby Depot", address: "Valby", location: at(12.5, 55.66), ownership: "company", status: "draft" })
     assert.equal(outcome.kind, "created")
@@ -298,7 +291,7 @@ describe("a depot", () => {
     assert.equal(outcome.serverId, created.id)
 
     const refused = scripted([() => problem(409, 'This project already has a depot coded "DEP-VALBY"')])
-    const answer = await writeRecord(clientOver(refused.fetch), placesModule, current, valby, { fixtures: placeFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), placesModule, current, valby, { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), 'This project already has a depot coded "DEP-VALBY"')
@@ -343,7 +336,7 @@ describe("an unloading station", () => {
 
   test("the record the form writes becomes an UnloadingStationCreate the contract accepts, the fractions by server id", () => {
     const paper = made("depots", "Operational Location", "Draft", {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: copenhagenWebId,
       locationType: "unloading",
       name: "Paper Recovery",
       code: "PAPER-RECOVERY",
@@ -417,7 +410,7 @@ describe("a warehouse", () => {
   const depotRecord = depotAdapter.toRecord(nordhavnDepot, context())
   const withDepots: ServerRecordsState = new Map([...state, ["resources.depots", loaded({ records: [depotRecord], serverIds: new Map([[depotRecord.id, nordhavnDepot.id]]) }, 1)]])
   const resolveDepots = resolverOver(withDepots)
-  const record = warehouseAdapter.toRecord(nordhavnWarehouse, context(warehouseFixtures, resolveDepots))
+  const record = warehouseAdapter.toRecord(nordhavnWarehouse, context(resolveDepots))
 
   test("is a record in its project naming the depot it shares a yard with by the web id the store knows it under", () => {
     assert.equal(record.id, `warehouse-${nordhavnWarehouse.id}`)
@@ -425,10 +418,10 @@ describe("a warehouse", () => {
     assert.equal(record.context, "Copenhagen Central · Kaj 14, Nordhavn")
     assert.equal(record.status, "Active")
     assert.equal(record.recordKind, "Warehouse")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [copenhagenWebId])
     assert.deepEqual(record.facts, { Code: "WAREHOUSE-NORDHAVN", Address: "Kaj 14, Nordhavn", "Colocated depot": "Nordhavn Depot", Project: "Copenhagen Central" })
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: copenhagenWebId,
       name: "Nordhavn Warehouse",
       code: "WAREHOUSE-NORDHAVN",
       status: "active",
@@ -438,7 +431,7 @@ describe("a warehouse", () => {
       colocatedDepotId: `depot-${nordhavnDepot.id}`,
     })
     assert.deepEqual(warehouseAdapter.statuses, WAREHOUSE_STATUSES)
-    const alone = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(warehouseFixtures, resolveDepots))
+    const alone = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(resolveDepots))
     assert.equal(alone.facts["Colocated depot"], undefined)
     assert.equal(alone.facts.Coordinates, "55.66, 12.5")
     assert.equal(alone.submittedValues?.colocatedDepotId, "")
@@ -449,7 +442,7 @@ describe("a warehouse", () => {
 
   test("the record the form writes becomes a WarehouseCreate the contract accepts: the status the form picked, the point only when both numbers are given, the depot by server id", () => {
     const valby = made("warehouses", "Warehouse", "Active", {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: copenhagenWebId,
       name: "Valby Stock",
       code: "WH-VALBY",
       status: "active",
@@ -462,10 +455,10 @@ describe("a warehouse", () => {
       source: "manual",
       effectiveFrom: "2026-10-01",
     })
-    const body = warehouseAdapter.toCreateBody?.(valby, context(warehouseFixtures, resolveDepots))
+    const body = warehouseAdapter.toCreateBody?.(valby, context(resolveDepots))
     assert.deepEqual(body, { projectId: copenhagen.id, code: "WH-VALBY", name: "Valby Stock", address: "Logistikvej 10, Valby", depotId: nordhavnDepot.id, status: "active" })
     assert.ok(WarehouseCreate.safeParse(body).success)
-    const refuse = (over: Record<string, string>) => warehouseAdapter.toCreateBody?.({ ...valby, submittedValues: { ...valby.submittedValues, ...over } }, context(warehouseFixtures, resolveDepots))
+    const refuse = (over: Record<string, string>) => warehouseAdapter.toCreateBody?.({ ...valby, submittedValues: { ...valby.submittedValues, ...over } }, context(resolveDepots))
     assert.deepEqual(refuse({ latitude: "55.66" }), { path: "longitude", message: "Give both the latitude and the longitude, or neither" })
     assert.deepEqual(refuse({ colocatedDepotId: `station-${arc.id}` }), { path: "colocatedDepotId", message: "Pick a depot the API holds" })
     assert.deepEqual(refuse({ status: "open" }), { path: "status", message: 'The API has no status "open" for a warehouse; it knows draft, active, restricted, closed' })
@@ -476,18 +469,18 @@ describe("a warehouse", () => {
 
   test("a patch says what moved, the yard shared no longer as null, and holds the code and the project still", () => {
     const parted: BusinessRecord = { ...record, name: "Nordhavn Stock", status: "Restricted", submittedValues: { ...record.submittedValues, name: "Nordhavn Stock", colocatedDepotId: "", latitude: "55.7091", longitude: "12.5958" } }
-    const body = warehouseAdapter.toPatchBody(record, parted, context(warehouseFixtures, resolveDepots))
+    const body = warehouseAdapter.toPatchBody(record, parted, context(resolveDepots))
     assert.deepEqual(body, { name: "Nordhavn Stock", location: at(12.5958, 55.7091), depotId: null, status: "restricted" })
     assert.ok(WarehousePatch.safeParse(body).success)
-    assert.equal(warehouseAdapter.toPatchBody(record, record, context(warehouseFixtures, resolveDepots)), null)
+    assert.equal(warehouseAdapter.toPatchBody(record, record, context(resolveDepots)), null)
     // A location cleared on a geocoded warehouse is null on the wire, which the contract takes.
-    const located = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(warehouseFixtures, resolveDepots))
-    const ungeocoded = warehouseAdapter.toPatchBody(located, { ...located, submittedValues: { ...located.submittedValues, latitude: "", longitude: "" } }, context(warehouseFixtures, resolveDepots))
+    const located = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(resolveDepots))
+    const ungeocoded = warehouseAdapter.toPatchBody(located, { ...located, submittedValues: { ...located.submittedValues, latitude: "", longitude: "" } }, context(resolveDepots))
     assert.deepEqual(ungeocoded, { location: null })
     assert.ok(WarehousePatch.safeParse(ungeocoded).success)
-    const patch = (over: Record<string, string>) => warehouseAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(warehouseFixtures, resolveDepots))
+    const patch = (over: Record<string, string>) => warehouseAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(resolveDepots))
     assert.deepEqual(patch({ code: "WH-NORD" }), { path: "code", message: "The code is set once: a warehouse that needs another code is another warehouse" })
-    assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A warehouse stays in its project" })
+    assert.deepEqual(patch({ projectId: harborWebId }), { path: "projectId", message: "A warehouse stays in its project" })
   })
 
   test("the module is Resources → Warehouses, and its update patches the row's own route", async () => {

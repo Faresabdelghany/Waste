@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { ScaleTicketComplete, ScaleTicketCreate, ScaleTicketVoid, VehicleTareCreate, type ScaleTicket, type VehicleTare } from "@waste/contracts/scale-house"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND } from "../../data/scale-house"
 import { isLocalRefusal, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
@@ -55,7 +55,7 @@ const state: ServerRecordsState = new Map([
     ),
   ],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 const ticket: ScaleTicket = {
   id: "01a0d2a4-a280-7099-8000-000000000101",

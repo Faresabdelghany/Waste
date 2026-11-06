@@ -13,9 +13,6 @@ import { TICKETS_MODULE } from "@/lib/api/records/tickets"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
-/** No fixture tickets: on the Pilot a route's tickets are the API's alone. */
-const NO_TICKETS: readonly BusinessRecord[] = []
-
 /**
  * A route's own page on the Pilot, laid out as fixture mode's
  * `RouteDetailsPage`: its name and status in the top bar, the stops headed by
@@ -39,7 +36,7 @@ export function RouteDetailsOnApi({
   menu?: ReactNode
 }) {
   // The tickets about this route: a ticket names its route by the route's web id (`TICKET_LINKS`).
-  const ticketRecords = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, NO_TICKETS).records
+  const ticketRecords = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId).records
   const tickets = useMemo(() => ticketRecords.filter((ticket) => ticket.submittedValues?.routeId === record.id), [record.id, ticketRecords])
   // Where it runs, then what made it and for which day, and whether the office holds it.
   const subtitle = [record.context, record.description].filter(Boolean).join(" · ")

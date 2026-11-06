@@ -18,7 +18,7 @@ import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/r
 
 import type { Product, WasteFraction } from "@waste/contracts/catalogue"
 import type { VisitRule } from "@waste/contracts/visit-rules"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"

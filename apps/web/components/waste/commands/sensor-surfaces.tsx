@@ -24,18 +24,16 @@ import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useProjectTimezone, useRowHistory } from "@/components/waste/commands/use-command-support"
 import { dayAndTimeOn, wallClockIn } from "@/lib/api/records/clock"
 import { CHANGE_PAIRING, PAIR_SENSOR, readingLine, sensorReadings, SENSORS_MODULE } from "@/lib/api/records/sensors"
-import { getModuleDefinition } from "@/lib/data/business-modules"
 import { changeDraft, pairableContainers, pairDraft, pairOffered } from "@/lib/data/sensors"
 
 const CONTAINERS = { workspaceId: "resources", moduleId: "containers" } as const
-const NO_RECORDS: never[] = []
 
 export function SensorPairingSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SENSORS_MODULE)
   const { busy, version, run } = useCommandRunner(SENSORS_MODULE, record.id)
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
   const timezone = useProjectTimezone(projectId)
-  const containers = useModuleRecords(CONTAINERS.workspaceId, CONTAINERS.moduleId, getModuleDefinition(CONTAINERS)?.records ?? NO_RECORDS)
+  const containers = useModuleRecords(CONTAINERS.workspaceId, CONTAINERS.moduleId)
   const readings = useRowHistory(SENSORS_MODULE.workspaceId, SENSORS_MODULE.moduleId, record, version, sensorReadings)
   const today = wallClockIn(new Date().toISOString(), timezone).slice(0, 10)
   const [pairing, setPairing] = useState<ReturnType<typeof pairDraft> | null>(null)

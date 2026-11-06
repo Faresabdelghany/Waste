@@ -2,7 +2,8 @@
 
 // Settings: the nav, the search, the pane an address shows and the frame
 // around it, all read from the Settings table (lib/data/settings-panes.ts);
-// each pane is drawn by its view (settings-pane-views.tsx).
+// each pane is drawn by its view (settings-pane-views.tsx), and where no API
+// is configured a pane the API holds says so in its place.
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -10,11 +11,14 @@ import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
 
 import { fixtureSettingsTerms } from "@/components/settings/fixture-settings-controls"
 import { SettingsPaneFrameProvider } from "@/components/settings/settings-pane-frame"
+import { AssetPanelShell } from "@/components/settings/settings-pane-kit"
 import { SETTINGS_PANE_ICONS, SETTINGS_PANE_VIEWS } from "@/components/settings/settings-pane-views"
+import { ReportNotice } from "@/components/insight/report-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/data/settings-panes"
+import { keptOnApi } from "@/lib/api/records/server-records"
+import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, settingsPaneDrawnWithoutApi, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/data/settings-panes"
 import { cn } from "@/lib/utils"
 
 type SettingsWorkspaceProps = {
@@ -30,7 +34,7 @@ const sameAddress = (one: SettingsAddress, other: SettingsAddress) => one.pane =
 export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceProps) {
   const router = useRouter()
   const configured = useApiConfigured()
-  const addressed = settingsAddressShown(pane, params, configured)
+  const addressed = settingsAddressShown(pane, params)
   // What is shown: the address's on arrival and whenever Back, Forward or a link moves it, else what was picked here, at once.
   const [shown, setShown] = useState(addressed)
   const [arrived, setArrived] = useState(addressed)
@@ -39,7 +43,7 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
     setShown(addressed)
   }
   const [search, setSearch] = useState("")
-  const nav = settingsNav(configured, search, fixtureSettingsTerms)
+  const nav = settingsNav(search, fixtureSettingsTerms)
 
   const go = (next: SettingsAddress, how: "push" | "replace" = "replace") => {
     setShown(next)
@@ -47,8 +51,9 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
     if (how === "push") router.push(href, { scroll: false })
     else router.replace(href, { scroll: false })
   }
-  const open = (paneId: SettingsPaneId, next: SettingsParams = {}, how: "push" | "replace" = "replace") => go(settingsAddressShown(paneId, next, configured), how)
-  const View = SETTINGS_PANE_VIEWS[shown.pane]
+  const open = (paneId: SettingsPaneId, next: SettingsParams = {}, how: "push" | "replace" = "replace") => go(settingsAddressShown(paneId, next), how)
+  const shownPane = settingsPane(shown.pane)
+  const View = configured || settingsPaneDrawnWithoutApi(shownPane) ? SETTINGS_PANE_VIEWS[shown.pane] : KeptOnApiPane
 
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-sidebar sm:flex-row">
@@ -108,7 +113,7 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
       <main className="mx-2 mb-2 min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-sidebar bg-background sm:my-2 sm:ml-0" id="settings-content">
         <div className="flex min-h-full w-full flex-col">
           <div className="flex min-w-0 flex-1 flex-col">
-            <SettingsPaneFrameProvider pane={settingsPane(shown.pane)}>
+            <SettingsPaneFrameProvider pane={shownPane}>
               <View
                 key={shown.pane}
                 paneId={shown.pane}
@@ -121,5 +126,14 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
         </div>
       </main>
     </div>
+  )
+}
+
+/** A pane the API holds, where none is configured: its frame, and the one sentence that says where its subject is kept. */
+function KeptOnApiPane({ paneId }: { paneId: SettingsPaneId }) {
+  return (
+    <AssetPanelShell>
+      <ReportNotice empty={keptOnApi(settingsPane(paneId).label)} />
+    </AssetPanelShell>
   )
 }

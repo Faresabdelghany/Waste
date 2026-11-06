@@ -30,7 +30,6 @@ import {
 
 import {
   businessWorkspaces,
-  FIXTURE_COMPANY_ID,
   FIXTURE_PROJECT_IDS,
   getModuleDefinition,
   getWorkspaceDefinition,
@@ -43,7 +42,7 @@ import { actionDecisionShape, actionRecordedSentence, REASON_MAX } from "@/lib/d
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { readableKey } from "@/lib/data/record-key"
-import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationWhenUnplaced } from "@/lib/data/route-schemes"
+import { planAheadToggledSentence, ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
   deriveFormRecord,
@@ -91,12 +90,10 @@ import {
   seedSchemeEditValues,
 } from "@waste/domain/route-schemes/quick-create"
 import {
-  collectionGroupContainerIds,
   collectionGroupSummary,
   collectionGroupsOf,
   collectionGroupsToValues,
   hasExplicitCollectionGroups,
-  schemeGroupPlans,
   sharedServiceProvider,
   type CollectionGroup,
 } from "@waste/domain/route-schemes/groups"
@@ -121,27 +118,8 @@ import type {
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
 import { softDeletedRecord } from "@waste/domain/record-visibility"
-import { count } from "@waste/domain/text"
 import {
-  applyIndexToRate,
-  serviceProviderPriceToRecord,
-  deriveServiceProviderPriceStatus,
-  encodeHistory,
   isSoftDeleted,
-  money,
-  normalizePriceRowRecord,
-  PRICING_REFERENCE_DATE,
-  PRODUCT_FACTS,
-  productIdOfPriceRow,
-  RATE_FACTS,
-  recordToServiceProviderPrice,
-  recordToPriceRow,
-  signedPercent,
-  softDeletedPriceRowsOf,
-  syncProductPricingFacts,
-  unitSuffix,
-  type PriceRowModel,
-  type PriceUnit,
 } from "@/lib/commercial/price-model"
 import {
   getBusinessModuleHref,
@@ -231,9 +209,6 @@ import { RecordHistory } from "@/components/waste/record-history"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import {
   canonicalServiceFrequencyName,
-  resolveServiceFrequencyValue,
-  serviceFrequencyById,
-  serviceFrequencyOfRecord,
 } from "@waste/domain/service-frequencies"
 import {
   BusinessViewOptionsPopover,
@@ -262,7 +237,6 @@ import {
 } from "@/components/waste/route-create-flow"
 import {
   SchemeCreateEntry,
-  resolvedDraftGroups,
   resolvedDraftPlans,
   validateGuidedScheme,
   type GuidedSchemeData,
@@ -275,22 +249,15 @@ import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSav
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
-import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
+import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
-import {
-  useAssetManagementStore,
-  type MeasurementSetting,
-  type ContainerType,
-  type WasteFraction,
-} from "@/components/settings/asset-management-store"
-import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
-import { ContainerDetailsSheet } from "@/components/waste/container-details-sheet"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
-import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
+import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
 import { settingsHref } from "@/lib/data/settings-panes"
@@ -306,8 +273,7 @@ import {
 } from "@/lib/data/project-scope"
 import { RouteDetailsPage } from "@/components/waste/route-details-page"
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
-import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
-import { useOrganizationStore } from "@/components/settings/organization-store"
+import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import {
   effectiveRoleAccess,
   type RoleAccessMap,
@@ -353,19 +319,6 @@ type BusinessWorkspaceProps = {
 // configure.organization project records (issue #44, lib/data/project-scope),
 // so the default is a project record's id, not a name of its own.
 const DEFAULT_PROJECT_SCOPE: ProjectScope = FIXTURE_PROJECT_IDS.copenhagen
-/** What the agreement forms' pickers fall back to: nothing, since they are read on the Pilot alone. */
-const NO_PICKER_FIXTURES: readonly BusinessRecord[] = []
-
-type AuditEvent = {
-  id: string
-  action: string
-  actor: string
-  at: string
-  reason: string
-  before: string
-  after: string
-  evidence: string
-}
 
 type PendingAction = {
   record: BusinessRecord
@@ -387,87 +340,6 @@ type RelatedCreateTarget = {
   schemaOverride?: BusinessFormSchema
   /** Stored on the created record without a form field — e.g. a map-drawn polygon. */
   extraValues?: BusinessFormValues
-}
-
-function configuredAssetFormSchema(
-  schema: BusinessFormSchema | undefined,
-  containerTypes: readonly ContainerType[],
-  wasteFractions: readonly WasteFraction[],
-  measurementSettings: readonly MeasurementSetting[],
-  projectScope: ProjectScope,
-) {
-  if (schema?.key !== "resources.containers") return schema
-  const selectedProjectId = pinnedProjectId(projectScope)
-  const availableInProject = (projectIds: readonly string[]) =>
-    projectIds.length === 0 ||
-    selectedProjectId === null ||
-    projectIds.includes(selectedProjectId)
-  const optionsByField: Record<string, readonly BusinessFormOption[]> = {
-    containerType: containerTypes
-      .filter(
-        (item) =>
-          item.lifecycleStatus === "Active" && availableInProject(item.projectIds),
-      )
-      .map((item) => ({ value: item.id, label: item.name })),
-    wasteFraction: wasteFractions
-      .filter(
-        (item) => item.status === "Active" && availableInProject(item.projectIds),
-      )
-      .map((item) => ({ value: item.id, label: item.name })),
-    secondaryWasteFraction: wasteFractions
-      .filter(
-        (item) => item.status === "Active" && availableInProject(item.projectIds),
-      )
-      .map((item) => ({ value: item.id, label: item.name })),
-    measurementSetting: measurementSettings
-      .filter(
-        (item) =>
-          item.active &&
-          (selectedProjectId === null || item.projectId === selectedProjectId),
-      )
-      .map((item) => ({ value: item.id, label: item.name })),
-  }
-
-  return {
-    ...schema,
-    sections: schema.sections.map((section) => ({
-      ...section,
-      fields: section.fields.map((field) =>
-        optionsByField[field.id]
-          ? { ...field, options: optionsByField[field.id] }
-          : field,
-      ),
-    })),
-  }
-}
-
-// Same idea for fixture mode's Add price: its price-list tag offers the lists
-// Settings › Commercial › Price lists holds in the browser's bucket, not the
-// fixture options baked into the schema. A list's NAME is the stored value —
-// a price row's tag references it as a plain string. Its zone and customer
-// type stay the schema's own options: the browser registries they came from
-// retired with #185 (a zone is a planning area, a customer type a customer's
-// kind on the Pilot).
-function configuredCommercialFormSchema(
-  schema: BusinessFormSchema | undefined,
-  priceLists: readonly BusinessRecord[],
-) {
-  if (schema?.key !== "commercial.price-rows") return schema
-  const optionsByField: Record<string, readonly BusinessFormOption[]> = {
-    // Scheduled lists are offered too — rows for next year's tariff are added before it starts applying.
-    tag: priceLists.filter((list) => list.status !== "Expired").map((list) => ({ value: list.name, label: list.name })),
-  }
-  return {
-    ...schema,
-    sections: schema.sections.map((section) => ({
-      ...section,
-      fields: section.fields.map((field) =>
-        optionsByField[field.id]
-          ? { ...field, options: optionsByField[field.id] }
-          : field,
-      ),
-    })),
-  }
 }
 
 function WorkspaceQuerySync({
@@ -722,11 +594,10 @@ function offeredTransitions(
   workspaceId: WorkspaceId,
   module: ModuleDefinition,
   record: BusinessRecord,
-  onApi: boolean,
 ): string[] {
   const transitions = record.allowedTransitions ?? module.lifecycle.slice(1, 3)
-  // Only where the module reads the API: in fixture mode every transition stands (#179).
-  const server = onApi ? serverModuleOf(workspaceId, module.id) : undefined
+  // Only where the module reads the API: on a module on fixtures every transition stands (#179).
+  const server = serverModuleOf(workspaceId, module.id)
   if (server === undefined) return transitions
   return transitions.filter((action) => {
     const outcome = actionOutcome(module, action, record.status)
@@ -754,7 +625,6 @@ function createsImmutableCompanion(module: ModuleDefinition, action: string): bo
 }
 
 function companionLabel(module: ModuleDefinition, action: string, record: BusinessRecord): string {
-  const normalized = action.toLowerCase()
   if (createsCorrection(action)) return `Correction for ${record.name}`
   if (module.id === "inventory" || module.id === "warehouses") {
     return `${action} ledger entry · ${record.name}`
@@ -889,22 +759,6 @@ function initialFormStatus(
   }
 
   return currentStatus
-}
-
-function preferredReason(values: BusinessFormValues) {
-  for (const fieldId of [
-    "decisionReason",
-    "changeReason",
-    "overrideReason",
-    "exceptionReason",
-    "reason",
-    "notes",
-    "message",
-  ]) {
-    const value = values[fieldId]
-    if (typeof value === "string" && value.trim()) return value.trim()
-  }
-  return "Submitted through the governed module form"
 }
 
 // A service provider-scoped workspace already knows which service provider, project,
@@ -1081,30 +935,16 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
-  // The API's routes and stops reach the map once they are read, and nothing before (#179): a fixture route drawn over the Pilot's containers is a route that does not exist.
-  const routesOnApi = useServerModuleState("route-studio", "routes")
-  const pickupsOnApi = useServerModuleState("route-studio", "pickups")
   // Whether a guided scheme's zero match is evidence: the API's containers placed (#207).
   const containersPlaced = useContainersPlaced()
   // Whether the adapter is on (Issue #81): what the switched modules' own surfaces show, and fixture mode does not.
   const apiConfigured = useApiConfigured()
-  // On the API a customer field names a Customer in the glossary's sense — a
-  // person or an organisation alike (the seed's private owners hold
-  // agreements and own properties) — so the pickers offer both there and say
-  // a row's status beside its name (#79: a picker hides nothing, the API's
-  // 409 speaks). Fixture mode keeps the prototype's rule: a company where a
-  // field says company.
-  const customersOnApi = apiConfigured && isServerBacked("customers", "contacts")
   // Whether the API fences a module's rows to the signed-in account (#291 C24):
-  // a switched module on the Pilot answers a provider's account its own rows
-  // alone, whatever provider a row's mapping names, so no scope filters it again.
-  const fencedByApi = useCallback(
-    (targetWorkspaceId: WorkspaceId, targetModuleId: string) => apiConfigured && isServerBacked(targetWorkspaceId, targetModuleId),
-    [apiConfigured],
-  )
-  // The live records of any workspace module (fixtures merged with stored
-  // records) — what the scheme lifecycle planners read their related
-  // records from.
+  // a switched module answers a provider's account its own rows alone,
+  // whatever provider a row's mapping names, so no scope filters it again.
+  const fencedByApi = isServerBacked
+  // The records of any workspace module, as the store answers them — what the
+  // scheme lifecycle planners read their related records from.
   const moduleRecords = useCallback(
     (targetWorkspaceId: WorkspaceId, targetModuleId: string): BusinessRecord[] => {
       const module = getModuleDefinition({
@@ -1112,7 +952,7 @@ export function BusinessWorkspace({
         moduleId: targetModuleId,
       })
       return module
-        ? getRecords(targetWorkspaceId, module.id, module.records)
+        ? getRecords(targetWorkspaceId, module.id)
         : []
     },
     [getRecords],
@@ -1120,33 +960,17 @@ export function BusinessWorkspace({
   const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
     serviceProviderScopeId ? "service-provider" : "operator",
   )
-  const { containerTypes, wasteFractions, measurementSettings } =
-    useAssetManagementStore()
-  const { roles: organizationRoles } = useOrganizationStore()
   const router = useRouter()
-  // The live grants for the restricting role — Settings edits apply on the
-  // next render. Null means no role restriction (office default).
+  // The grants of the restricting role: `/me`'s on the Pilot, else the
+  // fixture persona's role's charter. Null means no role restriction (office default).
   const roleAccess = useMemo<RoleAccessMap | null>(() => {
     if (roleGrants) return roleGrants
     if (!permissionsRoleId) return null
-    const role = organizationRoles.find(
-      (candidate) => candidate.id === permissionsRoleId,
-    )
-    return effectiveRoleAccess(role ?? { id: permissionsRoleId })
-  }, [organizationRoles, permissionsRoleId, roleGrants])
+    return effectiveRoleAccess({ id: permissionsRoleId })
+  }, [permissionsRoleId, roleGrants])
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
-    const allowedRecords = allowedRecordIds ? new Set(allowedRecordIds) : null
-    const modules = sourceWorkspace.modules
-      .filter((module) => !allowedModules || allowedModules.has(module.id))
-      .map((module) =>
-        allowedRecords
-          ? {
-              ...module,
-              records: module.records.filter((record) => allowedRecords.has(record.id)),
-            }
-          : module,
-      )
+    const modules = sourceWorkspace.modules.filter((module) => !allowedModules || allowedModules.has(module.id))
 
     if (modules.length === 0) {
       throw new Error(`No permitted modules are available in ${sourceWorkspace.id}`)
@@ -1167,7 +991,9 @@ export function BusinessWorkspace({
       ...sourceWorkspace,
       modules: viewableModules.length > 0 ? viewableModules : modules,
     }
-  }, [allowedModuleIds, allowedRecordIds, roleAccess, sourceWorkspace])
+  }, [allowedModuleIds, roleAccess, sourceWorkspace])
+  // The records a restricted shell shows, of all its module holds (the citizen portal's one property).
+  const recordAllowed = useCallback((record: BusinessRecord) => allowedRecordIds === undefined || allowedRecordIds.includes(record.id), [allowedRecordIds])
   const hasRoleViewableModules =
     !roleAccess ||
     workspace.modules.some((module) =>
@@ -1182,7 +1008,7 @@ export function BusinessWorkspace({
   const [query, setQuery] = useState("")
   // A module opens on its list's filters on the Pilot (the registry's `list`), applied when it becomes active and only then.
   const [businessFilters, setBusinessFilters] = useState<BusinessFilters>(() =>
-    initialFiltersOf(commandSurfaceFor(workspace.id, activeModuleId, apiConfigured)),
+    initialFiltersOf(commandSurfaceFor(workspace.id, activeModuleId)),
   )
   const [viewOptions, setViewOptions] = useState<BusinessViewOptions>(
     defaultBusinessViewOptions,
@@ -1192,7 +1018,7 @@ export function BusinessWorkspace({
   const projectScope =
     fixedProjectScope ??
     (apiConfigured
-      ? projectScopeOfMe(me?.projects, getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], DEFAULT_PROJECT_SCOPE)
+      ? projectScopeOfMe(me?.projects, OPERATOR_PROJECT_NAME)
       : DEFAULT_PROJECT_SCOPE)
   // The scope vocabulary: the organisation module's project records, fixture
   // and created alike (issue #44) — what a scope is compared against, what a
@@ -1235,7 +1061,6 @@ export function BusinessWorkspace({
     useState<BusinessRecord | null>(null)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
-  const [auditEvents, setAuditEvents] = useState<Record<string, AuditEvent[]>>({})
   // The one edit-save of a route scheme (issue #33; the edit policy of issue
   // #38) — both edit doors save through it, and the "Ask each time" question
   // it may raise is answered by the commit of the render that answers.
@@ -1244,26 +1069,24 @@ export function BusinessWorkspace({
   // generation — the Generate dialog, Plan Ahead on load — stays off until
   // slice 4 brings the API's trigger (the nightly sweep plans meanwhile).
   const { commitSchemeEdit, pendingSchemeEdit, answerPendingSchemeEdit, dismissPendingSchemeEdit } =
-    useSchemeEditCommit({ moduleRecords, upsertRecord, setAuditEvents, setSelectedRecord, actorName, schemesOnApi: apiConfigured })
+    useSchemeEditCommit({ moduleRecords, upsertRecord, setSelectedRecord, actorName, schemesOnApi: apiConfigured })
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
   // The active module's load on the Pilot (null for a module on fixtures): a governed action waits for it (#210).
   const activeModuleOnApi = useServerModuleState(workspace.id, activeModule.id)
-  // Agreements and subscriptions on the API (slice 9a of #81): the module
-  // holds two kinds, its form is the registry's trimmed to what the wire
-  // takes, and a standard view offers no row Edit, so the sheet's actions
-  // carry the edit and the subscription's own create — with the adapter
-  // configured only, since fixture mode never had any of it.
+  // Agreements and subscriptions (slice 9a of #81): the module holds two
+  // kinds, its form is the registry's trimmed to what the wire takes, and a
+  // standard view offers no row Edit, so the sheet's actions carry the edit
+  // and the subscription's own create.
   const isAgreementsView =
-    apiConfigured &&
     workspace.id === AGREEMENTS_MODULE.workspaceId &&
     activeModule.id === AGREEMENTS_MODULE.moduleId
   // What an agreement's price list and a subscription's product are picked
   // from there (#291): the server's rows alone — a fixture row offered on the
   // Pilot is a row the API does not hold — and whether the role reads them.
-  const agreementPriceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, NO_PICKER_FIXTURES)
-  const agreementProducts = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_PICKER_FIXTURES)
+  const agreementPriceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+  const agreementProducts = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const productsViewed = !agreementProducts.notGranted
   const activeModuleGrants = roleAccess
     ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
@@ -1278,10 +1101,9 @@ export function BusinessWorkspace({
   }
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
-  // How a switched module is operated on the Pilot beyond its own forms
-  // (Issue #181): what stands in for its primary action, and its rows'
-  // commands in their details — one registry, never reached in fixture mode.
-  const commandSurface = commandSurfaceFor(workspace.id, activeModule.id, apiConfigured)
+  // How a switched module is operated beyond its own forms (Issue #181): what
+  // stands in for its primary action, and its rows' commands in their details.
+  const commandSurface = commandSurfaceFor(workspace.id, activeModule.id)
   const formIsPrimary = commandSurface === undefined || commandSurface.primary === "form"
   const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
   const RowSurface = commandSurface?.rowActions
@@ -1310,79 +1132,25 @@ export function BusinessWorkspace({
   const activeSecondaryModule = secondaryModules.find(
     (module) => module.id === activeModule.id,
   )
-  // Fixture mode's price lists, the Add price form's tag options (#185).
-  const priceLists = useMemo(
-    () => getRecords(FIXTURE_PRICE_LISTS_BUCKET.workspaceId, FIXTURE_PRICE_LISTS_BUCKET.moduleId, FIXTURE_PRICE_LISTS).filter(isPriceListRecord),
-    [getRecords],
-  )
   const activeModuleFormSchema = useMemo(() => {
     const registered = getBusinessFormSchema(workspace.id, activeModule.id)
     return serviceProviderScopedFormSchema(
-      configuredCommercialFormSchema(
-        configuredAssetFormSchema(
-          // The agreement form as the API takes it: the fields the wire has no home for gone (lib/data/agreements.ts).
-          isAgreementsView && registered ? agreementFormSchemaOnApi(registered) : registered,
-          containerTypes,
-          wasteFractions,
-          measurementSettings,
-          projectScope,
-        ),
-        priceLists,
-      ),
+      // The agreement form as the API takes it: the fields the wire has no home for gone (lib/data/agreements.ts).
+      isAgreementsView && registered ? agreementFormSchemaOnApi(registered) : registered,
       serviceProviderScopeId,
     )
-  },
-    [
-      activeModule.id,
-      containerTypes,
-      isAgreementsView,
-      serviceProviderScopeId,
-      measurementSettings,
-      priceLists,
-      projectScope,
-      wasteFractions,
-      workspace.id,
-    ],
-  )
+  }, [activeModule.id, isAgreementsView, serviceProviderScopeId, workspace.id])
   const relatedCreateModule = relatedCreateTarget
     ? resolveFormModule(
         relatedCreateTarget.workspaceId,
         relatedCreateTarget.moduleId,
       )
     : null
-  // The Price Engine's Products header button opens Add price — a price-row
-  // create targeting commercial.price-rows — instead of the module's
-  // registered create schema: product creation lives in Settings →
-  // Commercial → Products, and pricing a product is the module's real action.
-  const isPriceEngineProducts =
-    workspace.id === "commercial" && activeModule.id === "products"
   const formSchema = useMemo(
     () =>
-      relatedCreateTarget?.schemaOverride ?? (relatedCreateModule
-        ? configuredCommercialFormSchema(
-            configuredAssetFormSchema(
-              getBusinessFormSchema(
-                relatedCreateModule.workspaceId,
-                relatedCreateModule.module.id,
-              ),
-              containerTypes,
-              wasteFractions,
-              measurementSettings,
-              projectScope,
-            ),
-            priceLists,
-          )
-        : activeModuleFormSchema),
-    [
-      activeModuleFormSchema,
-      containerTypes,
-      measurementSettings,
-      priceLists,
-      projectScope,
-      relatedCreateModule,
-      relatedCreateTarget?.schemaOverride,
-      wasteFractions,
-    ],
+      relatedCreateTarget?.schemaOverride ??
+      (relatedCreateModule ? getBusinessFormSchema(relatedCreateModule.workspaceId, relatedCreateModule.module.id) : activeModuleFormSchema),
+    [activeModuleFormSchema, relatedCreateModule, relatedCreateTarget?.schemaOverride],
   )
   const canOpenBusinessForm =
     Boolean(activeModuleFormSchema?.execution) &&
@@ -1401,11 +1169,7 @@ export function BusinessWorkspace({
   const isSchemeCreateFlow =
     activeModuleFormSchema?.key === "route-studio.schemes"
   const activeRecords = useMemo(() => {
-    let records = getRecords(
-      workspace.id,
-      activeModule.id,
-      activeModule.records,
-    )
+    let records = getRecords(workspace.id, activeModule.id).filter(recordAllowed)
     // Scheme status is always the derived lifecycle status (issue #25) —
     // no surface renders the raw stored string, so every downstream reader
     // (table, filters, grouping, detail, row actions) sees one truth. The
@@ -1439,15 +1203,13 @@ export function BusinessWorkspace({
     return serviceProviderScopeId && !fencedByApi(workspace.id, activeModule.id)
       ? records.filter((record) => record.serviceProviderId === serviceProviderScopeId)
       : records
-  }, [activeModule, serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, workspace.id])
+  }, [activeModule, serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, recordAllowed, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
         ? getRecords(
             relatedCreateModule.workspaceId,
-            relatedCreateModule.module.id,
-            relatedCreateModule.module.records,
-          )
+            relatedCreateModule.module.id)
         : activeRecords,
     [activeRecords, getRecords, relatedCreateModule],
   )
@@ -1492,7 +1254,7 @@ export function BusinessWorkspace({
       (module) => module.id === "tickets",
     )
     if (!ticketsModule) return []
-    return getRecords("operate", ticketsModule.id, ticketsModule.records).filter(
+    return getRecords("operate", ticketsModule.id).filter(
       (ticket) =>
         [ticket.name, ticket.context, ...ticket.related]
           .join(" ")
@@ -1508,9 +1270,7 @@ export function BusinessWorkspace({
     if (!sessionsModule) return []
     return getRecords(
       "operate",
-      sessionsModule.id,
-      sessionsModule.records,
-    ).filter((session) =>
+      sessionsModule.id).filter((session) =>
       [session.name, session.context, ...session.related]
         .join(" ")
         .includes(selectedRouteReference),
@@ -1526,9 +1286,7 @@ export function BusinessWorkspace({
     if (!usersModule) return []
     return getRecords(
       "service-providers",
-      usersModule.id,
-      usersModule.records,
-    ).filter(
+      usersModule.id).filter(
       (record) =>
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
@@ -1540,7 +1298,7 @@ export function BusinessWorkspace({
       (module) => module.id === "vehicles",
     )
     if (!vehiclesModule) return []
-    return getRecords("fleet", vehiclesModule.id, vehiclesModule.records).filter(
+    return getRecords("fleet", vehiclesModule.id).filter(
       (record) =>
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
@@ -1552,7 +1310,7 @@ export function BusinessWorkspace({
       (module) => module.id === "drivers",
     )
     if (!driversModule) return []
-    return getRecords("fleet", driversModule.id, driversModule.records).filter(
+    return getRecords("fleet", driversModule.id).filter(
       (record) =>
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
@@ -1566,9 +1324,7 @@ export function BusinessWorkspace({
     if (!serviceAreasModule) return []
     return getRecords(
       "service-providers",
-      serviceAreasModule.id,
-      serviceAreasModule.records,
-    ).filter(
+      serviceAreasModule.id).filter(
       (record) =>
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
@@ -1578,7 +1334,7 @@ export function BusinessWorkspace({
     const commercialWorkspace = getWorkspaceDefinition("commercial")
     const ratesModule = commercialWorkspace.modules.find((module) => module.id === "service-provider-prices")
     if (!ratesModule) return []
-    return getRecords("commercial", ratesModule.id, ratesModule.records).filter(
+    return getRecords("commercial", ratesModule.id).filter(
       (record) =>
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
@@ -1613,11 +1369,11 @@ export function BusinessWorkspace({
       containers: moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
-      routes: apiConfigured && routesOnApi !== null ? (routesOnApi.status === "ready" ? routesOnApi.records : []) : moduleRecords("route-studio", "routes"),
-      pickups: apiConfigured && pickupsOnApi !== null ? (pickupsOnApi.status === "ready" ? pickupsOnApi.records : []) : moduleRecords("route-studio", "pickups"),
+      routes: moduleRecords("route-studio", "routes"),
+      pickups: moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [apiConfigured, isMapPlanningView, moduleRecords, pickupsOnApi, routesOnApi])
+  }, [isMapPlanningView, moduleRecords])
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
@@ -1753,8 +1509,10 @@ export function BusinessWorkspace({
   }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
   // The module has rows, so an empty list means the search or filters hide them: only then is another search worth suggesting.
   const narrowed = visibleScopedRecords.length > 0
-  // On the Pilot the store hands out no sample rows while the API's are awaited: the empty table says they are loading, or why they are not.
-  const rowsAwaited = apiConfigured ? awaitedRowsSentence(activeModuleOnApi) : null
+  // A switched module's rows are the API's alone: the empty table says they are loading, why they are not, or that the API keeps them.
+  const rowsAwaited = awaitedRowsSentence(activeModuleOnApi)
+  // Where no API is configured a switched module has nothing to show or make: its table says so, and no action stands over it.
+  const keptOnApi = activeModuleOnApi?.status === "kept-on-api"
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],
@@ -1780,15 +1538,14 @@ export function BusinessWorkspace({
   const activeViewType: BusinessViewType = isRichRecordView
     ? viewOptions.viewType
     : "table"
-  const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create")
+  const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create") && !keptOnApi
   // A surface's own dialog stands with the create grant alone, whatever the fixture form (#186: Settlements').
   const primary = primaryOf(commandSurface, effectiveShowPrimaryAction, canOpenBusinessForm && Boolean(formSchema))
   const canCreateFromView =
     effectiveShowPrimaryAction &&
     formIsPrimary &&
     canOpenBusinessForm &&
-    Boolean(formSchema) &&
-    !isPriceEngineProducts
+    Boolean(formSchema)
   // Generic row Edit/Delete: a rich module that exposes them (tickets do not —
   // they are worked through lifecycle transitions and the details view), the
   // viewer's grants, and for edits a form execution policy.
@@ -1813,9 +1570,9 @@ export function BusinessWorkspace({
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
-  // another way. In fixture mode the module deletes as it always did.
+  // another way. A module on fixtures deletes as it always did.
   const canDeleteRecords =
-    offersRowActions && hasGrant("delete") && !(apiConfigured && isServerBacked(workspace.id, activeModule.id))
+    offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
   const canRunRecordActions = hasGrant("edit")
   // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
@@ -1835,7 +1592,7 @@ export function BusinessWorkspace({
       const module = getWorkspaceDefinition(workspaceId).modules.find(
         (candidate) => candidate.id === moduleId,
       )
-      return module ? getRecords(workspaceId, module.id, module.records) : []
+      return module ? getRecords(workspaceId, module.id) : []
     }
     const related = {
       schemes: activeRecords,
@@ -1885,26 +1642,17 @@ export function BusinessWorkspace({
                 // row: the status/context seams (issues #25/#30) are
                 // render-time and must never be frozen into the store.
                 const stored =
-                  getRecords("route-studio", "schemes", activeModule.records).find(
+                  getRecords("route-studio", "schemes").find(
                     (candidate) => candidate.id === target.id,
                   ) ?? target
                 whenSaved(upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled)), () =>
-                  toast.success(
-                    enabled ? "Plan Ahead turned on" : "Plan Ahead turned off",
-                    {
-                      description: enabled
-                        ? apiConfigured
-                          ? `${target.name} keeps its next 7 days planned through the nightly plan-ahead run.`
-                          : `${target.name} generates its next 7 days automatically when Route Studio loads.`
-                        : `${target.name} stops auto-generating; already-generated routes remain.`,
-                    },
-                  ),
+                  toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", { description: planAheadToggledSentence(stored, enabled) }),
                 )
               },
             },
           ]
         : undefined,
-    [activeModule.records, apiConfigured, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
+    [apiConfigured, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
   // The agreements module's sheet actions on the API (slice 9a of #81): the
   // edit a standard view offers no row action for — an agreement's period
@@ -2124,7 +1872,7 @@ export function BusinessWorkspace({
     moduleSync.record(moduleId)
     setActiveModuleId(moduleId)
     setQuery("")
-    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId, apiConfigured)))
+    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId)))
     setSelectedRecord(null)
     setPendingAction(null)
     setIsCreateOpen(false)
@@ -2138,10 +1886,10 @@ export function BusinessWorkspace({
     if (!moduleSync.apply(moduleId)) return
     setActiveModuleId(moduleId)
     setQuery("")
-    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId, apiConfigured)))
+    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId)))
     setPendingAction(null)
     setIsCreateOpen(false)
-  }, [apiConfigured, moduleSync, workspace.id])
+  }, [moduleSync, workspace.id])
 
   const resolveWorkspaceRecord = useCallback(
     (moduleId: string, recordId: string) => {
@@ -2150,8 +1898,8 @@ export function BusinessWorkspace({
       )
       if (!module) return null
       let record =
-        getRecords(workspace.id, module.id, module.records).find(
-          (candidate) => candidate.id === recordId,
+        getRecords(workspace.id, module.id).find(
+          (candidate) => candidate.id === recordId && recordAllowed(candidate),
         ) ?? null
       // Deep-linked schemes show the derived lifecycle status (issue #25)
       // and derived row context (issue #30) too.
@@ -2178,7 +1926,7 @@ export function BusinessWorkspace({
       }
       return record
     },
-    [serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, workspace],
+    [serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, recordAllowed, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -2223,56 +1971,6 @@ export function BusinessWorkspace({
     [activeModule.entityLabel],
   )
 
-  // Keeps a price row's parent product's derived facts (Price list /
-  // Variations / Customer / headline value) honest after any price-row
-  // write — create, edit, or (with `exclude`) delete. Component-level so
-  // both handleFormSubmit (create/edit) and commitRecordAction (delete) can
-  // call it; on create only, callers pass historyWhat to also append the
-  // product's History entry.
-  const syncProductForRow = (
-    rowRecord: BusinessRecord,
-    options?: { historyWhat?: string; exclude?: boolean },
-  ) => {
-    const row = recordToPriceRow(rowRecord)
-    const productsTarget = resolveFormModule("commercial", "products")
-    const rowsTarget = resolveFormModule("commercial", "price-rows")
-    if (!row || !productsTarget || !rowsTarget) return
-    const product = getRecords(
-      productsTarget.workspaceId,
-      productsTarget.module.id,
-      productsTarget.module.records,
-    ).find((candidate) => candidate.id === row.productId)
-    if (!product) return
-    const existingRowRecords = getRecords(
-      rowsTarget.workspaceId,
-      rowsTarget.module.id,
-      rowsTarget.module.records,
-    )
-    // Delete is a soft delete (the row stays in the store with a "Registry
-    // visibility" fact) and this runs before that write lands, so the row
-    // would otherwise still be read back as live — exclude it explicitly
-    // instead of relying on the store to have already dropped it.
-    const allRowRecords = options?.exclude
-      ? existingRowRecords.filter((candidate) => candidate.id !== rowRecord.id)
-      : existingRowRecords.some((candidate) => candidate.id === rowRecord.id)
-        ? existingRowRecords.map((candidate) => (candidate.id === rowRecord.id ? rowRecord : candidate))
-        : [...existingRowRecords, rowRecord]
-    const rows = allRowRecords
-      .map(recordToPriceRow)
-      .filter((candidate): candidate is PriceRowModel => candidate !== null)
-    const synced = syncProductPricingFacts(product, rows)
-    upsertRecord("commercial", "products", {
-      ...synced,
-      updated: "Now",
-      related: options?.historyWhat
-        ? [
-            encodeHistory({ at: PRICING_REFERENCE_DATE, who: actorName, what: options.historyWhat }),
-            ...synced.related,
-          ]
-        : synced.related,
-    })
-  }
-
   const commitRecordAction = ({
     reason,
     effectiveDate,
@@ -2283,39 +1981,22 @@ export function BusinessWorkspace({
     if (!pendingAction) return
 
     const { record, action } = pendingAction
-    // On the Pilot a module the API has not answered for — still loading, or
-    // its load failed — has nowhere to send the change: the store would keep
-    // it in the browser, which a switched module never shows. Say so and keep
-    // the dialog, rather than report an action that went nowhere (#210).
-    const gate = writeGate({ apiConfigured, target: activeModuleOnApi, label: activeModule.label, when: "the action can be confirmed" })
+    // A switched module the API has not answered for — still loading, its
+    // load failed, or no API is configured — has nowhere to send the change:
+    // say so and keep the dialog, rather than report an action that went
+    // nowhere (#210).
+    const gate = writeGate({ target: activeModuleOnApi, label: activeModule.label, when: "the action can be confirmed" })
     if (gate.kind === "held") {
       toast.error(`${record.name} was not changed`, { description: gate.description })
       return
     }
     const nextStatus = actionOutcome(activeModule, action, record.status)
     const createsCompanion = createsImmutableCompanion(activeModule, action)
-    const event: AuditEvent = {
-      id: `audit-${Date.now()}`,
-      action,
-      actor: actorName,
-      at: "Now",
-      reason,
-      before: record.status,
-      after: createsCompanion ? record.status : nextStatus,
-      evidence: effectiveDate
-        ? `Effective ${effectiveDate} · company and project scope validated`
-        : "Company and project scope validated",
-    }
-
-    const recordAuditEvent = () =>
-      setAuditEvents((current) => ({
-        ...current,
-        [record.id]: [event, ...(current[record.id] ?? [])],
-      }))
+    // The id the browser's deletion log and a companion's link name the action by.
+    const auditId = `audit-${Date.now()}`
 
     if (action.toLowerCase().includes("delete")) {
-      recordAuditEvent()
-      const deletion = { reason, actorName, deletionLogId: event.id }
+      const deletion = { reason, actorName, deletionLogId: auditId }
       let deletionMessage =
         "The structured reason and actor were written to the deletion log."
       if (activeModule.id === "schemes") {
@@ -2356,34 +2037,6 @@ export function BusinessWorkspace({
           softDeletedRecord(record, deletion),
         )
       }
-      if (workspace.id === "commercial" && activeModule.id === "price-rows") {
-        // Soft delete leaves the row in the store (marked, not removed), so
-        // the product's derived facts must be recomputed with this row
-        // explicitly excluded rather than relying on the store to have
-        // already dropped it.
-        syncProductForRow(record, { exclude: true })
-      }
-      if (workspace.id === "commercial" && activeModule.id === "products") {
-        // A price row has no meaning without its product (recordToPriceRow
-        // reads it through the product link), so the delete takes the
-        // product's live rows with it under the same deletion log (issue
-        // #22) — otherwise the Price rows module goes on listing rows whose
-        // product is gone, still counted and adjusted as if it were not.
-        const rowsTarget = resolveFormModule("commercial", "price-rows")
-        if (rowsTarget) {
-          const cascaded = softDeletedPriceRowsOf(
-            getRecords(rowsTarget.workspaceId, rowsTarget.module.id, rowsTarget.module.records),
-            record.id,
-            deletion,
-          )
-          for (const row of cascaded) {
-            upsertRecord(rowsTarget.workspaceId, rowsTarget.module.id, row)
-          }
-          if (cascaded.length > 0) {
-            deletionMessage = `${deletionMessage} ${count(cascaded.length, "price row")} of the product ${cascaded.length === 1 ? "was" : "were"} soft-deleted with it.`
-          }
-        }
-      }
       setSelectedRecord(null)
       setPendingAction(null)
       router.replace(
@@ -2422,11 +2075,10 @@ export function BusinessWorkspace({
             ? "Original document preserved"
             : "Append-only movement or child record",
         },
-        related: [record.name, `Audit ${event.id}`],
+        related: [record.name, `Audit ${auditId}`],
         source: "Controlled workflow",
         freshness: "Now",
         allowedTransitions: activeModule.lifecycle.slice(1, 3),
-        companyId: record.companyId ?? FIXTURE_COMPANY_ID,
         projectIds:
           record.projectIds ?? selectedProjectIds(projectScope, {}, projectRecords),
         serviceProviderId: record.serviceProviderId ?? serviceProviderScopeId,
@@ -2443,27 +2095,14 @@ export function BusinessWorkspace({
       }
 
       // On a module the API holds, the action has happened once the API has
-      // answered (#210): the dialog stays open, its confirm held, its audit
-      // row and its word wait for the write's outcome, and a refusal is the
-      // store's toast alone over the dialog still holding what was typed. In
-      // fixture mode there is nothing to wait for, and all of it runs at once.
+      // answered (#210): the dialog stays open, its confirm held, its word
+      // waiting for the write's outcome, and a refusal is the store's toast
+      // alone over the dialog still holding what was typed. On a module on
+      // fixtures there is nothing to wait for, and all of it runs at once.
       setActionSaving(true)
       whenSaved(upsertRecord(workspace.id, activeModule.id, companion), () => {
         // This action's dialog, unless another has been opened since.
         setPendingAction((current) => (current === pendingAction ? null : current))
-        recordAuditEvent()
-        setAuditEvents((current) => ({
-          ...current,
-          [companion.id]: [
-            {
-              ...event,
-              id: `audit-companion-${Date.now()}`,
-              before: "Absent",
-              after: companion.status,
-              evidence: `Created from ${readableKey(record.id) ?? record.name} · ${event.evidence}`,
-            },
-          ],
-        }))
         toast.success(`${companion.name} created`, {
           description: isCorrection
             ? "The issued source record was preserved."
@@ -2472,7 +2111,7 @@ export function BusinessWorkspace({
       }, () => setActionSaving(false))
     } else {
       // On a module the API holds, the status is all the wire takes (#251) and the API's audit log keeps the change: no action facts, no browser row, the reason in the write's change-reason header (#291).
-      const onApi = apiConfigured && activeModuleOnApi !== null
+      const onApi = activeModuleOnApi !== null
       const { keepsBrowserAudit } = actionDecisionShape({ onApi, createsCompanion })
       const nextRecord: BusinessRecord = {
         ...record,
@@ -2487,7 +2126,7 @@ export function BusinessWorkspace({
                 "Action actor": actorName,
                 ...(effectiveDate ? { "Effective date": effectiveDate } : {}),
               },
-              related: [`Audit ${event.id}`, ...record.related.filter((item) => item !== `Audit ${event.id}`)],
+              related: [`Audit ${auditId}`, ...record.related.filter((item) => item !== `Audit ${auditId}`)],
             }
           : {}),
         allowedTransitions:
@@ -2505,15 +2144,14 @@ export function BusinessWorkspace({
       whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord, onApi && said !== "" ? { reason: said } : undefined), () => {
         // This action's dialog, unless another has been opened since.
         setPendingAction((current) => (current === pendingAction ? null : current))
-        if (keepsBrowserAudit) recordAuditEvent()
         setSelectedRecord((current) => (current?.id === record.id ? nextRecord : current))
         toast.success(`${action} recorded`, { description: actionRecordedSentence({ onApi, before: record.status, after: nextStatus }) })
       }, () => setActionSaving(false))
     }
   }
 
-  /** The agreement form on the API (slice 9a of #81): the API holds the number's rule, so the workspace's uniqueness check stands aside. */
-  const agreementsOnApi = apiConfigured && formSchema?.key === `${AGREEMENTS_MODULE.workspaceId}.${AGREEMENTS_MODULE.moduleId}`
+  /** The agreement form (slice 9a of #81): the API holds the number's rule, so the workspace's uniqueness check stands aside. */
+  const agreementsOnApi = formSchema?.key === `${AGREEMENTS_MODULE.workspaceId}.${AGREEMENTS_MODULE.moduleId}`
   const getFormRelationOptions = useCallback(
     (
       field: BusinessFormField,
@@ -2525,13 +2163,12 @@ export function BusinessWorkspace({
         field.relation.moduleId,
       )
       if (!resolved) return []
-      // On the Pilot the scheme form offers only rows the store reads from
-      // the API (pickable-records.ts): the fleet, the places and the
-      // containers are fixtures until slices 5a and 5b, so they offer
-      // nothing, and a value the scheme already names stays as its id chip.
+      // The scheme form offers only rows the store reads from the API: a
+      // module on fixtures offers nothing, since a fixture row names nothing
+      // the API holds, and a value the scheme already names stays as its id chip.
       if (
         formSchema?.key === "route-studio.schemes" &&
-        !offersRowsOf(apiConfigured, resolved.workspaceId, resolved.module.id)
+        !isServerBacked(resolved.workspaceId, resolved.module.id)
       ) {
         const current = values[field.id]
         return typeof current === "string" && current !== "" ? [{ value: current, label: current }] : []
@@ -2551,9 +2188,7 @@ export function BusinessWorkspace({
         typeof values.projectId === "string" ? values.projectId : ""
       const relationRecords = getRecords(
         resolved.workspaceId,
-        resolved.module.id,
-        resolved.module.records,
-      )
+        resolved.module.id)
       // On the API an agreement's price list is one of its project's lists in
       // its currency, the project's default list first, and a subscription's
       // product one of its agreement's project's (#291, lib/data/agreements.ts).
@@ -2644,10 +2279,9 @@ export function BusinessWorkspace({
             return false
           }
           // A picker at the service areas module offers the kind its field
-          // names (slice 11 of #81): on the API the module holds the awards
-          // and their assignments, and a price names an assignment, never an award.
+          // names (slice 11 of #81): the module holds the awards and their
+          // assignments, and a price names an assignment, never an award.
           if (
-            apiConfigured &&
             resolved.workspaceId === SERVICE_AREAS_MODULE.workspaceId &&
             resolved.module.id === SERVICE_AREAS_MODULE.moduleId
           ) {
@@ -2669,25 +2303,11 @@ export function BusinessWorkspace({
           }
           if (resolved.module.id === "contacts") {
             const createdPartyType = record.submittedValues?.partyType
-            const isCompany =
-              record.id.startsWith("company-") || createdPartyType === "company"
             const isPerson =
               record.id.startsWith("contact-") || createdPartyType === "person"
-
-            // A customer field offers the companies alone in fixture mode and
-            // every Customer on the API (`customersOnApi`, above).
-            if (
-              [
-                "customerId",
-                "payerId",
-                "ownerCustomerId",
-                "payerCustomerId",
-                "connectedCompanyId",
-              ].includes(field.id) &&
-              !customersOnApi
-            ) {
-              if (!isCompany) return false
-            }
+            // A customer field names a Customer in the glossary's sense — a
+            // person or an organisation alike (the seed's private owners hold
+            // agreements and own properties) — so it offers both.
             if (
               (field.id === "recipientContactId" ||
                 /ContactId$/i.test(field.id)) &&
@@ -2732,27 +2352,26 @@ export function BusinessWorkspace({
           values,
           permittedRecords,
           vehicles
-            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records)
+            ? getRecords(vehicles.workspaceId, vehicles.module.id)
             : [],
         )
       }
       // A picker hides no row by status (#79: a status gates a new reference,
       // never an existing one, and the API's 409 says so); a customer picker
-      // on the API shows a row's status beside its name, so a person sees the
-      // refusal coming.
-      const showsStatus = customersOnApi && resolved.module.id === "contacts"
+      // shows a row's status beside its name, so a person sees the refusal
+      // coming.
+      const showsStatus = resolved.module.id === "contacts"
       return permittedRecords.map((record) => ({
         value: record.id,
         label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
       }))
     },
-    [apiConfigured, customersOnApi, isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, fencedByApi, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, fencedByApi, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {
     const pinnedProject = pinnedProjectId(projectScope)
     return {
-      companyId: FIXTURE_COMPANY_ID,
       ...(pinnedProject === null ? {} : { projectId: pinnedProject }),
       ...(serviceProviderScopeId
         ? { serviceProviderId: serviceProviderScopeId, invitedBy: actorName }
@@ -2777,19 +2396,6 @@ export function BusinessWorkspace({
               ...seedSchemeEditValues(editingRecord.submittedValues),
             }
           : { ...formInitialValues, ...editingRecord.submittedValues }
-      // The frequency select keeps the retired `pickupSetting` field id
-      // (issue #13) while records store the typed serviceFrequencyId (issue
-      // #20) — and pre-#20 records hold option ids the select no longer
-      // offers. Seed the select from whatever resolves so the dialog shows
-      // the stored cadence instead of an empty select.
-      if (activeModuleFormSchema.key === "resources.containers") {
-        const stored =
-          typeof seeded.pickupSetting === "string" ? seeded.pickupSetting : ""
-        if (!serviceFrequencyById.has(stored)) {
-          const definition = serviceFrequencyOfRecord(editingRecord)
-          seeded.pickupSetting = definition?.id ?? ""
-        }
-      }
       // Scheme-generated routes store generation stamps (schemeId/serviceDate/
       // actualDate/appliedVehicle/appliedDriver — generation.ts), not the
       // quick form's field ids, so every field but Route Scheme would open
@@ -2823,9 +2429,7 @@ export function BusinessWorkspace({
           return (
             getRecords(
               resolved.workspaceId,
-              resolved.module.id,
-              resolved.module.records,
-            ).find(
+              resolved.module.id).find(
               (candidate) =>
                 candidate.name === label ||
                 candidate.name.split(" · ")[0] === label,
@@ -2919,12 +2523,6 @@ export function BusinessWorkspace({
               option.label.toLowerCase() === factValue.toLowerCase(),
           )
           values[field.id] = optionMatch ? optionMatch.value : factValue
-        } else if (field.id === "status" && isPriceEngineProducts) {
-          // Products never carry a separate "Status" fact (top-level status
-          // is the only source of truth), so falling through to the
-          // schema's first option here would show every fixture product as
-          // Active in the edit dialog and silently promote it on save.
-          values[field.id] = editingRecord.status
         }
         continue
       }
@@ -2973,7 +2571,6 @@ export function BusinessWorkspace({
     formInitialValues,
     getFormRelationOptions,
     getRecords,
-    isPriceEngineProducts,
   ])
 
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
@@ -3064,9 +2661,9 @@ export function BusinessWorkspace({
         const drivers = resolveFormModule("fleet", "drivers")
         const reason = quickDriverIssue(
           values,
-          drivers ? getRecords(drivers.workspaceId, drivers.module.id, drivers.module.records) : [],
+          drivers ? getRecords(drivers.workspaceId, drivers.module.id) : [],
           vehicles
-            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records)
+            ? getRecords(vehicles.workspaceId, vehicles.module.id)
             : [],
         )
         if (reason) errors.plannedDriverId = reason
@@ -3080,103 +2677,6 @@ export function BusinessWorkspace({
         selectedProjectId !== pinnedProject
       ) {
         errors.projectId = "The selected project is outside the current workspace scope."
-      }
-
-      if (
-        formSchema.key === "resources.containers" &&
-        typeof selectedProjectId === "string"
-      ) {
-        const selectedContainerType =
-          typeof values.containerType === "string"
-            ? containerTypes.find((item) => item.id === values.containerType)
-            : undefined
-        if (
-          selectedContainerType?.projectIds.length &&
-          !selectedContainerType.projectIds.includes(selectedProjectId)
-        ) {
-          errors.containerType =
-            "This container type is not available in the selected project."
-        }
-
-        for (const fieldId of ["wasteFraction", "secondaryWasteFraction"]) {
-          const fractionId = values[fieldId]
-          const selectedFraction =
-            typeof fractionId === "string"
-              ? wasteFractions.find((item) => item.id === fractionId)
-              : undefined
-          if (
-            selectedFraction?.projectIds.length &&
-            !selectedFraction.projectIds.includes(selectedProjectId)
-          ) {
-            errors[fieldId] =
-              "This waste fraction is not available in the selected project."
-          }
-        }
-
-        const selectedMeasurementSetting =
-          typeof values.measurementSetting === "string"
-            ? measurementSettings.find(
-                (item) => item.id === values.measurementSetting,
-              )
-            : undefined
-        if (
-          selectedMeasurementSetting &&
-          selectedMeasurementSetting.projectId !== selectedProjectId
-        ) {
-          errors.measurementSetting =
-            "This measurement setting belongs to another project."
-        }
-      }
-
-      if (formSchema.key === "commercial.service-provider-prices") {
-        const selectedServiceProviderId =
-          typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
-        const selectedRateProductId =
-          typeof values.productId === "string" ? values.productId : ""
-        const selectedAreaId =
-          typeof values.serviceAreaId === "string" ? values.serviceAreaId : ""
-        const validFrom = typeof values.validFrom === "string" ? values.validFrom : ""
-        const validUntil = typeof values.validUntil === "string" ? values.validUntil : ""
-        if (selectedServiceProviderId && selectedRateProductId && selectedAreaId && validFrom) {
-          const areasTarget = resolveFormModule("service-providers", "service-areas")
-          const areaName = areasTarget
-            ? getRecords(
-                areasTarget.workspaceId,
-                areasTarget.module.id,
-                areasTarget.module.records,
-              ).find((record) => record.id === selectedAreaId)?.name
-            : undefined
-          // Fixture rates store the area code ("CA-Ø-2"); created rates store
-          // the area record's full name ("CA-Ø-2 · Østerbro") — compare by code.
-          const areaCode = areaName?.split(" · ")[0]?.trim()
-          const overlapping = formTargetRecords.find((record) => {
-            if (record.id === editingRecord?.id) return false
-            if (record.recordKind !== "Service provider price") return false
-            if (isSoftDeleted(record)) return false
-            if (record.serviceProviderId !== selectedServiceProviderId) return false
-            const recordProductId = record.relationRefs?.find(
-              (ref) => ref.fieldId === "productId",
-            )?.recordId
-            if (recordProductId !== selectedRateProductId) return false
-            const recordAreaCode = record.facts[RATE_FACTS.serviceArea]
-              ?.split(" · ")[0]
-              ?.trim()
-            if (!areaCode || !recordAreaCode || recordAreaCode !== areaCode) return false
-            const recordFrom = record.facts[RATE_FACTS.validFrom] ?? ""
-            const recordUntil = record.facts[RATE_FACTS.validUntil] ?? ""
-            const startsBeforeExistingEnds = !recordUntil || validFrom <= recordUntil
-            const existingStartsBeforeNewEnds =
-              !validUntil || !recordFrom || recordFrom <= validUntil
-            return startsBeforeExistingEnds && existingStartsBeforeNewEnds
-          })
-          if (overlapping) {
-            errors.validFrom = `Overlaps ${overlapping.name} (${
-              overlapping.facts[RATE_FACTS.validFrom] ?? "?"
-            } → ${
-              overlapping.facts[RATE_FACTS.validUntil] ?? "open"
-            }) for the same service provider, product, and service area.`
-          }
-        }
       }
 
       if (
@@ -3204,55 +2704,13 @@ export function BusinessWorkspace({
 
       return errors
     },
-    [
-      agreementsOnApi,
-      containerTypes,
-      editingRecord?.id,
-      formSchema,
-      formTargetRecords,
-      getRecords,
-      measurementSettings,
-      projectScope,
-      wasteFractions,
-    ],
+    [agreementsOnApi, editingRecord?.id, formSchema, formTargetRecords, getRecords, projectScope],
   )
 
   const getFormReviewSummary = useCallback(
     (values: BusinessFormValues) => {
       if (!formSchema?.execution) return []
       const projectIds = selectedProjectIds(projectScope, values, projectRecords)
-
-      if (formSchema.key === "commercial.billing") {
-        const eventsTarget = resolveFormModule("commercial", "events")
-        const events = eventsTarget
-          ? getRecords(
-              eventsTarget.workspaceId,
-              eventsTarget.module.id,
-              eventsTarget.module.records,
-            ).filter(
-              (record) =>
-                !record.projectIds?.length ||
-                record.projectIds.some((projectId) =>
-                  projectIds.includes(projectId),
-                ),
-            )
-          : []
-        const eligible = events.filter((record) =>
-          /ready/i.test(record.status),
-        ).length
-        const blocked = events.filter((record) =>
-          /blocked|failed/i.test(record.status),
-        ).length
-
-        return [
-          { label: "Eligible billable events", value: String(eligible) },
-          { label: "Blocked or failed events", value: String(blocked) },
-          {
-            label: "Execution",
-            value: values.dryRun === true ? "Preview only" : "Create draft invoices",
-          },
-        ]
-      }
 
       const linkedRecordCount = formSchema.sections
         .flatMap((section) => section.fields)
@@ -3282,129 +2740,6 @@ export function BusinessWorkspace({
     const now = Date.now()
     if (!formSchema?.execution) return
 
-    if (formSchema.recordKind === "Service provider price indexation") {
-      const ratesTarget = resolveFormModule("commercial", "service-provider-prices")
-      if (!ratesTarget) return
-      const rateRecords = getRecords("commercial", "service-provider-prices", ratesTarget.module.records)
-      const pickedIds =
-        typeof values.rateIds === "string" && values.rateIds
-          ? values.rateIds.split(",").map((item) => item.trim()).filter(Boolean)
-          : []
-      const label = typeof values.indexLabel === "string" ? values.indexLabel.trim() : ""
-      const percent = Number(values.percent)
-      const base = values.base === "bid" ? ("bid" as const) : ("current fee" as const)
-      const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
-      if (pickedIds.length === 0 || !label || !Number.isFinite(percent)) {
-        toast.error("Pick service provider prices, an index label, and a percent.")
-        return
-      }
-      let indexed = 0
-      for (const rateRecord of rateRecords) {
-        if (!pickedIds.includes(rateRecord.id)) continue
-        const updated = applyIndexToRate(recordToServiceProviderPrice(rateRecord), { label, percent, from, base })
-        upsertRecord("commercial", "service-provider-prices", serviceProviderPriceToRecord(updated, rateRecord))
-        indexed += 1
-      }
-      setIsCreateOpen(false)
-      setRelatedCreateTarget(null)
-      toast.success("Index applied", {
-        description: `${count(indexed, "service provider price")} recomputed from ${base} (${label} ${signedPercent(percent)}). Bids untouched.`,
-      })
-      return
-    }
-
-    if (formSchema.recordKind === "Service area assignment") {
-      const serviceAreaId =
-        typeof values.serviceAreaId === "string" ? values.serviceAreaId : ""
-      const serviceProviderId =
-        typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
-      const serviceAreaTarget = resolveFormModule("service-providers", "service-areas")
-      const serviceProviderTarget = resolveFormModule("service-providers", "service-providers")
-      const serviceArea = serviceAreaTarget
-        ? getRecords(
-            serviceAreaTarget.workspaceId,
-            serviceAreaTarget.module.id,
-            serviceAreaTarget.module.records,
-          ).find((record) => record.id === serviceAreaId)
-        : undefined
-      const serviceProvider = serviceProviderTarget
-        ? getRecords(
-            serviceProviderTarget.workspaceId,
-            serviceProviderTarget.module.id,
-            serviceProviderTarget.module.records,
-          ).find((record) => record.id === serviceProviderId)
-        : undefined
-
-      if (!serviceAreaTarget || !serviceArea || !serviceProvider) {
-        toast.error("Select an available service area.")
-        return
-      }
-
-      const previousServiceProvider = serviceArea.facts["Service provider"] || "Unassigned"
-      const effectiveFrom =
-        typeof values.effectiveFrom === "string" ? values.effectiveFrom : "Now"
-      const assignmentReason =
-        typeof values.reason === "string" ? values.reason : "Contract assignment"
-      const updatedArea: BusinessRecord = {
-        ...serviceArea,
-        context: serviceArea.context.replace(previousServiceProvider, serviceProvider.name),
-        updated: "Now",
-        freshness: "Now",
-        serviceProviderId,
-        facts: {
-          ...serviceArea.facts,
-          "Service provider": serviceProvider.name,
-          "Previous service provider": previousServiceProvider,
-          "Assignment effective from": effectiveFrom,
-          "Assignment reason": assignmentReason,
-        },
-        related: [
-          `Service provider ${serviceProvider.name}`,
-          ...serviceArea.related.filter((item) => !item.startsWith("Service provider ")),
-        ],
-        submittedValues: {
-          ...serviceArea.submittedValues,
-          serviceProviderId,
-          effectiveFrom: values.effectiveFrom,
-          reason: values.reason,
-        },
-        relationRefs: [
-          ...(serviceArea.relationRefs ?? []).filter(
-            (relation) => relation.fieldId !== "serviceProviderId",
-          ),
-          {
-            fieldId: "serviceProviderId",
-            workspaceId: "service-providers",
-            moduleId: "service-providers",
-            recordId: serviceProvider.id,
-            label: serviceProvider.name,
-          },
-        ],
-      }
-      const assignmentEvent: AuditEvent = {
-        id: `audit-service-area-assignment-${now}`,
-        action: "Assign service area",
-        actor: actorName,
-        at: "Now",
-        reason: assignmentReason,
-        before: previousServiceProvider,
-        after: serviceProvider.name,
-        evidence: `Effective ${effectiveFrom} · existing service area retained`,
-      }
-
-      upsertRecord("service-providers", "service-areas", updatedArea)
-      setAuditEvents((current) => ({
-        ...current,
-        [updatedArea.id]: [assignmentEvent, ...(current[updatedArea.id] ?? [])],
-      }))
-      setIsCreateOpen(false)
-      setRelatedCreateTarget(null)
-      toast.success("Service area assigned", {
-        description: `${serviceArea.name} is now assigned to ${serviceProvider.name}.`,
-      })
-      return
-    }
-
     if (formSchema.execution.kind === "preview") {
       setIsCreateOpen(false)
       setRelatedCreateTarget(null)
@@ -3422,10 +2757,9 @@ export function BusinessWorkspace({
       toast.error("This workflow target is not available.")
       return
     }
-    // On the Pilot a switched module the API has not read yet has nowhere to
-    // send the write: the dialog stays open and says when it can be saved (#239, as #210).
+    // A switched module the API has not read yet has nowhere to send the
+    // write: the dialog stays open and says when it can be saved (#239, as #210).
     const gate = writeGate({
-      apiConfigured,
       target: formTargetOnApi,
       label: resolvedTarget.module.label,
       when: "the form can be saved",
@@ -3450,9 +2784,7 @@ export function BusinessWorkspace({
       if (!resolved) return undefined
       const name = getRecords(
         resolved.workspaceId,
-        resolved.module.id,
-        resolved.module.records,
-      ).find((candidate) => candidate.id === recordId)?.name
+        resolved.module.id).find((candidate) => candidate.id === recordId)?.name
       if (!name) return undefined
       // Vehicle names carry the registration plate; facts show the callsign.
       return resolved.workspaceId === "fleet" && resolved.module.id === "vehicles"
@@ -3555,9 +2887,7 @@ export function BusinessWorkspace({
       const serviceProviderName = serviceProviderTarget
         ? getRecords(
             serviceProviderTarget.workspaceId,
-            serviceProviderTarget.module.id,
-            serviceProviderTarget.module.records,
-          ).find((record) => record.id === serviceProviderScopeId)?.name
+            serviceProviderTarget.module.id).find((record) => record.id === serviceProviderScopeId)?.name
         : undefined
       if (serviceProviderName) {
         facts["Service provider"] = serviceProviderName
@@ -3573,9 +2903,7 @@ export function BusinessWorkspace({
       const serviceProviderAreas = areaTarget
         ? getRecords(
             areaTarget.workspaceId,
-            areaTarget.module.id,
-            areaTarget.module.records,
-          ).filter((record) => record.serviceProviderId === serviceProviderScopeId)
+            areaTarget.module.id).filter((record) => record.serviceProviderId === serviceProviderScopeId)
         : []
       if (serviceProviderAreas.length === 1) {
         facts["Allowed service area"] = serviceProviderAreas[0].name
@@ -3626,97 +2954,6 @@ export function BusinessWorkspace({
         ? `${formSchema.recordKind} · ${nameValue || "submitted"}`
         : nameValue || `${formSchema.recordKind} · ${now}`
     const projectIds = selectedProjectIds(projectScope, values, projectRecords)
-
-    // The generic path stores select-field facts as their display label
-    // (e.g. Unit → "€ per pickup"), but a price row's Unit fact must stay the
-    // raw PriceUnit enum ("pickup") for recordToPriceRow/unitSuffix to read
-    // it back — normalizePriceRowRecord (lib/commercial/price-model) writes
-    // the submitted enum over it and derives the row's name, headline value,
-    // status and context the same way on create and on edit.
-    const submittedPriceUnit =
-      typeof values.unit === "string" && values.unit ? values.unit : undefined
-
-    // Same class of bug on the products module's generic edit path (row
-    // Actions → Edit): the Unit field's LABEL ("€ per pickup") lands in the
-    // Unit fact instead of the raw enum, the VAT rate field's label lands
-    // under its own field label "VAT rate" instead of the product's "VAT"
-    // fact, and — unlike create, which derives status via initialFormStatus
-    // — a generic edit never re-derives top-level status at all, so it can
-    // drift from a Status-shaped fact the form also writes. Fix all three so
-    // the generic path agrees with the Settings product editor's fact shape;
-    // top-level status is the source of truth, so no separate Status fact
-    // is kept.
-    const normalizeProductRecord = (record: BusinessRecord): BusinessRecord => {
-      const submittedUnit = typeof values.priceUnit === "string" ? values.priceUnit : undefined
-      const submittedStatus =
-        typeof values.status === "string" && values.status ? values.status : undefined
-      const nextFacts = { ...record.facts }
-      if (submittedUnit) nextFacts[PRODUCT_FACTS.unit] = submittedUnit
-      delete nextFacts["VAT rate"]
-      delete nextFacts["Status"]
-      // Field labels that are not product facts: the name duplicates the
-      // record's own name, and Default price / Effective from describe the
-      // product's no-conditions price row, not the product. The edit host no
-      // longer offers the price fields, so this also scrubs the strays left
-      // behind on records edited before that section was dropped.
-      delete nextFacts["Product name"]
-      delete nextFacts["Default price"]
-      delete nextFacts["Effective from"]
-      // contextFieldIds names two of those dropped price fields, so derive the
-      // context line from the product's own facts — the same shape the
-      // Settings product editor writes — instead of letting it degrade to the
-      // product type alone.
-      const unit = (nextFacts[PRODUCT_FACTS.unit] as PriceUnit) || "pickup"
-      const productType = nextFacts[PRODUCT_FACTS.type]
-      return {
-        ...record,
-        context: productType ? `${productType} · ${unitSuffix(unit)}` : record.context,
-        facts: nextFacts,
-        status: submittedStatus ?? record.status,
-      }
-    }
-
-    // Service provider prices get the same treatment: the Unit fact must stay the
-    // raw PriceUnit enum, the current fee tracks the locked bid until the
-    // first Apply index run, and name/context/status/value are derived the
-    // way the fixture rates shape them.
-    const normalizeServiceProviderPriceRecord = (
-      record: BusinessRecord,
-    ): BusinessRecord => {
-      const submittedUnit = typeof values.unit === "string" ? values.unit : undefined
-      const nextFacts = { ...record.facts }
-      if (submittedUnit) nextFacts[RATE_FACTS.unit] = submittedUnit
-      const bid = Number(nextFacts[RATE_FACTS.bid])
-      if (Number.isFinite(bid)) {
-        nextFacts[RATE_FACTS.bid] = bid.toFixed(2)
-        // An already-indexed rate keeps its recomputed current fee.
-        if (!nextFacts[RATE_FACTS.lastIndexed]) {
-          nextFacts[RATE_FACTS.currentFee] = bid.toFixed(2)
-        }
-      }
-      const rate = recordToServiceProviderPrice({ ...record, facts: nextFacts })
-      return {
-        ...record,
-        name:
-          rate.serviceProvider && rate.productName
-            ? `${rate.serviceProvider} · ${rate.productName}`
-            : record.name,
-        context: [
-          rate.serviceArea,
-          rate.validUntil ? `${rate.validFrom} → ${rate.validUntil}` : rate.validFrom,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        status: deriveServiceProviderPriceStatus(
-          rate.validFrom,
-          rate.validUntil || undefined,
-        ),
-        value: `${money(rate.currentFee)}${unitSuffix(rate.unit)}`,
-        description: `Service provider price: locked bid ${money(rate.bid)}, current fee ${money(rate.currentFee)}.`,
-        source: "Contract management",
-        facts: nextFacts,
-      }
-    }
 
     // A scheme's recurrence is machine-readable in submittedValues (frequency,
     // serviceDays, weekRotation, effectiveFrom/To, plannedStartTime — the shape
@@ -3823,123 +3060,6 @@ export function BusinessWorkspace({
       }
     }
 
-    // Tickets keep their classification facts under the fixture keys (Type,
-    // Team) so table columns and filters read one shape regardless of whether
-    // a ticket was seeded or submitted, and the record description is the
-    // submitted case description rather than the form's boilerplate.
-    const normalizeTicketRecord = (record: BusinessRecord): BusinessRecord => {
-      const nextFacts = { ...record.facts }
-      if (nextFacts["Ticket type"] && !nextFacts.Type) {
-        nextFacts.Type = nextFacts["Ticket type"]
-      }
-      delete nextFacts["Ticket type"]
-      if (nextFacts["Assigned team"] && !nextFacts.Team) {
-        nextFacts.Team = nextFacts["Assigned team"]
-      }
-      delete nextFacts["Assigned team"]
-      const caseDescription =
-        typeof values.description === "string" ? values.description.trim() : ""
-      return {
-        ...record,
-        description: caseDescription || record.description,
-        facts: nextFacts,
-      }
-    }
-
-    // Containers migrated their cadence fact off the retired "Pickup
-    // setting" key (issue #13); the edit merge would otherwise carry the
-    // stale retired key (and the drifted calendar name) forward forever.
-    // Since issue #20 the cadence is a typed reference: saving also resolves
-    // whatever shape the record carries (the form's retained `pickupSetting`
-    // value, a legacy option id, or a legacy fact string) onto
-    // submittedValues.serviceFrequencyId and re-derives the display fact.
-    const normalizeContainerRecord = (record: BusinessRecord): BusinessRecord => {
-      const nextFacts = { ...record.facts }
-      if (nextFacts["Pickup setting"] && !nextFacts["Service frequency"]) {
-        nextFacts["Service frequency"] = nextFacts["Pickup setting"]
-      }
-      delete nextFacts["Pickup setting"]
-      const calendar = canonicalCalendarName(nextFacts["Collection calendar"])
-      if (calendar) nextFacts["Collection calendar"] = calendar
-      const nextValues = { ...record.submittedValues }
-      // The just-submitted form value wins over a stale serviceFrequencyId
-      // carried forward by the edit merge; the fact string recovers records
-      // whose select prefilled empty (pre-#20 option ids are not options).
-      const submittedFrequency =
-        typeof values.pickupSetting === "string" ? values.pickupSetting : ""
-      const definition =
-        resolveServiceFrequencyValue(submittedFrequency) ??
-        resolveServiceFrequencyValue(nextFacts["Service frequency"]) ??
-        serviceFrequencyOfRecord({ facts: nextFacts, submittedValues: nextValues })
-      if (definition) {
-        nextValues.serviceFrequencyId = definition.id
-        // The retained form field id mirrors the typed key so the edit
-        // dialog's select prefills on the next open.
-        nextValues.pickupSetting = definition.id
-        nextFacts["Service frequency"] = definition.name
-      }
-      return { ...record, facts: nextFacts, submittedValues: nextValues }
-    }
-
-    // Agreements store no frequency of their own (issue #20): the promise
-    // lives on the assigned container's frequency record, and the agreement
-    // displays what it inherits. Saving derives the fact from the linked
-    // container — "—" when that container promises no cadence, so a
-    // reassignment never carries the previous container's promise forward —
-    // and drops the retired free-text value. Records whose link cannot be
-    // resolved (no container, or a deleted one) keep their stored fact.
-    const normalizeAgreementRecord = (record: BusinessRecord): BusinessRecord => {
-      const containerId =
-        (typeof record.submittedValues?.containerId === "string"
-          ? record.submittedValues.containerId
-          : "") ||
-        record.relationRefs?.find((ref) => ref.fieldId === "containerId")?.recordId
-      if (!containerId) return record
-      const resolved = resolveFormModule("resources", "containers")
-      const container = resolved
-        ? getRecords(resolved.workspaceId, resolved.module.id, resolved.module.records).find(
-            (candidate) => candidate.id === containerId,
-          )
-        : undefined
-      if (!container) return record
-      const nextValues = { ...record.submittedValues }
-      delete nextValues.serviceFrequency
-      return {
-        ...record,
-        facts: {
-          ...record.facts,
-          "Service frequency": serviceFrequencyOfRecord(container)?.name ?? "—",
-        },
-        submittedValues: nextValues,
-      }
-    }
-
-    // The inherited fact would otherwise go stale when the container's own
-    // frequency changes: a container save re-derives it on every agreement
-    // linked to that container (the updated copy shadows a fixture record).
-    const syncAgreementsForContainer = (container: BusinessRecord) => {
-      const resolved = resolveFormModule("customers", "agreements")
-      if (!resolved) return
-      const derived = serviceFrequencyOfRecord(container)?.name ?? "—"
-      for (const agreement of getRecords(
-        resolved.workspaceId,
-        resolved.module.id,
-        resolved.module.records,
-      )) {
-        const linkedId =
-          (typeof agreement.submittedValues?.containerId === "string"
-            ? agreement.submittedValues.containerId
-            : "") ||
-          agreement.relationRefs?.find((ref) => ref.fieldId === "containerId")?.recordId
-        if (linkedId !== container.id) continue
-        if (agreement.facts["Service frequency"] === derived) continue
-        upsertRecord(resolved.workspaceId, resolved.module.id, {
-          ...agreement,
-          facts: { ...agreement.facts, "Service frequency": derived },
-        })
-      }
-    }
-
     if (editingRecord) {
       // The derived facts skip empty values and are merged over the record's,
       // so a field the person emptied would keep its old fact and a
@@ -3969,18 +3089,6 @@ export function BusinessWorkspace({
         relationRefs,
         projectIds,
       }
-      if (resolvedTarget.module.id === "price-rows") {
-        updatedRecord = normalizePriceRowRecord(updatedRecord, { unit: submittedPriceUnit })
-      }
-      if (resolvedTarget.module.id === "products") {
-        updatedRecord = normalizeProductRecord(updatedRecord)
-      }
-      if (resolvedTarget.module.id === "service-provider-prices") {
-        updatedRecord = normalizeServiceProviderPriceRecord(updatedRecord)
-      }
-      if (resolvedTarget.module.id === "tickets") {
-        updatedRecord = normalizeTicketRecord(updatedRecord)
-      }
       if (resolvedTarget.module.id === "routes") {
         updatedRecord = normalizeRouteRecord(updatedRecord)
       }
@@ -3998,61 +3106,13 @@ export function BusinessWorkspace({
           moduleRecords("route-studio", "schemes").find(
             (candidate) => candidate.id === editingRecord.id,
           ) ?? editingRecord
-        commitSchemeEdit(
-          stored,
-          normalizeRouteSchemeRecord(updatedRecord),
-          {
-            id: `audit-edit-${now}`,
-            action: `Edit ${activeModule.entityLabel.toLowerCase()}`,
-            reason: preferredReason(values),
-            evidence: () =>
-              `${relationRefs.length} linked records · ${projectScopeLabel(projectIds, projectRecords)} scope validated`,
-          },
-          () => setEditingRecord(null),
-        )
+        commitSchemeEdit(stored, normalizeRouteSchemeRecord(updatedRecord), () => setEditingRecord(null))
         return
       }
-      if (resolvedTarget.module.id === "containers") {
-        updatedRecord = normalizeContainerRecord(updatedRecord)
-      }
-      if (resolvedTarget.module.id === "agreements") {
-        updatedRecord = normalizeAgreementRecord(updatedRecord)
-      }
-      const editEvent: AuditEvent = {
-        id: `audit-edit-${now}`,
-        action: `Edit ${activeModule.entityLabel.toLowerCase()}`,
-        actor: actorName,
-        at: "Now",
-        reason: preferredReason(values),
-        before: editingRecord.status,
-        after: updatedRecord.status,
-        evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
-          projectIds,
-          projectRecords,
-        )} scope validated`,
-      }
-
       // On a switched module the dialog waits for the API's answer, its
       // submit held, and stays open with what was typed on a refusal, which
-      // is the store's toast in the API's words; fixture mode lands at once (#239).
+      // is the store's toast in the API's words; a module on fixtures lands at once (#239).
       formWrite(upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, updatedRecord), updatedRecord, (stillOpen) => {
-        if (resolvedTarget.module.id === "price-rows") {
-          // A row moved to another product leaves the old product's derived
-          // facts behind unless that product is re-synced with the row
-          // excluded (issue #22); the new product then takes it up.
-          const previousProductId = productIdOfPriceRow(editingRecord)
-          if (previousProductId && previousProductId !== productIdOfPriceRow(updatedRecord)) {
-            syncProductForRow(editingRecord, { exclude: true })
-          }
-          syncProductForRow(updatedRecord)
-        }
-        if (resolvedTarget.module.id === "containers") {
-          syncAgreementsForContainer(updatedRecord)
-        }
-        setAuditEvents((current) => ({
-          ...current,
-          [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
-        }))
         setSelectedRecord((current) => (current?.id === updatedRecord.id ? updatedRecord : current))
         // The dialog this edit was made in, and no other the person has opened since.
         if (stillOpen) setEditingRecord(null)
@@ -4093,7 +3153,6 @@ export function BusinessWorkspace({
               : "Office workspace",
       freshness: "Now",
       allowedTransitions: resolvedTarget.module.lifecycle.slice(1, 3),
-      companyId: FIXTURE_COMPANY_ID,
       projectIds,
       serviceProviderId:
         typeof values.serviceProviderId === "string" && values.serviceProviderId
@@ -4103,65 +3162,21 @@ export function BusinessWorkspace({
       submittedValues: { ...values, ...(relatedCreateTarget?.extraValues ?? {}) },
       relationRefs,
     }
-    if (resolvedTarget.module.id === "price-rows") {
-      newRecord = normalizePriceRowRecord(newRecord, { unit: submittedPriceUnit })
-    }
-    if (resolvedTarget.module.id === "products") {
-      newRecord = normalizeProductRecord(newRecord)
-    }
-    if (resolvedTarget.module.id === "service-provider-prices") {
-      newRecord = normalizeServiceProviderPriceRecord(newRecord)
-    }
-    if (resolvedTarget.module.id === "tickets") {
-      newRecord = normalizeTicketRecord(newRecord)
-    }
     if (resolvedTarget.module.id === "routes") {
       newRecord = normalizeRouteRecord(newRecord)
     }
     if (resolvedTarget.module.id === "schemes") {
       newRecord = normalizeRouteSchemeRecord(newRecord)
     }
-    if (resolvedTarget.module.id === "containers") {
-      newRecord = normalizeContainerRecord(newRecord)
-    }
-    if (resolvedTarget.module.id === "agreements") {
-      newRecord = normalizeAgreementRecord(newRecord)
-    }
-    const creationEvent: AuditEvent = {
-      id: `audit-form-${now}`,
-      action: formSchema.submitLabel,
-      actor: actorName,
-      at: "Now",
-      reason: preferredReason(values),
-      before: "Absent",
-      after: newRecord.status,
-      evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
-        projectIds,
-        projectRecords,
-      )} scope validated`,
-    }
-
     // On a switched module the dialog waits for the API's answer, its submit
     // held: the row is opened and said to be made only once the API has
     // taken it, and a refusal — the store's toast, in the API's words —
     // leaves the dialog open with what was typed. A person who left the
-    // dialog meanwhile is not taken back to the row. Fixture mode lands at once (#239).
+    // dialog meanwhile is not taken back to the row. A module on fixtures lands at once (#239).
     // Read before the answer: `newRecord` is reassigned above, and `execution` is not narrowed inside the callback.
     const createdRecord = newRecord
     const { completionMessage } = formSchema.execution
     formWrite(upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, createdRecord), createdRecord, (stillOpen) => {
-      if (resolvedTarget.module.id === "price-rows") {
-        const createdRow = recordToPriceRow(createdRecord)
-        syncProductForRow(createdRecord, {
-          historyWhat: createdRow?.negotiatedCustomer
-            ? `Negotiated deal added for ${createdRow.negotiatedCustomer}`
-            : "Variation added",
-        })
-      }
-      setAuditEvents((current) => ({
-        ...current,
-        [createdRecord.id]: [creationEvent],
-      }))
       if (stillOpen) {
         setIsCreateOpen(false)
         setRelatedCreateTarget(null)
@@ -4201,9 +3216,7 @@ export function BusinessWorkspace({
       if (!resolved) return undefined
       const record = getRecords(
         resolved.workspaceId,
-        resolved.module.id,
-        resolved.module.records,
-      ).find((candidate) => candidate.id === recordId)
+        resolved.module.id).find((candidate) => candidate.id === recordId)
       if (!record) return undefined
       relationRefs.push({
         fieldId,
@@ -4287,7 +3300,6 @@ export function BusinessWorkspace({
       source: "Office workspace",
       freshness: "Now",
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
-      companyId: FIXTURE_COMPANY_ID,
       projectIds,
       serviceProviderId: data.serviceProviderId ?? serviceProviderScopeId,
       recordKind: "Route",
@@ -4305,25 +3317,7 @@ export function BusinessWorkspace({
       },
       relationRefs,
     }
-    const creationEvent: AuditEvent = {
-      id: `audit-guided-route-${now}`,
-      action: "Create route · Guided Setup",
-      actor: actorName,
-      at: "Now",
-      reason: "Guided Setup",
-      before: "Absent",
-      after: newRecord.status,
-      evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
-        projectIds,
-        projectRecords,
-      )} scope validated`,
-    }
-
     upsertRecord(workspace.id, activeModule.id, newRecord)
-    setAuditEvents((current) => ({
-      ...current,
-      [newRecord.id]: [creationEvent],
-    }))
     setSelectedRecord(newRecord)
     router.push(
       getWorkspaceNavigationHref(
@@ -4369,9 +3363,7 @@ export function BusinessWorkspace({
       if (!resolved) return undefined
       const record = getRecords(
         resolved.workspaceId,
-        resolved.module.id,
-        resolved.module.records,
-      ).find((candidate) => candidate.id === recordId)
+        resolved.module.id).find((candidate) => candidate.id === recordId)
       if (!record) return undefined
       relationRefs.push({
         fieldId,
@@ -4402,13 +3394,13 @@ export function BusinessWorkspace({
       (candidate) => candidate.id === "containers",
     )
     const containerRecords = containersModule
-      ? getRecords("resources", containersModule.id, containersModule.records)
+      ? getRecords("resources", containersModule.id)
       : []
     const vehiclesModule = businessWorkspaces.fleet.modules.find(
       (candidate) => candidate.id === "vehicles",
     )
     const vehicleRecords = vehiclesModule
-      ? getRecords("fleet", vehiclesModule.id, vehiclesModule.records)
+      ? getRecords("fleet", vehiclesModule.id)
       : []
 
     // Collection groups (D33): each group links its own vehicle, driver, and
@@ -4473,9 +3465,9 @@ export function BusinessWorkspace({
     const validation = validationWhenUnplaced(
       validateGuidedScheme(
         data,
-        getRecords(workspace.id, activeModule.id, activeModule.records),
+        getRecords(workspace.id, activeModule.id),
         allocationModule
-          ? getRecords("fleet", allocationModule.id, allocationModule.records)
+          ? getRecords("fleet", allocationModule.id)
           : [],
         containerRecords,
         vehicleRecords,
@@ -4570,7 +3562,6 @@ export function BusinessWorkspace({
       source: "Office workspace",
       freshness: "Now",
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
-      companyId: FIXTURE_COMPANY_ID,
       projectIds,
       serviceProviderId: sharedProviderId ?? serviceProviderScopeId,
       recordKind: "Route Scheme",
@@ -4585,21 +3576,6 @@ export function BusinessWorkspace({
     if (apiConfigured) {
       const saved = upsertRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, newRecord)
       whenSaved(saved, () => {
-        setAuditEvents((current) => ({
-          ...current,
-          [newRecord.id]: [
-            {
-              id: `audit-scheme-create-${now}`,
-              action: `Create route scheme · ${origin.method}`,
-              actor: actorName,
-              at: "Now",
-              reason: origin.method,
-              before: "Absent",
-              after: newRecord.status,
-              evidence: `${relationRefs.length} linked records · ${projectScopeLabel(projectIds, projectRecords)} scope validated`,
-            },
-          ],
-        }))
         if (origin.method !== "Guided Setup") {
           setSelectedRecord(newRecord)
           router.push(getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id, newRecord.id), { scroll: false })
@@ -4631,36 +3607,20 @@ export function BusinessWorkspace({
       { scheme: newRecord, today: todayIso(), actorName, createAs: data.createAs },
       {
         existingRoutes: routesModule
-          ? getRecords("route-studio", routesModule.id, routesModule.records)
+          ? getRecords("route-studio", routesModule.id)
           : [],
         existingPickups: pickupsModule
-          ? getRecords("route-studio", pickupsModule.id, pickupsModule.records)
+          ? getRecords("route-studio", pickupsModule.id)
           : [],
         containers: containerRecords,
         calendarRecords: calendarsModule
           ? getRecords(
               COLLECTION_CALENDARS_MODULE.workspaceId,
-              calendarsModule.id,
-              calendarsModule.records,
-            )
+              calendarsModule.id)
           : [],
         projectRecords: moduleRecords("configure", "organization"),
       },
     )
-    const creationEvent: AuditEvent = {
-      id: `audit-scheme-create-${now}`,
-      action: `Create route scheme · ${origin.method}`,
-      actor: actorName,
-      at: "Now",
-      reason: origin.method,
-      before: "Absent",
-      after: creation.scheme.status,
-      evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
-        projectIds,
-        projectRecords,
-      )} scope validated`,
-    }
-
     upsertRecord(workspace.id, activeModule.id, creation.scheme)
     for (const route of creation.routes) {
       upsertRecord("route-studio", "routes", route)
@@ -4668,10 +3628,6 @@ export function BusinessWorkspace({
     for (const pickup of creation.pickups) {
       upsertRecord("route-studio", "pickups", pickup)
     }
-    setAuditEvents((current) => ({
-      ...current,
-      [newRecord.id]: [creationEvent],
-    }))
     // Guided Setup closes onto the list, where the new scheme appears with
     // its status (2026-09-16 redesign); Quick create keeps opening the record.
     if (origin.method !== "Guided Setup") {
@@ -4735,19 +3691,7 @@ export function BusinessWorkspace({
       facts: withSchemeGroupFacts(stored.facts, mergedValues, groups),
       serviceProviderId: sharedServiceProvider(groups).id ?? stored.serviceProviderId,
     }
-    const containerRecords = moduleRecords("resources", "containers")
-    commitSchemeEdit(
-      stored,
-      updatedRecord,
-      {
-        id: `audit-edit-groups-${Date.now()}`,
-        action: "Edit collection groups",
-        reason: `${groups.length} collection group${groups.length === 1 ? "" : "s"}`,
-        evidence: (scheme) =>
-          `${collectionGroupContainerIds(schemeGroupPlans(scheme, serviceDays, containerRecords).resolution).length} containers across the groups`,
-      },
-      () => setGroupsEditorScheme(null),
-    )
+    commitSchemeEdit(stored, updatedRecord, () => setGroupsEditorScheme(null))
   }
 
   const handleGuidedSchemeCreate = (data: GuidedSchemeData) =>
@@ -4759,10 +3703,9 @@ export function BusinessWorkspace({
     if (!selectedRecord) return
     const serviceProviderId = selectedRecord.id
 
-    // On the Pilot an award and a price are the API's forms (slice 11 of #81):
-    // an award to this provider, a price under one of its assignments.
-    if (apiConfigured && (target === "service-area" || target === "service-provider-price")) {
-      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue(), getRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, [])))
+    // An award and a price are the API's forms (slice 11 of #81): an award to this provider, a price under one of its assignments.
+    if (target === "service-area" || target === "service-provider-price") {
+      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue(), getRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)))
       return
     }
 
@@ -4801,87 +3744,7 @@ export function BusinessWorkspace({
           employmentType: "service-provider",
         },
       })
-      return
     }
-
-    if (target === "service-provider-price") {
-      // Opens the module's New service provider price create form with the
-      // service provider fixed from the current page — we are adding a price for
-      // this service provider. The bulk Apply index workflow stays on the Price
-      // Engine module header.
-      setRelatedCreateTarget({
-        workspaceId: "commercial",
-        moduleId: "service-provider-prices",
-        initialValues: {
-          serviceProviderId,
-          validFrom: localDateInputValue(),
-        },
-      })
-      return
-    }
-
-    setRelatedCreateTarget({
-      workspaceId: "service-providers",
-      moduleId: "service-areas",
-      initialValues: {
-        serviceProviderId,
-        effectiveFrom: localDateInputValue(),
-      },
-      schemaOverride: {
-        key: "service-providers.service-areas",
-        mode: "action",
-        recordKind: "Service area assignment",
-        title: "Assign service area",
-        description:
-          `Link an existing service area to ${selectedRecord.name}. The service area remains the same record; this updates its effective service provider relationship.`,
-        submitLabel: "Assign service area",
-        contextFieldIds: ["serviceProviderId", "serviceAreaId", "effectiveFrom"],
-        execution: {
-          kind: "append-event",
-          sourceField: "serviceAreaId",
-          reviewBeforeSubmit: true,
-          completionMessage: "The service area relationship was updated with audit history.",
-        },
-        sections: [
-          {
-            id: "assignment",
-            title: "Service area relationship",
-            description:
-              "The service provider is fixed from the current page. Choose an existing area that is not already assigned to this service provider.",
-            fields: [
-              {
-                id: "serviceProviderId",
-                label: "Service provider",
-                type: "select",
-                required: true,
-                readOnly: true,
-                relation: { workspaceId: "service-providers", moduleId: "service-providers" },
-              },
-              {
-                id: "serviceAreaId",
-                label: "Service area",
-                type: "select",
-                required: true,
-                relation: { workspaceId: "service-providers", moduleId: "service-areas" },
-              },
-              {
-                id: "effectiveFrom",
-                label: "Effective from",
-                type: "date",
-                required: true,
-              },
-              {
-                id: "reason",
-                label: "Assignment reason",
-                type: "textarea",
-                required: true,
-                placeholder: "Why is this area being assigned or transferred?",
-              },
-            ],
-          },
-        ],
-      },
-    })
   }
 
   if (!hasRoleViewableModules) {
@@ -4906,17 +3769,17 @@ export function BusinessWorkspace({
   // A module's own actions sit in its table's header (TableCard), never in the
   // top bar, which is kept for the app-wide items (components/page-layout.tsx).
   const moduleActions =
-    isContainersAssetsView || showExportAction || primary !== null ? (
+    isContainersAssetsView || (showExportAction && !keptOnApi) || primary !== null ? (
       <>
         {isContainersAssetsView && (
           <Button variant="outline" size="sm" asChild>
-            <Link href={settingsHref("asset-management", { from: "/resources?module=containers" })}>
+            <Link href={settingsHref("master-data", { from: "/resources?module=containers" })}>
               <Gear className="h-4 w-4" />
               <span className="hidden sm:inline">Asset settings</span>
             </Link>
           </Button>
         )}
-        {showExportAction && (
+        {showExportAction && !keptOnApi && (
           <Button
             variant="ghost"
             size="sm"
@@ -4948,22 +3811,7 @@ export function BusinessWorkspace({
         )}
         {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
         {primary === "form" && formSchema && (
-          isPriceEngineProducts ? (
-            <Button
-              size="sm"
-              onClick={() =>
-                setRelatedCreateTarget({
-                  workspaceId: "commercial",
-                  moduleId: "price-rows",
-                  initialValues: {},
-                })
-              }
-            >
-              <Plus className="h-4 w-4" weight="bold" />
-              <span className="hidden sm:inline">Add price</span>
-              <span className="sm:hidden">Action</span>
-            </Button>
-          ) : isRouteCreateFlow ? (
+          isRouteCreateFlow ? (
             <RouteCreateEntry
               submitLabel={formSchema.submitLabel}
               onQuickCreate={() => setIsCreateOpen(true)}
@@ -5242,9 +4090,8 @@ export function BusinessWorkspace({
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
           onCreateServiceArea={(seed) => {
-            // On the Pilot the award is the planning areas the selection
-            // touches, the drawn polygon never persisted (slice 11 of #81).
-            const opened = apiConfigured ? pilotServiceAreaCreate(seed) : serviceAreaFormValues(seed)
+            // The award is the planning areas the selection touches, the drawn polygon never persisted (slice 11 of #81).
+            const opened = pilotServiceAreaCreate(seed)
             if ("refused" in opened) {
               toast.error("No service area to create", { description: opened.refused })
               return
@@ -5796,14 +4643,7 @@ export function BusinessWorkspace({
       )}
 
       {isTicketDetails && selectedRecord ? (
-        <TicketDetailsDialog record={selectedRecord} onClose={closeRecord} />
-      ) : isContainersAssetsView && RowSurface === undefined ? (
-        <ContainerDetailsSheet
-          key={selectedRecord?.id ?? "closed-container"}
-          record={selectedRecord}
-          onClose={closeRecord}
-          onAction={requestRecordAction}
-        />
+        <LiveTicketDetailsDialog record={selectedRecord} onClose={closeRecord} />
       ) : (
         <RecordDetailsDialog
           module={activeModule}
@@ -5811,7 +4651,7 @@ export function BusinessWorkspace({
           onClose={closeRecord}
           onAction={requestRecordAction}
           transitions={
-            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord, apiConfigured) : []
+            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord) : []
           }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords || (canEditSomeRecords && genericEditOffered(commandSurface, detailsRecord)) ? openEditRecord : undefined}
@@ -5820,11 +4660,11 @@ export function BusinessWorkspace({
           extraActions={selectedRecord ? recordExtraActions(selectedRecord) : undefined}
           commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
           history={
-            apiConfigured && activeModuleOnApi !== null && detailsRecord ? (
+            activeModuleOnApi !== null && detailsRecord ? (
               <RecordHistory key={detailsRecord.id} workspaceId={workspace.id} moduleId={activeModule.id} record={detailsRecord} />
             ) : undefined
           }
-          onApi={apiConfigured && activeModuleOnApi !== null}
+          onApi={activeModuleOnApi !== null}
           attention={
             isSchemesView && selectedRecord
               ? schemeRowsById.get(selectedRecord.id)?.attention
@@ -5860,7 +4700,7 @@ export function BusinessWorkspace({
         module={activeModule}
         pendingAction={pendingAction}
         saving={actionSaving}
-        onApi={apiConfigured && activeModuleOnApi !== null}
+        onApi={activeModuleOnApi !== null}
         onOpenChange={(open) => !open && setPendingAction(null)}
         onConfirm={commitRecordAction}
       />

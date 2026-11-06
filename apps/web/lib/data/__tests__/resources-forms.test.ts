@@ -4,16 +4,14 @@
 // `configure.master`, kept through enhanceField's static-key rule, which
 // still turns a single select at the module into its static keys; a
 // vehicle's fuel is a select over the wire's fuels, read off the vocabulary
-// and spelled nowhere else. The fixtures carry nothing under the retired
-// free-text field or the static key, so a browser that still holds either
-// reads as no selection.
+// and spelled nowhere else.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { FUEL_TYPES, VEHICLE_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
-import { getModuleDefinition, type WorkspaceId } from "../business-modules"
+import type { WorkspaceId } from "../business-modules"
 import { masterDataKindForField } from "../master-data-kinds"
 
 const fieldsOf = (workspaceId: WorkspaceId, moduleId: string) => {
@@ -118,22 +116,5 @@ describe("what the four forms require", () => {
     assert.deepEqual(required("fleet", "drivers"), ["driverName", "employmentType", "projectId", "licenceClass"])
     assert.deepEqual(required("resources", "depots"), ["projectId", "source", "locationType", "name", "code", "address", "latitude", "longitude", "ownership"])
     assert.deepEqual(required("resources", "warehouses"), ["projectId", "source", "name", "code", "status", "address"])
-  })
-})
-
-describe("the fixtures", () => {
-  test("no fixture vehicle or location carries a typed value under the retired fields or the new ones: the pickers open on no selection", () => {
-    for (const [workspaceId, moduleId] of [
-      ["fleet", "vehicles"],
-      ["resources", "depots"],
-    ] as const) {
-      const module = getModuleDefinition({ workspaceId, moduleId })
-      assert.ok(module)
-      for (const record of module.records) {
-        for (const key of ["wasteFractions", "wasteFractionIds", "acceptedFractionId", "acceptedFractionIds"]) {
-          assert.equal(record.submittedValues?.[key], undefined, `${record.id} carries ${key}`)
-        }
-      }
-    }
   })
 })

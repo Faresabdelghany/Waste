@@ -10,7 +10,6 @@ import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
 import { BusinessRecordStoreProvider } from "@/components/waste/business-record-store"
 import { ApiSessionProvider } from "@/components/waste/api-session-store"
 import { ActiveRoutesStoreProvider } from "@/components/waste/active-routes-store"
-import { OrganizationStoreProvider } from "@/components/settings/organization-store"
 import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
 import "./globals.css"
 
@@ -57,17 +56,15 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AppThemeProvider>
             <ApiSessionProvider>
-              <OrganizationStoreProvider>
-                <AssetManagementStoreProvider>
-                  <BusinessRecordStoreProvider>
-                    <ActiveRoutesStoreProvider>
-                      <SignInGate>{children}</SignInGate>
-                      <Analytics />
-                      <Toaster richColors closeButton />
-                    </ActiveRoutesStoreProvider>
-                  </BusinessRecordStoreProvider>
-                </AssetManagementStoreProvider>
-              </OrganizationStoreProvider>
+              <AssetManagementStoreProvider>
+                <BusinessRecordStoreProvider>
+                  <ActiveRoutesStoreProvider>
+                    <SignInGate>{children}</SignInGate>
+                    <Analytics />
+                    <Toaster richColors closeButton />
+                  </ActiveRoutesStoreProvider>
+                </BusinessRecordStoreProvider>
+              </AssetManagementStoreProvider>
             </ApiSessionProvider>
           </AppThemeProvider>
         </ThemeProvider>

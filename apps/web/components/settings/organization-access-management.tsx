@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
   DotsThree,
   Funnel,
@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import {
   useBusinessRecordStore,
   useModuleRecords,
@@ -18,12 +18,10 @@ import {
   whenSaved,
 } from "@/components/waste/business-record-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
 import { NewRoleDialog } from "@/components/settings/new-role-dialog"
-import { useOrganizationStore } from "@/components/settings/organization-store"
 import { PilotRolePermissionsPanel } from "@/components/settings/pilot-role-permissions"
-import { RolePermissionsPanel } from "@/components/settings/role-permissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -42,7 +40,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
@@ -69,10 +66,8 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import {
   DEACTIVATE_USER,
-  isCompanyRecord,
   REACTIVATE_USER,
   roleAdapter,
 } from "@/lib/api/records/organisation"
@@ -91,9 +86,6 @@ import {
 import { ACCESS_MODULE } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import {
-  FIXTURE_COMPANY_ID,
-  FIXTURE_SERVICE_PROVIDER_IDS,
-  getWorkspaceDefinition,
   type BusinessRecord,
 } from "@/lib/data/business-modules"
 import {
@@ -116,21 +108,6 @@ const roleScopeOptions = [
   "Own service provider",
 ] as const
 
-const configureAccessModule = getWorkspaceDefinition("configure").modules.find(
-  (module) => module.id === "access",
-)
-const organizationModule = getWorkspaceDefinition("configure").modules.find(
-  (module) => module.id === "organization",
-)
-const serviceProvidersModule = getWorkspaceDefinition("service-providers").modules.find(
-  (module) => module.id === "service-providers",
-)
-const serviceProviderAccessModule = getWorkspaceDefinition("service-providers").modules.find(
-  (module) => module.id === "service-provider-workspace",
-)
-
-/** No records, shared: a `[]` made in render reads as mutable to the React Compiler and would keep it from compiling the pane. */
-const NO_RECORDS: readonly BusinessRecord[] = []
 
 function UserRowActions({
   row,
@@ -433,7 +410,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   const session = useApiSession()
   const access = ticketTeamsAccessOf(session.me?.role.grants)
   const { upsertRecord } = useBusinessRecordStore()
-  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
+  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
@@ -569,33 +546,17 @@ type UsersRolesTab = SettingsTabOf<"access">
 
 /** The pane at the address's tab (the Settings table offers Teams on the Pilot alone). */
 export function OrganizationAccessManagement({ params, onParamsChange }: SettingsPaneProps) {
-  // On the Pilot (the adapter configured) the pane reads and writes the
-  // access module through the record store and nothing else: the
-  // organisation store below is fixture mode's (Issue #163).
-  const configured = useApiConfigured()
+  // The pane reads and writes the access module through the record store and nothing else (Issue #163).
   const { me } = useApiSession()
   const { getRecords, upsertRecord, sendCommand } = useBusinessRecordStore()
   const accessModuleState = useServerModuleState("configure", "access") ?? IDLE
-  // The pickers' and the company name's modules: read only once each is
-  // ready, since `getRecords` answers a module's fixtures until then and a
-  // fixture project is one the API never returned.
-  const organisationReady = useServerModuleState("configure", "organization")?.status === "ready"
-  const providersReady = useServerModuleState("service-providers", "service-providers")?.status === "ready"
-  const {
-    companies,
-    projects,
-    users: organizationUsers,
-    roles,
-    createUser,
-    createRole,
-  } = useOrganizationStore()
   const activeTab = (params.tab as UsersRolesTab | undefined) ?? "users"
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
-  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   const teamRows: readonly BusinessRecord[] = useMemo(
-    () => (configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS),
-    [configured, teams.records],
+    () => teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)),
+    [teams.records],
   )
 
   const [userQuery, setUserQuery] = useState("")
@@ -613,17 +574,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const [teamView, setTeamView] = useState<TableView>(defaultTeamView)
 
   const [addUserOpen, setAddUserOpen] = useState(false)
-  const [companyId, setCompanyId] = useState(FIXTURE_COMPANY_ID)
-  const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
-  const [role, setRole] = useState("")
-  const [projectAccess, setProjectAccess] = useState("")
-  const [serviceProvider, setServiceProvider] = useState("")
-
   const [newRoleOpen, setNewRoleOpen] = useState(false)
-  const [roleName, setRoleName] = useState("")
-  const [roleScope, setRoleScope] = useState("")
-  const [rolePermissions, setRolePermissions] = useState("")
 
   // The row a command is out for, and the row Deactivate asks about first;
   // the row stays named while its dialog animates shut.
@@ -633,54 +584,28 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
 
   const accessRecords = getRecords(
     "configure",
-    "access",
-    configureAccessModule?.records ?? [],
-  )
-  const serviceProviderAccessRecords = getRecords(
-    "service-providers",
-    "service-provider-workspace",
-    serviceProviderAccessModule?.records ?? [],
-  )
-  // The Pilot's pickers and the company's name: the organisation and the
+    "access")
+  // The pickers and the company's name: the organisation and the
   // service-provider modules, as the store loaded them, and `/me` for the
   // company until the organisation module is ready.
-  const organisationRecords: readonly BusinessRecord[] =
-    configured && organisationReady ? getRecords("configure", "organization", organizationModule?.records ?? NO_RECORDS) : NO_RECORDS
-  const providerRecords: readonly BusinessRecord[] =
-    configured && providersReady ? getRecords("service-providers", "service-providers", serviceProvidersModule?.records ?? NO_RECORDS) : NO_RECORDS
-  const companyRecord = organisationRecords.find(isCompanyRecord)
+  const organisationRecords = getRecords("configure", "organization")
+  const providerRecords = getRecords("service-providers", "service-providers")
   // The caller's company is `/me`'s; the organisation record lends only its web id.
   const companyName = me?.company.name ?? "Company"
   // The pickers, before the rows' memos: a call over these arrays after the
   // memos reads to the React Compiler as a possible mutation of a dependency,
   // and it would then skip the pane.
   const roleOptions = rolePickerOptions(accessRecords)
-  // The API's roles once the module is ready, never the fixtures `getRecords` answers until then: what a role's panel and New role's Start from read (#291).
-  const pilotRoleRecords: readonly BusinessRecord[] = configured && accessModuleState.status === "ready" ? accessRecords.filter((record) => roleAdapter.owns(record)) : NO_RECORDS
+  // The API's roles: what a role's panel and New role's Start from read (#291).
+  const pilotRoleRecords: readonly BusinessRecord[] = accessRecords.filter((record) => roleAdapter.owns(record))
   const projectOptions = projectPickerOptions(organisationRecords)
   const providerOptions = providerPickerOptions(providerRecords)
 
-  const userRows = useMemo(
-    () =>
-      userRowsOf(
-        configured
-          ? { kind: "api", module: accessModuleState, companyName }
-          : { kind: "fixtures", organizationUsers, companies, projects, roles, accessRecords, serviceProviderAccessRecords },
-      ),
-    [accessModuleState, accessRecords, companies, companyName, configured, organizationUsers, projects, roles, serviceProviderAccessRecords],
-  )
-  const roleRows = useMemo(
-    () =>
-      roleRowsOf(
-        configured
-          ? { kind: "api", module: accessModuleState, companyName }
-          : { kind: "fixtures", organizationUsers, companies, projects, roles, accessRecords, serviceProviderAccessRecords },
-      ),
-    [accessModuleState, accessRecords, companies, companyName, configured, organizationUsers, projects, roles, serviceProviderAccessRecords],
-  )
-  const pilotUsersEmpty = configured ? pilotEmptyState(accessModuleState, "users") : null
-  const pilotRolesEmpty = configured ? pilotEmptyState(accessModuleState, "roles") : null
-  const pilotReady = !configured || accessModuleState.status === "ready"
+  const userRows = useMemo(() => userRowsOf(accessModuleState, companyName), [accessModuleState, companyName])
+  const roleRows = useMemo(() => roleRowsOf(accessModuleState), [accessModuleState])
+  const pilotUsersEmpty = pilotEmptyState(accessModuleState, "users")
+  const pilotRolesEmpty = pilotEmptyState(accessModuleState, "roles")
+  const pilotReady = accessModuleState.status === "ready"
   const selfEmail = me?.user.email.toLowerCase()
 
   const userStatusOptions = useMemo(
@@ -802,135 +727,8 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   }, [normalizedTeamQuery, teamRows, teamStatuses, teamView])
   const teamsPagination = useTablePagination(filteredTeams)
 
-  const selectedCompany = companies.find(
-    (company) => company.id === companyId,
-  )
-  const selectedCompanyProjects = projects.filter(
-    (project) => project.companyId === companyId,
-  )
-
-  const resetUserForm = () => {
-    setCompanyId(FIXTURE_COMPANY_ID)
-    setFullName("")
-    setEmail("")
-    setRole("")
-    setProjectAccess("")
-    setServiceProvider("")
-  }
-
-  const handleUserDialogOpenChange = (nextOpen: boolean) => {
-    setAddUserOpen(nextOpen)
-    if (!nextOpen) resetUserForm()
-  }
-
-  const submitUser = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const normalizedEmail = email.trim().toLowerCase()
-    const isServiceProviderRole = role.startsWith("Service Provider ")
-    const selectedProject = selectedCompanyProjects.find(
-      (project) => project.id === projectAccess,
-    )
-
-    if (
-      !companyId ||
-      !fullName.trim() ||
-      !normalizedEmail ||
-      !role ||
-      !projectAccess ||
-      (isServiceProviderRole && !serviceProvider)
-    ) {
-      toast.error("Complete the required fields")
-      return
-    }
-
-    if (
-      userRows.some(
-        (user) => user.email.toLowerCase() === normalizedEmail,
-      )
-    ) {
-      toast.error("A user with this email already exists")
-      return
-    }
-
-    const accessMode =
-      role === "Company Administrator" || projectAccess === "all"
-        ? "all-company-projects"
-        : projectAccess === "none"
-          ? "none"
-          : "selected-projects"
-    const projectIds = selectedProject ? [selectedProject.id] : []
-    const serviceProviderId =
-      serviceProvider === "NordRen ApS"
-        ? FIXTURE_SERVICE_PROVIDER_IDS.nordren
-        : serviceProvider === "CityHaul A/S"
-          ? FIXTURE_SERVICE_PROVIDER_IDS.cityhaul
-          : undefined
-    try {
-      const user = createUser({
-        companyId,
-        fullName,
-        email: normalizedEmail,
-        role,
-        accessMode,
-        projectIds,
-        serviceProviderId,
-        serviceProviderName: serviceProvider || undefined,
-      })
-      handleUserDialogOpenChange(false)
-      toast.success("User added", {
-        description: `${user.fullName} has been added to ${selectedCompany?.name ?? "the company"} with an invited status.`,
-      })
-    } catch (caughtError) {
-      toast.error("User could not be added", {
-        description:
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Review the company and project access.",
-      })
-    }
-  }
-
-  const resetRoleForm = () => {
-    setRoleName("")
-    setRoleScope("")
-    setRolePermissions("")
-  }
-
-  const handleRoleDialogOpenChange = (nextOpen: boolean) => {
-    setNewRoleOpen(nextOpen)
-    if (!nextOpen) resetRoleForm()
-  }
-
-  const submitRole = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!roleName.trim() || !roleScope) {
-      toast.error("Complete the role name and scope")
-      return
-    }
-
-    try {
-      const createdRole = createRole({
-        name: roleName,
-        scope: roleScope,
-        permissions: rolePermissions,
-      })
-      handleRoleDialogOpenChange(false)
-      toast.success("Role created", {
-        description: `${createdRole.name} can now be assigned when adding users.`,
-      })
-    } catch (caughtError) {
-      toast.error("Role could not be created", {
-        description:
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Review the role name and scope.",
-      })
-    }
-  }
-
   const roleUserCount = (roleName: string) =>
     userRows.filter((user) => user.role === roleName).length
-  const isServiceProviderRole = role.startsWith("Service Provider ")
 
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
@@ -954,14 +752,12 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               {roleRows.length}
             </span>
           </TabsTrigger>
-          {configured && (
-            <TabsTrigger value="teams" className="rounded-full px-3 whitespace-nowrap">
-              Teams
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {teamRows.length}
-              </span>
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="teams" className="rounded-full px-3 whitespace-nowrap">
+            Teams
+            <span className="ml-1.5 text-[10px] text-muted-foreground">
+              {teamRows.length}
+            </span>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
     </div>
@@ -1041,11 +837,9 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                   <TableHead className="h-10">Organization</TableHead>
                   <TableHead className="h-10">Project access</TableHead>
                   <TableHead className="h-10">Status</TableHead>
-                  {configured && (
-                    <TableHead className="h-10 w-12">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  )}
+                  <TableHead className="h-10 w-12">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1077,24 +871,22 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                         {user.status}
                       </Badge>
                     </TableCell>
-                    {configured && (
-                      <TableCell className="w-12 text-right">
-                        <UserRowActions
-                          row={user}
-                          self={user.email.toLowerCase() === selfEmail}
-                          disabled={pendingCommandId !== null}
-                          onDeactivate={() => askToDeactivate(user)}
-                          onReactivate={() =>
-                            void runUserCommand(user, REACTIVATE_USER, `${user.name} reactivated`)
-                          }
-                        />
-                      </TableCell>
-                    )}
+                    <TableCell className="w-12 text-right">
+                      <UserRowActions
+                        row={user}
+                        self={user.email.toLowerCase() === selfEmail}
+                        disabled={pendingCommandId !== null}
+                        onDeactivate={() => askToDeactivate(user)}
+                        onReactivate={() =>
+                          void runUserCommand(user, REACTIVATE_USER, `${user.name} reactivated`)
+                        }
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
                 {filteredUsers.length === 0 && (
                   <EmptyRow
-                    colSpan={configured ? 6 : 5}
+                    colSpan={6}
                     message={pilotUsersEmpty?.message ?? (userRows.length > 0 ? "No users match your search." : "No users yet.")}
                     hint={pilotUsersEmpty?.hint}
                     narrowed={userRows.length > 0}
@@ -1111,18 +903,11 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           </RecordsSection>
         </AssetPanelShell>
       ) : selectedRoleId ? (
-        // On the Pilot the access module's role, its matrix saved whole and a system role's read-only (#291); in fixture mode the organisation store's.
-        configured ? (
-          <PilotRolePermissionsPanel
-            record={pilotRoleRecords.find((record) => record.id === selectedRoleId)}
-            onBack={() => setSelectedRoleId(null)}
-          />
-        ) : (
-          <RolePermissionsPanel
-            roleId={selectedRoleId}
-            onBack={() => setSelectedRoleId(null)}
-          />
-        )
+        // The access module's role, its matrix saved whole and a system role's read-only (#291).
+        <PilotRolePermissionsPanel
+          record={pilotRoleRecords.find((record) => record.id === selectedRoleId)}
+          onBack={() => setSelectedRoleId(null)}
+        />
       ) : (
         <AssetPanelShell
           tabs={tabs}
@@ -1185,7 +970,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               </TableHeader>
               <TableBody>
                 {rolesPageRows.map((roleDefinition) => (
-                  // A row opens its permissions: the organisation store's in fixture mode, the API's on the Pilot (#291).
+                  // A row opens its permissions, the API's (#291).
                   <TableRow
                     key={roleDefinition.id}
                     tabIndex={0}
@@ -1236,22 +1021,17 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         </AssetPanelShell>
       )}
 
-      {configured && (
-        <InviteUserDialog
-          open={addUserOpen}
-          onOpenChange={setAddUserOpen}
-          roles={roleOptions}
-          projects={projectOptions}
-          providers={providerOptions}
-          companyRecordId={companyRecord?.id}
-          // The dialog says a refusal itself, so the store's toast is off;
-          // and a record only goes out while the module is ready, never to
-          // the browser's bucket.
-          invite={(record) =>
-            accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
-          }
-        />
-      )}
+      <InviteUserDialog
+        open={addUserOpen}
+        onOpenChange={setAddUserOpen}
+        roles={roleOptions}
+        projects={projectOptions}
+        providers={providerOptions}
+        // The dialog says a refusal itself, so the store's toast is off; and a record only goes out while the module is ready.
+        invite={(record) =>
+          accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
+        }
+      />
 
       <Dialog open={deactivateOpen} onOpenChange={(nextOpen) => { if (!nextOpen && pendingCommandId === null) setDeactivateOpen(false) }}>
         <DialogContent className="sm:max-w-md">
@@ -1284,250 +1064,17 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!configured && addUserOpen} onOpenChange={handleUserDialogOpenChange}>
-        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-          <form onSubmit={submitUser}>
-            <DialogHeader>
-              <DialogTitle>Add user</DialogTitle>
-            </DialogHeader>
-
-            <div className="grid gap-4 py-5 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="organization-user-company">Company</Label>
-                <Select
-                  value={companyId}
-                  onValueChange={(value) => {
-                    setCompanyId(value)
-                    setProjectAccess("")
-                    setServiceProvider("")
-                  }}
-                >
-                  <SelectTrigger id="organization-user-company">
-                    <SelectValue placeholder="Select company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        {company.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  A user belongs to one company. Project access cannot cross
-                  this boundary.
-                </p>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="organization-user-name">Full name</Label>
-                <Input
-                  id="organization-user-name"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  autoComplete="name"
-                  required
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="organization-user-email">Email</Label>
-                <Input
-                  id="organization-user-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="organization-user-role">Role</Label>
-                <Select
-                  value={role}
-                  onValueChange={(value) => {
-                    setRole(value)
-                    if (value === "Company Administrator") {
-                      setProjectAccess("all")
-                      setServiceProvider("")
-                    }
-                  }}
-                >
-                  <SelectTrigger id="organization-user-role">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((roleDefinition) => (
-                      <SelectItem
-                        key={roleDefinition.id}
-                        value={roleDefinition.name}
-                      >
-                        {roleDefinition.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="organization-user-project">Project access</Label>
-                <Select
-                  value={projectAccess}
-                  onValueChange={setProjectAccess}
-                  disabled={role === "Company Administrator"}
-                >
-                  <SelectTrigger id="organization-user-project">
-                    <SelectValue placeholder="Select access" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      No project access
-                    </SelectItem>
-                    {selectedCompanyProjects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="all">
-                      All current and future projects
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {role === "Company Administrator" && (
-                  <p className="text-xs text-muted-foreground">
-                    Company administrators always cover all projects.
-                  </p>
-                )}
-              </div>
-              {isServiceProviderRole && (
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="organization-user-service-provider">
-                    Service provider
-                  </Label>
-                  <Select value={serviceProvider} onValueChange={setServiceProvider}>
-                    <SelectTrigger id="organization-user-service-provider">
-                      <SelectValue placeholder="Select service provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companyId === FIXTURE_COMPANY_ID ? (
-                        <>
-                          <SelectItem value="NordRen ApS">NordRen ApS</SelectItem>
-                          <SelectItem value="CityHaul A/S">CityHaul A/S</SelectItem>
-                        </>
-                      ) : (
-                        <SelectItem value="no-service-providers" disabled>
-                          No service providers in this company
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {companyId !== FIXTURE_COMPANY_ID && (
-                    <p className="text-xs text-muted-foreground">
-                      Add a service provider to this company before inviting a
-                      service provider user.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleUserDialogOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Add user</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {configured && (
-        <NewRoleDialog
-          open={newRoleOpen}
-          onOpenChange={setNewRoleOpen}
-          scopes={roleScopeOptions}
-          roles={pilotRoleRecords}
-          companyRecordId={companyRecord?.id}
-          // The dialog says a refusal itself, so the store's toast is off; a record only goes out while the module is ready.
-          create={(record) =>
-            accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
-          }
-          onCreated={setSelectedRoleId}
-        />
-      )}
-
-      <Dialog open={!configured && newRoleOpen} onOpenChange={handleRoleDialogOpenChange}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
-          <form onSubmit={submitRole}>
-            <DialogHeader>
-              <DialogTitle>New role</DialogTitle>
-            </DialogHeader>
-
-            <div className="grid gap-4 py-5">
-              <div className="space-y-2">
-                <Label htmlFor="organization-role-name">
-                  Role name<span className="ml-1 text-destructive">*</span>
-                </Label>
-                <Input
-                  id="organization-role-name"
-                  value={roleName}
-                  onChange={(event) => setRoleName(event.target.value)}
-                  placeholder="Depot Supervisor"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="organization-role-scope">
-                  Scope<span className="ml-1 text-destructive">*</span>
-                </Label>
-                <Select value={roleScope} onValueChange={setRoleScope}>
-                  <SelectTrigger id="organization-role-scope">
-                    <SelectValue placeholder="Select scope" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roleScopeOptions.map((scope) => (
-                      <SelectItem key={scope} value={scope}>
-                        {scope}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Where the role applies when it is assigned to a user.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="organization-role-permissions">
-                  Permissions summary
-                </Label>
-                <Textarea
-                  id="organization-role-permissions"
-                  value={rolePermissions}
-                  onChange={(event) => setRolePermissions(event.target.value)}
-                  placeholder="Warehouses, containers, and spare parts"
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Shown in the roles table to describe what this role can
-                  access.
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleRoleDialogOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Create role</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <NewRoleDialog
+        open={newRoleOpen}
+        onOpenChange={setNewRoleOpen}
+        scopes={roleScopeOptions}
+        roles={pilotRoleRecords}
+        // The dialog says a refusal itself, so the store's toast is off; a record only goes out while the module is ready.
+        create={(record) =>
+          accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
+        }
+        onCreated={setSelectedRoleId}
+      />
     </>
   )
 }

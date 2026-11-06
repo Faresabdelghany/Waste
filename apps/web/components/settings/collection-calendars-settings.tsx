@@ -22,7 +22,7 @@ import {
   defaultAssetView,
   sortByView,
   type AssetView,
-} from "@/components/settings/asset-management-settings"
+} from "@/components/settings/settings-pane-kit"
 import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -70,8 +70,6 @@ import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-cale
 
 const ACTOR_NAME = "Olivia Larsen"
 
-const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })
-
 export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
@@ -90,7 +88,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const relationRecords = (location: ModuleLocation): BusinessRecord[] => {
     const module = getModuleDefinition(location)
     return module
-      ? getRecords(location.workspaceId, module.id, module.records).filter(
+      ? getRecords(location.workspaceId, module.id).filter(
           (record) => !isSoftDeleted(record),
         )
       : []
@@ -98,10 +96,10 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
 
   // The pane's own module and the projects it names: on the Pilot, the API's
   // rows once they are here and nothing before (Issue #175).
-  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, calendarsModule.records)
+  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId)
   // The module holds the company's Holiday Lists too (holiday-lists-settings.tsx); this pane lists the per-year calendars alone.
   const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record) && !isHolidayListRecord(record))
-  const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
+  const organisation = useModuleRecords("configure", "organization")
   const projectRecords = organisation.records.filter(
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
   )

@@ -35,5 +35,5 @@ export function useCommandOffered(module: ModuleLocation): (command: string) => 
 /** A provider's web id, by its server id, through the resolver: the providers module's handle once read, its chip before. */
 export function useProviderWebId(providerId: string | undefined): string | undefined {
   const resolve = useServerResolver()
-  return providerId === undefined ? undefined : webIdVia({ fixtures: [], resolve }, "service-provider", providerId)
+  return providerId === undefined ? undefined : webIdVia({ resolve }, "service-provider", providerId)
 }

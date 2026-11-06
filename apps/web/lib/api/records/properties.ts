@@ -50,7 +50,7 @@ import {
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import {
   ACCESS_MODE_LABELS,
   BILLING_MODE_LABELS,
@@ -81,7 +81,7 @@ import {
 } from "@/lib/data/properties"
 
 import { create, get, listAll, patch, put } from "../client"
-import { inheritedPresentation, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { dayIn } from "./clock"
@@ -244,7 +244,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
       name: property.name,
       context: `${owners || "No owner"} · ${payers ? `Payer ${payers}` : "No payer"}`,
       status: statusLabel(property.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(property, context.now),
       description: property.notes ?? "",
       facts: {
@@ -261,7 +261,6 @@ export const propertyAdapter: ResourceAdapter<Property> = {
       },
       related: distinct(parties.map((party) => party.name ?? party.webId)),
       allowedTransitions: transitionsFrom(PROPERTY_STATUSES, property.status),
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PROPERTY_RECORD_KIND,
       submittedValues: {
@@ -444,7 +443,7 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
       name: group.name,
       context: responsible === undefined ? purpose : `${purpose} · ${responsible.name ?? responsible.webId}`,
       status: statusLabel(group.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(group, context.now),
       value: countLabel(members.length, "property", "properties"),
       facts: {
@@ -456,7 +455,6 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
       // No related chips: a chip links through the fixtures' index to a fixture id no server property carries (rule (b)); the facts name the members.
       related: [],
       allowedTransitions: transitionsFrom(PROPERTY_GROUP_STATUSES, group.status),
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PROPERTY_GROUP_RECORD_KIND,
       submittedValues: {
@@ -555,7 +553,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
       name: point.name,
       context: `${OPERATING_MODEL_LABELS[point.operatingModel]} · ${ACCESS_MODE_LABELS[point.accessMode]}`,
       status: statusLabel(point.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(point, context.now),
       value: countLabel(members.length, "member property", "member properties"),
       facts: {
@@ -576,7 +574,6 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
       // As a group's: the facts name the members, since a chip would link to a fixture id.
       related: [],
       allowedTransitions: transitionsFrom(SHARED_COLLECTION_POINT_STATUSES, point.status),
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: SHARED_POINT_RECORD_KIND,
       submittedValues: {

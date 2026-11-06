@@ -29,12 +29,10 @@ import { bulkyAvailability, CANCEL_BOOKING, ROUTE_BOOKING } from "@/lib/api/reco
 import { dayIn } from "@/lib/api/records/clock"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord } from "@/lib/data/agreements"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { agreementsOfCustomer, availabilityWindow, bookingPlaceOf, placesOfAgreement, withBookingDay, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 
-const NO_RECORDS: readonly BusinessRecord[] = []
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 const ROUTES = { workspaceId: "route-studio", moduleId: "routes" } as const satisfies ModuleLocation
 
 /** A place as the dialog's one picker holds it: which of the two, and its web id. */
@@ -57,9 +55,9 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(BULKY_BOOKINGS_MODULE)
   const openRecord = useOpenRecord(BULKY_BOOKINGS_MODULE.moduleId)
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
-  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
-  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
+  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId)
+  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId)
 
   const [open, setOpen] = useState(false)
   const [customerId, setCustomerId] = useState("")
@@ -311,7 +309,7 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
   const [moving, setMoving] = useState(false)
   const [newDay, setNewDay] = useState("")
   const [days, setDays] = useState<DaysRead>({ status: "idle" })
-  const routes = useModuleRecords(ROUTES.workspaceId, ROUTES.moduleId, fixturesOf(ROUTES))
+  const routes = useModuleRecords(ROUTES.workspaceId, ROUTES.moduleId)
   const [routing, setRouting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [routeId, setRouteId] = useState("")

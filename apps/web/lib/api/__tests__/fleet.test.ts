@@ -16,9 +16,9 @@ import type { VehicleType } from "@waste/contracts/vehicle-types"
 import { DRIVER_STATUSES, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { driverProfile, vehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
 import {
   A_POWERED_VEHICLE_HAS_A_COMPARTMENT as LOCAL_A_POWERED_VEHICLE_HAS_A_COMPARTMENT,
   compartmentDraftsOf,
@@ -39,14 +39,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-
-const fixturesOf = (workspaceId: "fleet" | "resources" | "configure" | "service-providers", moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId, moduleId })
-  if (!module) throw new Error(`no module ${workspaceId}.${moduleId}`)
-  return module.records
-}
-const vehicleFixtures = fixturesOf("fleet", "vehicles")
-const driverFixtures = fixturesOf("fleet", "drivers")
 
 // The seeded rows as the API answers them (packages/db/src/seed).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -70,9 +62,11 @@ const lars: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000003", name
 const jonas: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000004", name: "Jonas Lind", licenceClass: null, licenceExpiry: null, userAccountId: null }
 
 // The modules loaded before the fleet: the organisation, the providers, the access, the master data, the depots.
-const noResolve = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve(fixturesOf("service-providers", "service-providers")))
+const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
+const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve)
+const COPENHAGEN_WEB_ID = webIdOf("project", copenhagen.id)
+const NORDREN_WEB_ID = webIdOf("service-provider", nordren.id)
 const madsAccount: BusinessRecord = { id: "user-mads", name: "Mads Jensen", context: "Company · Copenhagen Central", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "Waste API", freshness: "", recordKind: "User" }
 // The access module lists the roles beside the users, and the account picker is over the whole module.
 const PLANNER_ROLE_ID = "01a0d2a4-a280-7004-8000-000000000002"
@@ -80,8 +74,8 @@ const plannerRole: BusinessRecord = { ...madsAccount, id: "role-route-planner", 
 const fractions = [residual, glass, mixed]
 const types = [rearLoader, organicSealed, closedTrailer]
 const masterRecords = [
-  ...fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve(fixturesOf("configure", "master")))),
-  ...types.map((type) => vehicleTypeAdapter.toRecord(type, noResolve(fixturesOf("configure", "master")))),
+  ...fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve)),
+  ...types.map((type) => vehicleTypeAdapter.toRecord(type, noResolve)),
 ]
 const masterIds = new Map(masterRecords.map((record, index) => [record.id, [...fractions, ...types][index].id]))
 const withoutDepots: ServerRecordsState = new Map([
@@ -90,10 +84,10 @@ const withoutDepots: ServerRecordsState = new Map([
   ["configure.access", loaded({ records: [plannerRole, madsAccount], serverIds: new Map([[plannerRole.id, PLANNER_ROLE_ID], [madsAccount.id, MADS_ACCOUNT_ID]]) }, 1)],
   ["configure.master", loaded({ records: masterRecords, serverIds: masterIds }, 1)],
 ])
-const nordhavnRecord = depotAdapter.toRecord(nordhavn, { fixtures: fixturesOf("resources", "depots"), resolve: resolverOver(withoutDepots), now: NOW })
+const nordhavnRecord = depotAdapter.toRecord(nordhavn, { resolve: resolverOver(withoutDepots), now: NOW })
 const state: ServerRecordsState = new Map([...withoutDepots, ["resources.depots", loaded({ records: [nordhavnRecord], serverIds: new Map([[nordhavnRecord.id, nordhavn.id]]) }, 1)]])
 const resolve = resolverOver(state)
-const context = (fixtures: readonly BusinessRecord[] = vehicleFixtures): MappingContext => ({ fixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (): MappingContext => ({ resolve, now: NOW })
 
 const fractionWebId = (fraction: WasteFraction) => `fraction-${fraction.id}`
 const typeWebId = (type: VehicleType) => `vehicle-type-${type.id}`
@@ -114,8 +108,7 @@ const made = (moduleId: string, recordKind: string, status: string, name: string
   related: [],
   source: "Office workspace",
   freshness: "Now",
-  companyId: FIXTURE_COMPANY_ID,
-  projectIds: [FIXTURE_PROJECT_IDS.copenhagen],
+  projectIds: [COPENHAGEN_WEB_ID],
   recordKind,
   submittedValues,
 })
@@ -142,11 +135,11 @@ describe("the fleet modules", () => {
 
   test("each lists its one resource and files every row under its own prefix; no fixture lends its id", async () => {
     const vehicles = scripted([() => pageOf([wh24, nr08, trailer])])
-    const loadedVehicles = await loadModule(clientOver(vehicles.fetch), fleetVehiclesModule, { fixtures: vehicleFixtures, state, now: NOW })
+    const loadedVehicles = await loadModule(clientOver(vehicles.fetch), fleetVehiclesModule, { state, now: NOW })
     assert.deepEqual(vehicles.calls.map((call) => call.url), ["http://api.test/vehicles?limit=200"])
     assert.deepEqual(loadedVehicles.records.map((record) => record.id), [`vehicle-${wh24.id}`, `vehicle-${nr08.id}`, `vehicle-${trailer.id}`])
     const drivers = scripted([() => pageOf([mads, lars, jonas])])
-    const loadedDrivers = await loadModule(clientOver(drivers.fetch), fleetDriversModule, { fixtures: driverFixtures, state, now: NOW })
+    const loadedDrivers = await loadModule(clientOver(drivers.fetch), fleetDriversModule, { state, now: NOW })
     assert.deepEqual(drivers.calls.map((call) => call.url), ["http://api.test/drivers?limit=200"])
     assert.deepEqual(loadedDrivers.records.map((record) => record.id), [`driver-${mads.id}`, `driver-${lars.id}`, `driver-${jonas.id}`])
   })
@@ -167,7 +160,7 @@ describe("a vehicle", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.owner, "")
     assert.equal(record.recordKind, "Vehicle or trailer")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [COPENHAGEN_WEB_ID])
     assert.equal(record.serviceProviderId, undefined)
     assert.deepEqual(record.facts, {
       Registration: "CN 42 018",
@@ -196,7 +189,7 @@ describe("a vehicle", () => {
       volumeCapacity: "",
       wasteFractionIds: `${fractionWebId(residual)},${fractionWebId(mixed)}`,
       compartments: "Compartment 1: Residual, Mixed",
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN_WEB_ID,
       homeDepotId: DEPOT_WEB_ID,
       gpsDeviceId: "",
       fuelOrEnergyType: "hvo",
@@ -230,8 +223,8 @@ describe("a vehicle", () => {
     assert.equal(provided.facts.Ownership, "NordRen ApS")
     assert.equal(provided.facts["Home depot"], undefined)
     assert.equal(provided.facts.Fuel, "Biogas")
-    assert.equal(provided.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
-    assert.equal(provided.submittedValues?.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+    assert.equal(provided.serviceProviderId, NORDREN_WEB_ID)
+    assert.equal(provided.submittedValues?.serviceProviderId, NORDREN_WEB_ID)
     assert.equal(provided.submittedValues?.ownershipType, "service-provider")
     assert.equal(provided.submittedValues?.homeDepotId, "")
   })
@@ -252,7 +245,7 @@ describe("a vehicle", () => {
       compartments: "",
       bodyOrLiftType: "",
       trailerCompatibility: "",
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN_WEB_ID,
       homeDepotId: DEPOT_WEB_ID,
       effectiveFrom: "2026-10-01",
       availability: "Weekdays",
@@ -302,11 +295,11 @@ describe("a vehicle", () => {
     assert.deepEqual(refuse({ homeDepotId: "depot-nowhere" }), { path: "homeDepotId", message: "Pick a depot the API holds" })
     assert.deepEqual(refuse({ fuelOrEnergyType: "petrol" }), { path: "fuelOrEnergyType", message: 'The API has no fuel "petrol" for a vehicle; it knows diesel, hvo, biogas, electric, hybrid, other' })
     assert.deepEqual(refuse({ ownershipType: "service-provider" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
-    assert.deepEqual(refuse({ serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
+    assert.deepEqual(refuse({ serviceProviderId: NORDREN_WEB_ID }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
     assert.deepEqual(refuse({ resourceKind: "" }), { path: "resourceKind", message: "Say whether this is a powered vehicle or a trailer" })
     assert.deepEqual(refuse({ registrationNumber: "" }), { path: "registrationNumber", message: "A vehicle needs a registration" })
     assert.deepEqual(refuse({ projectId: "project-nowhere" }), { path: "projectId", message: "Pick a project" })
-    const provided = refuse({ ownershipType: "service-provider", serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }) as { ownership: string; serviceProviderId: string }
+    const provided = refuse({ ownershipType: "service-provider", serviceProviderId: NORDREN_WEB_ID }) as { ownership: string; serviceProviderId: string }
     assert.equal(provided.serviceProviderId, nordren.id)
     assert.ok(VehicleCreate.safeParse(provided).success)
   })
@@ -348,7 +341,7 @@ describe("a vehicle", () => {
     const patch = (over: Record<string, string>) => vehicleAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ resourceKind: "trailer" }), { path: "resourceKind", message: "A vehicle keeps its kind: a powered vehicle does not become a trailer" })
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A vehicle stays in its project" })
-    assert.deepEqual(patch({ ownershipType: "leased", serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
+    assert.deepEqual(patch({ ownershipType: "leased", serviceProviderId: NORDREN_WEB_ID }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
     assert.deepEqual(patch({ homeDepotId: "" }), { vehicle: { homeDepotId: null } })
     // A callsign cleared is null on the wire, which the contract takes.
     const uncalled = patch({ assetReference: "" }) as { vehicle: unknown }
@@ -394,7 +387,7 @@ describe("a vehicle", () => {
       const reset = { ...wh24, compartments: [compartment([glass.id], { capacityKg: 4_000 })] }
       const { fetch, calls } = scripted([() => json(reset)])
       const current = loaded({ records: [record], serverIds: new Map([[record.id, wh24.id]]) }, 1)
-      const outcome = await commandRecord(clientOver(fetch), fleetVehiclesModule, current, record, SET_COMPARTMENTS, { compartments: [{ name: "", capacityKg: "4000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] }] }, { fixtures: vehicleFixtures, state, now: NOW })
+      const outcome = await commandRecord(clientOver(fetch), fleetVehiclesModule, current, record, SET_COMPARTMENTS, { compartments: [{ name: "", capacityKg: "4000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] }] }, { state, now: NOW })
       assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/vehicles/${wh24.id}/compartments`])
       assert.deepEqual(bodyOf(calls[0]), { compartments: [{ capacityKg: 4_000, wasteFractionIds: [glass.id] }] })
       assert.equal(outcome.kind, "done")
@@ -419,7 +412,7 @@ describe("a vehicle", () => {
     const created: Vehicle = { ...wh24, id: "019995e0-0000-7000-8000-0000000000e1", registration: "AB 12 345", callsign: "WH-40", capacityKg: 16_000, fuel: "diesel", telematicsDeviceId: "GPS-7", compartments: [compartment([residual.id, mixed.id], { volumeLitres: 20_000 })] }
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/vehicles/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), fleetVehiclesModule, current, registered(), { fixtures: vehicleFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), fleetVehiclesModule, current, registered(), { state, now: NOW })
     assert.equal(`${calls[0].init.method} ${calls[0].url}`, "POST http://api.test/vehicles")
     assert.equal((bodyOf(calls[0]) as { registration: string }).registration, "AB 12 345")
     assert.equal(outcome.kind, "created")
@@ -428,7 +421,7 @@ describe("a vehicle", () => {
     assert.equal(outcome.serverId, created.id)
 
     const refused = scripted([() => problem(409, "This company already has a vehicle registered AB 12 345")])
-    const answer = await writeRecord(clientOver(refused.fetch), fleetVehiclesModule, current, registered(), { fixtures: vehicleFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), fleetVehiclesModule, current, registered(), { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), "This company already has a vehicle registered AB 12 345")
@@ -436,7 +429,7 @@ describe("a vehicle", () => {
 })
 
 describe("a driver", () => {
-  const record = driverAdapter.toRecord(lars, context(driverFixtures))
+  const record = driverAdapter.toRecord(lars, context())
 
   test("is a record with its licence kept literal — the class and the last day it holds — its employer, and typed values under the form's field ids", () => {
     assert.equal(record.id, `driver-${lars.id}`)
@@ -444,8 +437,8 @@ describe("a driver", () => {
     assert.equal(record.context, "NordRen ApS · service provider")
     assert.equal(record.status, "Active")
     assert.equal(record.recordKind, "Driver workforce profile")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
-    assert.equal(record.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+    assert.deepEqual(record.projectIds, [COPENHAGEN_WEB_ID])
+    assert.equal(record.serviceProviderId, NORDREN_WEB_ID)
     assert.deepEqual(record.facts, {
       Licence: "C · valid to 2026-09-05",
       Employer: "NordRen ApS",
@@ -458,8 +451,8 @@ describe("a driver", () => {
       driverName: "Lars Møller",
       workforceReference: "",
       employmentType: "service-provider",
-      serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      serviceProviderId: NORDREN_WEB_ID,
+      projectId: COPENHAGEN_WEB_ID,
       homeDepotId: "",
       licenceNumber: "",
       licenceClass: "C",
@@ -480,7 +473,7 @@ describe("a driver", () => {
 
   test("is what the licence rule reads, unjudged here: the expired licence stays the expired licence, the new hire has none on record", () => {
     assert.deepEqual(driverProfile(record), { id: record.id, name: "Lars Møller", licenceClass: "C", licenceExpiry: "2026-09-05" })
-    const hire = driverAdapter.toRecord(jonas, context(driverFixtures))
+    const hire = driverAdapter.toRecord(jonas, context())
     assert.equal(hire.facts.Licence, "Not on record")
     assert.equal(hire.submittedValues?.licenceClass, "")
     assert.equal(hire.submittedValues?.licenceExpiry, "")
@@ -488,7 +481,7 @@ describe("a driver", () => {
   })
 
   test("a driver with a login names the account by the web id the store knows it under", () => {
-    const bound = driverAdapter.toRecord(mads, context(driverFixtures))
+    const bound = driverAdapter.toRecord(mads, context())
     assert.equal(bound.context, "Company · employee")
     assert.equal(bound.facts.Employer, "Company")
     assert.equal(bound.facts["App access"], "Mads Jensen")
@@ -504,7 +497,7 @@ describe("a driver", () => {
       workforceReference: "WF-0417",
       employmentType: "employee",
       serviceProviderId: "",
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN_WEB_ID,
       homeDepotId: DEPOT_WEB_ID,
       licenceNumber: "DK-4471",
       licenceClass: "CE",
@@ -515,7 +508,7 @@ describe("a driver", () => {
     })
 
   test("the record the form writes becomes a DriverCreate the contract accepts; the lifecycle's Invited is the account's word, so the create says no status and the API's default stands", () => {
-    const body = driverAdapter.toCreateBody?.(hired(), context(driverFixtures))
+    const body = driverAdapter.toCreateBody?.(hired(), context())
     assert.deepEqual(body, {
       projectId: copenhagen.id,
       name: "Sofie Eriksen",
@@ -529,16 +522,16 @@ describe("a driver", () => {
     })
     const parsed = DriverCreate.safeParse(body)
     assert.ok(parsed.success, JSON.stringify(parsed.error))
-    const unlicensed = driverAdapter.toCreateBody?.(hired({ licenceClass: "", licenceExpiry: "", licenceNumber: "", driverAppAccess: false, linkedUserId: "", homeDepotId: "", workforceReference: "" }), context(driverFixtures))
+    const unlicensed = driverAdapter.toCreateBody?.(hired({ licenceClass: "", licenceExpiry: "", licenceNumber: "", driverAppAccess: false, linkedUserId: "", homeDepotId: "", workforceReference: "" }), context())
     assert.deepEqual(unlicensed, { projectId: copenhagen.id, name: "Sofie Eriksen", employment: "employee" })
     assert.ok(DriverCreate.safeParse(unlicensed).success)
   })
 
   test("is refused here, naming the field, for what the API would refuse: the employment, the provider that does not fit it, a day that is no day, a class or a status the wire lacks, an account the store does not hold", () => {
-    const refuse = (over: Record<string, string | boolean>) => driverAdapter.toCreateBody?.(hired(over), context(driverFixtures))
+    const refuse = (over: Record<string, string | boolean>) => driverAdapter.toCreateBody?.(hired(over), context())
     assert.deepEqual(refuse({ employmentType: "" }), { path: "employmentType", message: "Say how the driver is employed" })
     assert.deepEqual(refuse({ employmentType: "service-provider" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT })
-    assert.deepEqual(refuse({ serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT })
+    assert.deepEqual(refuse({ serviceProviderId: NORDREN_WEB_ID }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT })
     assert.deepEqual(refuse({ licenceExpiry: "31/01/2029" }), { path: "licenceExpiry", message: "A licence expiry is a day, YYYY-MM-DD" })
     assert.deepEqual(refuse({ licenceClass: "D" }), { path: "licenceClass", message: "A licence class is B, C or CE" })
     assert.deepEqual(refuse({ linkedUserId: "" }), { path: "linkedUserId", message: "Pick the driver's user account" })
@@ -552,24 +545,24 @@ describe("a driver", () => {
   test("a shift goes out whole with its break, is read back into its five fields, moves whole on a patch and is cleared as null (O14 of #290)", () => {
     const shifted = { shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: "30", breakWindowStart: "11:00", breakWindowEnd: "12:30" }
     const shift = { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } }
-    const body = driverAdapter.toCreateBody?.(hired(shifted), context(driverFixtures)) as { shift?: unknown }
+    const body = driverAdapter.toCreateBody?.(hired(shifted), context()) as { shift?: unknown }
     assert.deepEqual(body.shift, shift)
     assert.ok(DriverCreate.safeParse(body).success)
-    const read = driverAdapter.toRecord({ ...mads, shift }, context(driverFixtures))
+    const read = driverAdapter.toRecord({ ...mads, shift }, context())
     assert.equal(read.facts?.Shift, "07:00–15:00 · 30 min break 11:00–12:30")
     assert.deepEqual(
       Object.fromEntries(Object.keys(shifted).map((key) => [key, read.submittedValues?.[key]])),
       shifted,
     )
     const later: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftEnd: "16:00" } }
-    assert.deepEqual(driverAdapter.toPatchBody(read, later, context(driverFixtures)), { shift: { ...shift, to: "16:00" } }, "whole, the break with it")
+    assert.deepEqual(driverAdapter.toPatchBody(read, later, context()), { shift: { ...shift, to: "16:00" } }, "whole, the break with it")
     const cleared: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftStart: "", shiftEnd: "", breakMinutes: "", breakWindowStart: "", breakWindowEnd: "" } }
-    assert.deepEqual(driverAdapter.toPatchBody(read, cleared, context(driverFixtures)), { shift: null })
-    assert.equal(driverAdapter.toRecord(mads, context(driverFixtures)).facts?.Shift, "None on record")
+    assert.deepEqual(driverAdapter.toPatchBody(read, cleared, context()), { shift: null })
+    assert.equal(driverAdapter.toRecord(mads, context()).facts?.Shift, "None on record")
   })
 
   test("a shift the API would refuse is refused here, at its field, in the domain's words", () => {
-    const refuse = (over: Record<string, string>) => driverAdapter.toCreateBody?.(hired(over), context(driverFixtures))
+    const refuse = (over: Record<string, string>) => driverAdapter.toCreateBody?.(hired(over), context())
     assert.deepEqual(refuse({ shiftStart: "07:00" }), { path: "shiftEnd", message: "Give both ends of the window, or neither" })
     assert.deepEqual(refuse({ shiftStart: "15:00", shiftEnd: "07:00" }), { path: "shiftEnd", message: "A window closes after it opens, on the same day" })
     assert.deepEqual(refuse({ breakMinutes: "30" }), { path: "shiftStart", message: "A break belongs to a shift: give the shift's hours" })
@@ -580,14 +573,14 @@ describe("a driver", () => {
 
   test("a patch says what moved — a licence renewal, an account unlinked as null, a status the lifecycle moved — holds the project and the provider rule, and the contract accepts it", () => {
     const renewed: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, licenceClass: "CE", licenceExpiry: "2031-09-05" } }
-    const body = driverAdapter.toPatchBody(record, renewed, context(driverFixtures))
+    const body = driverAdapter.toPatchBody(record, renewed, context())
     assert.deepEqual(body, { licenceClass: "ce", licenceExpiry: "2031-09-05" })
     assert.ok(DriverPatch.safeParse(body).success)
-    const bound = driverAdapter.toRecord(mads, context(driverFixtures))
-    assert.deepEqual(driverAdapter.toPatchBody(bound, { ...bound, submittedValues: { ...bound.submittedValues, driverAppAccess: false } }, context(driverFixtures)), { userAccountId: null })
-    assert.deepEqual(driverAdapter.toPatchBody(record, { ...record, status: "Suspended" }, context(driverFixtures)), { status: "suspended" })
-    assert.equal(driverAdapter.toPatchBody(record, record, context(driverFixtures)), null)
-    const patch = (over: Record<string, string | boolean>) => driverAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(driverFixtures))
+    const bound = driverAdapter.toRecord(mads, context())
+    assert.deepEqual(driverAdapter.toPatchBody(bound, { ...bound, submittedValues: { ...bound.submittedValues, driverAppAccess: false } }, context()), { userAccountId: null })
+    assert.deepEqual(driverAdapter.toPatchBody(record, { ...record, status: "Suspended" }, context()), { status: "suspended" })
+    assert.equal(driverAdapter.toPatchBody(record, record, context()), null)
+    const patch = (over: Record<string, string | boolean>) => driverAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A driver stays in its project" })
     assert.deepEqual(patch({ employmentType: "employee" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT }, "the rule is held against the row the patch leaves behind")
     assert.deepEqual(patch({ employmentType: "employee", serviceProviderId: "" }), { employment: "employee", serviceProviderId: null })
@@ -602,7 +595,7 @@ describe("a driver", () => {
     const current = loaded({ records: [record], serverIds: new Map([[record.id, lars.id]]) }, 1)
     const bound: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, driverAppAccess: true, linkedUserId: "user-mads" } }
     const { fetch, calls } = scripted([() => json({ ...lars, userAccountId: MADS_ACCOUNT_ID })])
-    const outcome = await writeRecord(clientOver(fetch), fleetDriversModule, current, bound, { fixtures: driverFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), fleetDriversModule, current, bound, { state, now: NOW })
     assert.equal(`${calls[0].init.method} ${calls[0].url}`, `PATCH http://api.test/drivers/${lars.id}`)
     assert.deepEqual(bodyOf(calls[0]), { userAccountId: MADS_ACCOUNT_ID })
     assert.equal(outcome.kind, "updated")
@@ -610,7 +603,7 @@ describe("a driver", () => {
     assert.equal(outcome.record.facts["App access"], "Mads Jensen")
 
     const refused = scripted([() => problem(409, "That login already has a driver profile")])
-    const answer = await writeRecord(clientOver(refused.fetch), fleetDriversModule, current, bound, { fixtures: driverFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), fleetDriversModule, current, bound, { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), "That login already has a driver profile")

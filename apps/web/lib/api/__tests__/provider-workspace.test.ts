@@ -10,7 +10,7 @@ import { UserInvite } from "@waste/contracts/access"
 import { TicketCreate } from "@waste/contracts/tickets"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
 import { isLocalRefusal, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { serverModuleOf } from "../records/modules"
@@ -37,7 +37,6 @@ const record = (id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord
   related: [],
   source: "Waste API",
   freshness: "Now",
-  companyId: FIXTURE_COMPANY_ID,
   ...extra,
 })
 
@@ -51,7 +50,7 @@ function resolverOf(rows: readonly [BusinessRecord, string][]): Resolver {
   }
 }
 
-const context = (resolve: Resolver): MappingContext => ({ fixtures: [], resolve })
+const context = (resolve: Resolver): MappingContext => ({ resolve })
 
 describe("the shell reads /me", () => {
   test("a provider's account is its provider's workspace, acted in by its name, under its role's grants", () => {

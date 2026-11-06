@@ -6,15 +6,13 @@
 // project of its own and shows in every scope, which is what
 // `isInProjectScope` does with a record that has none.
 //
-// The fixture ids the seed derived the demo customers from carry two
-// prefixes — `contact-` for a person (`contact-mikkel`) and `company-` for
-// an organisation (`company-osterbro-housing`) — and the workspace reads a
+// A customer's web id carries the prefix of its kind — `contact-` for a
+// person and `company-` for an organisation — and the workspace reads a
 // party's kind off exactly that prefix (`business-workspace.tsx`,
 // `getFormRelationOptions`: a `customerId` field offers `company-` records,
-// a `…ContactId` field `contact-` ones), so a server customer takes the
-// prefix of its kind, and a fixture is matched by name within the module.
+// a `…ContactId` field `contact-` ones).
 // The `company-` prefix is shared with the tenant's own record in
-// `configure.organization` (`company-kystbyen-dk`): the glossary keeps the
+// `configure.organization`: the glossary keeps the
 // two apart — a Company is the tenant, never a customer (CONTEXT.md) — and so
 // does the code: `owns` here is asked of the customers module's records
 // only, and the tenant's row is found by the company adapter's `owns` and
@@ -31,14 +29,13 @@
 // there before the API sees it and the workspace offers neither.
 import type { Customer } from "@waste/contracts/customers"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { paymentTermsLabel } from "@/lib/data/finance-settings"
 
 import { create, listAll, patch } from "../client"
 import {
-  fixtureNamed,
-  inheritedPresentation,
   isLocalRefusal,
+  NO_PRESENTATION,
   patchOf,
   stampFacts,
   statusLabel,
@@ -57,7 +54,7 @@ import { daysOrNoneOf, typedPaymentTerms } from "./organisation"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** The web id prefix of each kind: the fixtures' own two. */
+/** The web id prefix of each kind. */
 export const CUSTOMER_PREFIXES = { person: "contact", organisation: "company" } as const
 
 /** The form's `partyType` option for each wire kind, and back. */
@@ -102,14 +99,13 @@ const CUSTOMER_STATUSES: readonly Customer["status"][] = ["active", "inactive"]
 export const customerAdapter: ResourceAdapter<Customer> = {
   prefix: "customer",
   auditTable: "customer",
-  // Both fixture prefixes, and nothing else the module could hold.
+  // Both prefixes, and nothing else the module could hold.
   owns: (record) => customerKindOf(record) !== undefined,
   statuses: CUSTOMER_STATUSES,
   list: (client) => listAll<Customer>(client, "/customers"),
   toRecord: (customer, context) => {
     const prefix = CUSTOMER_PREFIXES[customer.kind]
-    const fixture = fixtureNamed(context.fixtures, prefix, [customer.name])
-    const facts: Record<string, string> = { ...fixture?.facts, Kind: customer.kind === "person" ? "Person" : "Organisation" }
+    const facts: Record<string, string> = { Kind: customer.kind === "person" ? "Person" : "Organisation" }
     const fact = (label: string, value: string | null) => {
       if (value === null) delete facts[label]
       else facts[label] = value
@@ -121,20 +117,16 @@ export const customerAdapter: ResourceAdapter<Customer> = {
     fact("Payment terms", customer.paymentTermsDays === null ? null : paymentTermsLabel(customer.paymentTermsDays))
     facts.Consent = customer.serviceMessagesAllowed ? "Service messages" : "No service messages"
     return {
-      id: fixture?.id ?? webIdOf(prefix, customer.id),
+      id: webIdOf(prefix, customer.id),
       name: customer.name,
-      context: fixture?.context ?? (customer.kind === "person" ? "Person · customer" : "Customer organisation"),
+      context: customer.kind === "person" ? "Person · customer" : "Customer organisation",
       status: statusLabel(customer.status),
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(customer, context.now),
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
-      // A Customer is the company's (Issue #78), so it carries no project and
-      // shows in every scope — whatever project the fixture happened to be
-      // filed under.
+      // A Customer is the company's (Issue #78), so it carries no project and shows in every scope.
       recordKind: "Contact or Customer Organization",
       submittedValues: {
-        ...fixture?.submittedValues,
         partyType: PARTY_TYPE_OF_KIND[customer.kind],
         displayName: customer.name,
         organizationId: customer.registrationNumber ?? "",

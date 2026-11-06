@@ -22,7 +22,7 @@ import { loaded, resolverOver, type ServerRecordsState } from "../../api/records
 import { assignmentAdapter, serviceAreaAdapter } from "../../api/records/service-areas"
 import { unloadAdapter } from "../../api/records/weights"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
+import { type BusinessRecord } from "../business-modules"
 import { NO_ONE } from "../properties"
 import {
   ASSIGNMENT_FORM,
@@ -62,7 +62,7 @@ const ASSIGNMENT = "01a0d2a4-a280-7091-8000-000000000001"
 const PRICE = "01a0d2a4-a280-7092-8000-000000000001"
 const SETTLEMENT = "01a0d2a4-a280-7093-8000-000000000001"
 
-const bare: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const projectRecord = projectAdapter.toRecord(copenhagen, bare)
 const fractionRecord = wasteFractionAdapter.toRecord(organic, bare)

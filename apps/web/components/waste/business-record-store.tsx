@@ -36,11 +36,11 @@ import {
   derivedFromChanged,
   derivedSourcesNow,
   IDLE,
+  KEPT_ON_API,
   paneAnswerOf,
   problemOfError,
   projectTimezonesOf,
   readModuleInto,
-  recordsOf,
   rereadRecord,
   rereadsOf,
   resolverOver,
@@ -85,23 +85,24 @@ const LEGACY_RECORD_KEY_RENAMES: Readonly<Record<string, string>> = {
 type StoredRecords = Record<string, BusinessRecord[]>
 
 type BusinessRecordStoreValue = {
-  getRecords: (
-    workspaceId: WorkspaceId,
-    moduleId: string,
-    fixtureRecords: readonly BusinessRecord[],
-  ) => BusinessRecord[]
+  /**
+   * A module's records: a switched module's the API's alone, once read, and
+   * none before or where no API is configured; a module on fixtures its
+   * fixtures merged with what the browser holds.
+   */
+  getRecords: (workspaceId: WorkspaceId, moduleId: string) => BusinessRecord[]
   /**
    * Saves a record. On a switched module, the write's outcome once the API
    * has answered — a caller that needs to know (a dialog that stays open on
    * a refusal) awaits it, and may say `report: false` to tell the person
    * itself instead of the store's toast; the rest of the workspace ignores
    * it. A `reason` travels with the write in the change-reason header, for
-   * the API's audit log to keep beside it (#291); fixture mode has no log and
-   * drops it. A write the API took whose answer could not be shown is `landed`,
+   * the API's audit log to keep beside it (#291); a module on fixtures has no log
+   * and drops it. A write the API took whose answer could not be shown is `landed`,
    * told as saved whatever `report` says, and its module is read again. A
-   * switched module the API has not read — or a session that has ended —
-   * refuses the write at once (`writeRouteOf`), never keeping it in the
-   * browser. In fixture mode and on a module on fixtures the record goes to
+   * switched module the API has not read — no API configured, or a session
+   * that has ended — refuses the write at once (`writeRouteOf`), never
+   * keeping it in the browser. On a module on fixtures the record goes to
    * the browser's bucket, and there is nothing to await.
    */
   upsertRecord: (
@@ -160,22 +161,19 @@ export type BusinessRecordStores = {
   records: ExternalStore<StoredRecords>
   /**
    * Flips to true once the provider has loaded localStorage. Effects that
-   * write derived records (Plan Ahead auto-generation) must wait for it:
-   * child effects run before the provider's load effect on mount, and a
-   * write planned against fixture-only state would be clobbered by the load.
+   * write derived records must wait for it: child effects run before the
+   * provider's load effect on mount, and a write planned before it would be
+   * clobbered by the load.
    */
   hydrated: ExternalStore<boolean>
   /**
    * The server-backed modules (Issue #81): one entry per switched
    * `workspace.module`, keyed like the records above, each the server's rows
    * as the prototype shows them once its read has landed. Empty while the
-   * adapter is off or nobody is signed in, so every module reads the
-   * browser's own path then. Until a module is `ready`, `getRecords` answers
-   * nothing while its load is pending or failed — a sample row shown on the
-   * Pilot is a row that does not exist — and its fixtures alone where the
-   * role does not view it: the browser's own bucket for that module is not
-   * shown in that window, and a write made in it is refused (`writeRouteOf`,
-   * #243), never kept there. Never a mixture.
+   * adapter is off or nobody is signed in. Until a module is `ready`,
+   * `getRecords` answers nothing of it — no API configured, its load pending
+   * or failed, or the role not viewing it — and a write made to it is
+   * refused (`writeRouteOf`, #243), never kept in the browser's bucket.
    */
   server: ExternalStore<ServerRecordsState>
   /**
@@ -220,7 +218,7 @@ const BusinessRecordStoreContext = createContext<BusinessRecordStores | null>(
   null,
 )
 
-// The server (and every hydrating component) sees fixtures only.
+// The server (and every hydrating component) sees no browser records.
 const EMPTY_STORED_RECORDS: StoredRecords = {}
 const NO_SERVER_MODULES: ServerRecordsState = new Map()
 const NO_RECORDS: readonly BusinessRecord[] = []
@@ -264,7 +262,7 @@ function reportUnsent(key: string, name: string, problem: Problem) {
   toast.error(`${name} was not saved`, { id: `unsent-${key}`, description: problemSentence(problem) })
 }
 
-/** The fixtures of a module, the seed's origin, which every mapping matches by name. */
+/** The fixtures of a module still on the browser's path; a switched module has none. */
 function fixturesOf(workspaceId: WorkspaceId, moduleId: string): readonly BusinessRecord[] {
   return getModuleDefinition({ workspaceId, moduleId })?.records ?? []
 }
@@ -296,7 +294,7 @@ export async function rowAgain(stores: BusinessRecordStores, module: ServerModul
   const state = serverStore.getSnapshot().get(key)
   if (state === undefined) return undefined
   if (adapterFor(module, row)?.read !== undefined) {
-    const again = await rereadRecord(client, module, state, row, { fixtures: fixturesOf(module.workspaceId, module.moduleId), state: serverStore.getSnapshot() })
+    const again = await rereadRecord(client, module, state, row, { state: serverStore.getSnapshot() })
     if (again.kind !== "done" || outlived()) return undefined
     serverStore.set((current) => new Map(current).set(key, withRecord(current.get(key) ?? state, again.record, again.serverId)))
     return again.record
@@ -329,7 +327,7 @@ function rereadModule(stores: BusinessRecordStores, module: ServerModule, outliv
     const alive = () => !outlived() && !signal.aborted
     try {
       const client: ApiClient = { ...(stores.client.getSnapshot() ?? commandClient), signal }
-      const problem = await readModuleInto(stores.server, client, module, { fixtures: fixturesOf(module.workspaceId, module.moduleId), alive })
+      const problem = await readModuleInto(stores.server, client, module, { alive })
       if (problem !== null && alive()) reportRead(key, problem)
     } catch (error) {
       // Nothing thrown here goes unheard: the read's own failures come back above, anything else is told the same way.
@@ -407,14 +405,12 @@ export function BusinessRecordStoreProvider({
   // which happens every hour, changes neither and reloads nothing, since a
   // request in flight reads the current client from `stores.client` at the
   // moment it is sent. No session (signed out, adapter off, expired and not
-  // refreshed) empties them, so every module reads the browser's own path
-  // again. The switched modules load in SERVER_MODULES' order, one after the
+  // refreshed) empties them. The switched modules load in SERVER_MODULES' order, one after the
   // other, since a later module's mapping resolves the earlier ones' rows (a
   // user names its role and its projects); each lands as it arrives, and a
-  // module that fails is reported once and left on its fixtures — unless the
-  // API refused the account itself (Issue #150): the client has ended the
-  // session by then, so the load stops there, reported nowhere but /login
-  // and never falling back on fixtures. Only the modules the person's `/me`
+  // module that fails is reported once and shows no rows — unless the API
+  // refused the account itself (Issue #150): the client has ended the
+  // session by then, so the load stops there, reported nowhere but /login. Only the modules the person's `/me`
   // role grants `view` on are read (`viewableModules`, Issue #145); the rest
   // are never requested and are marked not granted, told to nobody (Issue
   // #200), so nobody meets a refusal for a pane they cannot open and a pane
@@ -450,7 +446,7 @@ export function BusinessRecordStoreProvider({
       server.set((state) => {
         const marked = withNotGranted(state, SERVER_MODULES.filter((module) => !modules.includes(module)))
         // Where the role does not view the organisation, a row's project resolves through `/me`'s projects (Issue #217).
-        return projects !== undefined && !modules.includes(organisationModule) ? withMeProjects(marked, projects, fixturesOf("configure", "organization")) : marked
+        return projects !== undefined && !modules.includes(organisationModule) ? withMeProjects(marked, projects) : marked
       })
       for (const module of modules) {
         if (controller.signal.aborted) return
@@ -462,7 +458,6 @@ export function BusinessRecordStoreProvider({
         // refusal is reported rather than nothing at all.
         const problem = await enqueue(stores.pendingReads, key, () =>
           readModuleInto(server, { ...(stores.client.getSnapshot() ?? initial), signal: controller.signal }, module, {
-            fixtures: fixturesOf(module.workspaceId, module.moduleId),
             alive: () => !controller.signal.aborted,
           }),
         )
@@ -607,30 +602,20 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     stores.server.getServerSnapshot,
   )
   const apiConfigured = useApiConfigured()
-  // Signed in against the API: a switched module not yet read shows nothing, never its fixtures.
-  const identity = useApiSessionIdentity()
   /** The switched module's state, or null for a module still on the browser's own path. */
   const serverModuleState = useCallback(
-    (workspaceId: WorkspaceId, moduleId: string): ModuleState | null =>
-      serverModuleOf(workspaceId, moduleId) === undefined ? null : (serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE),
-    [serverModules],
+    (workspaceId: WorkspaceId, moduleId: string): ModuleState | null => switchedModuleState(serverModules, apiConfigured, workspaceId, moduleId),
+    [serverModules, apiConfigured],
   )
 
   const getRecords = useCallback(
-    (
-      workspaceId: WorkspaceId,
-      moduleId: string,
-      fixtureRecords: readonly BusinessRecord[],
-    ) => {
-      // A switched module answers the server's rows once they are here —
-      // never a mixture with the browser's own bucket, whose records were
-      // made against a store that no longer decides (Issue #81). Signed in,
-      // nothing until then, nor where the read failed: a sample row is no
-      // row of the API's. A module the role does not view keeps its fixtures.
+    (workspaceId: WorkspaceId, moduleId: string) => {
+      // A switched module answers the server's rows once they are here, and
+      // nothing else: never the browser's own bucket (Issue #81).
       const server = serverModuleState(workspaceId, moduleId)
-      if (server !== null && server.status === "ready") return recordsOf(server, fixtureRecords)
-      if (server !== null && identity !== null && server.status !== "not-granted") return []
+      if (server !== null) return server.status === "ready" ? server.records : []
 
+      const fixtureRecords = fixturesOf(workspaceId, moduleId)
       const stored = storedRecords[moduleKey(workspaceId, moduleId)] ?? []
       const storedById = new Map(stored.map((record) => [record.id, record]))
       const fixtureIds = new Set(fixtureRecords.map((record) => record.id))
@@ -641,7 +626,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
 
       return [...createdRecords, ...mergedFixtures]
     },
-    [serverModuleState, storedRecords, identity],
+    [serverModuleState, storedRecords],
   )
 
   const upsertRecord = useCallback(
@@ -657,8 +642,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         switched: module !== undefined,
         target: current,
         signedIn: client !== null,
-        // Asked for only where it can be said: a fixture-mode run writes hundreds of rows.
-        label: apiConfigured && module !== undefined ? (getModuleDefinition({ workspaceId, moduleId })?.label ?? key) : key,
+        label: module !== undefined ? (getModuleDefinition({ workspaceId, moduleId })?.label ?? key) : key,
       })
       const refused = (problem: Problem, said: boolean): Promise<WriteOutcome> => {
         if (report && said) reportUnsent(key, record.name, problem)
@@ -693,7 +677,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
           const turn = stores.client.getSnapshot() ?? client
           // The reason rides on the write's requests alone, never on the reads after it.
           const writer = options?.reason === undefined ? turn : { ...turn, reason: options.reason }
-          const outcome = await writeRecord(writer, module, { ...current, serverIds: latest.serverIds }, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+          const outcome = await writeRecord(writer, module, { ...current, serverIds: latest.serverIds }, record, { state: serverStore.getSnapshot() })
           if (outlived()) return outcome
           serverStore.set((state) => {
             const settled = state.get(key) ?? current
@@ -715,7 +699,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         return enqueue(stores.pendingWrites, record.id, run)
       }
 
-      // The browser's own path: fixture mode, or a module on fixtures.
+      // The browser's own path: a module on fixtures.
       store.set((current) => {
         const existing = current[key] ?? []
         const hasRecord = existing.some((candidate) => candidate.id === record.id)
@@ -761,7 +745,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
-        let outcome = await commandRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        let outcome = await commandRecord(client, module, latest, row, name, input, { state: serverStore.getSnapshot() })
         if (outlived()) return outcome
         if (outcome.kind === "landed") {
           // The movement stands and its row could not be read back (#263): read again once the other writes now out have answered,
@@ -812,7 +796,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
-        const outcome = await actOnRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        const outcome = await actOnRecord(client, module, latest, row, name, input, { state: serverStore.getSnapshot() })
         if (outlived()) return outcome
         if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(outcome.what, outcome.problem)
         return outcome
@@ -844,7 +828,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
-        const outcome = await rereadRecord({ ...client, signal }, module, latest, row, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        const outcome = await rereadRecord({ ...client, signal }, module, latest, row, { state: serverStore.getSnapshot() })
         if (outlived() || signal.aborted) return outcome
         if (outcome.kind === "done") serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
         return outcome
@@ -886,11 +870,17 @@ export function useMeProjects(): readonly BusinessRecord[] {
   return serverModules.get(ME_PROJECTS)?.records ?? NO_RECORDS
 }
 
+/** A switched module's state as the store holds it, `KEPT_ON_API` where no API is configured; null for a module on the browser's own path. */
+function switchedModuleState(serverModules: ServerRecordsState, apiConfigured: boolean, workspaceId: WorkspaceId, moduleId: string): ModuleState | null {
+  if (serverModuleOf(workspaceId, moduleId) === undefined) return null
+  if (!apiConfigured) return KEPT_ON_API
+  return serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE
+}
+
 /**
- * The state of a switched module — idle, not granted, loading, ready or
- * failed, with its problem — or null for a module on the browser's own
- * path. For a pane that must show nothing rather than the fixtures until
- * the API has answered (Settings › Users & roles on the Pilot, Issue #163).
+ * The state of a switched module — idle, not granted, loading, ready,
+ * failed or kept on the API, with its problem — or null for a module on the
+ * browser's own path.
  */
 export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string): ModuleState | null {
   const stores = useContext(BusinessRecordStoreContext)
@@ -904,8 +894,7 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
     stores.server.getSnapshot,
     stores.server.getServerSnapshot,
   )
-  if (serverModuleOf(workspaceId, moduleId) === undefined) return null
-  return serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE
+  return switchedModuleState(serverModules, useApiConfigured(), workspaceId, moduleId)
 }
 
 /**
@@ -924,30 +913,18 @@ export function useServerResolver(): Resolver {
 
 /**
  * The records a pane lists. On the browser's own path, `getRecords` as ever.
- * On the Pilot, a switched module's rows once they are here and nothing
- * before — never the fixtures, since a fixture row shown on the Pilot is a
- * row that does not exist — with the load's state beside them, for the
- * pane's empty row and its create button (Issue #163's rule for Settings ›
- * Users & roles, here for every pane that reads its own module). A module
- * the person's role does not view is not pending: its problem says so, and
- * nobody is toasted (`paneAnswerOf`, Issue #200).
+ * A switched module's rows once they are here and nothing before, with the
+ * load's state beside them, for the pane's empty row and its create button
+ * (Issue #163's rule for Settings › Users & roles, here for every pane that
+ * reads a module): a module the person's role does not view is not pending,
+ * its problem says so, and nobody is toasted (`paneAnswerOf`, Issue #200);
+ * where no API is configured its problem is that the API keeps it.
  */
-export function useModuleRecords(
-  workspaceId: WorkspaceId,
-  moduleId: string,
-  fixtures: readonly BusinessRecord[],
-): PaneAnswer {
-  const configured = useApiConfigured()
+export function useModuleRecords(workspaceId: WorkspaceId, moduleId: string): PaneAnswer {
   const state = useServerModuleState(workspaceId, moduleId)
   const { getRecords } = useBusinessRecordStore()
-  if (configured && state !== null) return paneAnswerOf(state)
-  return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, notGranted: false, problem: null }
-}
-
-/** A module's records as `getRecords` answers them, over the module's own fixtures. */
-export function useStoreRecords(workspaceId: WorkspaceId, moduleId: string): BusinessRecord[] {
-  const { getRecords } = useBusinessRecordStore()
-  return getRecords(workspaceId, moduleId, fixturesOf(workspaceId, moduleId))
+  if (state !== null) return paneAnswerOf(state)
+  return { records: getRecords(workspaceId, moduleId), ready: true, pending: false, notGranted: false, problem: null }
 }
 
 /**

@@ -1,23 +1,24 @@
 // Settings' panes, one entry each: where the nav lists it, what heads it,
-// which mode offers it and where a link to it lands in the other, the pane
-// ids it took the place of, and the params its address carries. The shell
-// (components/settings/SettingsDialog.tsx) renders the nav, the search, the
-// deep link and the frame from this table and nothing else, and every
+// the pane ids it took the place of, and the params its address carries. The
+// shell (components/settings/SettingsDialog.tsx) renders the nav, the search,
+// the deep link and the frame from this table and nothing else, and every
 // Settings address in the app is `settingsHref`'s.
 //
-// A pane is offered with the adapter configured (`api`), without it
-// (`fixture`), or in both. A pane one mode lacks names the pane a link to it
-// opens there (`instead`), or opens the default pane: the browser's panes
-// whose subject the API holds open the API's pane on the Pilot (#176, #181,
-// #291 C4, #487, O16 of #290), and the API's panes the browser's in fixture
-// mode. Company & projects reads only the browser's organisation store, which
-// has no API, so it is fixture mode's alone.
+// Every pane reads the API but Account & appearance (`withoutApi`), whose
+// theme is the browser's own: where no API is configured a pane says its
+// subject is kept on the API, and draws nothing of it. The browser's twins of
+// the API's panes — Asset management, Operations setup, Tickets &
+// communication, Commercial defaults, and the fixtures' Notifications,
+// Finance, Integrations and Portals forms — are gone, each id absorbed by the
+// pane that holds its subject, and so is Company & projects, which read only
+// the browser's organisation store.
 //
 // A pane that took the place of others lists their ids under `absorbs`, each
-// with the tab it opens at (#548 and #570 of #544), so a link or a bookmark
-// made before reads as it did. They live here rather than in legacy-ids.ts:
-// the tab a retired id opens is one of its pane's tabs, declared beside it
-// and changing with it, and the one resolution below reads both.
+// with the tab it opens at, or null for none (#548 and #570 of #544), so a
+// link or a bookmark made before reads as it did. They live here rather than
+// in legacy-ids.ts: the tab a retired id opens is one of its pane's tabs,
+// declared beside it and changing with it, and the one resolution below reads
+// both.
 import { PLACEHOLDERS } from "./message-templates"
 
 export const SETTINGS_SECTIONS = [
@@ -36,8 +37,6 @@ export type SettingsPaneIcon = "bell" | "calendar-blank" | "calendar-check" | "c
 /** The params of a pane's own address, besides `tab`, which a pane with tabs reads. */
 export type SettingsParam = "type" | "record" | "kind"
 
-type SettingsMode = "fixture" | "api"
-
 type PaneSpec = {
   readonly id: string
   readonly section: SettingsSectionId
@@ -49,14 +48,13 @@ type PaneSpec = {
   readonly description: string
   /** Words the search finds it by that its title and description do not say. */
   readonly terms?: readonly string[]
-  readonly offered: SettingsMode | "both"
-  /** Where a link to it lands in the mode that does not offer it; none, the default pane. */
-  readonly instead?: { readonly pane: string; readonly tab?: string }
+  /** Drawn where no API is configured, from the browser's own state: every other pane says its subject is kept on the API. */
+  readonly withoutApi?: true
   /** The bar above it names the pane rather than its section, where each of its tabs or records titles itself. */
   readonly headedBy?: "label"
-  readonly tabs?: readonly { readonly value: string; readonly label: string; readonly offered?: SettingsMode }[]
-  /** The panes it took the place of, each the tab it opens at. */
-  readonly absorbs?: Readonly<Record<string, string>>
+  readonly tabs?: readonly { readonly value: string; readonly label: string }[]
+  /** The panes it took the place of, each the tab it opens at, or null for none. */
+  readonly absorbs?: Readonly<Record<string, string | null>>
   readonly params?: readonly SettingsParam[]
 }
 
@@ -69,17 +67,7 @@ const PANES = [
     title: "Account and appearance",
     description: "Your profile, personal defaults, saved views, and visual preferences.",
     terms: ["Appearance", "Theme", "Ash", "Midnight", "Dawn", "Pale", "Custom", "Light", "Dark", "Sidebar color", "Interface color", "Theme code", "Accent"],
-    offered: "both",
-  },
-  {
-    id: "notifications",
-    section: "personal",
-    label: "Notifications",
-    icon: "bell",
-    title: "Notifications",
-    description: "Personal delivery preferences within the recipient scope configured by administrators.",
-    offered: "fixture",
-    instead: { pane: "notifications-on-api" },
+    withoutApi: true,
   },
   {
     id: "notifications-on-api",
@@ -88,19 +76,7 @@ const PANES = [
     icon: "bell",
     title: "Notifications",
     description: "The e-mails you get when something needs you. Nothing is sent until you ask for it.",
-    offered: "api",
-    instead: { pane: "notifications" },
-  },
-  {
-    id: "company",
-    section: "organization",
-    label: "Company & projects",
-    icon: "squares-four",
-    title: "Companies",
-    description: "Manage company identities, administrators, projects, and tenant-level operational data.",
-    terms: ["Create company", "Add company", "Add project", "Company administrator", "First project", "Tenant", "Legal name", "Registration number", "Language", "Currency", "Timezone"],
-    offered: "fixture",
-    headedBy: "label",
+    absorbs: { notifications: null },
   },
   {
     id: "access",
@@ -109,26 +85,13 @@ const PANES = [
     icon: "users-three",
     title: "Users and roles",
     description: "Manage every system user, role, organization assignment, and project access.",
-    offered: "both",
     headedBy: "label",
     tabs: [
       { value: "users", label: "Users" },
       { value: "roles", label: "Roles" },
-      { value: "teams", label: "Teams", offered: "api" },
+      { value: "teams", label: "Teams" },
     ],
     absorbs: { "ticket-teams": "teams" },
-  },
-  {
-    id: "asset-management",
-    section: "operations",
-    label: "Asset management",
-    icon: "gear",
-    title: "Asset management",
-    description: "Configure the company asset libraries.",
-    terms: ["Containers", "Container Types", "Waste Fractions", "Spare Parts", "Part Types", "Property equipment", "Key Types", "Locksmith"],
-    offered: "fixture",
-    instead: { pane: "master-data" },
-    headedBy: "label",
   },
   {
     id: "areas",
@@ -137,7 +100,6 @@ const PANES = [
     icon: "map-trifold",
     title: "Areas & Zones",
     description: "Planning areas, notification zones, and map validation.",
-    offered: "both",
     params: ["record"],
   },
   {
@@ -147,7 +109,6 @@ const PANES = [
     icon: "calendar-blank",
     title: "Collection calendars",
     description: "Validity periods, maintained per project and year; a project's holidays are the days of the company's holiday list it names.",
-    offered: "both",
     params: ["record"],
   },
   {
@@ -157,7 +118,6 @@ const PANES = [
     icon: "calendar-check",
     title: "Holiday lists",
     description: "The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend.",
-    offered: "both",
   },
   {
     id: "operations-bulky-schedules",
@@ -166,7 +126,6 @@ const PANES = [
     icon: "couch",
     title: "Bulky schedules",
     description: "The days each planning area collects bulky waste on, how many bookings a day takes, and what a booking is charged once collected.",
-    offered: "api",
   },
   {
     id: "master-data",
@@ -175,29 +134,8 @@ const PANES = [
     icon: "database",
     title: "Master data",
     description: "The company's own vocabulary: the waste fractions it collects, the container types it owns, the service frequencies each project offers, and the vehicle types with the container types they service. Products, containers, the fleet and route schemes name these rows.",
-    offered: "api",
-    instead: { pane: "asset-management" },
     params: ["kind", "record"],
-  },
-  {
-    id: "operations-setup",
-    section: "operations",
-    label: "Operations setup",
-    icon: "sliders-horizontal",
-    title: "Operations setup",
-    description: "Week numbering, operational master data, maps, areas, zones, and location behavior. The working week and the holiday lists are set per project under Holiday lists.",
-    offered: "fixture",
-    instead: { pane: "master-data" },
-  },
-  {
-    id: "ticket-comms",
-    section: "operations",
-    label: "Tickets & communication",
-    icon: "bell",
-    title: "Tickets and communication",
-    description: "Ticket types, lifecycle, actions, SLA, channels, templates, recipients, and inbound routing.",
-    offered: "fixture",
-    instead: { pane: "tickets", tab: "deadlines" },
+    absorbs: { "asset-management": null, "operations-setup": null },
   },
   {
     id: "tickets",
@@ -206,8 +144,6 @@ const PANES = [
     icon: "ticket",
     title: "Tickets",
     description: "Everything about the company's tickets in one place: its types, their teams, deadlines and charges, and the counting rules that open tickets.",
-    offered: "api",
-    instead: { pane: "ticket-comms" },
     headedBy: "label",
     // In the order a person sets tickets up: what a ticket is, which team works it, by when, at what price, and what opens one.
     tabs: [
@@ -217,7 +153,7 @@ const PANES = [
       { value: "charges", label: "Charges" },
       { value: "counting-rules", label: "Counting rules" },
     ],
-    absorbs: { "ticket-types": "types", "ticket-sla": "deadlines", "commercial-ticket-charges": "charges", "counting-rules": "counting-rules" },
+    absorbs: { "ticket-types": "types", "ticket-sla": "deadlines", "commercial-ticket-charges": "charges", "counting-rules": "counting-rules", "ticket-comms": "deadlines" },
     // A ticket type's own page, by the API's id, on the Types tab.
     params: ["type"],
   },
@@ -228,18 +164,6 @@ const PANES = [
     icon: "envelope-simple",
     title: "Message templates",
     description: `The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing. A service message reaches only a customer who allows them; a billing message is sent whatever the customer chose. A text names its values as ${PLACEHOLDERS.join(", ")}.`,
-    offered: "api",
-    instead: { pane: "ticket-comms" },
-  },
-  {
-    id: "finance",
-    section: "administration",
-    label: "Finance & invoicing",
-    icon: "credit-card",
-    title: "Finance and invoicing",
-    description: "VAT, payment references, cadence, bundling, cost centres, accounts, routing rules, and financial integrity.",
-    offered: "fixture",
-    instead: { pane: "finance-invoicing" },
   },
   {
     id: "finance-invoicing",
@@ -248,28 +172,7 @@ const PANES = [
     icon: "credit-card",
     title: "Finance & invoicing",
     description: "What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review.",
-    offered: "api",
-    instead: { pane: "finance" },
-  },
-  {
-    id: "pricing",
-    section: "administration",
-    label: "Commercial defaults",
-    icon: "tag",
-    title: "Commercial defaults",
-    description: "One-time commercial setup: company defaults and registries. Price lists are managed in the Commercial section; day-to-day pricing lives in Price Engine.",
-    offered: "fixture",
-    instead: { pane: "commercial-products" },
-  },
-  {
-    id: "integrations",
-    section: "administration",
-    label: "Integrations",
-    icon: "link-simple",
-    title: "Integrations",
-    description: "Connection, authentication, ownership, flow direction, mappings, jobs, retries, and support.",
-    offered: "fixture",
-    instead: { pane: "integrations-on-api" },
+    absorbs: { finance: null },
   },
   {
     id: "integrations-on-api",
@@ -278,18 +181,7 @@ const PANES = [
     icon: "link-simple",
     title: "Integrations",
     description: "The services this deployment calls, which way data goes, and their state.",
-    offered: "api",
-    instead: { pane: "integrations" },
-  },
-  {
-    id: "portals",
-    section: "administration",
-    label: "Portals & branding",
-    icon: "paint-brush",
-    title: "Portals and branding",
-    description: "Project identity, localized content, customer portal, driver app, banners, actions, and accessibility preview.",
-    offered: "fixture",
-    instead: { pane: "portals-on-api" },
+    absorbs: { integrations: null },
   },
   {
     id: "portals-on-api",
@@ -298,8 +190,7 @@ const PANES = [
     icon: "paint-brush",
     title: "Portals & branding",
     description: "What each project's residents find on its public pages, and which of its drivers use the Driver App.",
-    offered: "api",
-    instead: { pane: "portals" },
+    absorbs: { portals: null },
   },
   {
     id: "commercial-products",
@@ -308,7 +199,7 @@ const PANES = [
     icon: "package",
     title: "Products",
     description: "The sellable catalogue of each project, as the API holds it: what an invoice line calls a product, the code a ledger books it under, and its VAT rate. Prices are rows of a price list, added in Price Engine with Add price.",
-    offered: "both",
+    absorbs: { pricing: null },
   },
   {
     id: "commercial-price-lists",
@@ -317,7 +208,6 @@ const PANES = [
     icon: "receipt",
     title: "Price lists",
     description: "Each project's tariff and the named lists an agreement is priced under. A list's code and currency are set once, since its rows are quoted in them; a list ends on its last day in force. Price Engine's Add price puts a row in one.",
-    offered: "both",
   },
   {
     id: "commercial-visit-rules",
@@ -326,7 +216,6 @@ const PANES = [
     icon: "recycle",
     title: "Recycling-centre charges",
     description: "How a project's recycling-centre visits are charged: a household's free visits a year and the price of each after them, the fractions brought free, and a business's visit.",
-    offered: "api",
   },
   {
     id: "pickup-exception-charges",
@@ -335,7 +224,6 @@ const PANES = [
     icon: "warning",
     title: "Exception charges",
     description: "What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence.",
-    offered: "api",
   },
 ] as const satisfies readonly PaneSpec[]
 
@@ -364,10 +252,6 @@ export type SettingsParams = Partial<Readonly<Record<SettingsParam | "tab", stri
 /** What Settings shows: a pane, and the params of its own it was asked with. */
 export type SettingsAddress = { readonly pane: SettingsPaneId; readonly params: SettingsParams }
 
-const modeOf = (configured: boolean): SettingsMode => (configured ? "api" : "fixture")
-
-const offeredIn = (offered: SettingsMode | "both" | undefined, mode: SettingsMode): boolean => offered === undefined || offered === "both" || offered === mode
-
 export function settingsPaneOf(id: string | undefined): SettingsPane | undefined {
   return SETTINGS_PANES.find((pane) => pane.id === id)
 }
@@ -378,47 +262,39 @@ export function settingsPane(id: SettingsPaneId): SettingsPane {
   return pane
 }
 
-/** Whether the nav offers a pane, with the adapter configured or not. */
-export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  const pane = settingsPaneOf(paneId)
-  return pane !== undefined && offeredIn(pane.offered, modeOf(configured))
+/** A pane's tabs. */
+export function settingsTabsOf(paneId: SettingsPaneId): NonNullable<SettingsPane["tabs"]> {
+  return settingsPane(paneId).tabs ?? []
 }
 
-/** A pane's tabs its mode offers. */
-export function settingsTabsOffered(paneId: SettingsPaneId, configured: boolean): NonNullable<SettingsPane["tabs"]> {
-  return (settingsPane(paneId).tabs ?? []).filter((tab) => offeredIn(tab.offered, modeOf(configured)))
-}
-
-/** The params `given` holds that the pane reads in this mode: its own, and a tab it offers. */
-function paramsRead(pane: SettingsPane, given: Readonly<Record<string, string | null | undefined>>, configured: boolean): SettingsParams {
+/** The params `given` holds that the pane reads: its own, and one of its tabs. */
+function paramsRead(pane: SettingsPane, given: Readonly<Record<string, string | null | undefined>>): SettingsParams {
   const read: Partial<Record<SettingsParam | "tab", string>> = {}
   for (const param of pane.params ?? []) {
     const value = given[param]
     if (typeof value === "string" && value !== "") read[param] = value
   }
   const tab = given.tab
-  if (typeof tab === "string" && settingsTabsOffered(pane.id, configured).some((offered) => offered.value === tab)) read.tab = tab
+  if (typeof tab === "string" && settingsTabsOf(pane.id).some((offered) => offered.value === tab)) read.tab = tab
   return read
 }
 
 /**
- * The pane an address shows, with the adapter configured or not, and the
- * params it reads: a retired pane's id opens the pane that absorbed it at its
- * tab; a pane its mode does not offer opens the one it names `instead`; an id
- * no pane answers to, or a pane with nowhere to land, opens the default pane.
+ * The pane an address shows, and the params it reads: a retired pane's id
+ * opens the pane that absorbed it at its tab; an id no pane answers to opens
+ * the default pane.
  */
-export function settingsAddressShown(requested: string | undefined, given: Readonly<Record<string, string | null | undefined>>, configured: boolean): SettingsAddress {
-  const mode = modeOf(configured)
+export function settingsAddressShown(requested: string | undefined, given: Readonly<Record<string, string | null | undefined>>): SettingsAddress {
   const absorbing = requested === undefined ? undefined : SETTINGS_PANES.find((pane) => pane.absorbs !== undefined && Object.hasOwn(pane.absorbs, requested))
-  let pane = absorbing ?? settingsPaneOf(requested)
-  let params: Readonly<Record<string, string | null | undefined>> = absorbing === undefined ? given : { ...given, tab: absorbing.absorbs?.[requested ?? ""] }
-  if (pane !== undefined && !offeredIn(pane.offered, mode)) {
-    const instead = pane.instead
-    pane = instead === undefined ? undefined : settingsPaneOf(instead.pane)
-    params = { tab: instead?.tab }
-  }
-  if (pane === undefined || !offeredIn(pane.offered, mode)) return { pane: DEFAULT_SETTINGS_PANE, params: {} }
-  return { pane: pane.id, params: paramsRead(pane, params, configured) }
+  const pane = absorbing ?? settingsPaneOf(requested)
+  if (pane === undefined) return { pane: DEFAULT_SETTINGS_PANE, params: {} }
+  const params = absorbing === undefined ? given : { ...given, tab: absorbing.absorbs?.[requested ?? ""] }
+  return { pane: pane.id, params: paramsRead(pane, params) }
+}
+
+/** Whether a pane draws where no API is configured: its subject is the browser's own, not the API's. */
+export function settingsPaneDrawnWithoutApi(pane: SettingsPane): boolean {
+  return pane.withoutApi === true
 }
 
 /** The bar above a pane: its section, or the pane itself where its tabs or records title themselves. */
@@ -427,16 +303,16 @@ export function settingsPaneHeading(pane: SettingsPane): string {
 }
 
 /**
- * The nav: each section with the panes its mode offers, those the search
- * finds where a person typed one — by label, title, description, terms, and
- * `moreTerms`, the words a pane's own content says.
+ * The nav: each section with its panes, those the search finds where a
+ * person typed one — by label, title, description, terms, and `moreTerms`,
+ * the words a pane's own content says.
  */
-export function settingsNav(configured: boolean, search: string, moreTerms: (paneId: SettingsPaneId) => readonly string[] = () => []) {
+export function settingsNav(search: string, moreTerms: (paneId: SettingsPaneId) => readonly string[] = () => []) {
   const needle = search.trim().toLowerCase()
   const found = (pane: SettingsPane) => needle === "" || [pane.label, pane.title, pane.description, ...(pane.terms ?? []), ...moreTerms(pane.id)].join(" ").toLowerCase().includes(needle)
   return SETTINGS_SECTIONS.map((section) => ({
     ...section,
-    panes: SETTINGS_PANES.filter((pane) => pane.section === section.id && offeredIn(pane.offered, modeOf(configured)) && found(pane)),
+    panes: SETTINGS_PANES.filter((pane) => pane.section === section.id && found(pane)),
   })).filter((section) => needle === "" || section.panes.length > 0)
 }
 

@@ -23,7 +23,7 @@ import { explainQuery, priceListAdapter, priceRowAdapter, productAdapter } from 
 import { customerAdapter } from "../../api/records/registry"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
+import { type BusinessRecord } from "../business-modules"
 import {
   blankNone,
   createBillingRunRecord,
@@ -64,7 +64,7 @@ const list: PriceList = { id: "01a0d2a4-a280-7028-8000-000000000001", ...STAMPS,
 const AREA = "01a0d2a4-a280-7015-8000-000000000001"
 const invoice: Invoice = { id: "01a0d2a4-a280-7080-8000-000000000001", recordedAt: STAMPS.createdAt, projectId: copenhagen.id, number: 26007188, label: "INV-26007188", kind: "invoice", customerId: osterbro.id, currency: "DKK", issuedOn: "2026-09-30", dueOn: "2026-10-30", periodFrom: "2026-09-01", periodTo: "2026-09-30", billingRunId: null, creditsInvoiceId: null, creditReason: null, creditNote: null, netMinor: 60000, vatMinor: 15000, grossMinor: 75000, issuedBy: null, paymentReference: null, paidMinor: 0, outstandingMinor: 75000, paymentStatus: "open" }
 
-const bare = (fixtures: readonly BusinessRecord[] = []): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const bare = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const projectRecord = projectAdapter.toRecord(copenhagen, bare())
 const customerRecord = customerAdapter.toRecord(osterbro, bare())

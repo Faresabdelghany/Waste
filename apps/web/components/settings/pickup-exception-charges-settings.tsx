@@ -16,7 +16,7 @@ import { PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 
 import type { Product } from "@waste/contracts/catalogue"
 import type { ContaminantCode, PickupExceptionRule } from "@waste/contracts/pickup-exceptions"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"

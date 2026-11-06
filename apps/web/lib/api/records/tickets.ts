@@ -43,13 +43,13 @@ import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/do
 import { isBillableResolution, OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { isAgreementRecord } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
 import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { fieldValuesFromForm, TICKET_TYPE_PREFIX } from "@/lib/data/ticket-types"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter } from "./fleet"
@@ -177,14 +177,13 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
     name: ticket.subject,
     context: CONTEXT_LINKS.flatMap((key) => links.find((link) => link.key === key)?.name ?? []).join(" · "),
     status: statusLabel(ticket.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(ticket, context.now),
     owner: assignee ?? "Unassigned",
     value: ticket.dueAt === null ? "No due date" : `Due ${shownOn(ticket.dueAt, project.timezone)}`,
     description: ticket.description,
     related: links.map((link) => `${link.fact} ${link.name}`),
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: "Ticket",
     submittedValues: {

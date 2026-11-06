@@ -12,8 +12,8 @@ import { BulkyBookingCreate, BulkyBookingPatch, type BulkyBooking } from "@waste
 
 import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
-import { BULKY_BOOKINGS_MODULE, BULKY_ITEMS_KEY, bookingMoves, bookingRecordOf } from "../../data/bulky"
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { BULKY_ITEMS_KEY, bookingMoves, bookingRecordOf } from "../../data/bulky"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
 import { BULKY_BOOKING_COMMANDS, bulkyBookingAdapter, itemsOfRecord, ROUTE_BOOKING, toBulkyBookingCreateBody, toBulkyBookingPatchBody, toBulkyBookingRecord } from "../records/bulky-bookings"
 import { isServerBacked } from "../records/modules"
@@ -51,7 +51,7 @@ const booked: BulkyBooking = {
 }
 const routed: BulkyBooking = { ...booked, status: "routed", stop: { pickupId: id(11), routeId: id(12), status: "planned" } }
 
-const context: MappingContext = { fixtures: getModuleDefinition(BULKY_BOOKINGS_MODULE)?.records ?? [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 
 describe("a bulky booking as a record", () => {
   test("is read over the routes' window by its day, not every booking ever made", async () => {

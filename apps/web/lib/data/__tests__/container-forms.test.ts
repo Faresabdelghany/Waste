@@ -15,7 +15,6 @@ import { containerAdapter, type ContainerCommand } from "../../api/records/conta
 import { containerTypeAdapter, decommissionReasonAdapter, wasteFractionAdapter } from "../../api/records/master-data"
 import { projectAdapter } from "../../api/records/organisation"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
-import { FIXTURE_COMPANY_ID, getModuleDefinition } from "../business-modules"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
 import { CONTAINER_COMMAND_FORMS, CONTAINER_COMMANDS_OFFERED, CONTAINER_FORM, containerEditForm, containerFormValues, createContainerRecord, updateContainerRecord } from "../containers"
 
@@ -27,8 +26,8 @@ const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...S
 const warehouseId = "01a0d2a4-a280-7021-8000-000000000001"
 const subscriptionId = "01a0d2a4-a280-7013-8000-000000000001"
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], resolve: NOTHING_RESOLVED, now: NOW })
-const masterContext: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const masterContext: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const organicRecord = wasteFractionAdapter.toRecord(organic, masterContext)
 const bin240Record = containerTypeAdapter.toRecord(bin240, masterContext)
 const wornOutId = "01a0d2a4-a280-702e-8000-000000000001"
@@ -37,7 +36,7 @@ const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["configure.master", loaded({ records: [organicRecord, bin240Record, wornOutRecord], serverIds: new Map([[organicRecord.id, organic.id], [bin240Record.id, bin240.id], [wornOutRecord.id, wornOutId]]) }, 1)],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 const fieldIdsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))
 const requiredOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.filter((field) => field.required).map((field) => field.id))

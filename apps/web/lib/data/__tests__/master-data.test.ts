@@ -45,17 +45,16 @@ describe("the master data module", () => {
     assert.equal(getBusinessFormSchema("configure", "master")?.mode, "disabled")
   })
 
-  test("a record's kind is its id prefix first, then the typed kind it carries, and nothing for the fixtures' master-data sets", () => {
-    const fixture = getModuleDefinition(MASTER_DATA_MODULE)?.records[0]
-    assert.ok(fixture)
-    assert.equal(masterDataKindOf(fixture), null)
-    const byPrefix = (id: string): BusinessRecord => ({ ...fixture, id, name: id, submittedValues: undefined })
+  test("a record's kind is its id prefix first, then the typed kind it carries, and nothing for a record that is neither", () => {
+    const neither: BusinessRecord = { id: "master-fractions", name: "Waste fractions", context: "", status: "Effective", owner: "", value: "", updated: "Now", description: "", facts: {}, related: [], source: "Office workspace", freshness: "Now" }
+    assert.equal(masterDataKindOf(neither), null)
+    const byPrefix = (id: string): BusinessRecord => ({ ...neither, id, name: id })
     assert.equal(masterDataKindOf(byPrefix("fraction-01")), "waste-fraction")
     assert.equal(masterDataKindOf(byPrefix("container-type-01")), "container-type")
     assert.equal(masterDataKindOf(byPrefix("frequency-01")), "service-frequency")
     assert.equal(masterDataKindOf(byPrefix("vehicle-type-01")), "vehicle-type")
-    assert.equal(masterDataKindOf({ ...fixture, id: "master-renamed", submittedValues: { kind: "waste-fraction" } }), "waste-fraction", "a row the pane minted is known by the kind it typed")
-    assert.equal(masterDataKindOf({ ...fixture, id: "master-renamed", submittedValues: { kind: "something-else" } }), null)
+    assert.equal(masterDataKindOf({ ...neither, id: "master-renamed", submittedValues: { kind: "waste-fraction" } }), "waste-fraction", "a row the pane minted is known by the kind it typed")
+    assert.equal(masterDataKindOf({ ...neither, id: "master-renamed", submittedValues: { kind: "something-else" } }), null)
   })
 
   test("a picker's field says which list it wants, by the field's name, and nothing for a field that names no kind", () => {
@@ -238,9 +237,8 @@ describe("the rules a form is held to, inline", () => {
 })
 
 describe("a master data row's link", () => {
-  test("lands on the pane for a row of a kind, and keeps a fixture master-data set under Operations setup, which reads no record", () => {
+  test("lands on the pane for a row of a kind", () => {
     assert.equal(getBusinessModuleHref("configure", "master", "fraction-01"), "/settings?pane=master-data&record=fraction-01")
-    assert.equal(getBusinessModuleHref("configure", "master", "master-fractions"), "/settings?pane=operations-setup")
     assert.equal(getBusinessModuleHref("configure", "master"), "/settings?pane=master-data")
   })
 })

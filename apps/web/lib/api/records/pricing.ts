@@ -48,7 +48,7 @@ import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, type Cu
 
 import { percentLabel } from "@/lib/commercial/indexation"
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import {
   CUSTOMER_KIND_LABELS,
@@ -70,7 +70,7 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from 
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, withQuery } from "../client"
-import { inheritedPresentation, isLocalRefusal, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { planningAreaAdapter } from "./planning"
 import { dayIn } from "./clock"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"
@@ -261,7 +261,7 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
       name: product.name,
       context: `${kindLabel} · ${UNIT_SUFFIX[product.unit]}`,
       status: statusLabel(product.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(product, context.now),
       value: defaultPriceOf(product, id, project.webId, context),
       description: product.invoiceName === null ? "No invoice name yet: an invoice line reads the product's own name." : `Invoiced as ${product.invoiceName}${product.invoiceCode === null ? "" : ` (${product.invoiceCode})`}.`,
@@ -278,7 +278,6 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
         Project: project.name ?? project.webId,
       },
       allowedTransitions: [...PRODUCT_TRANSITIONS[product.status]],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PRODUCT_RECORD_KIND,
       submittedValues: {
@@ -367,7 +366,7 @@ export const priceListAdapter: ResourceAdapter<PriceList> = {
       name: list.name,
       context: `${list.code} · ${list.currency}`,
       status: periodStatus(list.validFrom, list.validTo, projectDay(list.projectId, context)),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(list, context.now),
       value: periodLabel(list.validFrom, list.validTo),
       description: list.notes ?? "",
@@ -381,7 +380,6 @@ export const priceListAdapter: ResourceAdapter<PriceList> = {
         ...(lastDay === undefined ? {} : { "Valid to": lastDay }),
         ...(list.notes === null ? {} : { Notes: list.notes }),
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PRICE_LIST_RECORD_KIND,
       submittedValues: {
@@ -502,7 +500,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
       name,
       context: productName,
       status: periodStatus(row.validFrom, row.validTo, projectDay(row.projectId, context)),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(row, context.now),
       value: `${formatMinor(row.unitPriceMinor, currency)}${unit === undefined ? "" : UNIT_SUFFIX[unit]}`,
       description: `Price row on ${productName} (${name}) in ${listName}.`,
@@ -526,7 +524,6 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
         ...(row.indexLabel === null || row.indexBasisPoints === null ? {} : { Indexed: `${row.indexLabel} ${percentLabel(row.indexBasisPoints)} from ${row.validFrom}` }),
       },
       related: [listName, productName],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PRICE_ROW_RECORD_KIND,
       submittedValues: {
@@ -628,7 +625,7 @@ export type ExplainQuery = { priceListId: string; query: PriceResolveQuery }
  * stranger would be judged. A refusal names the field before the API sees it.
  */
 export function explainQuery(values: BusinessFormValues, resolve: Resolver = NOTHING_RESOLVED): ExplainQuery | LocalRefusal {
-  const context: MappingContext = { fixtures: [], resolve }
+  const context: MappingContext = { resolve }
   const record = { submittedValues: values } as BusinessRecord
   const list = listOf(typed(record, "priceListId"), context)
   if (list === undefined) return refusal("priceListId", "Pick a price list the API holds")

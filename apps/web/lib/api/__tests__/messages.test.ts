@@ -8,7 +8,6 @@ import { describe, test } from "node:test"
 import type { CustomerContact } from "@waste/contracts/customers"
 import { MessageCreate } from "@waste/contracts/messaging"
 
-import { FIXTURE_COMPANY_ID } from "../../data/business-modules"
 import { NOTHING_RESOLVED } from "../records/adapter"
 import { messageBody, messageDraftOf, messageLine, recipientOptions, SEND_MESSAGE, TO_CUSTOMER } from "../records/messages"
 import { customerAdapter, customersModule } from "../records/registry"
@@ -23,7 +22,7 @@ const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T0
 
 const organisation = customerAdapter.toRecord(
   { id: CUSTOMER_ID, ...STAMPS, kind: "organisation", name: "Østerbro Boligforening", registrationNumber: null, email: "kontor@osterbro.example", phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active", paymentTermsDays: null },
-  { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW },
+  { resolve: NOTHING_RESOLVED, now: NOW },
 )
 const state: ServerRecordsState = new Map([["customers.contacts", loaded({ records: [organisation], serverIds: new Map([[organisation.id, CUSTOMER_ID]]) }, 1)]])
 const contact = (values: Partial<CustomerContact>): CustomerContact => ({ id: CONTACT_ID, ...STAMPS, customerId: CUSTOMER_ID, name: "Hanne Holm", role: "billing", email: null, phone: "+45 20 30 40 50", status: "active", ...values })
@@ -43,7 +42,7 @@ describe("a customer's messages (#291 C15)", () => {
     const { fetch, calls } = scripted([() => json(answer, 201, { location: `/messages/${answer.id}` })])
     const current = state.get("customers.contacts")
     assert.ok(current !== undefined)
-    const outcome = await actOnRecord(clientOver(fetch), customersModule, current, organisation, SEND_MESSAGE, { message: { templateId: TEMPLATE_ID, recipient: TO_CUSTOMER } }, { fixtures: [], state, now: NOW })
+    const outcome = await actOnRecord(clientOver(fetch), customersModule, current, organisation, SEND_MESSAGE, { message: { templateId: TEMPLATE_ID, recipient: TO_CUSTOMER } }, { state, now: NOW })
     assert.equal(outcome.kind, "done")
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url.replace("http://api.test", "")}`), ["POST /messages"])
     assert.deepEqual(bodyOf(calls[0]), { templateId: TEMPLATE_ID, customerId: CUSTOMER_ID })

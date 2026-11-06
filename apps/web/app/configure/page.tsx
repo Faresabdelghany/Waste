@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-import { settingsHref } from "@/lib/data/settings-panes"
+import { DEFAULT_SETTINGS_PANE, settingsHref } from "@/lib/data/settings-panes"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.
@@ -8,5 +8,5 @@ import { settingsHref } from "@/lib/data/settings-panes"
 export const instant = false;
 
 export default function ConfigurePage() {
-  redirect(settingsHref("company"))
+  redirect(settingsHref(DEFAULT_SETTINGS_PANE))
 }

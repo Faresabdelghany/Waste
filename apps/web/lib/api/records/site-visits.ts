@@ -12,13 +12,13 @@
 import type { SiteVisit } from "@waste/contracts/site-visits"
 
 import { AGREEMENT_PREFIX, PROPERTY_PREFIX } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { PRODUCT_PREFIX } from "@/lib/data/commercial"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { chargeBasisSentence, IDENTIFICATION_LABELS, OUTCOME_LABELS, REFUSAL_LABELS, SITE_VISITS_MODULE, SOURCE_LABELS, VISIT_VOIDED_KEY, visitStatusOf } from "@/lib/data/site-visits"
 
 import { command, get, listAll, type ApiClient } from "../client"
-import { inheritedPresentation, ofKind, stampFacts, webIdOf, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, ofKind, stampFacts, webIdOf, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayAndTimeOn, projectTimezoneOf } from "./clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
@@ -85,12 +85,11 @@ export function toSiteVisitRecord(visit: SiteVisit, context: MappingContext): Bu
     name: `${identifier === "" ? "Visitor" : identifier} · ${when}`,
     context: `${site} · ${identifier}`,
     status: visitStatusOf(visit),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(visit, context.now),
     value: charge,
     description: brought.length === 0 ? "Nothing recorded" : brought.join(", "),
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: SITE_VISIT_RECORD_KIND,
     submittedValues: {

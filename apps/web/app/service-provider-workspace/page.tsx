@@ -6,5 +6,5 @@ import { RestrictedWorkspaceShell } from "@/components/waste/restricted-workspac
 export const instant = false;
 
 export default function ServiceProviderWorkspacePage() {
-  return <RestrictedWorkspaceShell persona="service-provider" pageId="dashboard" />
+  return <RestrictedWorkspaceShell persona="service-provider" pageId="routes" />
 }

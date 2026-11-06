@@ -178,7 +178,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const reads = useRowHistory(workspaceId, moduleId, live, version + changes, readTicket)
   const userName = useServerNames(ACCESS_MODULE, "user")
   // The teams and the ticket types (#545 of #544) are one module's records, told apart by kind.
-  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_TEAMS)
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   const ticketForm = useTicketForm()
   const aboutAStop = typeof live.submittedValues?.pickupId === "string" && live.submittedValues.pickupId !== ""
   const evidenceRead = useRowHistory(workspaceId, moduleId, live, `${version + changes}:${aboutAStop}`, aboutAStop ? readEvidence : NO_EVIDENCE)
@@ -750,9 +750,6 @@ function Row({ label, value, children }: { label: string; value: string; childre
     </div>
   )
 }
-
-/** A field of a closed list, changed in place: the patch of that one field. */
-const NO_TEAMS: readonly BusinessRecord[] = []
 
 /** The types a ticket may be moved to (#545 of #544): the active ones, and the one it is of whatever its status, each with its kind. */
 function typeOptions(records: readonly BusinessRecord[], current: string): { value: string; label: string }[] {

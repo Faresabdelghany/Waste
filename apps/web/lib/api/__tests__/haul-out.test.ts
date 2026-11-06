@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 import { MaterialAdjustmentCreate, OutboundLoadCreate, OutboundLoadReason, OutboundLoadReceive, OutboundLoadReconcile, type OutboundLoad } from "@waste/contracts/haul-out"
 import type { UnloadingStation } from "@waste/contracts/places"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
 import { ADJUST_STOCK, adjustStockBody, CANCEL_LOAD, GIVE_A_DELTA, HAUL_OUT_ACTIONS, loadLine, NAME_THE_CARRIER, RECEIVE_LOAD, RECONCILE_LOAD, SAY_WHY, SEND_LOAD, sendLoadBody, stockLine } from "../records/haul-out"
 import { unloadingStationAdapter } from "../records/places"
@@ -25,7 +25,7 @@ const ids = new Map<string, string>([
   [WEB.plant, SERVER.plant],
   [WEB.vehicle, SERVER.vehicle],
 ])
-const context: MappingContext = { fixtures: [], resolve: { ...NOTHING_RESOLVED, serverIdOf: (webId) => ids.get(webId) }, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: { ...NOTHING_RESOLVED, serverIdOf: (webId) => ids.get(webId) }, now: NOW }
 
 const omlast: UnloadingStation = {
   id: "01a0d2a4-a280-7012-8000-000000000001",

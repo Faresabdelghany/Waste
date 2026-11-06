@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 import type { Project } from "@waste/contracts/organisation"
 import { SensorCreate, SensorPairingCreate, SensorPairingPatch, SensorPatch, type Sensor } from "@waste/contracts/sensors"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -22,9 +22,9 @@ const STAMPS = { createdAt: "2026-10-20T09:00:00.000Z", updatedAt: "2026-10-21T0
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
 const BIN = "01a0d2a4-a280-7999-8000-000000000010"
 const copenhagen: Project = { id: PROJECT, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], resolve: NOTHING_RESOLVED, now: NOW })
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const resolve = resolverOver(new Map([["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, PROJECT]]) }, 1)]]))
-const context: MappingContext = { fixtures: [], resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve, now: NOW }
 
 const sensor: Sensor = {
   id: "01a0d2a4-a280-7999-8000-000000000001",

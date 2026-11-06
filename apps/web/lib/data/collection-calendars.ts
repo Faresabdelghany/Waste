@@ -22,7 +22,6 @@ import type {
   BusinessFormValues,
 } from "./business-form-types"
 import {
-  FIXTURE_COMPANY_ID,
   getModuleDefinition,
   type BusinessRecord,
   type ModuleDefinition,
@@ -187,7 +186,6 @@ export function createCollectionCalendarRecord(
     source: "Settings",
     freshness: "Now",
     allowedTransitions: module.lifecycle.slice(1, 3),
-    companyId: FIXTURE_COMPANY_ID,
     projectIds: derived.projectIds,
     recordKind: schema.recordKind,
     submittedValues: values,

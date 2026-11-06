@@ -1,6 +1,5 @@
 import { settingsModuleDomains } from "@/lib/data/business-domain"
-import { masterDataKindOf } from "@/lib/data/master-data-kinds"
-import { settingsHref, type SettingsPaneId } from "@/lib/data/settings-panes"
+import { DEFAULT_SETTINGS_PANE, settingsHref, type SettingsPaneId } from "@/lib/data/settings-panes"
 import {
   businessWorkspaces,
   type BusinessRecord,
@@ -38,20 +37,15 @@ const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
   "control-center": "/control-center",
 }
 
-const masterDataDomain = settingsModuleDomains.find((module) => module.moduleId === "master")
-if (!masterDataDomain) throw new Error("business-domain lists no settings domain for configure.master")
-const MASTER_DATA_MODULE_ID = masterDataDomain.moduleId
-
 const settingsPaneByModule: Record<string, SettingsPaneId> = {
   ...Object.fromEntries(
     settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId]),
   ),
-  organization: "company",
   access: "access",
-  templates: "ticket-comms",
-  finance: "finance",
-  integrations: "integrations",
-  portals: "portals",
+  templates: "tickets",
+  finance: "finance-invoicing",
+  integrations: "integrations-on-api",
+  portals: "portals-on-api",
 }
 
 const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
@@ -154,11 +148,7 @@ function moduleHref({
       })
     }
 
-    // A master data row of no kind is one of the fixtures' master-data sets,
-    // which keep their home under Operations setup; a row of a kind — the
-    // API's, or one the Master data pane minted — is the pane's.
-    const fixtureMasterDataSet = moduleId === MASTER_DATA_MODULE_ID && recordId !== undefined && masterDataKindOf({ id: recordId }) === null
-    return settingsHref(fixtureMasterDataSet ? "operations-setup" : (settingsPaneByModule[moduleId] ?? "company"), { record: recordId })
+    return settingsHref(settingsPaneByModule[moduleId] ?? DEFAULT_SETTINGS_PANE, { record: recordId })
   }
 
   const params = new URLSearchParams({ module: moduleId })
@@ -209,7 +199,7 @@ const recordIndex: IndexedRecord[] = workspaceEntries.flatMap(([workspaceId, wor
     // in search results, which would otherwise link to a removed route.
     if (workspaceId === "control-center") return []
     if (workspaceId === "configure" && module.id === "control-center") return []
-    return module.records.map((record) => indexRecord(workspaceId, module, record))
+    return (module.records ?? []).map((record) => indexRecord(workspaceId, module, record))
   }),
 )
 
