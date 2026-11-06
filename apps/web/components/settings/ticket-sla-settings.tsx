@@ -30,7 +30,7 @@ import { typesListed } from "@/lib/data/ticket-scope"
 import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
 import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Teams and Charges tabs. */
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Default teams and Charges tabs. */
 export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const configured = useApiConfigured()
   const client = useApiClient()

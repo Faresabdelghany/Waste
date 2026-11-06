@@ -24,8 +24,24 @@ import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJEC
 import type { ModuleState } from "@/lib/api/records/server-records"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "./business-modules"
+import { TICKET_TEAMS_SETTINGS_PANE_ID } from "./ticket-teams"
 import { projectRecordsOf } from "./project-scope"
 import type { RoleAccessMap } from "./role-permissions"
+
+/** Settings › Users & roles' own pane id. */
+export const USERS_ROLES_SETTINGS_PANE_ID = "access"
+
+/** The pane's tabs: the company's people, their roles, and the teams its tickets wait with (offered on the Pilot alone, since the teams are the API's). */
+export const USERS_ROLES_TABS = [
+  { value: "users", label: "Users" },
+  { value: "roles", label: "Roles" },
+  { value: "teams", label: "Teams" },
+] as const
+
+export type UsersRolesTab = (typeof USERS_ROLES_TABS)[number]["value"]
+
+/** The tab a pane id opens Users & roles at: the Teams tab for the ticket teams' own pane, which it took the place of, so a link made before reads as it did; else Users. */
+export const usersRolesTabOf = (paneId: string | undefined): UsersRolesTab => (paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? "teams" : "users")
 
 export type UserRow = {
   id: string

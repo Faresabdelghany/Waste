@@ -14,7 +14,8 @@ import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "../ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "../ticket-types"
 import { COUNTING_RULES_SETTINGS_PANE_ID } from "../counting-rules"
-import { projectShown, TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, ticketsSettingsHref, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
+import { opensTickets, projectShown, TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, ticketsSettingsHref, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
+import { USERS_ROLES_SETTINGS_PANE_ID, USERS_ROLES_TABS, usersRolesTabOf } from "../users-roles"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -41,10 +42,9 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOpened(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, false), TICKETS_COMMUNICATION_SETTINGS_PANE_ID)
   })
 
-  test("the five ticket panes the Tickets page took the place of open it at their tab, so a link made before it reads as it did (#548 of #544)", () => {
+  test("the ticket panes the Tickets page took the place of open it at their tab, so a link made before it reads as it did (#548 of #544)", () => {
     const opened: [string, string][] = [
       [TICKET_TYPES_SETTINGS_PANE_ID, "types"],
-      [TICKET_TEAMS_SETTINGS_PANE_ID, "teams"],
       [TICKET_SLA_SETTINGS_PANE_ID, "deadlines"],
       [TICKET_CHARGES_SETTINGS_PANE_ID, "charges"],
       [COUNTING_RULES_SETTINGS_PANE_ID, "counting-rules"],
@@ -54,7 +54,16 @@ describe("the Settings panes offered", () => {
       assert.equal(ticketsTabOf(paneId), tab, paneId)
     }
     assert.equal(ticketsTabOf(undefined), "types")
-    assert.deepEqual(TICKETS_TABS.map((tab) => tab.label), ["Types", "Teams", "Deadlines", "Charges", "Counting rules"])
+    assert.deepEqual(TICKETS_TABS.map((tab) => tab.label), ["Types", "Default teams", "Deadlines", "Charges", "Counting rules"])
+  })
+
+  test("the ticket teams' pane opens Users & roles at its Teams tab, where the teams are kept; the pane's own id opens it at Users", () => {
+    assert.equal(settingsPaneOpened(TICKET_TEAMS_SETTINGS_PANE_ID, true), USERS_ROLES_SETTINGS_PANE_ID)
+    assert.equal(usersRolesTabOf(TICKET_TEAMS_SETTINGS_PANE_ID), "teams")
+    assert.equal(opensTickets(TICKET_TEAMS_SETTINGS_PANE_ID), false)
+    assert.equal(usersRolesTabOf(USERS_ROLES_SETTINGS_PANE_ID), "users")
+    assert.equal(usersRolesTabOf(undefined), "users")
+    assert.deepEqual(USERS_ROLES_TABS.map((tab) => tab.label), ["Users", "Roles", "Teams"])
   })
 
   test("a ticket type's page has an address of its own, under the Tickets pane, keeping where Back to app returns", () => {

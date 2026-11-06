@@ -68,6 +68,7 @@ import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKETS_SETTINGS_PANE_ID, ticketsSettingsHref, ticketsTabOf, type TicketsTab } from "@/lib/data/tickets-settings"
+import { USERS_ROLES_SETTINGS_PANE_ID, usersRolesTabOf, type UsersRolesTab } from "@/lib/data/users-roles"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -1512,6 +1513,8 @@ export function SettingsWorkspace({
     setTicketTypeId(addressedTicketTypeId)
     if (addressedTicketTypeId !== null) setTicketsTab("types")
   }
+  // Users & roles' tab, held the same way: the Teams tab where a link names the ticket teams' old pane.
+  const [usersRolesTab, setUsersRolesTab] = useState<UsersRolesTab>(() => usersRolesTabOf(initialPaneId))
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
       ? openedPaneId
@@ -1638,6 +1641,11 @@ export function SettingsWorkspace({
     setTicketTypeId(typeId)
     router.push(ticketsSettingsHref(typeId, returnTo), { scroll: false })
   }
+  // Where a counting rule sends a person for its team: Users & roles, at its Teams tab.
+  const openTeams = () => {
+    setUsersRolesTab("teams")
+    selectPane(USERS_ROLES_SETTINGS_PANE_ID)
+  }
   const updateValue = (controlId: string, value: SettingValue) => {
     setValues((current) => ({ ...current, [controlId]: value }))
     setDirtyControlIds((current) =>
@@ -1747,6 +1755,9 @@ export function SettingsWorkspace({
             onTicketsTabChange={setTicketsTab}
             ticketTypeId={ticketTypeId}
             onTicketTypeChange={openTicketType}
+            onOpenTeams={openTeams}
+            usersRolesTab={usersRolesTab}
+            onUsersRolesTabChange={setUsersRolesTab}
             profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
@@ -1767,6 +1778,9 @@ function SettingsPane({
   onTicketsTabChange,
   ticketTypeId,
   onTicketTypeChange,
+  onOpenTeams,
+  usersRolesTab,
+  onUsersRolesTabChange,
   profile,
   values,
   dirtyControlIds,
@@ -1782,6 +1796,11 @@ function SettingsPane({
   /** The ticket type whose page the Types tab shows, by the API's id, or null for the list; `onTicketTypeChange` opens one or goes back. */
   ticketTypeId: string | null
   onTicketTypeChange: (typeId: string | null) => void
+  /** Opens Users & roles at its Teams tab, for a counting rule that needs a team. */
+  onOpenTeams: () => void
+  /** The tab Users & roles opens at: Teams where a link names the ticket teams' old pane. */
+  usersRolesTab: UsersRolesTab
+  onUsersRolesTabChange: (tab: UsersRolesTab) => void
   /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
   profile: AccountProfile | null
   values: Record<string, SettingValue>
@@ -1838,8 +1857,8 @@ function SettingsPane({
 
       {paneId === "company" ? (
         <CompanyProjectsManagement />
-      ) : paneId === "access" ? (
-        <OrganizationAccessManagement />
+      ) : paneId === USERS_ROLES_SETTINGS_PANE_ID ? (
+        <OrganizationAccessManagement tab={usersRolesTab} onTabChange={onUsersRolesTabChange} />
       ) : paneId === "asset-management" ? (
         <AssetManagementSettings />
       ) : paneId === PLANNING_AREAS_SETTINGS_PANE_ID ? (
@@ -1851,7 +1870,7 @@ function SettingsPane({
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
       ) : paneId === TICKETS_SETTINGS_PANE_ID ? (
-        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} typeId={ticketTypeId} onTypeChange={onTicketTypeChange} />
+        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} typeId={ticketTypeId} onTypeChange={onTicketTypeChange} onOpenTeams={onOpenTeams} />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
