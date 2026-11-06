@@ -419,7 +419,7 @@ export function AssetPanelShell({
 }: {
   /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
   heading?: string | null
-  /** A record's page: its `RecordPageHeader`, in place of the heading bar. */
+  /** A record's page: its `RecordPageHeader`, in place of the heading bar (`heading` and `action` then go unused). */
   header?: ReactNode
   tabs?: ReactNode
   /** The buttons of a pane that has no list (Notifications' Save); a list's actions go in its `RecordsSection`, as a workspace's do. */

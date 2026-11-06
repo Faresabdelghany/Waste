@@ -90,13 +90,19 @@ export function TableCard({
 export function RecordPageHeader({
   backLabel,
   onBack,
+  name,
+  badge,
+  line,
   actions,
-  children,
 }: {
   backLabel: string
   onBack: () => void
+  name: ReactNode
+  /** Beside the name: its status, and anything else that marks the record. */
+  badge?: ReactNode
+  /** Beneath the name: what the record is, in one line. */
+  line?: ReactNode
   actions?: ReactNode
-  children: ReactNode
 }) {
   return (
     <div data-slot="record-page-header" className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -104,7 +110,13 @@ export function RecordPageHeader({
         <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={backLabel} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="min-w-0">{children}</div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-base font-medium text-foreground">{name}</h1>
+            {badge}
+          </div>
+          {line ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{line}</p> : null}
+        </div>
       </div>
       {actions ? <PageActions>{actions}</PageActions> : null}
     </div>

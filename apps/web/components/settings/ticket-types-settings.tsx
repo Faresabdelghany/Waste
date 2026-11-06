@@ -21,9 +21,9 @@ import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ti
 import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "@waste/domain/resolution/vocabulary"
+import { RecordPageHeader } from "@/components/page-layout"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
-import { RecordPageHeader } from "@/components/page-layout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -229,15 +229,12 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   )
 }
 
-/** The header a type's page stands under: the way back to the list, the type's name and what it is, and the page's own buttons. */
 /** The page of a type the address names that is not listed: still being read, not shown to the role, or not there. */
 function TicketTypeMissing({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="border-b border-border/40">
-        <RecordPageHeader backLabel="Back to ticket types" onBack={onBack}>
-          <p className="truncate text-base font-medium text-foreground">Ticket type</p>
-        </RecordPageHeader>
+        <RecordPageHeader backLabel="Back to ticket types" onBack={onBack} name="Ticket type" />
       </header>
       <p className="p-8 text-center text-sm text-muted-foreground">{message}</p>
     </div>
@@ -308,24 +305,24 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
         <RecordPageHeader
           backLabel="Back to ticket types"
           onBack={onBack}
-          actions={
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              {refusal !== null && <p className="max-w-xl text-sm text-destructive">{refusal}</p>}
-              {editable && (
-                <Button size="sm" onClick={save} disabled={saving}>
-                  Save type
-                </Button>
-              )}
-            </div>
+          name={record.name}
+          badge={
+            <>
+              <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
+              {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
+            </>
           }
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-base font-medium text-foreground">{record.name}</h1>
-            <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
-            {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.facts.Kind}</p>
-        </RecordPageHeader>
+          line={record.facts.Kind}
+          actions={
+            editable ? (
+              <Button size="sm" onClick={save} disabled={saving}>
+                Save type
+              </Button>
+            ) : undefined
+          }
+        />
+        {/* What the API refused of the last save, under the header rather than among its buttons. */}
+        {refusal !== null && <p className="border-b border-border px-4 py-2 text-sm text-destructive">{refusal}</p>}
         <div className="overflow-x-auto px-4 py-3">
           <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket type">
             <TabsTrigger value="details" className={tabClass}>

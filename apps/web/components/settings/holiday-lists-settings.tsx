@@ -730,11 +730,13 @@ function HolidayListPage({
 
   return (
     <AssetPanelShell
-      heading={null}
       header={
         <RecordPageHeader
           backLabel="Back to holiday lists"
           onBack={onBack}
+          name={name}
+          badge={<HolidayListStatusBadge status={status} />}
+          line={[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
           actions={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -763,15 +765,7 @@ function HolidayListPage({
               </DropdownMenuContent>
             </DropdownMenu>
           }
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-base font-medium text-foreground">{name}</h1>
-            <HolidayListStatusBadge status={status} />
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
-          </p>
-        </RecordPageHeader>
+        />
       }
       toolbar={
         <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">

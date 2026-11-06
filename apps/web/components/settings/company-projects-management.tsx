@@ -29,6 +29,7 @@ import {
   type Project,
   type UpdateCompanyInput,
 } from "@/components/settings/organization-store"
+import { RecordPageHeader } from "@/components/page-layout"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -80,7 +81,6 @@ import {
   FIXTURE_COMPANY_ID,
   fixtureRecordScopeById,
 } from "@/lib/data/business-modules"
-import { RecordPageHeader } from "@/components/page-layout"
 import { AssetPanelShell, RecordsSection } from "@/components/settings/asset-management-settings"
 import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 
@@ -821,17 +821,13 @@ function CompanyDetails({
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">
-        <RecordPageHeader backLabel="Back to Companies" onBack={onBack}>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-base font-medium text-foreground">
-              {company.name}
-            </p>
-            <ProjectStatusBadge status={company.status} />
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {company.legalName}
-          </p>
-        </RecordPageHeader>
+        <RecordPageHeader
+          backLabel="Back to Companies"
+          onBack={onBack}
+          name={company.name}
+          badge={<ProjectStatusBadge status={company.status} />}
+          line={company.legalName}
+        />
         <div className="flex flex-col gap-3 px-4 py-3">
           <div className="overflow-x-auto pb-0.5">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
