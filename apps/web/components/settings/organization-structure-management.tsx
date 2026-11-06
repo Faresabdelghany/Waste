@@ -57,6 +57,7 @@ import {
   FIXTURE_COMPANY_ID,
   fixtureRecordScopeById,
 } from "@/lib/data/business-modules"
+import { recordCountLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 
 const initialCompanyForm: CreateCompanyInput = {
@@ -693,7 +694,7 @@ export function OrganizationStructureManagement() {
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {recordCount} records
+                      {recordCountLabel(recordCount)}
                     </TableCell>
                     <TableCell>
                       <Badge

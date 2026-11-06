@@ -82,6 +82,7 @@ import {
   FIXTURE_COMPANY_ID,
   fixtureRecordScopeById,
 } from "@/lib/data/business-modules"
+import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 
 function projectStatusTone(status: string): StatusTone {
   if (/active|completed|approved/i.test(status)) {
@@ -265,7 +266,7 @@ function RecordsSection({
     <section className="overflow-hidden rounded-xl border border-border/60">
       <div className="border-b border-border px-4 py-2">
         <p className="text-xs text-muted-foreground">
-          {shown === total ? `${shown} records` : `${shown} of ${total} records`}
+          {recordCountLabel(shown, total)}
         </p>
       </div>
       {children}
@@ -520,10 +521,8 @@ function CompanyList({
                     <TableRow>
                       <TableCell colSpan={7} className="h-52 text-center">
                         <MagnifyingGlass className="mx-auto h-6 w-6 text-muted-foreground" />
-                        <p className="mt-2 text-sm font-medium">No matching companies</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Try a different search or filter.
-                        </p>
+                        <p className="mt-2 text-sm font-medium">{totalCompanyCount > 0 ? "No matching companies" : "No companies yet"}</p>
+                        {totalCompanyCount > 0 ? <p className="mt-1 text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -578,7 +577,7 @@ function CompanyList({
                         ) : null}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {recordCount} records
+                        {recordCountLabel(recordCount)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -651,7 +650,7 @@ function CompanyInformation({
     ["Registration number", company.registrationNumber || "Not provided"],
     ["Tenant ID", company.id],
     ["Lifecycle", company.status],
-    ["Operational data", `${recordCount} records`],
+    ["Operational data", recordCountLabel(recordCount)],
   ] as const
   const administrationInformation = [
     ["Primary administrator", primaryAdministrator?.fullName ?? "Missing"],
@@ -757,10 +756,8 @@ function ProjectsTable({
                 <TableRow>
                   <TableCell colSpan={7} className="h-52 text-center">
                     <Buildings className="mx-auto h-6 w-6 text-muted-foreground" />
-                    <p className="mt-2 text-sm font-medium">No matching projects</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Try a different search or filter.
-                    </p>
+                    <p className="mt-2 text-sm font-medium">{projects.length > 0 ? "No matching projects" : "No projects yet"}</p>
+                    {projects.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
                   </TableCell>
                 </TableRow>
               ) : (

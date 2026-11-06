@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ProgressCircle } from "@/components/progress-circle"
+import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 
 export function recordStatusTone(status: string): StatusTone {
@@ -108,14 +109,16 @@ function RecordStatusBadge({ status }: { status: string }) {
   )
 }
 
-export function NoMatchingRecords() {
+/**
+ * What a record view says in place of rows. `narrowed` says the module has rows its search or filters hide,
+ * the one case another search is worth suggesting; with none, it says there are no records yet.
+ */
+export function NoRecordsShown({ narrowed }: { narrowed: boolean }) {
   return (
     <div className="flex h-52 flex-col items-center justify-center gap-2 text-center">
       <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
-      <p className="text-sm font-medium">No matching records</p>
-      <p className="text-xs text-muted-foreground">
-        Try a different search or status filter.
-      </p>
+      <p className="text-sm font-medium">{narrowed ? "No matching records" : "No records yet"}</p>
+      {narrowed ? <p className="text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
     </div>
   )
 }
@@ -260,6 +263,8 @@ function RecordCard({ record, entityLabel, onOpen, onEdit, onDelete }: RecordCar
 
 type BusinessRecordCardsViewProps = {
   records: BusinessRecord[]
+  /** The module has rows the search or filters hide (`NoRecordsShown`). */
+  narrowed: boolean
   entityLabel: string
   onOpenRecord: (record: BusinessRecord) => void
   onCreateRecord?: () => void
@@ -269,13 +274,14 @@ type BusinessRecordCardsViewProps = {
 
 export function BusinessRecordCardsView({
   records,
+  narrowed,
   entityLabel,
   onOpenRecord,
   onCreateRecord,
   onEditRecord,
   onDeleteRecord,
 }: BusinessRecordCardsViewProps) {
-  if (records.length === 0) return <NoMatchingRecords />
+  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} />
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -325,6 +331,8 @@ function lifecycleIcon(status: string): React.JSX.Element {
 
 type BusinessRecordBoardViewProps = {
   records: BusinessRecord[]
+  /** The module has rows the search or filters hide (`NoRecordsShown`). */
+  narrowed: boolean
   lifecycle: readonly string[]
   entityLabel: string
   onOpenRecord: (record: BusinessRecord) => void
@@ -335,6 +343,7 @@ type BusinessRecordBoardViewProps = {
 
 export function BusinessRecordBoardView({
   records,
+  narrowed,
   lifecycle,
   entityLabel,
   onOpenRecord,
@@ -377,7 +386,7 @@ export function BusinessRecordBoardView({
     )
   }
 
-  if (records.length === 0) return <NoMatchingRecords />
+  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} />
 
   return (
     <div className="flex gap-4 overflow-x-auto p-4">
@@ -501,11 +510,14 @@ function formatHour(hour: number) {
 
 type BusinessRecordDayTimelineProps = {
   records: BusinessRecord[]
+  /** The module has rows the search or filters hide (`NoRecordsShown`). */
+  narrowed: boolean
   onOpenRecord: (record: BusinessRecord) => void
 }
 
 export function BusinessRecordDayTimeline({
   records,
+  narrowed,
   onOpenRecord,
 }: BusinessRecordDayTimelineProps) {
   const { scheduled, unscheduled } = useMemo(() => {
@@ -520,7 +532,7 @@ export function BusinessRecordDayTimeline({
     return { scheduled, unscheduled }
   }, [records])
 
-  if (records.length === 0) return <NoMatchingRecords />
+  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} />
 
   const axisStartHour = scheduled.length
     ? Math.floor(Math.min(...scheduled.map((row) => row.window.startMinutes)) / 60)

@@ -21,7 +21,6 @@ import {
   DownloadSimple,
   Gear,
   Info,
-  MagnifyingGlass,
   PencilSimple,
   Plus,
   PushPin,
@@ -167,6 +166,7 @@ import {
   subscriptionProductOptions,
 } from "@/lib/data/agreements"
 import type { TimelineTask } from "@/lib/data/project-details"
+import { recordCountLabel } from "@/lib/table-copy"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
 import { PageActions, PageTopBar } from "@/components/page-layout"
@@ -253,6 +253,7 @@ import {
   BusinessRecordBoardView,
   BusinessRecordCardsView,
   BusinessRecordDayTimeline,
+  NoRecordsShown,
   RecordActionsMenu,
   recordProgress,
   recordStatusTone,
@@ -1772,6 +1773,8 @@ export function BusinessWorkspace({
     }
     return matchingRecords
   }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
+  // The module has rows, so an empty list means the search or filters hide them: only then is another search worth suggesting.
+  const narrowed = visibleScopedRecords.length > 0
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],
@@ -5321,9 +5324,7 @@ export function BusinessWorkspace({
           <section className="overflow-hidden rounded-xl border border-border/60">
             <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
               <p className="text-xs text-muted-foreground">
-                {filteredRecords.length === visibleScopedRecords.length
-                  ? `${filteredRecords.length} records`
-                  : `${filteredRecords.length} of ${visibleScopedRecords.length} records`}
+                {recordCountLabel(filteredRecords.length, visibleScopedRecords.length)}
                 {fixedScopeLabel ? ` · ${fixedScopeLabel}` : ""}
               </p>
               {moduleActions}
@@ -5344,13 +5345,7 @@ export function BusinessWorkspace({
             ) : isQueueView ? (
               <div className="divide-y divide-border/60 p-1">
                 {filteredRecords.length === 0 ? (
-                  <div className="flex h-52 flex-col items-center justify-center gap-2 text-center">
-                    <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm font-medium">No matching records</p>
-                    <p className="text-xs text-muted-foreground">
-                      Try a different search or status filter.
-                    </p>
-                  </div>
+                  <NoRecordsShown narrowed={narrowed} />
                 ) : (
                   filteredRecords.map((record) => (
                     <TaskRowBase
@@ -5382,6 +5377,7 @@ export function BusinessWorkspace({
             ) : activeViewType === "list" ? (
               <BusinessRecordCardsView
                 records={filteredRecords}
+                narrowed={narrowed}
                 entityLabel={activeModule.entityLabel}
                 onOpenRecord={openRecord}
                 onCreateRecord={
@@ -5393,6 +5389,7 @@ export function BusinessWorkspace({
             ) : activeViewType === "board" ? (
               <BusinessRecordBoardView
                 records={filteredRecords}
+                narrowed={narrowed}
                 lifecycle={activeModule.lifecycle}
                 entityLabel={activeModule.entityLabel}
                 onOpenRecord={openRecord}
@@ -5405,6 +5402,7 @@ export function BusinessWorkspace({
             ) : activeViewType === "timeline" ? (
               <BusinessRecordDayTimeline
                 records={filteredRecords}
+                narrowed={narrowed}
                 onOpenRecord={openRecord}
               />
             ) : (
@@ -5513,17 +5511,8 @@ export function BusinessWorkspace({
                     <TableBody>
                       {filteredRecords.length === 0 ? (
                         <TableRow>
-                          <TableCell
-                            colSpan={visibleTableColumnCount}
-                            className="h-52 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-2">
-                              <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
-                              <p className="text-sm font-medium">No matching records</p>
-                              <p className="text-xs text-muted-foreground">
-                                Try a different search or status filter.
-                              </p>
-                            </div>
+                          <TableCell colSpan={visibleTableColumnCount}>
+                            <NoRecordsShown narrowed={narrowed} />
                           </TableCell>
                         </TableRow>
                       ) : (

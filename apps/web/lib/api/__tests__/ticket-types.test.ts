@@ -118,6 +118,18 @@ describe("a ticket type", () => {
     assert.deepEqual(bodyOf(calls[2]), { permissions: [{ command: "reject", roleIds: [handlerId] }] })
     assert.equal(outcome.kind, "updated")
   })
+
+  test("retiring it is an edit the store sends: the type's patch carries the status, and the row reads the API's answer", async () => {
+    const retired = updatedTicketTypeRecord(bulkyRecord, { name: bulky.name, description: "", status: "Inactive", isDefault: false, fields: bulky.fields, permissions: typePermissionsOf(bulkyRecord) })
+    const { fetch, calls } = scripted([() => json({ ...bulky, status: "inactive" })])
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, typesState, retired, { fixtures: [], state, now: NOW })
+    assert.deepEqual(
+      calls.map((call) => [call.init.method, call.url, bodyOf(call)]),
+      [["PATCH", `http://api.test/ticket-types/${bulkyId}`, { status: "inactive" }]],
+    )
+    assert.equal(outcome.kind, "updated")
+    assert.equal(outcome.kind === "updated" ? outcome.record.status : undefined, "Inactive")
+  })
 })
 
 describe("a ticket type's automation (#546 of #544)", () => {

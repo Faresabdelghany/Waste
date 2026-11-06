@@ -90,6 +90,7 @@ import {
   todayIso,
 } from "@waste/domain/route-schemes/recurrence"
 import { stringValue } from "@waste/domain/route-schemes/validation"
+import { recordCountLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -134,7 +135,7 @@ import {
   type SchemeGenerationRuns,
 } from "@/components/waste/scheme-generation"
 import {
-  NoMatchingRecords,
+  NoRecordsShown,
   recordStatusTone,
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
@@ -904,11 +905,6 @@ function SchemeTabToolbar({
   )
 }
 
-/** "12 records" / "3 of 12 records" — the workspace record-count line. */
-function recordCountLabel(shown: number, total: number) {
-  return shown === total ? `${total} records` : `${shown} of ${total} records`
-}
-
 function routeDetailsHref(routeId: string) {
   return `/route-studio?module=routes&record=${routeId}`
 }
@@ -1054,7 +1050,7 @@ function SchemeRoutesTab({
                   {filtered.length === 0 && rows.length > 0 ? (
                     <TableRow>
                       <TableCell colSpan={7}>
-                        <NoMatchingRecords />
+                        <NoRecordsShown narrowed />
                       </TableCell>
                     </TableRow>
                   ) : rows.length === 0 ? (
@@ -1233,7 +1229,7 @@ function SchemeStopsTab({
               {filtered.length === 0 && stops.length > 0 ? (
                 <TableRow>
                   <TableCell colSpan={8}>
-                    <NoMatchingRecords />
+                    <NoRecordsShown narrowed />
                   </TableCell>
                 </TableRow>
               ) : stops.length === 0 ? (

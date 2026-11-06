@@ -208,13 +208,17 @@ export function CollectionCalendarsSettings() {
     })
   }
 
+  // Rows the search or filters hide: an empty table with none is not helped by another search.
+  const narrowed = calendarRecords.length > 0
   const emptyMessage = calendars.pending
     ? "Reading the collection calendars from the API…"
     : calendars.notGranted
       ? "The collection calendars are not shown to your role."
       : calendars.problem
         ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
-        : "No collection calendars match this search."
+        : narrowed
+          ? "No collection calendars match this search."
+          : "No collection calendars yet."
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = calendars.notGranted ? calendars.problem?.detail : undefined
 
@@ -265,7 +269,7 @@ export function CollectionCalendarsSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={6} message={emptyMessage} hint={emptyHint} />
+                <EmptyRow colSpan={6} message={emptyMessage} hint={emptyHint} narrowed={narrowed} />
               ) : (
                 pageRows.map((row) => (
                   <TableRow key={row.record.id}>

@@ -16,7 +16,7 @@ import type { LocalRefusal } from "@/lib/api/records/adapter"
 import type { BusinessFormOption } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
-import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoice } from "@/lib/data/ticket-scope"
+import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } from "@/lib/data/ticket-scope"
 import { tokenOptions } from "@/lib/data/tickets"
 
 /** The units a billing run charges by their period — a recurring charge's month, a hire's day (M14 of #293): never a ticket's work. */
@@ -39,7 +39,7 @@ export type TicketChargeRow = TicketScope & { key: string; label: string }
 export const typesPicked = (picks: TicketChargePicks): string[] => Object.keys(picks).flatMap((key) => (key.startsWith("type:") ? [key.slice("type:".length)] : []))
 
 /** The pane's rows: every kind, then each type listed (`typesListed`), the types the set names already among them. */
-export function chargeRowsOf(types: readonly TypeChoice[], named: Iterable<string> = []): TicketChargeRow[] {
+export function chargeRowsOf(types: TypeChoices, named: Iterable<string> = []): TicketChargeRow[] {
   const kinds = TICKET_KIND_ROWS.map(({ kind, label }) => ({ kind, ticketTypeId: null, key: scopeKey({ kind, ticketTypeId: null }), label }))
   return [...kinds, ...typesListed(types, named).map((type) => ({ kind: null, ticketTypeId: type.id, key: scopeKey({ kind: null, ticketTypeId: type.id }), label: typeLabel(type) }))]
 }
