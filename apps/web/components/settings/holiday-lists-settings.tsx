@@ -360,9 +360,6 @@ function HolidayListsIndex({
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Holiday lists"
-      description="The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend."
       toolbar={
         <div className="flex flex-col gap-2">
           <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">

@@ -13,14 +13,13 @@
 // sees the id. The form and the bodies it becomes are lib/data/site-visits.ts'.
 // Offered on the Pilot alone.
 
-import { useState, type FormEvent } from "react"
+import type { FormEvent } from "react"
 import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
-import { toast } from "sonner"
 
 import type { Product, WasteFraction } from "@waste/contracts/catalogue"
 import type { VisitRule } from "@waste/contracts/visit-rules"
-import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -28,11 +27,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/api/records/planning"
-import { problemOfError } from "@/lib/api/records/server-records"
 import { periodSentence } from "@/lib/data/bulky"
 import {
   ANNUAL_ACCESS_UNIT,
@@ -57,76 +55,50 @@ type Read = { rules: VisitRule[]; products: Product[]; fractions: WasteFraction[
 type Editing = { rule: VisitRule | null; form: VisitRuleForm }
 
 export function VisitRulesSettings() {
-  const client = useApiClient()
   const { me } = useApiSession()
-  const projects = me?.projects ?? []
   const access = visitRuleAccessOf(me?.role.grants)
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
-  // Bumped by a save, so the rules are read again as the API now holds them.
-  const [version, setVersion] = useState(0)
-
-  const read = useReport<Read>(project === null || !access.view ? null : `visit-rules:${project.id}:${version}`, async (asking) => {
-    const projectId = project?.id ?? ""
-    const [rules, products, fractions] = await Promise.all([
-      listAll<VisitRule>(asking, "/visit-rules", { projectId }),
-      listAll<Product>(asking, "/products", { projectId }),
-      access.fractions ? listAll<WasteFraction>(asking, "/waste-fractions") : Promise.resolve([]),
-    ])
-    return { rules, products, fractions }
+  const setting = useProjectSetting<Read, Editing, VisitRuleRefusal>({
+    name: "visit-rules",
+    readable: access.view,
+    read: async (asking, projectId) => {
+      const [rules, products, fractions] = await Promise.all([
+        listAll<VisitRule>(asking, "/visit-rules", { projectId }),
+        listAll<Product>(asking, "/products", { projectId }),
+        access.fractions ? listAll<WasteFraction>(asking, "/waste-fractions") : Promise.resolve([]),
+      ])
+      return { rules, products, fractions }
+    },
   })
-  const shown = read.shown
+  const { project, shown, draft: editing, refusal, saving } = setting
   const productName = (id: string) => shown?.products.find((candidate) => candidate.id === id)?.name ?? id
   const fractionName = (id: string) => shown?.fractions.find((candidate) => candidate.id === id)?.name ?? id
   const rules = shown === null ? [] : rulesInOrder(shown.rules)
 
-  const [editing, setEditing] = useState<Editing | null>(null)
-  const [refusal, setRefusal] = useState<VisitRuleRefusal | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const open = (rule: VisitRule | null) => {
-    setRefusal(null)
-    setEditing({ rule, form: rule === null ? newVisitRuleForm(dayIn(new Date(), undefined)) : visitRuleFormOf(rule) })
-  }
-  const change = (values: Partial<VisitRuleForm>) => {
-    if (editing === null) return
-    setEditing({ ...editing, form: { ...editing.form, ...values } })
-    setRefusal(null)
-  }
+  const open = (rule: VisitRule | null) => setting.edit({ rule, form: rule === null ? newVisitRuleForm(dayIn(new Date(), undefined)) : visitRuleFormOf(rule) })
+  const change = (values: Partial<VisitRuleForm>) => editing !== null && setting.edit({ ...editing, form: { ...editing.form, ...values } })
 
   const save = (event: FormEvent) => {
     event.preventDefault()
-    if (client === null || project === null || editing === null) return
+    if (project === null || editing === null) return
     const { rule, form } = editing
     const body = rule === null ? visitRuleCreateBodyOf(project.id, form) : visitRulePatchBodyOf(rule, form)
-    if (body === null) {
-      setEditing(null)
-      return
-    }
-    if (isVisitRuleRefusal(body)) {
-      setRefusal(body)
-      return
-    }
-    setSaving(true)
-    const writing = rule === null ? create<VisitRule>(client, "/visit-rules", body).then((answer) => answer.body) : patch<VisitRule>(client, `/visit-rules/${rule.id}`, body)
-    writing
-      .then(
-        (written) => {
-          setEditing(null)
-          setVersion((current) => current + 1)
-          toast.success(rule === null ? "Visit Rule added" : "Visit Rule saved", { description: `${project.name}: ${periodSentence(written)}.` })
-        },
-        (error: unknown) => toast.error(rule === null ? "The Visit Rule was not added" : "The Visit Rule was not saved", { description: problemSentence(problemOfError(error)) }),
-      )
-      .finally(() => setSaving(false))
+    if (body === null) return setting.discard()
+    if (isVisitRuleRefusal(body)) return setting.refuse(body)
+    setting.save(
+      (client) => (rule === null ? create<VisitRule>(client, "/visit-rules", body).then((answer) => answer.body) : patch<VisitRule>(client, `/visit-rules/${rule.id}`, body)),
+      {
+        saved: (written) => ({ title: rule === null ? "Visit Rule added" : "Visit Rule saved", description: `${project.name}: ${periodSentence(written)}.` }),
+        failed: rule === null ? "The Visit Rule was not added" : "The Visit Rule was not saved",
+      },
+    )
   }
 
   const emptyMessage = !access.view
     ? "The Visit Rules are not shown to your role."
     : project === null
       ? "No project to charge recycling-centre visits in."
-      : read.problem !== null
-        ? `The Visit Rules could not be read from the API: ${problemSentence(read.problem)}`
+      : setting.problem !== null
+        ? `The Visit Rules could not be read from the API: ${problemSentence(setting.problem)}`
         : shown === null
           ? "Reading the Visit Rules from the API…"
           : `${project.name} has no Visit Rule: its visits are logged and charged nothing.`
@@ -136,26 +108,9 @@ export function VisitRulesSettings() {
 
   return (
     <AssetPanelShell
-      heading="Commercial"
-      title="Recycling-centre charges"
-      description="How a project's recycling-centre visits are charged: a household's free visits a year and the price of each after them, the fractions brought free, and a business's visit."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="visit-rules-project" className="text-sm text-muted-foreground">
-            Project
-          </Label>
-          <Select value={project?.id ?? ""} onValueChange={setChosenProjectId} disabled={projects.length === 0}>
-            <SelectTrigger id="visit-rules-project" className="w-64">
-              <SelectValue placeholder="Pick a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectPicker id="visit-rules-project" setting={setting} />
         </div>
       }
     >
@@ -208,7 +163,7 @@ export function VisitRulesSettings() {
         </div>
       </RecordsSection>
 
-      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
+      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setting.discard()}>
         {/* An edit says why the start does not move; an add says nothing. */}
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" {...(editing === null || editing.rule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && (
@@ -221,7 +176,7 @@ export function VisitRulesSettings() {
               fractions={shown.fractions}
               fractionsRead={access.fractions}
               onChange={change}
-              onCancel={() => setEditing(null)}
+              onCancel={setting.discard}
               onSubmit={save}
             />
           )}

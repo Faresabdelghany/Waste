@@ -52,9 +52,6 @@ export function IntegrationsSettingsOnApi() {
 
   return (
     <AssetPanelShell
-      heading="Administration"
-      title="Integrations"
-      description="The services this deployment calls, which way data goes, and their state."
       toolbar={null}
     >
       <RecordsSection

@@ -65,7 +65,7 @@ import {
   weekendLabel,
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
-import { holidaySettingsHref } from "@/lib/data/business-links"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
 import { schemeEditPolicy } from "@waste/domain/route-schemes/edit"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
@@ -539,7 +539,6 @@ export function SchemeDetailsPage({
             calendar={projectCalendar}
             policy={holidayPolicy}
             today={today}
-            projectId={schemeProjectId(record)}
           />
         </TabsContent>
       </Tabs>
@@ -1307,17 +1306,14 @@ function SchemeHolidaysTab({
   calendar,
   policy,
   today,
-  projectId,
 }: {
   calendar: ProjectCalendar
   policy: HolidayPolicy
   today: string
-  /** The scheme's project — Settings opens on its holiday list. */
-  projectId: string | undefined
 }) {
   const settingsLink = (
     <Button size="sm" variant="outline" asChild>
-      <Link href={holidaySettingsHref(projectId)}>
+      <Link href={settingsHref("holiday-lists")}>
         <ArrowSquareOut className="h-4 w-4" />
         View in Settings
       </Link>

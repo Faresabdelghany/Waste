@@ -4,10 +4,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { getBusinessModuleHref, masterDataSettingsHref, MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
+import { getBusinessModuleHref } from "../business-links"
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
 import { settingsModuleDomains } from "../business-domain"
 import { getBusinessFormSchema } from "../business-form-schemas"
+import { settingsHref } from "../settings-panes"
 import { WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 
 import {
@@ -37,9 +38,9 @@ describe("the master data module", () => {
     assert.deepEqual(MASTER_DATA_MODULE, { workspaceId: "configure", moduleId: "master" })
     assert.ok(getModuleDefinition(MASTER_DATA_MODULE))
     const domain = settingsModuleDomains.find((module) => module.moduleId === "master")
-    assert.equal(domain?.settingsPaneId, MASTER_DATA_SETTINGS_PANE_ID)
-    assert.equal(masterDataSettingsHref(), `/settings?pane=${MASTER_DATA_SETTINGS_PANE_ID}`)
-    assert.equal(masterDataSettingsHref("container-type"), `/settings?pane=${MASTER_DATA_SETTINGS_PANE_ID}&kind=container-type`)
+    assert.equal(domain?.settingsPaneId, "master-data")
+    assert.equal(settingsHref("master-data"), "/settings?pane=master-data")
+    assert.equal(settingsHref("master-data", { kind: "container-type" }), "/settings?pane=master-data&kind=container-type")
     // The generic registry keeps no create form for the module: the pane's four are local, so fixture mode gains no button it never had.
     assert.equal(getBusinessFormSchema("configure", "master")?.mode, "disabled")
   })
@@ -237,9 +238,9 @@ describe("the rules a form is held to, inline", () => {
 })
 
 describe("a master data row's link", () => {
-  test("lands on the pane for a row of a kind, and keeps a fixture master-data set under Operations setup", () => {
-    assert.equal(getBusinessModuleHref("configure", "master", "fraction-01"), `/settings?pane=${MASTER_DATA_SETTINGS_PANE_ID}&record=fraction-01`)
-    assert.equal(getBusinessModuleHref("configure", "master", "master-fractions"), "/settings?pane=operations-setup&record=master-fractions")
-    assert.equal(getBusinessModuleHref("configure", "master"), `/settings?pane=${MASTER_DATA_SETTINGS_PANE_ID}`)
+  test("lands on the pane for a row of a kind, and keeps a fixture master-data set under Operations setup, which reads no record", () => {
+    assert.equal(getBusinessModuleHref("configure", "master", "fraction-01"), "/settings?pane=master-data&record=fraction-01")
+    assert.equal(getBusinessModuleHref("configure", "master", "master-fractions"), "/settings?pane=operations-setup")
+    assert.equal(getBusinessModuleHref("configure", "master"), "/settings?pane=master-data")
   })
 })

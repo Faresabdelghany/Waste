@@ -41,6 +41,7 @@ import {
 } from "@/components/waste/active-routes-store"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { footerItems, navBadgeOf, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 
@@ -199,8 +200,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu className="gap-0.5">
           {footerItems.map((item) => {
-            const pane = item.id === "settings" ? "account" : "ticket-comms"
-            const href = `/settings?pane=${pane}&from=${encodeURIComponent(pathname)}`
+            const href = settingsHref(item.pane, { from: pathname })
 
             return (
               <SidebarMenuItem key={item.label}>

@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { MessageTemplateCreate, MessageTemplatePatch, unknownPlaceholderSentence as contractsSentence, type MessageTemplate } from "@waste/contracts/messaging"
 
-import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID, NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf, unknownPlaceholderSentence } from "../message-templates"
+import { NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf, unknownPlaceholderSentence } from "../message-templates"
 import { settingsPaneOffered } from "../settings-panes"
 
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
@@ -55,8 +55,8 @@ describe("a message template's draft (#291 C15)", () => {
 
   test("reads its channel, its purpose and whether it is retired, and is the Pilot's pane under Tickets & communication's grants", () => {
     assert.equal(templateLine({ ...stored, status: "inactive" }), "E-mail · Service · Inactive")
-    assert.equal(settingsPaneOffered(MESSAGE_TEMPLATES_SETTINGS_PANE_ID, true), true)
-    assert.equal(settingsPaneOffered(MESSAGE_TEMPLATES_SETTINGS_PANE_ID, false), false)
+    assert.equal(settingsPaneOffered("message-templates", true), true)
+    assert.equal(settingsPaneOffered("message-templates", false), false)
     assert.deepEqual(templatesAccessOf([{ moduleKey: "configure.templates", actions: ["view"] }]), { view: true, create: false, edit: false })
   })
 })

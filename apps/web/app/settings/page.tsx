@@ -12,12 +12,7 @@ export const metadata: Metadata = {
 }
 
 type SettingsPageProps = {
-  searchParams: Promise<{
-    pane?: string | string[]
-    /** A ticket type's page on Settings › Tickets, by the API's id. */
-    type?: string | string[]
-    from?: string | string[]
-  }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 function safeReturnPath(value: string | string[] | undefined): string {
@@ -35,13 +30,12 @@ function safeReturnPath(value: string | string[] | undefined): string {
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const params = await searchParams
-  const initialPaneId =
-    typeof params.pane === "string" ? params.pane : undefined
+  const given = Object.fromEntries(Object.entries(params).flatMap(([name, value]) => (typeof value === "string" ? [[name, value]] : [])))
 
   return (
     <SettingsWorkspace
-      initialPaneId={initialPaneId}
-      ticketTypeId={typeof params.type === "string" ? params.type : null}
+      pane={typeof params.pane === "string" ? params.pane : undefined}
+      params={given}
       returnTo={safeReturnPath(params.from)}
     />
   )

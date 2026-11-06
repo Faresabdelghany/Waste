@@ -62,9 +62,6 @@ export function FinanceSettingsOnApi() {
 
   return (
     <AssetPanelShell
-      heading="Administration"
-      title="Finance & invoicing"
-      description="What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review."
       toolbar={null}
     >
       {/* Keyed by what was read: a re-read the store answers starts the form from it. */}

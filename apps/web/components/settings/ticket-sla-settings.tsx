@@ -8,60 +8,40 @@
 // own. The rows and the body they become are lib/data/ticket-sla.ts's. Offered
 // on the Pilot alone, in place of the fixtures' Tickets & communication.
 
-import { useRef, useState, type ReactNode } from "react"
+import { useRef, type ReactNode } from "react"
 import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
-import { toast } from "sonner"
 
 import type { TicketSla } from "@waste/contracts/ticket-sla"
-import { useReport } from "@/components/insight/use-report"
 import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { ProjectPicker, useProjectSetting, type ProjectPick } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { get, put } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { typesListed } from "@/lib/data/ticket-scope"
 import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
-import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settings"
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Default teams and Charges tabs. */
-export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
-  const configured = useApiConfigured()
-  const client = useApiClient()
+export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: ProjectPick }) {
   const session = useApiSession()
-  const { me } = session
-  const projects = me?.projects ?? []
-  const access = slaAccessOf(me?.role.grants)
-  const project = projectShown(projects, projectId, (candidate) => candidate.id)
-
-  const read = useReport<TicketSla>(project === null || !access.view ? null : `ticket-sla:${project.id}`, (asking) => get<TicketSla>(asking, `/projects/${project?.id}/ticket-sla`))
-  // The set the last save answered, which stands for the project's until the next read of another project.
-  const [answered, setAnswered] = useState<TicketSla | null>(null)
-  const base = answered !== null && answered.projectId === project?.id ? answered : read.report
-  // The rows as edited, held to the set they were edited from: a new read or a save starts them again.
-  const [edits, setEdits] = useState<{ base: TicketSla; rows: SlaRow[] } | null>(null)
-  const editing = edits !== null && edits.base === base
-  const rows = base === null ? [] : editing ? edits.rows : slaRowsOf(base)
+  const access = slaAccessOf(session.me?.role.grants)
+  const setting = useProjectSetting<TicketSla, SlaRow[], SlaRefusal>({ name: "ticket-sla", readable: access.view, read: (asking, projectId) => get<TicketSla>(asking, `/projects/${projectId}/ticket-sla`) }, pick)
+  const { project, base, refusal, saving } = setting
+  const editing = setting.draft !== null
+  const rows = base === null ? [] : (setting.draft ?? slaRowsOf(base))
   // Every kind, each kind, and each type (#548 of #544): the active ones, and any the saved set names.
   const types = useTicketTypeChoices()
   const listedTypes = typesListed(types, base === null ? [] : typesNamedBy(base))
   const scopeOptions = slaScopeOptions(listedTypes)
   const rowsMax = scopeOptions.length * SLA_PRIORITY_OPTIONS.length
-  const [refusal, setRefusal] = useState<SlaRefusal | null>(null)
-  const [saving, setSaving] = useState(false)
   const minted = useRef(0)
 
-  const change = (next: SlaRow[]) => {
-    if (base === null) return
-    setEdits({ base, rows: next })
-    setRefusal(null)
-  }
+  const change = (next: SlaRow[]) => base !== null && setting.edit(next)
   const changeRow = (index: number, values: Partial<SlaRow>) => change(rows.map((row, at) => (at === index ? { ...row, ...values } : row)))
   const addRow = () => {
     minted.current += 1
@@ -69,70 +49,31 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
   }
 
   const save = () => {
-    if (client === null || project === null || base === null) return
+    if (project === null || base === null) return
     const body = slaBodyOf(rows)
-    if (isSlaRefusal(body)) {
-      setRefusal(body)
-      return
-    }
-    setSaving(true)
-    put<TicketSla>(client, `/projects/${project.id}/ticket-sla`, body)
-      .then(
-        (sla) => {
-          setAnswered(sla)
-          setEdits(null)
-          toast.success("SLA saved", { description: slaSavedSentence(project.name, sla.targets.length) })
-        },
-        (error: unknown) => toast.error("The SLA was not saved", { description: problemSentence(problemOfError(error)) }),
-      )
-      .finally(() => setSaving(false))
+    if (isSlaRefusal(body)) return setting.refuse(body)
+    setting.save((client, projectId) => put<TicketSla>(client, `/projects/${projectId}/ticket-sla`, body), { saved: (sla) => ({ title: "SLA saved", description: slaSavedSentence(project.name, sla.targets.length) }), failed: "The SLA was not saved" }, (sla) => sla)
   }
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
-  const emptyMessage = !configured
-    ? "The ticket SLA is kept on the API: sign in on the Pilot to read and set it."
-    : accessUnknownSentence(session) ?? (!access.view
+  const emptyMessage = accessUnknownSentence(session) ?? (!access.view
     ? "The ticket SLA is not shown to your role."
     : project === null
       ? "No project to set an SLA for."
-      : read.problem !== null
-        ? `The SLA could not be read from the API: ${problemSentence(read.problem)}`
+      : setting.problem !== null
+        ? `The SLA could not be read from the API: ${problemSentence(setting.problem)}`
         : base === null
           ? "Reading the SLA from the API…"
           : `${project.name} has no SLA: its tickets open without a due date unless someone gives one.`)
 
   return (
     <AssetPanelShell
-      heading="Tickets"
       tabs={tabs}
       title="Ticket SLA"
       description="How long a ticket has from opening to its due date, by priority, for every kind, one kind or one ticket type."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="ticket-sla-project" className="text-sm text-muted-foreground">
-            Project
-          </Label>
-          {/* Held while the rows are edited: another project's set would drop them unasked. */}
-          <Select
-            value={project?.id ?? ""}
-            onValueChange={(id) => {
-              onProjectChange(id)
-              setAnswered(null)
-              setRefusal(null)
-            }}
-            disabled={projects.length === 0 || editing}
-          >
-            <SelectTrigger id="ticket-sla-project" className="w-64">
-              <SelectValue placeholder="Pick a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectPicker id="ticket-sla-project" setting={setting} disabled={editing} />
           <Button variant="outline" size="sm" disabled={!access.edit || base === null || rows.length >= rowsMax} onClick={addRow}>
             <Plus className="h-4 w-4" weight="bold" />
             Add target
@@ -147,7 +88,7 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
         actions={
           <>
             {editing && (
-              <Button variant="outline" size="sm" disabled={saving} onClick={() => setEdits(null)}>
+              <Button variant="outline" size="sm" disabled={saving} onClick={setting.discard}>
                 Discard
               </Button>
             )}
