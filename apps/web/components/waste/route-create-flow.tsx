@@ -26,10 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Stepper } from "@/components/project-wizard/Stepper"
-import { StepMode } from "@/components/project-wizard/steps/StepMode"
-import type { ProjectMode } from "@/components/project-wizard/types"
-import { useModuleRecords } from "@/components/waste/scheme-route-map"
+import { Stepper } from "@/components/ui/stepper"
+import { CreateModeChooser, type CreateMode } from "@/components/waste/create-mode-chooser"
+import { useStoreRecords } from "@/components/waste/business-record-store"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
@@ -132,12 +131,12 @@ function ModeChooserOverlay({
   onQuick: () => void
   onGuided: () => void
 }) {
-  const [mode, setMode] = useState<ProjectMode | undefined>()
+  const [mode, setMode] = useState<CreateMode | undefined>()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="flex w-full max-w-[900px] overflow-hidden rounded-[24px] bg-background shadow-2xl">
-        <StepMode
+        <CreateModeChooser
           selected={mode}
           onSelect={setMode}
           onCancel={onClose}
@@ -255,7 +254,7 @@ interface GuidedStepProps {
 // Step 1 — Project & date
 
 function StepProjectDate({ data, updateData }: GuidedStepProps) {
-  const projects = useModuleRecords("configure", "organization")
+  const projects = useStoreRecords("configure", "organization")
 
   return (
     <div className="max-w-md space-y-6">
@@ -292,7 +291,7 @@ function StepProjectDate({ data, updateData }: GuidedStepProps) {
 // Step 2 — Responsibility (service provider list)
 
 function StepResponsibility({ data, updateData }: GuidedStepProps) {
-  const serviceProviders = useModuleRecords("service-providers", "service-providers")
+  const serviceProviders = useStoreRecords("service-providers", "service-providers")
 
   return (
     <div className="space-y-4">
@@ -336,8 +335,8 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
 // Step 3 — Fleet & locations
 
 function StepFleetLocations({ data, updateData }: GuidedStepProps) {
-  const vehicles = useModuleRecords("fleet", "vehicles")
-  const drivers = useModuleRecords("fleet", "drivers")
+  const vehicles = useStoreRecords("fleet", "vehicles")
+  const drivers = useStoreRecords("fleet", "drivers")
 
   return (
     <div className="max-w-md space-y-6">
@@ -420,7 +419,7 @@ function StepFleetLocations({ data, updateData }: GuidedStepProps) {
 // Step 4 — Containers
 
 function StepContainers({ data, updateData }: GuidedStepProps) {
-  const containers = useModuleRecords("resources", "containers")
+  const containers = useStoreRecords("resources", "containers")
   const [propertyFilter, setPropertyFilter] = useState("all")
   const [search, setSearch] = useState("")
 
@@ -599,11 +598,11 @@ function StepRouteReview({
   data: GuidedRouteData
   onEditStep: (step: number) => void
 }) {
-  const projects = useModuleRecords("configure", "organization")
-  const serviceProviders = useModuleRecords("service-providers", "service-providers")
-  const vehicles = useModuleRecords("fleet", "vehicles")
-  const drivers = useModuleRecords("fleet", "drivers")
-  const containers = useModuleRecords("resources", "containers")
+  const projects = useStoreRecords("configure", "organization")
+  const serviceProviders = useStoreRecords("service-providers", "service-providers")
+  const vehicles = useStoreRecords("fleet", "vehicles")
+  const drivers = useStoreRecords("fleet", "drivers")
+  const containers = useStoreRecords("resources", "containers")
 
   const nameOf = (records: BusinessRecord[], id?: string) =>
     records.find((record) => record.id === id)?.name ?? "Not specified"

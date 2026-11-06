@@ -65,11 +65,17 @@ const nextConfig = {
     ]
   },
   async redirects() {
-    // Contractor → Service provider rename (2026-09-02): keep old bookmarks working.
     return [
+      // Contractor → Service provider rename (2026-09-02): keep old bookmarks working.
       { source: "/contractors", destination: "/service-providers", permanent: false },
       { source: "/contractor-workspace", destination: "/service-provider-workspace", permanent: false },
       { source: "/contractor-workspace/:path*", destination: "/service-provider-workspace/:path*", permanent: false },
+      // The prototype's portfolio dashboard, removed (#574): its "projects" were
+      // Routes, its clients Customers, and its tasks and inbox the Tickets.
+      { source: "/projects/:path*", destination: "/route-studio?module=routes", permanent: false },
+      { source: "/clients/:path*", destination: "/customers", permanent: false },
+      { source: "/tasks", destination: "/tickets", permanent: false },
+      { source: "/inbox", destination: "/tickets", permanent: false },
     ]
   },
   async rewrites() {

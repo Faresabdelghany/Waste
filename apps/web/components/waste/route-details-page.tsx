@@ -55,7 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useModuleRecords } from "@/components/waste/scheme-route-map"
+import { useStoreRecords } from "@/components/waste/business-record-store"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,9 +64,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { StatRow } from "@/components/projects/StatRow"
+import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import {
   Table,
   TableBody,
@@ -292,9 +292,9 @@ function ReassignRouteDialog({
   onClose: () => void
   onReassign: (updated: BusinessRecord, pickups: BusinessRecord[]) => void
 }) {
-  const driverRecords = useModuleRecords("fleet", "drivers")
-  const vehicleRecords = useModuleRecords("fleet", "vehicles")
-  const pickupRecords = useModuleRecords("route-studio", "pickups")
+  const driverRecords = useStoreRecords("fleet", "drivers")
+  const vehicleRecords = useStoreRecords("fleet", "vehicles")
+  const pickupRecords = useStoreRecords("route-studio", "pickups")
   const currentDriver = record.facts.Driver ?? record.owner ?? "Unassigned"
   const currentVehicle = record.facts.Vehicle ?? "Unassigned"
   const [driver, setDriver] = useState(currentDriver)
@@ -547,7 +547,7 @@ function OverviewTab({
   // the fallback for fixture routes (issue #23). Manual stop edits sit in an
   // overlay so the store-backed derivation stays hydration-safe, and "Reset
   // route" simply clears the overlay back to the source of truth.
-  const pickupRecords = useModuleRecords("route-studio", "pickups")
+  const pickupRecords = useStoreRecords("route-studio", "pickups")
   const generatedStops = useMemo(
     () => generatedRouteStops(record, pickupRecords),
     [pickupRecords, record],

@@ -3,8 +3,7 @@
  * `wastehero…` prefix became `waste…`, the name the `@waste/*` namespace and
  * the repository already carry), each beside the key or keys it replaced.
  * Keys that never carried the old name are not listed and do not need this
- * module: next-themes writes its own `theme`, and the sign-in dialog writes
- * `auth-last-provider`.
+ * module: next-themes writes its own `theme`.
  *
  * The rename lives in this module alone. A store imports its key constant and
  * reads through `readPersisted`, which returns the value under the current

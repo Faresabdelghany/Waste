@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ArrowRight, Check, X } from "@phosphor-icons/react/dist/ssr"
 
-import { Stepper } from "@/components/project-wizard/Stepper"
+import { Stepper } from "@/components/ui/stepper"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

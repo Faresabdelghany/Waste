@@ -4,7 +4,7 @@ import { createContext, useContext, type ReactNode } from "react"
 
 import { OPERATOR_IDENTITY, type FixtureIdentity } from "@/lib/data/fixture-identity"
 
-// What the top bar's account menu and bell show for the shell a page sits in.
+// What the top bar's account menu shows for the shell a page sits in.
 // The office's shell is the default; a restricted shell (the citizen portal,
 // a service provider's workspace) provides its own around its pages.
 export type ShellIdentity = {
@@ -12,11 +12,9 @@ export type ShellIdentity = {
   fixture: FixtureIdentity
   /** Whether the menu links to Settings › Account & appearance. */
   offersSettings: boolean
-  /** Whether the bell reads the office's Service Inbox. */
-  readsInbox: boolean
 }
 
-const OFFICE_SHELL: ShellIdentity = { fixture: OPERATOR_IDENTITY, offersSettings: true, readsInbox: true }
+const OFFICE_SHELL: ShellIdentity = { fixture: OPERATOR_IDENTITY, offersSettings: true }
 
 const ShellIdentityContext = createContext<ShellIdentity>(OFFICE_SHELL)
 

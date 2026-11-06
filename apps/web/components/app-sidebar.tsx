@@ -87,24 +87,12 @@ export function AppSidebar() {
 
   const isItemActive = (id: NavItemId): boolean => {
     if (id === "operate")
-      return (
-        pathname === "/" ||
-        pathname.startsWith("/operate") ||
-        pathname.startsWith("/projects") ||
-        pathname.startsWith("/tasks") ||
-        pathname.startsWith("/tickets") ||
-        pathname.startsWith("/inbox")
-      )
+      return pathname === "/" || pathname.startsWith("/operate") || pathname.startsWith("/tickets")
     if (id === "plan") return pathname.startsWith("/plan")
     if (id === "route-studio")
       return pathname.startsWith("/route-studio") || pathname.startsWith("/routes")
     if (id === "fleet") return pathname.startsWith("/fleet")
-    if (id === "customers")
-      return (
-        pathname.startsWith("/customers") ||
-        pathname.startsWith("/clients") ||
-        pathname.startsWith("/portal")
-      )
+    if (id === "customers") return pathname.startsWith("/customers") || pathname.startsWith("/portal")
     if (id === "resources") return pathname.startsWith("/resources")
     if (id === "service-providers")
       return pathname.startsWith("/service-providers") || pathname.startsWith("/service-provider-workspace")

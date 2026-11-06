@@ -28,7 +28,7 @@ import type { ImportKind, ImportRowResult, ImportRun } from "@waste/contracts/im
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
 import type { ImportRow } from "@waste/domain/imports/csv"
 
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"

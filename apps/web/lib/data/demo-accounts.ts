@@ -18,7 +18,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     email: "olivia.larsen@kystbyen.example",
     initials: "OL",
     avatarSrc: "/avatar-profile.jpg",
-    homePath: "/performance",
+    homePath: "/operate",
     viewLabel: "Operations workspace",
   },
   {

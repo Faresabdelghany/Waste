@@ -944,6 +944,12 @@ export function useModuleRecords(
   return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, notGranted: false, problem: null }
 }
 
+/** A module's records as `getRecords` answers them, over the module's own fixtures. */
+export function useStoreRecords(workspaceId: WorkspaceId, moduleId: string): BusinessRecord[] {
+  const { getRecords } = useBusinessRecordStore()
+  return getRecords(workspaceId, moduleId, fixturesOf(workspaceId, moduleId))
+}
+
 /**
  * How a pane waits on a write's outcome — the one way. On the Pilot
  * `upsertRecord` answers once the API has, so the dialog stays open and the

@@ -16,7 +16,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
 import { useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
-import { ServiceProviderDashboard } from "@/components/waste/service-provider-dashboard"
+import { ServiceProviderDashboard } from "@/components/insight/provider-dashboard"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
@@ -34,7 +34,7 @@ import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
 import { ShellIdentityProvider, type ShellIdentity } from "@/components/top-bar/shell-identity"
 import { PageTopBar } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 
 type RestrictedWorkspacePage = {
   id: string
@@ -43,9 +43,6 @@ type RestrictedWorkspacePage = {
   moduleIds: readonly string[]
   recordIds?: readonly string[]
   workspaceLabel: string
-  workspaceDescription: string
-  /** The description on the Pilot, naming the account's provider. */
-  describeOnApi?: (provider: string) => string
   navigationBasePath: string
   showWorkspaceActions: boolean
   /**
@@ -85,8 +82,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleIds: ["citizen-portal"],
         recordIds: ["portal-activity-parkvej"],
         workspaceLabel: "Citizen portal",
-        workspaceDescription:
-          "Authorized property services, collection dates, requests, documents, and messages.",
         navigationBasePath: "/portal",
         showWorkspaceActions: false,
         showFilters: false,
@@ -106,9 +101,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleId: "routes",
         moduleIds: ["routes", "pickups"],
         workspaceLabel: "Routes",
-        workspaceDescription:
-          "NordRen ApS route days and their generated Pickups — read-only.",
-        describeOnApi: (provider) => `The routes ${provider} runs and their stops — crew and dispatch them with your own fleet.`,
         navigationBasePath: "/service-provider-workspace/routes",
         showWorkspaceActions: true,
         showFilters: true,
@@ -119,9 +111,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleId: "vehicles",
         moduleIds: ["vehicles", "drivers"],
         workspaceLabel: "Fleet",
-        workspaceDescription:
-          "NordRen ApS vehicles and drivers — fully self-managed.",
-        describeOnApi: (provider) => `${provider}'s vehicles and drivers.`,
         navigationBasePath: "/service-provider-workspace/fleet",
         showWorkspaceActions: true,
         showWorkspaceActionsOnApi: false,
@@ -133,9 +122,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleId: "tickets",
         moduleIds: ["tickets"],
         workspaceLabel: "Tickets",
-        workspaceDescription:
-          "Tickets on NordRen ApS work — raise new ones for the office to resolve.",
-        describeOnApi: (provider) => `Tickets about the routes ${provider} runs — raise new ones for the office to resolve.`,
         navigationBasePath: "/service-provider-workspace/tickets",
         showWorkspaceActions: true,
         showFilters: true,
@@ -146,9 +132,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleId: "activities",
         moduleIds: ["activities"],
         workspaceLabel: "Activities",
-        workspaceDescription:
-          "NordRen ApS proposals, compliance follow-ups and notes with the office.",
-        describeOnApi: (provider) => `${provider}'s proposals to the office, its compliance follow-ups and its notes — a proposal changes nothing until the office approves it.`,
         navigationBasePath: "/service-provider-workspace/activities",
         showWorkspaceActions: true,
         showFilters: true,
@@ -159,9 +142,6 @@ const restrictedWorkspaceDefinitions: Record<
         moduleId: "service-provider-workspace",
         moduleIds: ["service-provider-workspace"],
         workspaceLabel: "Team",
-        workspaceDescription:
-          "NordRen ApS workspace users — invite managers, foremen, and drivers.",
-        describeOnApi: (provider) => `${provider}'s workspace users — invite managers, foremen and drivers.`,
         navigationBasePath: "/service-provider-workspace/team",
         showWorkspaceActions: true,
         showFilters: true,
@@ -186,11 +166,11 @@ type WorkspaceScope = {
   onApi: boolean
 }
 
-// The top bar's account menu and bell in a restricted shell: its persona in
-// fixture mode, no link to the office's Settings, and not the office's inbox.
+// The top bar's account menu in a restricted shell: its persona in fixture
+// mode, and no link to the office's Settings.
 const RESTRICTED_SHELLS: Record<RestrictedPersona, ShellIdentity> = {
-  citizen: { fixture: CITIZEN_IDENTITY, offersSettings: false, readsInbox: false },
-  "service-provider": { fixture: SERVICE_PROVIDER_IDENTITY, offersSettings: false, readsInbox: false },
+  citizen: { fixture: CITIZEN_IDENTITY, offersSettings: false },
+  "service-provider": { fixture: SERVICE_PROVIDER_IDENTITY, offersSettings: false },
 }
 
 function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; children: ReactNode }) {
@@ -309,7 +289,6 @@ export function RestrictedWorkspaceShell({
           actorName: provider.actorName,
           onApi: true,
         }
-  const workspaceDescription = scope.onApi && page.describeOnApi !== undefined ? page.describeOnApi(scope.fixedScopeLabel) : page.workspaceDescription
   const showPrimaryAction = scope.onApi ? page.showWorkspaceActionsOnApi ?? page.showWorkspaceActions : page.showWorkspaceActions
 
   return (
@@ -325,7 +304,6 @@ export function RestrictedWorkspaceShell({
           allowedModuleIds={page.moduleIds}
           allowedRecordIds={page.recordIds}
           workspaceLabel={page.workspaceLabel}
-          workspaceDescription={workspaceDescription}
           fixedProjectScope={scope.fixedProjectScope}
           fixedScopeLabel={scope.fixedScopeLabel}
           navigationBasePath={page.navigationBasePath}
