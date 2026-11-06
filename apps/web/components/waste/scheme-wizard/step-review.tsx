@@ -10,7 +10,6 @@ import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
-import { SCHEME_EDIT_POLICY_DESCRIPTIONS } from "@waste/domain/route-schemes/creation"
 import { HOLIDAY_POLICY_LABELS, PREVIEW_HORIZON_MONTHS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
@@ -149,7 +148,6 @@ export function StepReview({
             options={EDIT_POLICY_OPTIONS}
             placeholder="Select"
           />
-          <p className="text-xs text-muted-foreground">{SCHEME_EDIT_POLICY_DESCRIPTIONS[data.editPolicy]}</p>
         </Field>
       </div>
     </div>

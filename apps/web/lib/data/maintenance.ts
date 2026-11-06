@@ -81,6 +81,7 @@ export const COMPLETE_FORM: BusinessFormSchema = {
   recordKind: "Maintenance order",
   title: "Complete maintenance order",
   description: "The day the work was done and the readings then. A plan's order is its service: the plan counts from it, and a plan by kilometres or engine hours needs its reading.",
+  warning: "The order closes as done.",
   submitLabel: "Complete order",
   sections: [
     {

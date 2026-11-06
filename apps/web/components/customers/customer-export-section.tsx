@@ -56,7 +56,6 @@ export function CustomerExportSection({ record }: { record: BusinessRecord }) {
         <h3 id={`customer-export-${record.id}`} className="text-sm font-semibold">
           Personal data
         </h3>
-        <p className="text-xs text-muted-foreground">Everything held about this customer as one file: its details and history, properties, agreements, money, tickets and messages, site access and visits, bookings and applications.</p>
       </div>
       <Button variant="outline" size="sm" onClick={exportAll} disabled={exporting || client === null || serverId === undefined}>
         <DownloadSimple className="h-4 w-4" />

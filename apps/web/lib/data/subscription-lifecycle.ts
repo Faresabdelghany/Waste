@@ -13,12 +13,13 @@ import { count } from "@waste/domain/text"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema } from "./business-form-types"
 
-const dialog = (recordKind: string, title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]): BusinessFormSchema => ({
+const dialog = (recordKind: string, title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string): BusinessFormSchema => ({
   key: "customers.agreements",
   mode: "action",
   recordKind,
   title,
   description,
+  ...(warning === undefined ? {} : { warning }),
   submitLabel,
   sections: [{ id: "command", title, fields }],
   // The form dialog shows no dialog without an execution: what it does is append to the row's lifecycle.
@@ -31,7 +32,7 @@ export const CHANGE_SERVICE_FORM = (products: readonly BusinessFormOption[]): Bu
     { id: "from", label: "New service from", type: "date", required: true, description: "The first day of the new service." },
     { id: "productId", label: "Product", type: "select", options: products, description: "Blank keeps the product." },
     { id: "quantity", label: "Quantity", type: "number", min: 1, description: "Blank keeps the quantity." },
-  ])
+  ], "The subscription ends the day before the new service begins.")
 
 /** Pause: from its first day through its last, or until it is resumed. */
 export const PAUSE_FORM: BusinessFormSchema = dialog("Subscription pause", "Pause", "No collection is planned for the subscription's bins while it is paused; a stop already dispatched is named for removal by hand.", "Pause", [
@@ -42,7 +43,7 @@ export const PAUSE_FORM: BusinessFormSchema = dialog("Subscription pause", "Paus
 /** Terminate: the agreement's last day of service. */
 export const TERMINATE_FORM: BusinessFormSchema = dialog("Agreement", "Terminate", "The agreement, its subscriptions and their placements end after this day; the bins stay in service until they are collected.", "Terminate", [
   { id: "lastDay", label: "Last day of service", type: "date", required: true },
-])
+], "The agreement, its subscriptions and their placements end after this day.")
 
 /** What a pause offers on the project's day: its cancel before it begins, its resume while it runs, nothing once it has ended. */
 export function pauseOffers(pause: Pick<SubscriptionPause, "validFrom" | "validTo">, today: string): "cancel" | "resume" | null {

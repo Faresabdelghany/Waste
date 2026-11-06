@@ -14,7 +14,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -170,10 +170,9 @@ export function TransferStationSurface({ record }: RowSurfaceProps) {
       />
 
       <Dialog open={adjusting !== null} onOpenChange={(open) => !open && setAdjusting(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Adjust {record.name}&apos;s stock</DialogTitle>
-            <DialogDescription>A stock count&apos;s correction of what the station holds of one fraction for one project: more in kilograms, or less with a minus.</DialogDescription>
           </DialogHeader>
           {adjusting !== null && (
             <div className="space-y-3">
@@ -195,10 +194,9 @@ export function TransferStationSurface({ record }: RowSurfaceProps) {
       </Dialog>
 
       <Dialog open={sending !== null} onOpenChange={(open) => !open && setSending(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Send a load from {record.name}</DialogTitle>
-            <DialogDescription>Our out-weighing of a load leaving for another station; the receiving site&apos;s ticket is recorded when it comes back. Costs are recorded in the project&apos;s currency and never billed.</DialogDescription>
           </DialogHeader>
           {sending !== null && (
             <div className="space-y-3">
@@ -239,16 +237,9 @@ export function TransferStationSurface({ record }: RowSurfaceProps) {
       </Dialog>
 
       <Dialog open={acting !== null} onOpenChange={(open) => !open && setActing(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{acting === null ? "" : VERB[acting.verb]}</DialogTitle>
-            <DialogDescription>
-              {acting?.verb === "receive"
-                ? "The receiving site's own ticket: its number, its net and when it weighed. Given again, it corrects the receipt."
-                : acting?.verb === "reconcile"
-                  ? "Accept the receiving site's ticket against our out-weighing; say how a dispute was settled if you like."
-                  : "Say why."}
-            </DialogDescription>
           </DialogHeader>
           {acting !== null &&
             (acting.verb === "receive" ? (

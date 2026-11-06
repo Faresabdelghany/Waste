@@ -121,12 +121,6 @@ export function WhatChanged({
           ))}
         </dl>
       )}
-      {!reviewed && (
-        <p className="pb-2 text-xs text-muted-foreground">
-          {BASELINE_LABELS.start}. Go back through Change and return to compare against this
-          review instead.
-        </p>
-      )}
     </section>
   )
 }

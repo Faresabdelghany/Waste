@@ -842,12 +842,6 @@ function SchemeDetailsTab({
           {facts["Unloading station"] && (
             <StatRow label="Unloading station" value={facts["Unloading station"]} />
           )}
-          <p className="text-xs text-muted-foreground">
-            One route is generated per group per day it runs on, starting from
-            the group&apos;s planned assignment — dispatcher overrides stay on the
-            route. Rule matches are a preview; Stops exist only on generated
-            routes.
-          </p>
         </DetailCard>
       </div>
     </div>

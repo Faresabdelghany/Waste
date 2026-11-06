@@ -8,7 +8,6 @@ import {
   CheckSquare,
   DownloadSimple,
   DotsThree,
-  Funnel,
   Gear,
   ListBullets,
   MagnifyingGlass,
@@ -30,7 +29,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -437,10 +435,6 @@ export function ContainersAssetsRegister({
               </Button>
             </div>
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Physical container registry with agreement-driven status, collection configuration,
-            optional sensor pairing, inventory state, and audited service history.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm">
@@ -564,10 +558,6 @@ export function ContainersAssetsRegister({
                 </DropdownMenu>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Funnel className="h-3.5 w-3.5" />
-              Project · type · fraction · vehicle · service frequency · route scheme · calendar · status · property · sensor freshness
-            </div>
           </section>
 
           {selectedIds.size > 0 ? (
@@ -607,12 +597,9 @@ export function ContainersAssetsRegister({
       )}
 
       <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Create container group</DialogTitle>
-            <DialogDescription>
-              Create a named cluster with its own location. Members remain independent containers.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -656,7 +643,7 @@ function ContainerTable({
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-        {records.length} container{records.length === 1 ? "" : "s"} · last measurement shown in project time
+        {records.length} container{records.length === 1 ? "" : "s"}
       </div>
       <div className="overflow-x-auto">
         <Table>
@@ -775,7 +762,6 @@ function ContainerMap({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <p className="text-sm font-medium">Container map</p>
-          <p className="text-xs text-muted-foreground">Clustered service locations · collection calendar layer available</p>
         </div>
         <Badge variant="outline">{records.length} visible</Badge>
       </div>
@@ -817,7 +803,7 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-        {groups.length} container groups · office users only
+        {groups.length} container groups
       </div>
       <Table>
         <TableHeader>
@@ -978,7 +964,6 @@ export function ContainerDetailsSheet({
                 <TabsContent value="routes" className="mt-0 space-y-4">
                   <DetailSection title="Routes · last 7 days">
                     <FactGrid record={record} labels={["Route scheme", "Vehicle", "Last collection", "Next collection"]} />
-                    <p className="text-xs text-muted-foreground">Dynamic routing uses fill prediction when available and falls back to the static candidate list.</p>
                   </DetailSection>
                 </TabsContent>
 
@@ -1032,14 +1017,12 @@ export function ContainerDetailsSheet({
                 <TabsContent value="agreements" className="mt-0">
                   <DetailSection title="Agreements">
                     <FactGrid record={record} labels={["Agreement", "Property", "Waste fractions", "Container type"]} />
-                    <p className="text-xs text-muted-foreground">Active, future, ended, and fallback agreement states synchronize the displayed container status.</p>
                   </DetailSection>
                 </TabsContent>
 
                 <TabsContent value="temporary-changes" className="mt-0">
                   <DetailSection title="Temporary location changes">
                     <p className="text-sm">{temporaryLocation === "None" ? "No scheduled or active temporary relocation." : temporaryLocation}</p>
-                    <p className="text-xs text-muted-foreground">Reasons: equipment failure, roadworks, event, or other. Changes move through Scheduled, Active, and Reverted.</p>
                     <Button variant="outline" size="sm" onClick={() => toast.success("Temporary-change workflow opened")}>Create temporary change</Button>
                   </DetailSection>
                 </TabsContent>
@@ -1051,7 +1034,6 @@ export function ContainerDetailsSheet({
                   </DetailSection>
                   <DetailSection title="Lifecycle stock activity">
                     <p className="text-sm">{record.related.find((item) => item.startsWith("Stock")) ?? "No stock movements linked"}</p>
-                    <p className="text-xs text-muted-foreground">Stock movements are append-only. A DECOMMISSION movement makes an Ended container terminal.</p>
                   </DetailSection>
                 </TabsContent>
               </div>

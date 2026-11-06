@@ -232,9 +232,6 @@ function FilterPopover({ groups }: { groups: FilterGroup[] }) {
         <div className="space-y-3 p-4">
           <div>
             <p className="text-sm font-semibold">Filter</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Narrow the table by {groups.map((group) => group.label.toLowerCase()).join(" and ")}.
-            </p>
           </div>
           {groups.map((group) => (
             <div key={group.label} className="space-y-2">
@@ -301,9 +298,6 @@ function ViewPopover({
         <div className="space-y-4 p-4">
           <div>
             <p className="text-sm font-semibold">Table view</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Choose ordering and visible details.
-            </p>
           </div>
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm">Ordering</span>
@@ -476,6 +470,18 @@ function TeamRowActions({
   )
 }
 
+/** The Teams tab's search, filter, view and page, which the pane holds as it holds the Users' and the Roles', so leaving the tab and coming back finds them as they were. */
+type TeamsTable = {
+  query: string
+  onQueryChange: (query: string) => void
+  statuses: string[]
+  onStatusesChange: (statuses: string[]) => void
+  view: TableView
+  onViewChange: (view: TableView) => void
+  filtered: readonly BusinessRecord[]
+  pagination: ReturnType<typeof useTablePagination<BusinessRecord>>
+}
+
 /**
  * The Teams tab (O30 of #290, moved from Settings › Tickets): the company's
  * teams a ticket waits with — added, edited, retired and reactivated through
@@ -484,26 +490,16 @@ function TeamRowActions({
  * takes stays Settings › Tickets' Default teams tab. Offered on the Pilot
  * alone, since the teams are the API's.
  */
-function TeamsPanel({ tabs, teams, rows }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[] }) {
+function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[]; table: TeamsTable }) {
   const session = useApiSession()
   const access = ticketTeamsAccessOf(session.me?.role.grants)
   const { upsertRecord } = useBusinessRecordStore()
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
-  const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [view, setView] = useState<TableView>(defaultTeamView)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const matches = rows.filter(
-    (team) =>
-      (statuses.length === 0 || statuses.includes(team.status)) &&
-      (normalizedQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedQuery)),
-  )
-  const filtered = view.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
-  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
+  const { query, onQueryChange: setQuery, statuses, onStatusesChange: setStatuses, view, onViewChange: setView, filtered } = table
+  const { page, setPage, pageCount, pageRows, totalCount } = table.pagination
 
   // The accounts a member may be: the company's own people, never a provider's.
   const relationOptions = (field: BusinessFormField): readonly BusinessFormOption[] =>
@@ -654,7 +650,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
-  const teamRows: readonly BusinessRecord[] = configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS
+  const teamRows: readonly BusinessRecord[] = useMemo(
+    () => (configured ? teams.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record)) : NO_RECORDS),
+    [configured, teams.records],
+  )
 
   const [userQuery, setUserQuery] = useState("")
   const [userStatuses, setUserStatuses] = useState<string[]>([])
@@ -665,6 +664,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   const [roleTypes, setRoleTypes] = useState<string[]>([])
   const [roleScopes, setRoleScopes] = useState<string[]>([])
   const [roleView, setRoleView] = useState<TableView>(defaultRoleView)
+
+  const [teamQuery, setTeamQuery] = useState("")
+  const [teamStatuses, setTeamStatuses] = useState<string[]>([])
+  const [teamView, setTeamView] = useState<TableView>(defaultTeamView)
 
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [companyId, setCompanyId] = useState(FIXTURE_COMPANY_ID)
@@ -845,6 +848,16 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
     pageRows: rolesPageRows,
     totalCount: rolesTotalCount,
   } = useTablePagination(filteredRoles)
+  const normalizedTeamQuery = teamQuery.trim().toLowerCase()
+  const filteredTeams = useMemo(() => {
+    const matches = teamRows.filter(
+      (team) =>
+        (teamStatuses.length === 0 || teamStatuses.includes(team.status)) &&
+        (normalizedTeamQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedTeamQuery)),
+    )
+    return teamView.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
+  }, [normalizedTeamQuery, teamRows, teamStatuses, teamView])
+  const teamsPagination = useTablePagination(filteredTeams)
 
   const selectedCompany = companies.find(
     (company) => company.id === companyId,
@@ -1014,7 +1027,21 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
   return (
     <>
       {activeTab === "teams" ? (
-        <TeamsPanel tabs={tabs} teams={teams} rows={teamRows} />
+        <TeamsPanel
+          tabs={tabs}
+          teams={teams}
+          rows={teamRows}
+          table={{
+            query: teamQuery,
+            onQueryChange: setTeamQuery,
+            statuses: teamStatuses,
+            onStatusesChange: setTeamStatuses,
+            view: teamView,
+            onViewChange: setTeamView,
+            filtered: filteredTeams,
+            pagination: teamsPagination,
+          }}
+        />
       ) : activeTab === "users" ? (
         <PanelShell
           tabs={tabs}
@@ -1309,13 +1336,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
       </Dialog>
 
       <Dialog open={!configured && addUserOpen} onOpenChange={handleUserDialogOpenChange}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <form onSubmit={submitUser}>
             <DialogHeader>
               <DialogTitle>Add user</DialogTitle>
-              <DialogDescription>
-                Add a user and assign their role and project access.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-5 sm:grid-cols-2">
@@ -1485,14 +1509,10 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
       )}
 
       <Dialog open={!configured && newRoleOpen} onOpenChange={handleRoleDialogOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <form onSubmit={submitRole}>
             <DialogHeader>
               <DialogTitle>New role</DialogTitle>
-              <DialogDescription>
-                Custom roles bundle permissions at a scope and can be assigned
-                when adding users.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-5">

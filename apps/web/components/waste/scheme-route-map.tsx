@@ -167,9 +167,6 @@ export function SchemeRouteMap({
             }}
           />
         ))}
-        <div className="absolute bottom-2 right-2 rounded bg-background/90 px-2 py-1 text-[10px] text-muted-foreground">
-          Pin positions are illustrative — stop order follows the picked order.
-        </div>
       </div>
 
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">

@@ -103,7 +103,7 @@ export function MessagesSurface({ record }: RowSurfaceProps) {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Send a message to {record.name}</DialogTitle>
-              <DialogDescription>A template of Settings › Message templates, to the customer or to one of its contact persons. Messages go through a log-only sender for now: nothing reaches anyone yet.</DialogDescription>
+              <DialogDescription>Messages go through a log-only sender for now: nothing reaches anyone yet.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1.5">

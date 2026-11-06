@@ -68,9 +68,7 @@ function PilotRoleMatrix({ record, onBack }: { record: BusinessRecord; onBack: (
       onBack={onBack}
       notice={
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
-          <p className="text-sm text-muted-foreground">
-            {changed ? "Unsaved changes: the role allows what it did until they are saved." : "Tick what the role allows, then save the whole matrix at once."}
-          </p>
+          <p className="text-sm text-muted-foreground">{changed ? "Unsaved changes: the role allows what it did until they are saved." : null}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" disabled={!changed || saving} onClick={() => setDraft(null)}>
               Discard

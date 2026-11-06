@@ -172,9 +172,7 @@ export function SchemeRuleEditor({
           Matching inside{" "}
           <span className="font-semibold text-foreground">
             {areaName ?? "the selected planning area"}
-          </span>{" "}
-          — containers carry their planning area; the scheme&apos;s area bounds
-          the rule.
+          </span>
         </p>
       ) : (
         <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
@@ -232,9 +230,6 @@ export function SchemeRuleEditor({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          Only containers this vehicle type can service are matched.
-        </p>
       </div>
 
       <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
@@ -849,10 +844,6 @@ function CollectionGroupSpoke({
               )
             })}
           </div>
-          <p className="text-xs text-muted-foreground">
-            A subset of the scheme&apos;s service days — one route is generated
-            per group per day it runs on.
-          </p>
         </div>
       </div>
 
@@ -870,7 +861,6 @@ function CollectionGroupSpoke({
           records={drivers}
           value={group.driverId}
           onChange={(id) => pick(drivers, "driverId", "driverName", id)}
-          hint="Required to validate; refined per route at dispatch."
         />
         <RecordSelect
           label="Service provider (optional)"
@@ -898,11 +888,6 @@ function CollectionGroupSpoke({
         >
           Pick containers manually
         </Button>
-        <p className="basis-full text-xs text-muted-foreground">
-          {group.stopSource === "rule"
-            ? "The group stores its selection rule — matching containers are resolved every time routes are generated. A container another group already collects that day is left to that group."
-            : "The exception path: the group stores its picked list — new containers must be added by editing the group. A hand-picked container always beats another group's rule on the same day."}
-        </p>
       </div>
 
       {group.stopSource === "rule" && (
@@ -927,7 +912,6 @@ function CollectionGroupSpoke({
               )}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">The rule matches the containers inside this area. Another area than the scheme&apos;s narrows or moves this group alone.</p>
         </div>
       )}
 
@@ -1046,10 +1030,7 @@ function CollectionGroupsEditorDialogBody({
     <>
       <DialogHeader>
         <DialogTitle>Edit collection groups</DialogTitle>
-        <DialogDescription>
-          {scheme.name} · who collects what on which service days. Saving
-          revalidates the scheme and reshapes its future planned routes.
-        </DialogDescription>
+        <DialogDescription>{scheme.name}</DialogDescription>
       </DialogHeader>
       <CollectionGroupsEditor
         groups={groups}

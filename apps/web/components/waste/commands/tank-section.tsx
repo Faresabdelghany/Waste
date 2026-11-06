@@ -198,11 +198,10 @@ function RegisterTankDialog({ record, propertyServerId, today, onClose, onSaved 
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Register a tank at {record.name}</DialogTitle>
-            <DialogDescription>The container that stands for the tank is planned, emptied and charged as any container is; the next emptying falls due its interval after the last.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5 sm:col-span-2">

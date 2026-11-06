@@ -154,9 +154,6 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A ticket opened without a due date is due this many hours after it opens: its type&apos;s target at its priority, else its kind&apos;s, else the one for every kind. Tickets already open keep their due date.
-      </p>
       <RecordsSection shown={rows.length} total={rows.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">

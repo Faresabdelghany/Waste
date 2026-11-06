@@ -74,9 +74,6 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
             <p className="text-base font-semibold text-foreground">
               {isEdit ? "Edit customer" : "New customer"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Basic information about the customer, primary contact and service context.
-            </p>
           </div>
           <Button
             variant="ghost"

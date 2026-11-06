@@ -512,8 +512,7 @@ function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "contai
       )}
       {perDay && (
         <div className="text-xs text-muted-foreground">
-          Picking the route for <span className="font-semibold text-foreground">{DAY_LABELS[activeDay]}</span> — each
-          service day generates its own route with its own stops.
+          Picking the route for <span className="font-semibold text-foreground">{DAY_LABELS[activeDay]}</span>
         </div>
       )}
       <ContainerPicker draft={draft} containers={props.containers} picked={picked} onPick={onPick} />
@@ -584,9 +583,6 @@ function RouteMapStep({ draft, containers }: Pick<VariantProps, "draft" | "conta
             )
           })}
         </svg>
-        <div className="absolute bottom-2 right-2 rounded bg-background/90 px-2 py-1 text-[10px] text-muted-foreground">
-          Pin positions are illustrative — stop order follows the picked order.
-        </div>
       </div>
       <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
         {plans.map((p) => (
@@ -722,9 +718,6 @@ function VariantAStepper(props: VariantProps) {
                         placeholder="Select driver"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Defaults only — every generated route can be reassigned individually.
-                    </p>
                   </>
                 )}
                 {step === 3 && <ContainersStep {...props} />}
@@ -809,7 +802,6 @@ function VariantBFlatForm(props: VariantProps) {
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div>
             <div className="text-base font-semibold">New route scheme</div>
-            <div className="text-xs text-muted-foreground">Everything on one page — fill in any order.</div>
           </div>
           <Button variant="unstyled" type="button" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted">
             <X className="size-4" />
@@ -980,9 +972,6 @@ function VariantCCalendarFirst(props: VariantProps) {
         <div className="flex max-h-[80vh] min-h-[560px] flex-col">
           <div className="border-b border-border px-6 py-4">
             <div className="text-base font-semibold">New route scheme — pick the rhythm first</div>
-            <div className="text-xs text-muted-foreground">
-              Toggle days and frequency; the calendar shows exactly which dates will get a route.
-            </div>
           </div>
           <div className="flex min-h-0 flex-1">
             <div className="min-w-0 flex-[3] overflow-y-auto p-6">

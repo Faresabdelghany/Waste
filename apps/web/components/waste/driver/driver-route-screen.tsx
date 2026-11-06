@@ -169,7 +169,6 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         open={dialog === "report"}
         onOpenChange={close}
         title="Report a problem on the route"
-        description="The office hears of it as a ticket."
         confirm="Report problem"
         noteRequired
         takesPhoto={false}

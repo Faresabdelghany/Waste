@@ -16,12 +16,11 @@
 
 import { useState } from "react"
 import { ArrowSquareOut, PencilSimple } from "@phosphor-icons/react/dist/ssr"
-import Link from "next/link"
 import { toast } from "sonner"
 
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -38,9 +37,6 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 const DRIVER_FIXTURES = getModuleDefinition({ workspaceId: "fleet", moduleId: "drivers" })?.records ?? []
-
-/** What the public door enforces for every published page, whatever is configured: true of `PUBLIC_DOOR_TABLES`. */
-export const PUBLIC_DOOR_RULE = "A public page reads only the columns the public door is granted: an address and its collection days, and the drop-off points. No customer, ticket, invoice, price, service provider or driver reaches it."
 
 export function PortalsSettingsOnApi() {
   const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
@@ -80,7 +76,6 @@ export function PortalsSettingsOnApi() {
 
   return (
     <AssetPanelShell heading="Administration" title="Portals & branding" description="What each project's residents find on its public pages, and which of its drivers use the Driver App." toolbar={null}>
-      <p className="border-b border-border px-4 py-3 text-xs text-muted-foreground">{PUBLIC_DOOR_RULE}</p>
       <RecordsSection shown={projects.length} total={projects.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[720px]">
@@ -142,9 +137,6 @@ export function PortalsSettingsOnApi() {
           </Table>
         </div>
       </RecordsSection>
-      <p className="px-4 py-3 text-xs text-muted-foreground">
-        A driver signs in to the <Link className="text-primary underline-offset-4 hover:underline" href="/driver">Driver App</Link> with the login their profile under Fleet › Drivers names.
-      </p>
       {branding !== null && <BrandingDialog key={branding.id} project={branding} onClose={() => setBranding(null)} />}
       {publishing !== null && <PublishDialog key={publishing.id} project={publishing} saving={saving} onClose={() => setPublishing(null)} onPublish={(slug) => write(publishing, slug, () => setPublishing(null))} />}
     </AssetPanelShell>
@@ -156,7 +148,7 @@ function PublishDialog({ project, saving, onClose, onPublish }: { project: Busin
   const refusal = slugRefusalOf(slug)
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -165,7 +157,6 @@ function PublishDialog({ project, saving, onClose, onPublish }: { project: Busin
         >
           <DialogHeader>
             <DialogTitle>Publish {project.name}</DialogTitle>
-            <DialogDescription>Its collection days and drop-off points open to residents under this address.</DialogDescription>
           </DialogHeader>
           <div className="my-4 grid gap-1.5">
             <Label htmlFor="portal-slug">Public address</Label>
@@ -237,7 +228,7 @@ function BrandingDialog({ project, onClose }: { project: BusinessRecord; onClose
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -246,7 +237,6 @@ function BrandingDialog({ project, onClose }: { project: BusinessRecord; onClose
         >
           <DialogHeader>
             <DialogTitle>{project.name}&apos;s branding</DialogTitle>
-            <DialogDescription>Shown on the project&apos;s public pages. Leave a part empty for none.</DialogDescription>
           </DialogHeader>
           <div className="my-4 grid gap-4">
             <div className="grid gap-1.5">
@@ -263,13 +253,11 @@ function BrandingDialog({ project, onClose }: { project: BusinessRecord; onClose
               <Label htmlFor="branding-logo">Logo address</Label>
               <Input id="branding-logo" placeholder="https://kk.dk/logo.svg" value={form.logoUrl} aria-invalid={logoRefusal !== null} onChange={(event) => setForm({ ...form, logoUrl: event.target.value })} />
               {logoRefusal !== null && <p className="text-xs text-destructive">{logoRefusal}</p>}
-              <p className="text-xs text-muted-foreground">An image the project serves itself, such as on its municipality&apos;s site.</p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="branding-statement">Accessibility statement address</Label>
               <Input id="branding-statement" placeholder="https://was.digst.dk/…" value={form.accessibilityStatementUrl} aria-invalid={statementRefusal !== null} onChange={(event) => setForm({ ...form, accessibilityStatementUrl: event.target.value })} />
               {statementRefusal !== null && <p className="text-xs text-destructive">{statementRefusal}</p>}
-              <p className="text-xs text-muted-foreground">The statement the project publishes, in Denmark through Digitaliseringsstyrelsen&apos;s WAS tool. The public pages link to it.</p>
             </div>
           </div>
           <DialogFooter>

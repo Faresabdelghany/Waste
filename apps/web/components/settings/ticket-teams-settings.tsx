@@ -36,8 +36,11 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs. */
-export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
+/**
+ * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs.
+ * `onOpenTeams` opens Settings › Users & roles at its Teams tab, offered while the company has no active team to name.
+ */
+export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } & TicketsProjectPick) {
   const client = useApiClient()
   const configured = useApiConfigured()
   const session = useApiSession()
@@ -48,6 +51,8 @@ export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange }:
   const teamRecords = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
   const teamIds = useServerModuleState(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)?.serverIds
   const teams = teamRecords.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record))
+  // No team takes tickets yet: each kind's picker offers "No team" alone, so the way to the teams is said here.
+  const noActiveTeam = configured && teamRecords.ready && !teams.some((team) => team.status === "Active")
   const serverIdOf = (webId: string) => teamIds?.get(webId)
   const webIdOfTeam = (serverId: string) => [...(teamIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(TICKET_TEAM_PREFIX, serverId)
   const projects = me?.projects ?? []
@@ -150,7 +155,16 @@ export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange }:
         </div>
       }
     >
-      <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">A ticket opened without a team goes to its type&apos;s team here, else its kind&apos;s. A retired team gives a new ticket none; tickets already open keep their team.</p>
+      {noActiveTeam && (
+        <div role="note" className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-3 text-sm">
+          <span className="text-muted-foreground">The company has no active team yet.</span>
+          {onOpenTeams !== undefined && (
+            <Button variant="outline" size="sm" onClick={onOpenTeams}>
+              Open Teams
+            </Button>
+          )}
+        </div>
+      )}
       <RecordsSection shown={rows.length} total={rows.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[520px]">

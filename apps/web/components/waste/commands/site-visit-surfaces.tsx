@@ -151,11 +151,10 @@ export function RegisterCredentialSurface({ label }: PrimarySurfaceProps) {
         {label}
       </Button>
       <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <form onSubmit={submit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Register a plate or card</DialogTitle>
-              <DialogDescription>A household&apos;s under its property, its visits counted against the property&apos;s year; a business&apos;s under its customer, its visits charged to the agreement named.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -337,14 +336,12 @@ export function CredentialCommandsSurface({ record }: RowSurfaceProps) {
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">The kind, the number and the holder are what a credential is: end it and register another to change them.</p>
 
       <Dialog open={editing} onOpenChange={(next) => !busy && setEditing(next)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <form onSubmit={edit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Edit credential</DialogTitle>
-              <DialogDescription>What the office calls it, and its last day in force. Clear the day to reopen it.</DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
               <Label htmlFor="credential-edit-label">Label</Label>
@@ -447,10 +444,9 @@ function LikelyTradesSurface() {
         Likely trades
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Likely trades</DialogTitle>
-            <DialogDescription>Households whose counted visits reach the Visit Rule&apos;s threshold, so their visits may be a business&apos;s. A reading of the ledger today, never stored.</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label htmlFor="likely-trades-project">Project</Label>

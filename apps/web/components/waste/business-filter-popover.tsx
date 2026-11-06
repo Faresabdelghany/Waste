@@ -431,9 +431,6 @@ export function BusinessFilterPopover({
                 <p className="text-xs font-semibold">
                   {categories.find((category) => category.id === resolvedActiveCategory)?.label}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  Select one or several values
-                </p>
               </div>
               {options[resolvedActiveCategory].length > 6 && (
                 <Input

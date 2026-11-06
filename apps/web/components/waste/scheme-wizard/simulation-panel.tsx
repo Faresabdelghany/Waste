@@ -158,10 +158,6 @@ export function SimulationPanel({
   if (!open) {
     return (
       <div className="flex items-center justify-between rounded-2xl border border-dashed border-border px-5 py-3">
-        <span className="text-sm text-muted-foreground">
-          Try a change to the recurrence and see which collections it adds, removes, or moves
-          before you make it.
-        </span>
         <Button
           variant="outline"
           className="rounded-xl"

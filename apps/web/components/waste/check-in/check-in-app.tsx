@@ -84,7 +84,7 @@ export function CheckInApp() {
         {!signedIn ? (
           <section className="flex flex-col gap-3 rounded-xl border p-4">
             <h1 className="text-lg font-semibold">Sign in to check visitors in</h1>
-            <p className="text-sm text-muted-foreground">{apiConfigured ? "The check-in records each visit to a recycling centre once you sign in." : "The check-in works against the Waste API, and this deployment is not connected to one."}</p>
+            {!apiConfigured && <p className="text-sm text-muted-foreground">The check-in works against the Waste API, and this deployment is not connected to one.</p>}
             {apiConfigured && (
               <Button asChild className="h-11">
                 <Link href={`${SIGN_IN_PATH}?next=${encodeURIComponent(CHECK_IN_PATH)}`}>Sign in</Link>

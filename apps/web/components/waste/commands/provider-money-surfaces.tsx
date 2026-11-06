@@ -328,7 +328,6 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
   return (
     <ApplyIndexDialog
       title="Apply index to provider prices"
-      description="Every price of the provider or the award in force on the day ends on it, and its successor carries the fee indexed over the bid or the current fee, rounded to the minor unit. A price that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
       withBase
       defaultDay={dayIn(new Date(), scopeProject === undefined ? undefined : typed(scopeProject, "timezone"))}
       waiting={pricesReady ? undefined : "The provider prices are being read from the API; Preview follows."}

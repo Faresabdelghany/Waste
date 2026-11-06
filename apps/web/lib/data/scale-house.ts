@@ -150,6 +150,7 @@ export const VOID_TICKET_FORM: BusinessFormSchema = {
   recordKind: SCALE_TICKET_RECORD_KIND,
   title: "Void ticket",
   description: "The ticket stays, voided with its reason: it is what the customer was handed.",
+  warning: "A voided ticket stays voided, with its reason.",
   submitLabel: "Void",
   sections: [
     {

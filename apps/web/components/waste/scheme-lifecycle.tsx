@@ -75,12 +75,9 @@ export function SchemePlanAheadWindowDialog({ record, stored, open, onOpenChange
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Plan Ahead window</DialogTitle>
-          <DialogDescription>
-            Each night the plan-ahead run keeps {record.name}&apos;s collections planned from tomorrow through this many days ahead, while Plan Ahead is on.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
           <Label htmlFor="plan-ahead-days">Days ahead</Label>

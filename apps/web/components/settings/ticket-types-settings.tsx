@@ -14,7 +14,7 @@
 // Offered on the Pilot alone, beside the Ticket teams.
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowDown, ArrowLeft, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
@@ -152,7 +153,6 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
       tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
-      toolbar={<p className="text-sm text-muted-foreground">A ticket opened by its kind alone — by a driver, the worker or a work order — is of the kind&apos;s default type.</p>}
       action={
         <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" weight="bold" />
@@ -269,6 +269,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
   const [actions, setActions] = useState<TicketTypeAction[]>(() => typeActionsOf(record))
   const kind = record.submittedValues?.kind as TicketKind
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [tab, setTab] = useState("details")
 
   const changeField = (index: number, change: (draft: FieldDraft) => FieldDraft) => {
     setFields((current) => current.map((draft, at) => (at === index ? change(draft) : draft)))
@@ -312,7 +313,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
 
   const tabClass = "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background"
   return (
-    <Tabs defaultValue="details" className="flex min-w-0 flex-1 flex-col gap-0">
+    <Tabs value={tab} onValueChange={setTab} className="flex min-w-0 flex-1 flex-col gap-0">
       <header className="flex flex-col border-b border-border/40">
         <TicketTypeHeader
           onBack={onBack}
@@ -351,6 +352,17 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
               <span className="ml-1.5 text-[10px] text-muted-foreground">{actions.length}</span>
             </TabsTrigger>
           </TabsList>
+          {/* Outside the tabs' fieldset, so a role that only reads the page can open it too. */}
+          {tab === "permissions" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button type="button" variant="unstyled" className="ml-2 align-middle text-muted-foreground hover:text-foreground" aria-label="About status permissions">
+                  <Info className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs">A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone.</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </header>
       <div className="flex-1 p-4">
@@ -372,21 +384,20 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
               <span>
                 <span className="font-medium">Active</span>
-                <span className="block text-xs text-muted-foreground">A retired type is offered to no new ticket and keeps the tickets it holds.</span>
+                {isDefault && <span className="block text-xs text-muted-foreground">Make another type of the kind the default to change it.</span>}
               </span>
               <Switch checked={active} onCheckedChange={setActive} disabled={isDefault} aria-label="Active" />
             </label>
             <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
               <span>
                 <span className="font-medium">Default for its kind</span>
-                <span className="block text-xs text-muted-foreground">{isDefault ? "Make another type of the kind the default to change it." : "Makes this the type of a ticket opened by its kind alone."}</span>
+                {isDefault && <span className="block text-xs text-muted-foreground">Make another type of the kind the default to change it.</span>}
               </span>
               <Switch checked={makeDefault} onCheckedChange={setMakeDefault} disabled={isDefault} aria-label="Default for its kind" />
             </label>
           </TabsContent>
 
           <TabsContent value="fields" className="mt-0 space-y-3">
-            <p className="text-sm text-muted-foreground">The facts the office records on a ticket of this type, in the order its form asks for them. A field taken off keeps its values on the tickets that hold them.</p>
             {fields.length === 0 && <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No field yet.</p>}
             {fields.map((draft, index) => (
               <div key={index} className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_10rem_10rem_auto]" aria-label={`Field ${index + 1}`}>
@@ -458,7 +469,6 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
           </TabsContent>
 
           <TabsContent value="permissions" className="mt-0 space-y-3">
-            <p className="text-sm text-muted-foreground">Who may move a ticket of this type. A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone. The system&apos;s own work — a stop serving its ticket — is not held to it.</p>
             <div className="overflow-x-auto rounded-md border">
               <Table className="min-w-[760px]">
                 <TableHeader>
