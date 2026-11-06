@@ -86,6 +86,7 @@ import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceFo
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
+import { isAutomationLine } from "@waste/domain/resolution/automation"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
@@ -357,7 +358,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   ) : (
                     <ol className="space-y-1" data-testid="ticket-history">
                       {detail.events.map((event) => (
-                        <HistoryRow key={event.id} event={event} who={event.recordedBy === null ? live.facts["Opened via"] ?? "The system" : userName(event.recordedBy)} assignee={event.assigneeUserAccountId === null ? undefined : userName(event.assigneeUserAccountId)} at={shownOn(event.recordedAt, timezone)} />
+                        <HistoryRow key={event.id} event={event} who={event.recordedBy === null ? (isAutomationLine(event.body) ? "Automation" : (live.facts["Opened via"] ?? "The system")) : userName(event.recordedBy)} assignee={event.assigneeUserAccountId === null ? undefined : userName(event.assigneeUserAccountId)} at={shownOn(event.recordedAt, timezone)} />
                       ))}
                     </ol>
                   )}
