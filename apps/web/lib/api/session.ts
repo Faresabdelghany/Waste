@@ -249,7 +249,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       }
       if (session !== null && (session.refreshToken !== null || session.accessToken === stored.accessToken)) return
       const samePerson = session !== null && whoOf(session) === whoOf(stored)
-      store.set((state) => ({ ...state, session: stored, ended: null, me: samePerson ? state.me : null }))
+      store.set((state) => ({ ...state, session: stored, ended: null, me: samePerson ? state.me : null, meProblem: samePerson ? state.meProblem : null }))
     },
     signIn: async (email, password) => {
       if (auth === null) throw new SignInRefused(0, "Password sign-in is not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY")

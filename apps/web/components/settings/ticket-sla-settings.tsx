@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { get, put } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
@@ -32,6 +32,7 @@ import { projectShown, type TicketsProjectPick } from "@/lib/data/tickets-settin
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Teams and Charges tabs. */
 export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
+  const configured = useApiConfigured()
   const client = useApiClient()
   const session = useApiSession()
   const { me } = session
@@ -88,7 +89,9 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
   }
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
-  const emptyMessage = accessUnknownSentence(session) ?? (!access.view
+  const emptyMessage = !configured
+    ? "The ticket SLA is kept on the API: sign in on the Pilot to read and set it."
+    : accessUnknownSentence(session) ?? (!access.view
     ? "The ticket SLA is not shown to your role."
     : project === null
       ? "No project to set an SLA for."

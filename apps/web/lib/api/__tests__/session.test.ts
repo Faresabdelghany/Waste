@@ -335,6 +335,22 @@ describe("across the browser's tabs", () => {
     assert.equal(a.controller.store.getSnapshot().session?.accessToken, "a2", "its own session, whose refresh token it holds")
   })
 
+  test("a borrowing tab that takes another person's session drops the last person's failed /me with their /me", async () => {
+    const shared = memoryStorage()
+    const clock = { now: NOW }
+    const a = tabOver(shared, [() => tokens("a1")], clock)
+    await a.controller.signIn(EMAIL, "the temporary one")
+    const b = tabOver(shared, [() => new Response("", { status: 503 })], clock)
+    await assert.rejects(() => b.controller.loadMe())
+    assert.equal(b.controller.store.getSnapshot().meProblem?.status, 503)
+    const c = tabOver(shared, [() => tokens("c1", "auth-another")], clock)
+    await c.controller.signIn(EMAIL, "another one's")
+    b.controller.storageChanged()
+    assert.equal(b.controller.store.getSnapshot().session?.accessToken, "c1")
+    assert.equal(b.controller.store.getSnapshot().meProblem, null, "the new person's access is being read, not failed")
+    assert.equal(accessUnknownSentence(b.controller.store.getSnapshot()), "Reading your access from the API…")
+  })
+
   test("a borrowing tab whose token runs out leaves the shared half alone: another tab may have refreshed it", async () => {
     const shared = memoryStorage()
     const clock = { now: NOW }
