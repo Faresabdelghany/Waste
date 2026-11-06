@@ -106,6 +106,7 @@ import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/rout
 import { projectHolidayListName, projectWeekend } from "@waste/domain/route-schemes/project-calendar"
 import { formatServiceDate, isIsoDate, todayIso } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
+import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"
@@ -463,7 +464,7 @@ function HolidayListsIndex({
                         <div className="flex flex-col items-center gap-2">
                           <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
                           <p className="text-sm font-medium">No matching holiday lists</p>
-                          <p className="text-xs text-muted-foreground">Try a different search or filter.</p>
+                          <p className="text-xs text-muted-foreground">{NARROWED_HINT}</p>
                         </div>
                       </TableCell>
                     </TableRow>

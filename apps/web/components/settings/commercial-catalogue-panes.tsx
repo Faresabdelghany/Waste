@@ -104,7 +104,8 @@ export function ProductsOnApiPane() {
     )
   }
 
-  const empty = emptyMessageOf(answer, "products", answer.records.length > 0)
+  const narrowed = answer.records.length > 0
+  const empty = emptyMessageOf(answer, "products", narrowed)
 
   return (
     <AssetPanelShell
@@ -156,7 +157,7 @@ export function ProductsOnApiPane() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message={empty.message} hint={empty.hint} />
+                <EmptyRow colSpan={8} message={empty.message} hint={empty.hint} narrowed={narrowed} />
               ) : (
                 pageRows.map((product) => (
                   <TableRow key={product.id}>
@@ -297,7 +298,8 @@ export function PriceListsPane() {
     )
   }
 
-  const empty = configured ? emptyMessageOf(answer, "price lists", lists.length > 0) : { message: lists.length > 0 ? "No price lists match this search." : "No price lists yet." }
+  const narrowed = lists.length > 0
+  const empty = configured ? emptyMessageOf(answer, "price lists", narrowed) : { message: narrowed ? "No price lists match this search." : "No price lists yet." }
 
   return (
     <AssetPanelShell
@@ -329,7 +331,7 @@ export function PriceListsPane() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message={empty.message} hint={empty.hint} />
+                <EmptyRow colSpan={8} message={empty.message} hint={empty.hint} narrowed={narrowed} />
               ) : (
                 pageRows.map((list) => {
                   const values = list.submittedValues ?? {}

@@ -290,7 +290,7 @@ export function MasterDataSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={kind === "waste-fraction" ? 6 : 5} message={emptyMessage} hint={emptyHint} />
+                <EmptyRow colSpan={kind === "waste-fraction" ? 6 : 5} message={emptyMessage} hint={emptyHint} narrowed={ofKind.length > 0} />
               ) : (
                 pageRows.map(({ record, detail, scope }) => (
                   <TableRow key={record.id}>

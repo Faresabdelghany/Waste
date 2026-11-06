@@ -491,7 +491,7 @@ function ProductsPane() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message="No products match this search." />
+                <EmptyRow colSpan={8} message="No products match this search." narrowed={productRecords.length > 0} />
               ) : (
                 productsPageRows.map((product) => {
                   const defaultRow = defaultRowOf(rows, product.id)
