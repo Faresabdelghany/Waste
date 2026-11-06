@@ -8,6 +8,7 @@
 // tickets grant takes one, member or not. A project's defaults name the team
 // a ticket of a kind goes to when its opener names none, one per kind,
 // replaced whole through `PUT /projects/:id/ticket-team-defaults`.
+import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TEAM_STATUSES, TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
@@ -65,19 +66,30 @@ export type TeamMembersSet = z.infer<typeof TeamMembersSet>
 export const TeamListQuery = PageRequest.extend({ status: TeamStatus.optional() })
 export type TeamListQuery = z.infer<typeof TeamListQuery>
 
-export const TicketTeamDefault = z.object({ kind: TicketKind, teamId: Id })
+/** The team a ticket of one kind, or of one Ticket Type (#548 of #544), goes to when its opener names none: exactly one of the two, the type's own winning over its kind's. */
+export const TicketTeamDefault = z.object({ kind: TicketKind.nullable(), ticketTypeId: Id.nullable(), teamId: Id })
 export type TicketTeamDefault = z.infer<typeof TicketTeamDefault>
 
-/** A project's defaults, in the vocabulary's order of kinds. */
+/** A project's defaults, in the vocabulary's order of kinds, then the types'. */
 export const TicketTeamDefaults = z.object({ projectId: Id, defaults: z.array(TicketTeamDefault) })
 export type TicketTeamDefaults = z.infer<typeof TicketTeamDefaults>
 
-/** What a set naming a kind twice is told. */
-export const EACH_KIND_ONCE = eachOnceSentence("kind", "a ticket of a kind goes to one team")
+/** What a set naming a kind or a type twice is told. */
+export const EACH_KIND_ONCE = eachOnceSentence("kind or ticket type", "a ticket goes to one team")
 
-/** `PUT /projects/:id/ticket-team-defaults`: the whole set, each kind once; a kind left out goes to no team. */
+/** `PUT /projects/:id/ticket-team-defaults`: the whole set, each kind or type once and each entry exactly one of the two; one left out goes to no team, or a type to its kind's. */
 export const TicketTeamDefaultsSet = z
-  .strictObject({ defaults: z.array(z.strictObject({ kind: TicketKind, teamId: Id })).max(TICKET_KINDS.length) })
+  .strictObject({
+    defaults: z
+      .array(z.strictObject({ kind: TicketKind.nullable().default(null), ticketTypeId: Id.nullable().default(null).describe("Null when absent: a kind's default."), teamId: Id }))
+      .max(TICKET_KINDS.length + TICKET_TYPE_SETTINGS_MAX),
+  })
   // zod 4 runs a check on a body whose fields failed: read the entries with care.
-  .refine((body) => eachOnce(body.defaults.filter((entry) => entry !== undefined).map((entry) => entry.kind)), { message: EACH_KIND_ONCE, path: ["defaults"] })
+  .superRefine((body, context) => {
+    const entries = body.defaults.filter((entry) => entry !== undefined)
+    for (const [index, entry] of body.defaults.entries()) {
+      if (entry !== undefined && (entry.kind === null) === (entry.ticketTypeId === null)) context.addIssue({ code: "custom", message: KIND_OR_TYPE, path: ["defaults", index] })
+    }
+    if (!eachOnce(entries.map(kindOrTypeKey))) context.addIssue({ code: "custom", message: EACH_KIND_ONCE, path: ["defaults"] })
+  })
 export type TicketTeamDefaultsSet = z.infer<typeof TicketTeamDefaultsSet>

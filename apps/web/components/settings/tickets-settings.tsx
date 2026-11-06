@@ -1,0 +1,49 @@
+"use client"
+
+// Settings › Tickets (#548 of #544): one page, a tab each for the ticket
+// types, the teams, the deadlines, the charges and the counting rules
+// (lib/data/tickets-settings.ts). Each tab is the pane it was, drawing the
+// page's tab strip in its own header, as Asset management's tabs do; a type's
+// own deadline, default team and charge are rows of the Deadlines, Teams and
+// Charges tabs beside its kind's. Offered on the Pilot alone.
+
+import { useState } from "react"
+
+import { CountingRulesSettings } from "@/components/settings/counting-rules-settings"
+import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
+import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
+import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
+import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TICKETS_TABS, type TicketsTab } from "@/lib/data/tickets-settings"
+
+export function TicketsSettings({ initialTab = "types" }: { initialTab?: TicketsTab }) {
+  const [tab, setTab] = useState<TicketsTab>(initialTab)
+
+  const tabs = (
+    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+      <Tabs value={tab} onValueChange={(value) => setTab(value as TicketsTab)}>
+        <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket settings">
+          {TICKETS_TABS.map((option) => (
+            <TabsTrigger key={option.value} value={option.value} className="whitespace-nowrap rounded-full px-3">
+              {option.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+    </div>
+  )
+
+  switch (tab) {
+    case "types":
+      return <TicketTypesSettings tabs={tabs} />
+    case "teams":
+      return <TicketTeamsSettings tabs={tabs} />
+    case "deadlines":
+      return <TicketSlaSettings tabs={tabs} />
+    case "charges":
+      return <TicketChargesSettings tabs={tabs} />
+    case "counting-rules":
+      return <CountingRulesSettings tabs={tabs} />
+  }
+}

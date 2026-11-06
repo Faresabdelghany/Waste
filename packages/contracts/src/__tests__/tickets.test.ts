@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { KIND_OR_TYPE } from "@waste/domain/resolution/ticket-types"
 import { TICKET_EVENT_SHAPES, ticketEventShape, ticketEventShapeIssue, type TicketEventRow } from "@waste/domain/resolution/event-shapes"
 import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind } from "@waste/domain/resolution/vocabulary"
 
@@ -397,7 +398,7 @@ describe("TicketEvent", () => {
 })
 
 describe("a project's ticket charges (#291 C3)", () => {
-  const set = { projectId: OTHER, charges: [{ kind: "missed-collection", productId: THIRD }, { kind: "container-request", productId: ID }] }
+  const set = { projectId: OTHER, charges: [{ kind: "missed-collection", ticketTypeId: null, productId: THIRD }, { kind: "container-request", ticketTypeId: null, productId: ID }] }
 
   test("are the product each ticket kind's work is charged at, a kind at most once, the set replaced whole", () => {
     assert.deepEqual(TicketChargesSet.parse(set), set)
@@ -407,6 +408,12 @@ describe("a project's ticket charges (#291 C3)", () => {
     refusesWhatTheServerOwns(TicketChargesSet, set)
     assert.deepEqual(TicketCharges.parse(set), set)
     assert.deepEqual(TicketChargesQuery.parse({ projectId: OTHER }), { projectId: OTHER })
+    // A ticket type's own charge (#548 of #544): exactly one of a kind and a type, each once; absent, a kind's.
+    assert.deepEqual(TicketChargesSet.parse({ projectId: OTHER, charges: [{ kind: "overflow", productId: ID }] }).charges[0].ticketTypeId, null)
+    const typed = { kind: null, ticketTypeId: THIRD, productId: ID }
+    assert.deepEqual(TicketChargesSet.parse({ ...set, charges: [...set.charges, typed] }).charges[2], typed)
+    assert.deepEqual(refusal(TicketChargesSet.safeParse({ ...set, charges: [{ ...typed, kind: "overflow" }] })), [{ path: "charges.0", message: KIND_OR_TYPE }])
+    assert.deepEqual(refusal(TicketChargesSet.safeParse({ ...set, charges: [typed, typed] })), [{ path: "charges", message: KIND_CHARGED_ONCE }])
     assert.deepEqual(refusal(TicketChargesQuery.safeParse({})).map((issue) => issue.path), ["projectId"])
   })
 })

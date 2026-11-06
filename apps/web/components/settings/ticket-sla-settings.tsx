@@ -8,12 +8,13 @@
 // own. The rows and the body they become are lib/data/ticket-sla.ts's. Offered
 // on the Pilot alone, in place of the fixtures' Tickets & communication.
 
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketSla } from "@waste/contracts/ticket-sla"
 import { useReport } from "@/components/insight/use-report"
+import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,11 +25,11 @@ import { useApiClient, useApiSession } from "@/components/waste/api-session-stor
 import { get, put } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
-import { isSlaRefusal, newSlaRow, SLA_KIND_OPTIONS, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
+import { typesListed } from "@/lib/data/ticket-scope"
+import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
 
-const SLA_ROWS_MAX = SLA_KIND_OPTIONS.length * SLA_PRIORITY_OPTIONS.length
-
-export function TicketSlaSettings() {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
+export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const client = useApiClient()
   const { me } = useApiSession()
   const projects = me?.projects ?? []
@@ -44,6 +45,10 @@ export function TicketSlaSettings() {
   const [edits, setEdits] = useState<{ base: TicketSla; rows: SlaRow[] } | null>(null)
   const editing = edits !== null && edits.base === base
   const rows = base === null ? [] : editing ? edits.rows : slaRowsOf(base)
+  // Every kind, each kind, and each type (#548 of #544): the active ones, and any the saved set names.
+  const types = useTicketTypeChoices()
+  const scopeOptions = slaScopeOptions(typesListed(types, base === null ? [] : typesNamedBy(base)))
+  const rowsMax = scopeOptions.length * SLA_PRIORITY_OPTIONS.length
   const [refusal, setRefusal] = useState<SlaRefusal | null>(null)
   const [saving, setSaving] = useState(false)
   const minted = useRef(0)
@@ -91,7 +96,8 @@ export function TicketSlaSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
+      heading="Tickets"
+      tabs={tabs}
       title="Ticket SLA"
       description="How long a ticket has from opening to its due date, by priority, for every kind or for one kind."
       action={
@@ -133,7 +139,7 @@ export function TicketSlaSettings() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" disabled={!access.edit || base === null || rows.length >= SLA_ROWS_MAX} onClick={addRow}>
+          <Button variant="outline" size="sm" disabled={!access.edit || base === null || rows.length >= rowsMax} onClick={addRow}>
             <Plus className="h-4 w-4" weight="bold" />
             Add target
           </Button>
@@ -149,7 +155,7 @@ export function TicketSlaSettings() {
           <Table className="min-w-[640px]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead>Kind</TableHead>
+                <TableHead>Kind or type</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Due within</TableHead>
                 <TableHead className="w-16" />
@@ -169,7 +175,7 @@ export function TicketSlaSettings() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {SLA_KIND_OPTIONS.map((option) => (
+                            {scopeOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                               </SelectItem>

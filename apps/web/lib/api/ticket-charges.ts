@@ -1,5 +1,5 @@
 // A project's ticket charges through the client (#291 C3): Settings ›
-// Commercial › Ticket charges' read and the replacement of its set. The set
+// Tickets › Charges' read and the replacement of its set (#548 of #544). The set
 // is a project's configuration and no row of a workspace's table, so it is no
 // switched module: the pane asks the client itself, as Run billing's preview
 // does.

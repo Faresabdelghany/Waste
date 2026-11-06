@@ -11,7 +11,7 @@
 // alone; a ticket's form offers a type's fields once the type is picked.
 // Offered on the Pilot alone, beside the Ticket teams.
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -66,7 +66,8 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 
-export function TicketTypesSettings() {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
+export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const configured = useApiConfigured()
   const { me } = useApiSession()
   const access = ticketTypesAccessOf(me?.role.grants)
@@ -121,7 +122,8 @@ export function TicketTypesSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
+      heading="Tickets"
+      tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
       toolbar={<p className="text-sm text-muted-foreground">A ticket opened by its kind alone — by a driver, the worker or a work order — is of the kind&apos;s default type.</p>}

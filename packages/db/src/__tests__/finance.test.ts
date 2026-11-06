@@ -740,7 +740,9 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       const refused = (values: Partial<typeof ticketKindProduct.$inferInsert>, code: string, constraint: RegExp, why: string) =>
         assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketKindProduct).values(charge({ id: a.other, ...values }))), refusedWith(code, constraint), why)
       await tx.insert(ticketKindProduct).values(charge({}))
-      await refused({}, "23505", /ticket_kind_product_project_id_ticket_kind_key/, "a kind charged twice in a project")
+      await refused({}, "23505", /ticket_kind_product_project_id_ticket_kind_ticket_type_id_key/, "a kind charged twice in a project")
+      // A charge names a kind or a ticket type, exactly one (#548 of #544).
+      await refused({ ticketKind: null }, "23514", /ticket_kind_product_kind_or_type_exactly_one/, "a charge of nothing")
       await refused({ ticketKind: "rescheduling" }, "23514", /ticket_kind_product_ticket_kind_one_of/, "a kind outside the vocabulary")
       await refused({ ticketKind: "complaint", productId: a.harborProduct }, "23503", /ticket_kind_product_product_id_fk/, "another project's product")
       // The same kind in another project is that project's charge.

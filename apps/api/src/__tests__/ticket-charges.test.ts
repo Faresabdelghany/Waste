@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { TicketType } from "@waste/contracts/ticket-types"
 import { CHARGE_WITH_A_BILLABLE_RESOLUTION, KIND_CHARGED_ONCE, Ticket, TicketCharges } from "@waste/contracts/tickets"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
@@ -10,7 +11,8 @@ import { and, desc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { NOT_A_PRODUCT } from "../routes/references"
-import { unofferedProduct } from "../routes/statuses"
+import { retiredTicketType, unofferedProduct } from "../routes/statuses"
+import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
 import { MONTH_PRODUCT_IS_NOT_TICKET_WORK } from "../routes/ticket-charges"
 import { seedBilling, ticketEvent, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -63,8 +65,9 @@ describe("ticket work priced (#291 C3)", { skip: database.skip || owner.skip }, 
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return TicketCharges.parse(await response.json())
   }
-  const put = (set: { kind: string; productId: string }[], projectId = copenhagen) => olivia("/ticket-charges", { method: "PUT", body: { projectId, charges: set } })
-  const replaced = async (set: { kind: string; productId: string }[]): Promise<TicketCharges> => {
+  type Charge = { kind?: string | null; ticketTypeId?: string | null; productId: string }
+  const put = (set: Charge[], projectId = copenhagen) => olivia("/ticket-charges", { method: "PUT", body: { projectId, charges: set } })
+  const replaced = async (set: Charge[]): Promise<TicketCharges> => {
     const response = await put(set)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return TicketCharges.parse(await response.json())
@@ -85,7 +88,7 @@ describe("ticket work priced (#291 C3)", { skip: database.skip || owner.skip }, 
       { kind: "overflow", productId: fx.products.bulky.id },
       { kind: "missed-collection", productId: fx.products.residual.id },
     ])
-    assert.deepEqual(set.charges, [{ kind: "missed-collection", productId: fx.products.residual.id }, { kind: "overflow", productId: fx.products.bulky.id }], "in the kinds' order")
+    assert.deepEqual(set.charges, [{ kind: "missed-collection", ticketTypeId: null, productId: fx.products.residual.id }, { kind: "overflow", ticketTypeId: null, productId: fx.products.bulky.id }], "in the kinds' order")
     assert.deepEqual(await charges(), set)
 
     assert.deepEqual((await refused(await put([{ kind: "overflow", productId: rental }]), 400)).errors, [{ path: "charges.0.productId", message: MONTH_PRODUCT_IS_NOT_TICKET_WORK }])
@@ -102,12 +105,28 @@ describe("ticket work priced (#291 C3)", { skip: database.skip || owner.skip }, 
         { kind: "overflow", productId: fx.products.bulky.id },
         { kind: "container-request", productId: fx.products.residual.id },
       ])
-      assert.deepEqual(restated.charges, [{ kind: "overflow", productId: fx.products.bulky.id }, { kind: "container-request", productId: fx.products.residual.id }], "missed-collection left out, container-request added")
+      assert.deepEqual(restated.charges, [{ kind: "overflow", ticketTypeId: null, productId: fx.products.bulky.id }, { kind: "container-request", ticketTypeId: null, productId: fx.products.residual.id }], "missed-collection left out, container-request added")
       assert.equal((await refused(await put([{ kind: "container-request", productId: fx.products.bulky.id }]), 409)).detail, unofferedProduct("inactive"), "moved onto the retired product")
     } finally {
       await retire(fx.products.bulky.id, "active")
     }
     assert.deepEqual((await replaced([])).charges, [], "an empty set charges no kind")
+  })
+
+  test("a ticket type may have its own charge beside its kind's (#548 of #544): answered after the kinds, the type the company's and, named afresh, active", async () => {
+    const crane = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Crane overflow", kind: "overflow" } }), TicketType)
+    const set = await replaced([
+      { ticketTypeId: crane.id, productId: fx.products.residual.id },
+      { kind: "overflow", productId: fx.products.bulky.id },
+    ])
+    assert.deepEqual(set.charges, [
+      { kind: "overflow", ticketTypeId: null, productId: fx.products.bulky.id },
+      { kind: null, ticketTypeId: crane.id, productId: fx.products.residual.id },
+    ])
+    assert.deepEqual((await refused(await put([{ ticketTypeId: copenhagen, productId: fx.products.bulky.id }]), 400)).errors, [{ path: "charges.0.ticketTypeId", message: NOT_A_TICKET_TYPE }])
+    const old = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Old overflow", kind: "overflow", status: "inactive" } }), TicketType)
+    assert.equal((await refused(await put([{ ticketTypeId: old.id, productId: fx.products.bulky.id }]), 409)).detail, retiredTicketType("Old overflow"))
+    assert.deepEqual((await replaced([])).charges, [])
   })
 
   test("complete names the product the work is charged at — with a re-collection or a service alone, the project's, never one sold by the month, offered — and reopen clears it", async () => {

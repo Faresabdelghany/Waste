@@ -9,7 +9,7 @@ import { SLA_TARGET_ONCE, TicketSlaSet, type TicketSla } from "@waste/contracts/
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { EVERY_KIND, HOURS_SENTENCE, newSlaRow, ONCE_SENTENCE, SLA_KIND_OPTIONS, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, type SlaRow } from "../ticket-sla"
+import { EVERY_KIND, HOURS_SENTENCE, newSlaRow, ONCE_SENTENCE, SLA_KIND_OPTIONS, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaScopeOptions, typesNamedBy, type SlaRow } from "../ticket-sla"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -17,8 +17,8 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const sla: TicketSla = {
   projectId: ID,
   targets: [
-    { id: ID, kind: null, priority: "high", hours: 24 },
-    { id: OTHER, kind: "overflow", priority: "high", hours: 4 },
+    { id: ID, kind: null, ticketTypeId: null, priority: "high", hours: 24 },
+    { id: OTHER, kind: "overflow", ticketTypeId: null, priority: "high", hours: 4 },
   ],
 }
 
@@ -47,10 +47,32 @@ describe("the rows", () => {
   })
 })
 
+describe("a type's own target (#548 of #544)", () => {
+  const BULKY = "01a0d3a5-e5e0-7000-8000-0000000000b1"
+  const typed: TicketSla = { projectId: ID, targets: [...sla.targets, { id: BULKY, kind: null, ticketTypeId: BULKY, priority: "high", hours: 72 }] }
+
+  test("is a row whose picker value is the type's, offered after the kinds, and goes back as the type", () => {
+    const rows = slaRowsOf(typed)
+    assert.deepEqual(rows[2], row(`type:${BULKY}`, "high", "72", BULKY))
+    assert.deepEqual(typesNamedBy(typed), [BULKY])
+    const options = slaScopeOptions([{ id: BULKY, name: "Bulky waste collection", kind: "container-request", status: "active" }])
+    assert.deepEqual(options.at(-1), { value: `type:${BULKY}`, label: "Bulky waste collection (Container request)" })
+    const body = slaBodyOf(rows)
+    assert.ok(!("index" in body))
+    assert.deepEqual(body.targets[2], { kind: null, ticketTypeId: BULKY, priority: "high", hours: 72 })
+    assert.ok(TicketSlaSet.safeParse(body).success)
+  })
+
+  test("a type and its kind at one priority are two targets; the type twice is refused", () => {
+    assert.ok(!("index" in slaBodyOf([row("container-request", "high", "24"), row(`type:${BULKY}`, "high", "72")])))
+    assert.deepEqual(slaBodyOf([row(`type:${BULKY}`, "high", "72"), row(`type:${BULKY}`, "high", "48", "again")]), { index: 1, field: "kind", message: ONCE_SENTENCE })
+  })
+})
+
 describe("the body", () => {
   test("is the rows as the API takes them: every kind as null, the hours as a number, the row's key the client's alone", () => {
     const body = slaBodyOf([row(EVERY_KIND, "high", "24"), row("overflow", "high", " 4 ")])
-    assert.deepEqual(body, { targets: [{ kind: null, priority: "high", hours: 24 }, { kind: "overflow", priority: "high", hours: 4 }] })
+    assert.deepEqual(body, { targets: [{ kind: null, ticketTypeId: null, priority: "high", hours: 24 }, { kind: "overflow", ticketTypeId: null, priority: "high", hours: 4 }] })
     assert.ok(TicketSlaSet.safeParse(body).success, "the contracts take it")
     assert.deepEqual(slaBodyOf([]), { targets: [] }, "no rows: the project without an SLA")
   })

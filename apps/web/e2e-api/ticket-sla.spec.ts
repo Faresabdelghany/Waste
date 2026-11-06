@@ -43,7 +43,7 @@ test("the office sets a project's SLA in Settings, a ticket opened without a due
     await overflow.getByRole("textbox", { name: "Hours" }).fill("4")
     const [saved] = await Promise.all([answerOf(page, "PUT", `/projects/${project.id}/ticket-sla`), pane.getByRole("button", { name: "Save SLA" }).click()])
     expect(saved.status(), await saved.text()).toBe(200)
-    expect(saved.request().postDataJSON()).toEqual({ targets: [{ kind: null, priority: "high", hours: 24 }, { kind: "overflow", priority: "high", hours: 4 }] })
+    expect(saved.request().postDataJSON()).toEqual({ targets: [{ kind: null, ticketTypeId: null, priority: "high", hours: 24 }, { kind: "overflow", ticketTypeId: null, priority: "high", hours: 4 }] })
     await expect(toasts(page)).toContainText(`${project.name} has 2 targets.`)
 
     // The office opens an overflow at High with no due date: the API gives it the kind's four hours.

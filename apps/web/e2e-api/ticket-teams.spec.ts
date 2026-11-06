@@ -43,7 +43,7 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     await pick(pane.getByRole("row", { name: "Complaint" }), page, "Team for Complaint", name)
     const [saved] = await Promise.all([answerOf(page, "PUT", `/projects/${project.id}/ticket-team-defaults`), pane.getByRole("button", { name: "Save defaults" }).click()])
     expect(saved.status(), await saved.text()).toBe(200)
-    expect((saved.request().postDataJSON() as Pick<Defaults, "defaults">).defaults).toContainEqual({ kind: "complaint", teamId: team.id })
+    expect((saved.request().postDataJSON() as Pick<Defaults, "defaults">).defaults).toContainEqual({ kind: "complaint", ticketTypeId: null, teamId: team.id })
     await expect(toasts(page)).toContainText("Default teams saved")
 
     // A complaint opened without a team waits with the project's default for the kind.

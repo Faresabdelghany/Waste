@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Bell,
-  Calculator,
   CalendarBlank,
   CalendarCheck,
   Couch,
@@ -25,7 +24,6 @@ import {
   SquaresFour,
   Tag,
   Ticket,
-  Timer,
   EnvelopeSimple,
   UserCircle,
   UsersThree,
@@ -60,10 +58,7 @@ import { NotificationsSettingsOnApi } from "@/components/settings/notifications-
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
 import { MessageTemplatesSettings } from "@/components/settings/message-templates-settings"
-import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
-import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
-import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
-import { CountingRulesSettings } from "@/components/settings/counting-rules-settings"
+import { TicketsSettings } from "@/components/settings/tickets-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
@@ -72,10 +67,7 @@ import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
-import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
-import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
-import { TICKET_TYPES_SETTINGS_PANE_ID } from "@/lib/data/ticket-types"
-import { COUNTING_RULES_SETTINGS_PANE_ID } from "@/lib/data/counting-rules"
+import { TICKETS_SETTINGS_PANE_ID, ticketsTabOf, type TicketsTab } from "@/lib/data/tickets-settings"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -180,14 +172,8 @@ const settingsSections: Array<{
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       // Offered in fixture mode only: on the Pilot the Ticket SLA takes its place (lib/data/settings-panes.ts).
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
-      // A project's ticket SLA on the API (O4 of #290): offered with the adapter configured.
-      { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
-      // The ticket teams on the API (O30 of #290): offered with the adapter configured.
-      { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
-      // The company's ticket types, their fields and status permissions on the API (#545 of #544): offered with the adapter configured.
-      { id: TICKET_TYPES_SETTINGS_PANE_ID, label: "Ticket types", icon: Ticket },
-      // The company's counting rules on the API (#547 of #544): the emptyings counted per property and period, simulated before they are switched on; offered with the adapter configured.
-      { id: COUNTING_RULES_SETTINGS_PANE_ID, label: "Counting rules", icon: Calculator },
+      // Everything about tickets on the API, a tab each (#548 of #544): the types, the teams, the deadlines, the charges and the counting rules; offered with the adapter configured.
+      { id: TICKETS_SETTINGS_PANE_ID, label: "Tickets", icon: Ticket },
       // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
     ],
@@ -214,7 +200,6 @@ const settingsSections: Array<{
     items: [
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
-      { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
       // A project's Visit Rules for its recycling centres on the API (#393): offered with the adapter configured.
       { id: VISIT_RULES_SETTINGS_PANE_ID, label: "Recycling-centre charges", icon: Recycle },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
@@ -1277,19 +1262,9 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing.",
     groups: [],
   },
-  [TICKET_SLA_SETTINGS_PANE_ID]: {
-    title: "Ticket SLA",
-    description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
-    groups: [],
-  },
-  [TICKET_TEAMS_SETTINGS_PANE_ID]: {
-    title: "Ticket teams",
-    description: "The teams the company's tickets wait with, and each project's default team per kind.",
-    groups: [],
-  },
-  [TICKET_TYPES_SETTINGS_PANE_ID]: {
-    title: "Ticket types",
-    description: "The company's own types of case, each inside one kind, with the fields the office fills in and the roles that may move each status.",
+  [TICKETS_SETTINGS_PANE_ID]: {
+    title: "Tickets",
+    description: "Everything about the company's tickets in one place: its types, their teams, deadlines and charges, and the counting rules that open tickets.",
     groups: [],
   },
   [FINANCE_ON_API_SETTINGS_PANE_ID]: {
@@ -1376,11 +1351,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The sellable catalogue — add and edit products here. Prices are managed in Price Engine.",
     groups: [],
   },
-  "commercial-ticket-charges": {
-    title: "Ticket charges",
-    description: "The product each ticket kind's re-collection or service is charged at when its completion names none (#291 C3).",
-    groups: [],
-  },
   [VISIT_RULES_SETTINGS_PANE_ID]: {
     title: "Recycling-centre charges",
     description: "How a project's recycling-centre visits are charged: a household's free visits a year and the ladder after them, the free fractions, a business's visit and the likely-trade threshold (#393).",
@@ -1423,9 +1393,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
-    paneId === TICKET_SLA_SETTINGS_PANE_ID ||
-    paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
-    paneId === TICKET_TYPES_SETTINGS_PANE_ID ||
+    paneId === TICKETS_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ||
@@ -1752,6 +1720,7 @@ export function SettingsWorkspace({
           <SettingsPane
             definition={profile !== null && activeItemId === "account" ? withSignedInProfile(activePane, profile) : activePane}
             paneId={activeItemId}
+            ticketsTab={ticketsTabOf(initialPaneId)}
             profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
@@ -1768,6 +1737,7 @@ export function SettingsWorkspace({
 function SettingsPane({
   definition,
   paneId,
+  ticketsTab,
   profile,
   values,
   dirtyControlIds,
@@ -1777,6 +1747,8 @@ function SettingsPane({
 }: {
   definition: SettingsPaneDefinition
   paneId: string
+  /** The tab Settings › Tickets opens at: the one a link to a pane it took the place of names (#548 of #544). */
+  ticketsTab: TicketsTab
   /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
   profile: AccountProfile | null
   values: Record<string, SettingValue>
@@ -1843,14 +1815,8 @@ function SettingsPane({
         <HolidayListsSettings />
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
-      ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
-        <TicketSlaSettings />
-      ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
-        <TicketTeamsSettings />
-      ) : paneId === TICKET_TYPES_SETTINGS_PANE_ID ? (
-        <TicketTypesSettings />
-      ) : paneId === COUNTING_RULES_SETTINGS_PANE_ID ? (
-        <CountingRulesSettings />
+      ) : paneId === TICKETS_SETTINGS_PANE_ID ? (
+        <TicketsSettings initialTab={ticketsTab} />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (

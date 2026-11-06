@@ -1,30 +1,40 @@
-// A ticket's SLA (O4 of #290): the target a project gives a kind and a
-// priority, the due date opening sets from it, and what a ticket's due date
+// A ticket's SLA (O4 of #290): the target a project gives a kind, or a
+// ticket type (#548 of #544), and a priority, the due date opening sets from it, and what a ticket's due date
 // reads as at an instant — overdue, due, met, breached or none.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { duplicateSlaTarget, dueBySla, slaStateOf, slaTargetFor, slaTargetKey, SLA_STATES, TICKET_SLA_HOURS_MAX, type SlaTarget } from "../sla"
 
+const BULKY = "01a0d3a5-e5e0-7000-8000-000000000b01"
 const targets: SlaTarget[] = [
-  { kind: null, priority: "high", hours: 24 },
-  { kind: "overflow", priority: "high", hours: 4 },
-  { kind: null, priority: "low", hours: 168 },
+  { kind: null, ticketTypeId: null, priority: "high", hours: 24 },
+  { kind: "overflow", ticketTypeId: null, priority: "high", hours: 4 },
+  { kind: null, ticketTypeId: null, priority: "low", hours: 168 },
+  { kind: null, ticketTypeId: BULKY, priority: "high", hours: 72 },
 ]
+const overflow = { kind: "overflow" as const, ticketTypeId: null }
+const complaint = { kind: "complaint" as const, ticketTypeId: null }
 
 describe("the target a ticket is due by", () => {
   test("the kind's own target at the priority beats the one for every kind", () => {
-    assert.equal(slaTargetFor(targets, "overflow", "high")?.hours, 4)
+    assert.equal(slaTargetFor(targets, overflow, "high")?.hours, 4)
+  })
+
+  test("a type's own target at the priority beats its kind's and every kind's; where it has none, its kind's applies (#548 of #544)", () => {
+    assert.equal(slaTargetFor(targets, { kind: "overflow", ticketTypeId: BULKY }, "high")?.hours, 72)
+    assert.equal(slaTargetFor(targets, { kind: "overflow", ticketTypeId: BULKY }, "low")?.hours, 168)
+    assert.equal(slaTargetFor(targets, { kind: "overflow", ticketTypeId: "01a0d3a5-e5e0-7000-8000-000000000b02" }, "high")?.hours, 4)
   })
 
   test("a kind with no target of its own takes the one for every kind at the priority", () => {
-    assert.equal(slaTargetFor(targets, "complaint", "high")?.hours, 24)
-    assert.equal(slaTargetFor(targets, "overflow", "low")?.hours, 168)
+    assert.equal(slaTargetFor(targets, complaint, "high")?.hours, 24)
+    assert.equal(slaTargetFor(targets, overflow, "low")?.hours, 168)
   })
 
   test("a priority the project sets no target for has none", () => {
-    assert.equal(slaTargetFor(targets, "overflow", "critical"), undefined)
-    assert.equal(slaTargetFor([], "complaint", "none"), undefined)
+    assert.equal(slaTargetFor(targets, overflow, "critical"), undefined)
+    assert.equal(slaTargetFor([], complaint, "none"), undefined)
   })
 
   test("the due date is when the issue or request happened plus the hours, on the wall clock", () => {
@@ -40,13 +50,15 @@ describe("the target a ticket is due by", () => {
 describe("a set of targets names a kind and a priority once", () => {
   test("the first entry repeating one before it, by its index", () => {
     assert.equal(duplicateSlaTarget(targets), undefined)
-    assert.equal(duplicateSlaTarget([...targets, { kind: "overflow", priority: "high", hours: 8 }]), 3)
+    assert.equal(duplicateSlaTarget([...targets, { kind: "overflow", ticketTypeId: null, priority: "high", hours: 8 }]), 4)
+    assert.equal(duplicateSlaTarget([...targets, { kind: null, ticketTypeId: BULKY, priority: "high", hours: 8 }]), 4)
     assert.equal(duplicateSlaTarget([{ kind: null, priority: "low", hours: 1 }, { kind: null, priority: "low", hours: 2 }]), 1)
   })
 
-  test("a target is named by its kind, every kind as the empty kind, and its priority", () => {
-    assert.equal(slaTargetKey({ kind: null, priority: "high" }), ":high")
-    assert.equal(slaTargetKey({ kind: "overflow", priority: "high" }), "overflow:high")
+  test("a target is named by its kind or its type, every kind as the empty kind, and its priority", () => {
+    assert.equal(slaTargetKey({ kind: null, priority: "high" }), "::high")
+    assert.equal(slaTargetKey({ kind: "overflow", ticketTypeId: null, priority: "high" }), "overflow::high")
+    assert.equal(slaTargetKey({ kind: null, ticketTypeId: BULKY, priority: "high" }), `:${BULKY}:high`)
   })
 
   test("every kind and one kind at the same priority are two targets", () => {

@@ -1,4 +1,5 @@
 // A project's ticket charges (#291 C3): the product each ticket kind's work
+// — or since #548 of #544 one ticket type's, whose own wins over its kind's —
 // is charged at when a completion names none, read and replaced whole as the
 // project's set under the Products module, since it is the catalogue's word
 // on what the work costs. The Finance consumer reads it when a completed
@@ -18,6 +19,7 @@ import { product } from "@waste/db/schema/catalogue"
 import { ticketKindProduct } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
+import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -31,6 +33,7 @@ import { describeProblem, invalidRequest, validate } from "../problem"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { describeJson, lockRow } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
+import { requireSetTypes } from "./ticket-type-rules"
 
 const MODULE = "commercial.products"
 
@@ -53,14 +56,21 @@ export async function requireTicketWorkProduct(tx: Tx, scope: Scope, id: string,
   return found.status as ProductStatus
 }
 
-/** A project's charges, in the kinds' order. */
-async function chargesOf(tx: Tx, scope: Scope): Promise<TicketCharges> {
+/** A project's charge rows, with their ids. */
+async function chargeRowsOf(tx: Tx, scope: Scope): Promise<(TicketCharge & { id: string })[]> {
   const rows = await tx
-    .select({ kind: ticketKindProduct.ticketKind, productId: ticketKindProduct.productId })
+    .select({ id: ticketKindProduct.id, kind: ticketKindProduct.ticketKind, ticketTypeId: ticketKindProduct.ticketTypeId, productId: ticketKindProduct.productId })
     .from(ticketKindProduct)
     .where(and(eq(ticketKindProduct.companyId, scope.companyId), eq(ticketKindProduct.projectId, scope.projectId)))
-  const order = (kind: string) => TICKET_KINDS.indexOf(kind as TicketKind)
-  const charges: TicketCharge[] = rows.map((row) => ({ kind: row.kind as TicketKind, productId: row.productId })).sort((a, b) => order(a.kind) - order(b.kind))
+  return rows.map((row) => ({ ...row, kind: row.kind as TicketKind | null }))
+}
+
+/** A project's charges, in the kinds' order, then the types' by id. */
+async function chargesOf(tx: Tx, scope: Scope): Promise<TicketCharges> {
+  const order = (charge: TicketCharge) => (charge.ticketTypeId !== null ? TICKET_KINDS.length : TICKET_KINDS.indexOf(charge.kind as TicketKind))
+  const charges: TicketCharge[] = (await chargeRowsOf(tx, scope))
+    .map(({ id: _id, ...charge }) => charge)
+    .sort((a, b) => order(a) - order(b) || (a.ticketTypeId ?? "").localeCompare(b.ticketTypeId ?? ""))
   return { projectId: scope.projectId, charges }
 }
 
@@ -101,13 +111,13 @@ export function ticketChargeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putTicketCharges",
         summary: "Replace a project's ticket charges",
         description:
-          "Replaces the project's whole set of charges with the body's: a kind the body leaves out is charged at nothing afterwards, and an empty list charges no kind. Each kind once (400 on `charges`); each product a product of the project (400 at `charges.N.productId`, `Not a product of this project`), never one sold by the month — a recurring charge, not a ticket's work (400, `A product sold by the month is a recurring charge; a ticket's work is charged per job or per pickup`) — and offered (409, `The product is inactive; …`) on a charge that is new or names another product than it did; a charge restated as it stands is no new reference and is not gated. Under the project's row lock, so two replacements take turns. Events already recorded keep their product. Every row written is audited under the request's principal, a set of its project.",
+          "Replaces the project's whole set of charges with the body's: a kind the body leaves out is charged at nothing afterwards, a ticket type at its kind's (#548 of #544), and an empty list charges nothing. Each charge names a kind or a type, exactly one (400 at `charges.N`), each once (400 on `charges`); a type is one of this company's (400 at `charges.N.ticketTypeId`) and, where the set names it afresh, active (409); each product a product of the project (400 at `charges.N.productId`, `Not a product of this project`), never one sold by the month — a recurring charge, not a ticket's work (400, `A product sold by the month is a recurring charge; a ticket's work is charged per job or per pickup`) — and offered (409, `The product is inactive; …`) on a charge that is new or names another product than it did; a charge restated as it stands is no new reference and is not gated. Under the project's row lock, so two replacements take turns. Events already recorded keep their product. Every row written is audited under the request's principal, a set of its project.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project's charges as they now stand.", TicketCharges),
           400: describeProblem("The body names a member the command does not take, a kind twice, a project this account does not work in, a product that is not the project's, or a product sold by the month."),
           ...problems("edit"),
-          409: describeProblem("A new or changed charge names a product that is not offered."),
+          409: describeProblem("A new or changed charge names a product that is not offered, or a ticket type the set names afresh is retired."),
         },
       }),
       guard,
@@ -120,21 +130,23 @@ export function ticketChargeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireProject(principal, body.projectId)
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         await lockRow(tx, project, { companyId: scope.companyId, id: scope.projectId })
-        const current = new Map((await chargesOf(tx, scope)).charges.map((charge) => [charge.kind, charge.productId]))
-        // The 400s in body order, then the gate on what is new or changed.
+        const current = new Map((await chargeRowsOf(tx, scope)).map((charge) => [kindOrTypeKey(charge), charge]))
+        // The 400s in body order — the types', then the products' — then the gates on what is new or changed.
+        const refuseRetiredTypes = await requireSetTypes(tx, scope.companyId, body.charges, "charges", new Set([...current.values()].flatMap((charge) => (charge.ticketTypeId === null ? [] : [charge.ticketTypeId]))))
         const statuses = new Map<string, ProductStatus>()
-        for (const [index, charge] of body.charges.entries()) statuses.set(charge.kind, await requireTicketWorkProduct(tx, scope, charge.productId, `charges.${index}.productId`))
-        for (const charge of body.charges) if (current.get(charge.kind) !== charge.productId) refuseUnofferedProduct(statuses.get(charge.kind))
+        for (const [index, charge] of body.charges.entries()) statuses.set(kindOrTypeKey(charge), await requireTicketWorkProduct(tx, scope, charge.productId, `charges.${index}.productId`))
+        for (const charge of body.charges) if (current.get(kindOrTypeKey(charge))?.productId !== charge.productId) refuseUnofferedProduct(statuses.get(kindOrTypeKey(charge)))
+        refuseRetiredTypes()
 
-        const named = new Set(body.charges.map((charge) => charge.kind as string))
-        const leftOut = [...current.keys()].filter((kind) => !named.has(kind))
+        const named = new Set(body.charges.map(kindOrTypeKey))
+        const leftOut = [...current.entries()].filter(([key]) => !named.has(key)).map(([, charge]) => charge.id)
         const fenced = and(eq(ticketKindProduct.companyId, scope.companyId), eq(ticketKindProduct.projectId, scope.projectId))
-        if (leftOut.length > 0) await tx.delete(ticketKindProduct).where(and(fenced, inArray(ticketKindProduct.ticketKind, leftOut)))
+        if (leftOut.length > 0) await tx.delete(ticketKindProduct).where(and(fenced, inArray(ticketKindProduct.id, leftOut)))
         for (const charge of body.charges) {
-          const before = current.get(charge.kind)
-          if (before === charge.productId) continue
-          if (before === undefined) await tx.insert(ticketKindProduct).values({ id: newId(), ...scope, ticketKind: charge.kind, productId: charge.productId })
-          else await tx.update(ticketKindProduct).set({ productId: charge.productId }).where(and(fenced, eq(ticketKindProduct.ticketKind, charge.kind)))
+          const before = current.get(kindOrTypeKey(charge))
+          if (before?.productId === charge.productId) continue
+          if (before === undefined) await tx.insert(ticketKindProduct).values({ id: newId(), ...scope, ticketKind: charge.kind, ticketTypeId: charge.ticketTypeId, productId: charge.productId })
+          else await tx.update(ticketKindProduct).set({ productId: charge.productId }).where(and(fenced, eq(ticketKindProduct.id, before.id)))
         }
         return c.json(await chargesOf(tx, scope))
       },
