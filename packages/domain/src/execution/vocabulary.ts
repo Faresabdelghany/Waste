@@ -44,8 +44,7 @@
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
-// vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
-// vehicle's walk-round before or during the day (O13 of #290), and
+// vehicle was while the session ran (O8 of #290), and
 // `record-fill`, how full a stop's container was (M23 of #293), and
 // `record-volume`, the litres a tank was emptied of (M11 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
@@ -89,7 +88,7 @@ export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-fill", "record-volume"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "record-fill", "record-volume"] as const
 /** How full a container was when the driver emptied it (M23 of #293): the driver's estimate by eye, a quarter at a time, and past full. What right-sizing reads. */
 export const FILL_LEVELS = ["empty", "quarter", "half", "three-quarters", "full", "overflowing"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */
@@ -160,14 +159,13 @@ export const OFFICE_STOP_SERVICES = ["empty", "deliver", "remove", "swap", "repa
 export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
 
 /**
- * The work orders a project prices (M14 of #293): every office service but an
- * emptying, which is a collection and priced as a pickup is. A project names
- * the `job` product each one bills (`work_order_product`); a value beside the
- * lists, like the office's services it is drawn from.
+ * The office's work orders (O3 of #290): every office service but an
+ * emptying, which is a collection, and a bulky collection, which is a
+ * booking's. A value beside the lists, like the office's services it is drawn
+ * from.
  */
 export const WORK_ORDER_SERVICES = ["deliver", "remove", "swap", "repair", "wash"] as const satisfies readonly OfficeStopService[]
 export type WorkOrderService = (typeof WORK_ORDER_SERVICES)[number]
-export const isWorkOrderService = (service: PickupService): service is WorkOrderService => (WORK_ORDER_SERVICES as readonly PickupService[]).includes(service)
 
 /**
  * The codes the office may give a cancel (O5 of #290): every one but

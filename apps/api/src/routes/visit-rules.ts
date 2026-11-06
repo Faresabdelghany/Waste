@@ -1,5 +1,5 @@
 // A project's Visit Rules (Issue #393, M4 of #293), under
-// `commercial.products` as its ticket and work order charges are: how its
+// `commercial.products` as its ticket charges are: how its
 // recycling centres' visits are charged (@waste/domain/visits/charges).
 //
 // A rule is effective-dated (ADR-0005), one in force per project at a time

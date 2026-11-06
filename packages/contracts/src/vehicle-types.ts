@@ -16,15 +16,10 @@
 // the way a property's parties are; a create may carry the set it starts
 // with, a patch never does. The set body is bounded and distinct, the
 // resource unbounded, since a set already stored has to read back however
-// long it grew. Since M10 of #293 it carries its consumption by fuel too, a
-// set of its own replaced through `PUT /vehicle-types/:id/consumption`
-// (@waste/contracts/emissions), and since O13 of #290 its pre-trip checklist,
-// replaced through `PUT /vehicle-types/:id/checklist` (@waste/contracts/pre-trip).
+// long it grew.
 import * as z from "zod"
 
-import { VehicleTypeConsumption } from "./emissions"
 import { Id } from "./ids"
-import { ChecklistItem } from "./pre-trip"
 import { PageRequest } from "./pagination"
 import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
@@ -50,10 +45,6 @@ export const VehicleType = z.object({
   description: Paragraph.nullable(),
   /** The container types a vehicle of this type may service, by id; replaced whole through its own route. */
   containerTypeIds: ContainerTypeIds,
-  /** What a vehicle of this type burns of each fuel it may run on, one per fuel; replaced whole through its own route. */
-  consumption: z.array(VehicleTypeConsumption),
-  /** What a driver checks on a vehicle of this type before the day, in order; replaced whole through its own route. */
-  checklist: z.array(ChecklistItem),
 })
 export type VehicleType = z.infer<typeof VehicleType>
 

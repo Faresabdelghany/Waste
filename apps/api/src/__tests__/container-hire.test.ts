@@ -12,8 +12,8 @@
 // and the days; October again mints nothing, a run over November before it
 // has ended is refused, and once ended November alone; a blocked
 // hire is repriced as the run priced it, a hire product keeps its day, and a
-// work order's job blocked for its product takes one sold by the job, priced
-// on the office's ad-hoc route under no scheme. Skipped with the
+// job blocked for its price is priced again on the office's ad-hoc route
+// under no scheme, held where its project holds its jobs. Skipped with the
 // reason when `DATABASE_URL` or `DATABASE_ADMIN_URL` is unset, failed under
 // `REQUIRE_DATABASE`.
 import assert from "node:assert/strict"
@@ -37,7 +37,6 @@ import { HELD_FOR_REVIEW } from "@waste/db/commands/billable-writes"
 import { createApp } from "../app"
 import { FREE_DAYS_KEEP_THE_DAY } from "../routes/products"
 import { MONTH_PRODUCT_IS_NOT_TICKET_WORK } from "../routes/ticket-charges"
-import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
 import { seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -297,24 +296,6 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     assert.deepEqual((await readProblem(charged)).errors, [{ path: "charges.0.productId", message: MONTH_PRODUCT_IS_NOT_TICKET_WORK }])
   })
 
-  test("a work order's job blocked for its product takes one sold by the job, and is priced on the office's ad-hoc route, which has no scheme", async () => {
-    const adHoc = { route: testId(), pickup: testId(), event: testId() }
-    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-      await tx.insert(route).values({ id: adHoc.route, companyId: a.companyId, projectId: copenhagen, routeSchemeId: null, collectionGroupId: null, serviceDate: ex.day, operatingDate: ex.day, status: "planned", number: 990_001 })
-      await tx.insert(pickup).values({ id: adHoc.pickup, companyId: a.companyId, projectId: copenhagen, routeId: adHoc.route, containerId: ex.containers.bin1.id, position: 1, status: "planned", origin: "office", service: "wash", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id })
-      // As the worker records a wash mapped to a product it will not charge at.
-      await tx.insert(billableEvent).values({ id: adHoc.event, companyId: a.companyId, projectId: copenhagen, kind: "job", serviceDate: ex.day, agreementId: fx.agreements.housingDkk.id, subscriptionId: fx.subscriptions.housingResidual.id, productId: null, quantity: 1, blockReason: "no-product", routeId: adHoc.route, pickupId: adHoc.pickup, sourceEventId: testId() })
-    })
-    const reprice = (productId: string) => olivia(`/billable-events/${adHoc.event}/reprice`, { method: "POST", body: { productId } })
-    const refused = await reprice(fx.products.residual.id)
-    assert.equal(refused.status, 400)
-    assert.deepEqual((await readProblem(refused)).errors, [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
-    const response = await reprice(products.wash)
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    const priced = BillableEvent.parse(await response.json())
-    assert.deepEqual([priced.kind, priced.status, priced.productId, priced.unitPriceMinor, priced.netMinor, priced.vatMinor], ["job", "ready", products.wash, 30_000, 30_000, 7_500])
-  })
-
   test("a month a run to a day before it ended left undue is charged by the next run, and a month whose charge the office cancelled is never charged again", async () => {
     // A skip from 1 March 2027 under the housing association's hire, its free week spent on the 7th.
     const march = { container: testId(), placement: testId() }
@@ -394,19 +375,24 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     }
   })
 
-  test("a job blocked as it was charged is held once the office prices it, where its project holds its jobs for review", async () => {
+  test("a job blocked as it was charged is priced again on the office's ad-hoc route, which has no scheme, and held where its project holds its jobs for review", async () => {
     const blockedJob = { route: testId(), pickup: testId(), event: testId() }
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       await tx.insert(route).values({ id: blockedJob.route, companyId: a.companyId, projectId: copenhagen, routeSchemeId: null, collectionGroupId: null, serviceDate: ex.day, operatingDate: ex.day, status: "planned", number: 990_002 })
       await tx.insert(pickup).values({ id: blockedJob.pickup, companyId: a.companyId, projectId: copenhagen, routeId: blockedJob.route, containerId: ex.containers.bin1.id, position: 1, status: "planned", origin: "office", service: "wash", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id })
-      await tx.insert(billableEvent).values({ id: blockedJob.event, companyId: a.companyId, projectId: copenhagen, kind: "job", serviceDate: ex.day, agreementId: fx.agreements.housingDkk.id, subscriptionId: fx.subscriptions.housingResidual.id, productId: null, quantity: 1, blockReason: "no-product", routeId: blockedJob.route, pickupId: blockedJob.pickup, sourceEventId: testId() })
+      // A job the consumer recorded while its list had no row for the product that day; the row is there now. A reprice reads the event, its product and its stop's conditions, never the stop's service.
+      await tx.insert(billableEvent).values({ id: blockedJob.event, companyId: a.companyId, projectId: copenhagen, kind: "job", serviceDate: ex.day, agreementId: fx.agreements.housingDkk.id, subscriptionId: fx.subscriptions.housingResidual.id, productId: products.wash, quantity: 1, blockReason: "no-price-row", routeId: blockedJob.route, pickupId: blockedJob.pickup, sourceEventId: testId() })
     })
+    const reprice = (body: Record<string, unknown>) => olivia(`/billable-events/${blockedJob.event}/reprice`, { method: "POST", body })
     assert.equal((await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: true } })).status, 200)
     try {
-      const response = await olivia(`/billable-events/${blockedJob.event}/reprice`, { method: "POST", body: { productId: products.wash } })
+      const response = await reprice({})
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
       const priced = BillableEvent.parse(await response.json())
-      assert.deepEqual([priced.status, priced.netMinor, priced.hold?.by, priced.hold?.reason], ["held", 30_000, null, HELD_FOR_REVIEW])
+      assert.deepEqual(
+        [priced.kind, priced.status, priced.productId, priced.unitPriceMinor, priced.netMinor, priced.vatMinor, priced.hold?.by, priced.hold?.reason],
+        ["job", "held", products.wash, 30_000, 30_000, 7_500, null, HELD_FOR_REVIEW],
+      )
     } finally {
       await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: false } })
     }

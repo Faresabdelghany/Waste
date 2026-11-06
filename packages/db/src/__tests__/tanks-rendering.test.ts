@@ -28,16 +28,17 @@ import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import { withPreTripCheck } from "./pre-trip-as-of"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { proofAsOf0038 } from "./proof-as-of"
 import { statementsBetween } from "./specimen"
 
 const referenced = { company, project, route, session, pickup, userAccount, container, property, contaminantCode }
 
-/** The receipt's kind respelt: dropped and added again with today's list. */
+/** The receipt's kind respelt: dropped and added again with the list as of this file — today's with `pre-trip-check`, which the pre-trip inspection's removal took since. */
 const RECEIPT_RESPELT = [
   'ALTER TABLE "wms"."driver_command" DROP CONSTRAINT "driver_command_kind_one_of";',
-  `ALTER TABLE "wms"."driver_command" ADD ${oneOfCheck("driver_command", "kind", ...DRIVER_COMMAND_KINDS)};`,
+  `ALTER TABLE "wms"."driver_command" ADD ${oneOfCheck("driver_command", "kind", ...withPreTripCheck(DRIVER_COMMAND_KINDS))};`,
 ]
 
 /** What drizzle-kit writes: the two tables, the proof from 0038's spelling to today's, and the receipt's kind. */

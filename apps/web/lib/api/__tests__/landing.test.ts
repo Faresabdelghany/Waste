@@ -97,8 +97,8 @@ describe("the sign-in gate", () => {
   })
 
   test("never stands in front of a published project's public pages, which are anyone's (ADR-0010), and no page merely named like one", () => {
-    assert.equal(gateOf(pilot({}), "/p/kystbyen/sorting"), "show")
-    assert.equal(gateOf(pilot({ hydrated: false }), "/p/kystbyen/sorting"), "show")
+    assert.equal(gateOf(pilot({}), "/p/kystbyen/drop-off"), "show")
+    assert.equal(gateOf(pilot({ hydrated: false }), "/p/kystbyen/drop-off"), "show")
     assert.equal(gateOf(pilot({}), "/portal"), "sign-in", "the citizen portal is a signed-in surface")
     assert.equal(gateOf(pilot({}), "/p"), "sign-in")
   })

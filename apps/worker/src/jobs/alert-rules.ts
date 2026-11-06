@@ -71,9 +71,8 @@
 // of a vehicle not retired that is within its margins of a limit — fourteen
 // days, a thousand kilometres, fifty engine hours — or past one, judged as
 // @waste/domain/resources/maintenance judges it: on its project's today, and
-// against the newest odometer and engine hours a pre-trip check read of the
-// vehicle, or the last service's where none is newer (`DUE_PLANS`, one probe
-// each into `pre_trip_check_vehicle_id_idx`). Its key is
+// against the last service's odometer and engine hours, since nothing reads
+// a vehicle's between services (`duePlans`). Its key is
 // `maintenance-due:<plan>:<last service's day>/<km>/<hours>` (`-` for a reading
 // the plan has none of), `:overdue` once past a limit: a service done moves
 // the baseline and clears it, a plan retired or relieved by a patch clears
@@ -154,16 +153,11 @@ const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr
 const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
 /** A pairing in force on the project's today. */
 const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p.timezone)::date and (sp.valid_to is null or sp.valid_to > (${now} at time zone p.timezone)::date)`
-/** A vehicle's newest reading of one kind by a pre-trip check, one backward probe into the check's vehicle index. */
-const newestReading = (column: "odometer_km" | "engine_hours") =>
-  sql.raw(`(select pc.${column} from wms.pre_trip_check pc where pc.company_id = m.company_id and pc.vehicle_id = m.vehicle_id and pc.${column} is not null order by pc.occurred_at desc limit 1)`)
-
 /**
  * The active plans of vehicles not retired, each judged at the tick's
- * instant: its next limits, the readings it is judged on — the newest a
- * pre-trip check read, else the last service's (`greatest` passes over a
- * null) — whether it is past a limit or within the margins of one, and its
- * key. As `mp`, read by the raise and, by the plan in the key, the clear.
+ * instant: its next limits, the readings it is judged on — the last
+ * service's — whether it is past a limit or within the margins of one, and
+ * its key. As `mp`, read by the raise and, by the plan in the key, the clear.
  */
 const duePlans = (now: SQL) => sql`(
   select j.*,
@@ -180,8 +174,8 @@ const duePlans = (now: SQL) => sql`(
                  m.last_done_on + m.interval_days as next_on,
                  m.last_done_km + m.interval_km as next_km,
                  m.last_done_hours + m.interval_hours as next_hours,
-                 greatest(${newestReading("odometer_km")}, m.last_done_km) as odometer_km,
-                 greatest(${newestReading("engine_hours")}, m.last_done_hours) as engine_hours
+                 m.last_done_km as odometer_km,
+                 m.last_done_hours as engine_hours
             from wms.vehicle_maintenance_plan m
             join wms.vehicle v on v.company_id = m.company_id and v.id = m.vehicle_id
             join wms.project p on p.company_id = m.company_id and p.id = m.project_id

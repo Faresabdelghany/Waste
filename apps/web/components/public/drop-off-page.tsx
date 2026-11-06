@@ -1,7 +1,7 @@
 // The public map of Drop-off Points (Issue #293, M3b, ADR-0010): a server
 // component a resident reaches without an account, from the project's other
-// public pages or from a Sorting Guide answer, which asks for the points
-// taking its fraction (`?fraction=<key>`). The list is the page — each point's
+// public pages or from a link that asks for the points taking one fraction
+// (`?fraction=<key>`). The list is the page — each point's
 // kind, address, what it takes, today's opening and the week's, its note —
 // and works with no JavaScript; the map beside it adds where. The pages' own
 // words are English until M21; what the office wrote is marked with the
@@ -29,7 +29,7 @@ export async function DropOffPage({ params, searchParams }: DropOffPageProps) {
   const asked = fractionKeyOf(fraction)
   const door = doorFor(incoming)
   let answer = await readDropOffPoints(slug, asked, door)
-  // A key the guide named that this project's fractions do not finds no point: ask again for every point, as the page then says it shows.
+  // A key the link named that this project's fractions do not finds no point: ask again for every point, as the page then says it shows.
   const unknown = answer.kind === "ok" && asked !== null && answer.body.fraction === null
   if (unknown) answer = await readDropOffPoints(slug, null, door)
   if (answer.kind === "not-published") notFound()

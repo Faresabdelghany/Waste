@@ -1,8 +1,8 @@
 // A vehicle's maintenance on the Pilot (O20 of #290): its maintenance plans,
 // each with where it stands, and the Maintenance Orders that do them, read
-// and worked from the vehicle's details in Fleet. Like its defects
-// (pre-trip.ts), they are not rows of the store — nothing lists them but their
-// vehicle — so they are read through the client beside the row
+// and worked from the vehicle's details in Fleet. Like its periods out of use
+// (availability.ts), they are not rows of the store — nothing lists them but
+// their vehicle — so they are read through the client beside the row
 // (`useRowHistory`), and written as the row's actions, which answer the plan
 // or the order, never the row. The wire shapes are the contracts'
 // (`@waste/contracts/maintenance`), imported as types.

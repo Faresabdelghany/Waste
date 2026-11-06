@@ -8,7 +8,6 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 
 export type ResolvedBusinessLink = {
   href: string
@@ -90,9 +89,6 @@ const settingsPaneByModule: Record<string, string> = {
   finance: "finance",
   integrations: "integrations",
   portals: "portals",
-  // The Sorting Guide's own pane (#293): an item or the module opens Settings › Sorting guide.
-  "sorting-guide": SORTING_GUIDE_SETTINGS_PANE_ID,
-  privacy: "privacy",
 }
 
 const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [

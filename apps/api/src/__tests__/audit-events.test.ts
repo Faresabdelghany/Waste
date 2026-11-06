@@ -3,8 +3,7 @@
 // reason — bounded and percent-decoded, never the client's word for who —
 // and `GET /audit-events` reads one row's history newest first, its sets'
 // changes under it in one transaction per request, held to the view grant of
-// the module the table belongs to and to the caller's projects, or the whole
-// company's under `configure.privacy`.
+// the module the table belongs to and to the caller's projects.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -126,13 +125,11 @@ describe("the audit log through the API", { skip: database.skip }, () => {
     assert.deepEqual((await readProblem(half)).errors?.map((error) => error.path), ["rowId"])
   })
 
-  test("the company's whole history asks view on configure.privacy; another company's rows are never there", async () => {
+  test("the company's whole history is not read: no row is a 400; another company's rows are never there", async () => {
     const customer = await customerNamed(olivia, "Valby Housing")
-    const company = await history(olivia, "limit=200")
-    assert.ok(company.items.some((item) => item.rowId === customer.id))
-    const refused = await viewer("/audit-events")
-    assert.equal(refused.status, 403)
-    assert.match((await readProblem(refused)).detail ?? "", /view on configure\.privacy/)
+    const whole = await olivia("/audit-events")
+    assert.equal(whole.status, 400)
+    assert.deepEqual((await readProblem(whole)).errors?.map((error) => error.path).sort(), ["rowId", "table"])
     assert.deepEqual((await history(other, `table=customer&rowId=${customer.id}`)).items, [])
   })
 

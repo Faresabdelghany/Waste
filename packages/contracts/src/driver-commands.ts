@@ -1,10 +1,10 @@
-// The driver's commands on the wire (Issue #104, ADR-0004): eighteen kinds,
+// The driver's commands on the wire (Issue #104, ADR-0004): seventeen kinds,
 // one contract each, every one a `z.strictObject` under a common envelope —
 // `{ id, kind, routeId, occurredAt, deviceId, body }` — where `id` is minted
 // by the device (a UUIDv7 from the device's clock, through
 // @waste/domain/ids) and is the command's idempotency key and, where the
 // command makes a row, that row's id. `DriverCommand` is the discriminated
-// union over the eighteen, so a client that imports this package as the
+// union over the seventeen, so a client that imports this package as the
 // Expo app does builds a typed command per kind.
 //
 // The door, `POST /driver/commands`, takes `DriverCommandBatch`: one to two
@@ -44,9 +44,7 @@
 // applier's), `pause`, `resume` carry nothing at all, and `record-positions`
 // (O8 of #290) carries one to `POSITIONS_MAX` fixes in the order they were
 // taken, each judged by the door on the envelope's own clock rules, and
-// `pre-trip-check` (O13 of #290) names a vehicle or a trailer and answers
-// every item of its type's checklist once (pre-trip.ts), and `record-fill`
-// (M23 of #293) names a stop and how full its container was. What each command
+// `record-fill` (M23 of #293) names a stop and how full its container was. What each command
 // does when applied is #104 §3's table and the domain's `decide`.
 import { POSITION_RULES } from "@waste/domain/execution/positions"
 import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
@@ -60,7 +58,6 @@ import { Driver, Vehicle } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
-import { ChecklistItem, PreTripCheck, PreTripCheckBody } from "./pre-trip"
 import { UnloadingStation } from "./places"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
@@ -140,7 +137,7 @@ const inOrder = (points: readonly { at: string }[]): boolean => points.every((po
 export const Identification = z.strictObject({ code: Label, method: IdentificationMethod })
 export type Identification = z.infer<typeof Identification>
 
-/** The eighteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
+/** The seventeen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
   arrive: z.strictObject({ pickupId: Id, identification: Identification.optional(), ...located }),
@@ -174,7 +171,6 @@ export const COMMAND_BODIES = {
   "record-positions": z.strictObject({
     points: z.array(PositionFix).min(1).max(POSITIONS_MAX).refine(inOrder, { message: FIXES_IN_ORDER }),
   }),
-  "pre-trip-check": z.strictObject({ ...PreTripCheckBody, ...located }),
   "record-fill": z.strictObject({ pickupId: Id, fill: FillLevel }),
   /** The litres a tank was emptied of at the stop (M11 of #293), whole litres: `PositiveInt`, bounded like the column. */
   "record-volume": z.strictObject({ pickupId: Id, volumeLitres: PositiveInt }),
@@ -195,13 +191,12 @@ export const Pause = commandOf("pause", COMMAND_BODIES.pause)
 export const Resume = commandOf("resume", COMMAND_BODIES.resume)
 export const EndRoute = commandOf("end-route", COMMAND_BODIES["end-route"])
 export const RecordPositions = commandOf("record-positions", COMMAND_BODIES["record-positions"])
-export const PreTripCheckCommand = commandOf("pre-trip-check", COMMAND_BODIES["pre-trip-check"])
 export const RecordFill = commandOf("record-fill", COMMAND_BODIES["record-fill"])
 
 export const RecordVolume = commandOf("record-volume", COMMAND_BODIES["record-volume"])
 
 /** One command of any kind: the envelope and the body its kind takes. */
-export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, PreTripCheckCommand, RecordFill, RecordVolume])
+export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, RecordFill, RecordVolume])
 export type DriverCommand = z.infer<typeof DriverCommand>
 
 /** The envelope read loosely, its body unparsed, so a body that fails its kind is one command's rejection and not the batch's 400. */
@@ -228,13 +223,12 @@ export type DriverCommandBatch = z.infer<typeof DriverCommandBatch>
 export const WireOutcome = z.enum([...COMMAND_OUTCOMES, "replayed"])
 export type WireOutcome = z.infer<typeof WireOutcome>
 
-/** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route`, the check for `pre-trip-check`, the stop for `record-fill` — so a device never takes a stripped object of one resource for another. */
+/** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route`, the stop for `record-fill` — so a device never takes a stripped object of one resource for another. */
 export const CommandResult = z.discriminatedUnion("resource", [
   z.object({ resource: z.literal("session"), value: Session }),
   z.object({ resource: z.literal("proof"), value: ProofOfService }),
   z.object({ resource: z.literal("unload"), value: Unload }),
   z.object({ resource: z.literal("route"), value: Route }),
-  z.object({ resource: z.literal("pre-trip-check"), value: PreTripCheck }),
   z.object({ resource: z.literal("pickup"), value: Pickup }),
 ])
 export type CommandResult = z.infer<typeof CommandResult>
@@ -284,8 +278,8 @@ export const DriverCommandReceipt = z
   .refine((receipt) => (receipt.outcome === "rejected") === (receipt.problem !== null), problemWithARejection)
 export type DriverCommandReceipt = z.infer<typeof DriverCommandReceipt>
 
-/** A vehicle or a trailer a `start-route` names, as the start screen offers it: the `Vehicle`'s id, kind and required licence class, the one label a person names it by — the callsign where it has one, the plate otherwise — and the checklist of its type a `pre-trip-check` answers (O13 of #290), absent from an answer before it and read as none. */
-export const DriverVehicle = Vehicle.pick({ id: true, kind: true, requiredLicenceClass: true }).extend({ label: Label, checklist: z.array(ChecklistItem).default([]) })
+/** A vehicle or a trailer a `start-route` names, as the start screen offers it: the `Vehicle`'s id, kind and required licence class, the one label a person names it by — the callsign where it has one, the plate otherwise. */
+export const DriverVehicle = Vehicle.pick({ id: true, kind: true, requiredLicenceClass: true }).extend({ label: Label })
 export type DriverVehicle = z.infer<typeof DriverVehicle>
 
 /** A station a `record-unload` names, as the unload screen offers it: the `UnloadingStation`'s id, name, point and weighbridge, and the fractions it accepts, sorted by id — none on record, an empty list. */

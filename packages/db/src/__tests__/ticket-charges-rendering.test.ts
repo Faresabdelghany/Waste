@@ -9,9 +9,10 @@
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger — a set of its project, read under `commercial.products`. The file
 // is found by its name, not its number, which it takes at its turn.
-// Migration 0075 (O13 of #290) grew the kinds by `vehicle-defect`, so the file
-// is held to the list as it was then (`asOfThisFile`) and
-// pre-trip-rendering.test.ts pins the replacement. No database.
+// Migration 0075 (O13 of #290) grew the kinds by `vehicle-defect` and the
+// pre-trip inspection's removal took it again, so today's list is this
+// file's; pre-trip-rendering.test.ts and pre-trip-removal-rendering.test.ts
+// pin the two replacements. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -43,9 +44,6 @@ const CHARGE_SHAPE = `${ref("ticket", "charge_product_id")} is null or (${ref("t
 
 const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket: ticketAsOf("0033"), ticketKindProduct })
 
-/** A statement as this file spells it: the kind's list as it was before 0075 added `vehicle-defect`. */
-const asOfThisFile = (statement: string): string => statement.replace(list(...TICKET_KINDS), list(...TICKET_KINDS.filter((kind) => kind !== "vehicle-defect")))
-
 /** The migration, by its name: it takes its number at its turn. */
 async function migration(): Promise<string[]> {
   const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_ticket_charges\.sql$/.test(name))
@@ -75,7 +73,7 @@ describe("ticket work priced as drizzle-kit writes it", () => {
 
   test("the migration is exactly that, then the new table's fence, its updated_at trigger and its audit trigger, a set of its project", async () => {
     const audit = TICKET_CHARGE_AUDITED.flatMap(auditTrail)
-    assert.deepEqual(await migration(), [...(await generated()).map(asOfThisFile), ...handWrittenStatements(ticketKindProduct), ...audit].map(normalised))
+    assert.deepEqual(await migration(), [...(await generated()), ...handWrittenStatements(ticketKindProduct), ...audit].map(normalised))
     assert.deepEqual(audit, [`CREATE TRIGGER "ticket_kind_product_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."ticket_kind_product" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id');`])
   })
 

@@ -117,9 +117,13 @@
 //
 // Migration 0094 (M11 of #293) grew the receipt's kind by `record-volume` and
 // the proof by its `volume` kind and the `volume_litres` it carries, so
-// `CHANGED_IN_0094` maps today's spelling of both onto 0092's and 0038's,
-// applied first of all; tanks-rendering.test.ts pins the statements
-// themselves.
+// `CHANGED_IN_0094` maps its spelling of both onto 0092's and 0038's;
+// tanks-rendering.test.ts pins the statements themselves.
+//
+// The pre-trip inspection's removal shrank the receipt's kind by
+// `pre-trip-check` again, so `CHANGED_FOR_PRE_TRIP_REMOVAL`, applied first of
+// all, maps today's spelling onto 0094's;
+// pre-trip-removal-rendering.test.ts pins the statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -313,8 +317,8 @@ const unloadTable = (asOf: "0008" | "0010" | "0045"): string => {
 /** What 0045 changed on one of the seven (O9 of #290): the unload's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first; weighbridge-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0045 = new Map([[unloadTable("0045"), unloadTable("0010")]])
 
-/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060), by `pre-trip-check` (O13 of #290, migration 0075), by `record-fill` (M23 of #293, migration 0092) and by `record-volume` (M11 of #293, migration 0094) — and as it wrote it as of 0092, 0075, 0060 and 0008. */
-const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092" | "0094"): string =>
+/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060), by `pre-trip-check` (O13 of #290, migration 0075), by `record-fill` (M23 of #293, migration 0092) and by `record-volume` (M11 of #293, migration 0094), and shrunk by `pre-trip-check` again when the pre-trip inspection was removed — and as it wrote it as of 0094, 0092, 0075, 0060 and 0008. */
+const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092" | "0094" | "pre-trip-removal"): string =>
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -345,7 +349,7 @@ const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0092" | "0094"): s
       "resume",
       "end-route",
       ...(asOf >= "0060" ? ["record-positions"] : []),
-      ...(asOf >= "0075" ? ["pre-trip-check"] : []),
+      ...(asOf >= "0075" && asOf !== "pre-trip-removal" ? ["pre-trip-check"] : []),
       ...(asOf >= "0092" ? ["record-fill"] : []),
       ...(asOf >= "0094" ? ["record-volume"] : []),
     ),
@@ -544,11 +548,14 @@ const CHANGED_IN_0038 = new Map([
   [proofTable("0038"), proofTable("0008")],
 ])
 
-/** What 0094 changed on two of the seven (M11 of #293): the receipt's and the proof's CREATE TABLE as drizzle-kit generates them now onto what 0092 and 0038 say. Applied first of all; tanks-rendering.test.ts pins the statements themselves. */
+/** What 0094 changed on two of the seven (M11 of #293): the receipt's CREATE TABLE as drizzle-kit wrote it as of 0094 and the proof's as it generates it now, onto what 0092 and 0038 say. Applied after `CHANGED_FOR_PRE_TRIP_REMOVAL`; tanks-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0094 = new Map([
   [driverCommandTable("0094"), driverCommandTable("0092")],
   [proofTable("0094"), proofTable("0038")],
 ])
+
+/** What the pre-trip inspection's removal changed on one of the seven: the receipt's CREATE TABLE as drizzle-kit generates it now, its kind without `pre-trip-check`, onto what 0094 says. Applied first of all; pre-trip-removal-rendering.test.ts pins the statements themselves. */
+const CHANGED_FOR_PRE_TRIP_REMOVAL = new Map([[driverCommandTable("pre-trip-removal"), driverCommandTable("0094")]])
 
 /** What 0038 added to the two beside the columns: each one's key into the contaminant codes and its index. */
 const ADDED_IN_0038 = [
@@ -632,7 +639,7 @@ const expected = [
   ]),
   proofTable("0094"),
   unloadTable("0045"),
-  driverCommandTable("0094"),
+  driverCommandTable("pre-trip-removal"),
   outboxEventTable("window-prices"),
   companyFk("route"),
   projectFk("route"),
@@ -792,6 +799,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
     .filter((statement) => !ADDED_IN_0055.includes(statement) && !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_FOR_PRE_TRIP_REMOVAL.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0094.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0092.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0075.get(statement) ?? statement)
@@ -838,7 +846,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0038 and 0024 changed are ones the schema generates today, the one 0032 changed is what 0038 maps the pickup back to, the one 0023 changed is what 0032 maps it back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0094.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_PRE_TRIP_REMOVAL.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0094.keys()) assert.ok(today.includes(statement) || [...CHANGED_FOR_PRE_TRIP_REMOVAL.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0092.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0094.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0075.keys()) assert.ok([...CHANGED_IN_0092.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0060.keys()) assert.ok([...CHANGED_IN_0075.values()].includes(statement), statement.split("\n")[0])
@@ -891,6 +900,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0075.size, 1, "the receipt's pre-trip-check")
     assert.equal(CHANGED_IN_0092.size, 2, "the receipt's record-fill and the stop's fill estimate")
     assert.equal(CHANGED_IN_0094.size, 2, "the receipt's record-volume and the proof's volume")
+    assert.equal(CHANGED_FOR_PRE_TRIP_REMOVAL.size, 1, "the receipt's pre-trip-check gone again")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {

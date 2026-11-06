@@ -54,19 +54,13 @@
 // the scheme and the container are left joins, since an ad-hoc route names
 // no scheme (no planning area, then) and an address-only stop no container
 // (no type, and no placement to read), so the event is judged and never a
-// dead letter; the domain records nothing for an office stop but a work
-// order's job (M14 of #293). For that the stop's `service` and whether a
-// ticket booked it (O3c of #290) are read with it, and, where the project
-// names a product for the service (`work_order_product`) and no ticket booked
-// the stop, the agreement it charges: a delivery's through the subscription
-// it books, a removal's and a swap's through the container's latest placement
-// to begin by the service date — the one it takes away, which the
-// completion's return has ended on that day — and a repair's or a wash's
-// through the placement in force that day; with the list it is priced under
-// on the service date and its rows. An office stop's own placement is never
-// read for a pickup's price, since the domain charges it nothing but a job.
-// A bulky collection (O11 of #290) is a job at its booking's product, charged
-// to the agreement the booking names (`bulkyFacts`).
+// dead letter; the domain records nothing for an office stop — a work order
+// (O3 of #290) among them — but a bulky collection's job (O11 of #290): for
+// that the stop's `service` is read with it, and the job's product is the one
+// its booking froze, charged to the agreement the booking names, with the
+// list it is priced under on the service date and its rows (`bulkyFacts`).
+// An office stop's own placement is never read for a pickup's price, since
+// the domain charges it nothing but a job.
 //
 // An Unload's weight review (O28 of #290, C32 of #291) is read under the row
 // lock of the Unload's route, the lock every review takes (routes/weight-
@@ -83,7 +77,7 @@ import { isChargeable, judgeException, type PickupExceptionStop } from "@waste/d
 import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, ScaleTicketEventFacts, ScaleTicketLineFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts, WeighedStopFacts, WeightReviewedFacts } from "@waste/domain/finance/from-event"
 import { soldAtTheWindow } from "@waste/domain/finance/window"
 import { chargedByWeight, stopsCarried, tonnageShares } from "@waste/domain/finance/tonnage"
-import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
@@ -105,11 +99,11 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { customer } from "@waste/db/schema/customers"
 import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
 import { weightReview } from "@waste/db/schema/finance"
-import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { ticketKindProduct } from "@waste/db/schema/finance"
 import { bulkyBooking, bulkyBookingItem } from "@waste/db/schema/bulky"
-import { ticket, ticketBooking } from "@waste/db/schema/resolution"
+import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
@@ -126,12 +120,8 @@ export type PickupRow = {
   status: string
   /** An emptying, or the office's work order (O3 of #290). */
   service: PickupService
-  /** The subscription a delivery books; null for every other service. */
-  subscriptionId: string | null
   /** The Bulky Booking a bulky collection collects (O11 of #290); null for every other service. */
   bulkyBookingId: string | null
-  /** Whether a ticket booked the stop to answer it (O3c of #290), the ticket booked again since or not (#422). */
-  bookedForTicket: boolean
   /** What a Pickup Exception is judged on (#293 M5): the driver's reason, the contaminant code, and the place it is counted at. */
   reason: string | null
   contaminantCodeId: string | null
@@ -167,9 +157,7 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       wasteFractionId: pickup.wasteFractionId,
       status: pickup.status,
       service: pickup.service,
-      subscriptionId: pickup.subscriptionId,
       bulkyBookingId: pickup.bulkyBookingId,
-      bookingTicketId: ticketBooking.ticketId,
       reason: pickup.reason,
       contaminantCodeId: pickup.contaminantCodeId,
       propertyId: pickup.propertyId,
@@ -180,15 +168,13 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
     .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
-    // Any booking that ever named the stop, not only a ticket's current one (#422): a stop a rebooking replaced still answered its ticket. One ticket at most books a stop (`ticket_booking_pickup_id_key`).
-    .leftJoin(ticketBooking, and(eq(ticketBooking.companyId, pickup.companyId), eq(ticketBooking.pickupId, pickup.id)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
     .limit(1)
   if (row === undefined) return undefined
-  const { bookingTicketId, movedFromPickupId, ...stop } = row
+  const { movedFromPickupId, ...stop } = row
   // A moved stop is read as the stop it stands for (O23 of #290): a scheduled collection moved to another route is billed, and judged for its exceptions, as the collection it is.
   const origin = movedFromPickupId === null ? (row.origin as PickupOrigin) : await originStoodFor(tx, companyId, movedFromPickupId)
-  return { ...stop, origin, service: row.service as PickupService, bookedForTicket: bookingTicketId !== null }
+  return { ...stop, origin, service: row.service as PickupService }
 }
 
 /**
@@ -351,9 +337,8 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
   return {
     facts: {
       service: found.service,
-      bookedForTicket: found.bookedForTicket,
       publicService: found.containerId !== null && (await publicPlacementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)),
-      job: await jobFacts(tx, companyId, found),
+      job: found.service === "bulky" ? await bulkyFacts(tx, companyId, found) : null,
       kind,
       routeId: found.routeId,
       pickupId,
@@ -369,45 +354,6 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
       liveException: liveException === undefined ? null : liveFacts(liveException),
     },
     live: [live, liveException].flatMap((row) => (row === undefined ? [] : [row])),
-  }
-}
-
-/**
- * A work order's charge (M14 of #293): the project's product for the stop's
- * service, and the agreement it charges with its pricing; null for an
- * emptying, a stop a ticket booked — the ticket's charge is the one — and a
- * service the project names no product for, none of which the domain charges.
- */
-async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts | null> {
-  if (found.service === "bulky") return await bulkyFacts(tx, companyId, found)
-  if (found.origin !== "office" || !isWorkOrderService(found.service) || found.bookedForTicket || found.containerId === null) return null
-  const scope = { companyId, projectId: found.projectId }
-  const [named] = await tx
-    .select({ id: product.id, status: product.status, unit: product.unit, vatPercent: product.vatPercent })
-    .from(workOrderProduct)
-    .innerJoin(product, and(eq(product.companyId, workOrderProduct.companyId), eq(product.id, workOrderProduct.productId)))
-    .where(and(eq(workOrderProduct.companyId, companyId), eq(workOrderProduct.projectId, found.projectId), eq(workOrderProduct.service, found.service)))
-    .limit(1)
-  if (named === undefined) return null
-  const jobProduct = { id: named.id, status: named.status as ProductStatus, unit: named.unit as ProductUnit, vatPercent: named.vatPercent }
-  const subscriptionId = found.service === "deliver" ? found.subscriptionId : await placedUnder(tx, scope, found.containerId, found.serviceDate, found.service === "remove" || found.service === "swap")
-  const [served] =
-    subscriptionId === null
-      ? []
-      : await tx
-          .select({ agreementId: subscription.agreementId })
-          .from(subscription)
-          .where(and(eq(subscription.companyId, companyId), eq(subscription.projectId, found.projectId), eq(subscription.id, subscriptionId)))
-          .limit(1)
-  const facts = served === undefined ? undefined : await agreementFacts(tx, scope, served.agreementId)
-  if (facts === undefined) return { product: jobProduct, agreement: null, subscriptionId: null, priceList: null, items: null }
-  const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
-  return {
-    product: jobProduct,
-    agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
-    subscriptionId,
-    priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, jobProduct.id, found.serviceDate) },
-    items: null,
   }
 }
 
@@ -438,33 +384,14 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
     .from(bulkyBookingItem)
     .where(and(eq(bulkyBookingItem.companyId, companyId), eq(bulkyBookingItem.bookingId, found.bulkyBookingId)))
   const facts = await agreementFacts(tx, scope, booked.agreementId)
-  if (facts === undefined) return { product: bulkyProduct, agreement: null, subscriptionId: null, priceList: null, items }
+  if (facts === undefined) return { product: bulkyProduct, agreement: null, priceList: null, items }
   const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
   return {
     product: bulkyProduct,
     agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
-    subscriptionId: null,
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, bulkyProduct.id, found.serviceDate) },
     items,
   }
-}
-
-/** The subscription a container stood under for a work order on the day: the placement in force, or for a removal or a swap its latest to begin by the day, ended or not. Null where none is. */
-async function placedUnder(tx: Tx, scope: { companyId: string; projectId: string }, containerId: string, day: string, latest: boolean): Promise<string | null> {
-  const [placed] = await tx
-    .select({ subscriptionId: containerServicePlacement.subscriptionId })
-    .from(containerServicePlacement)
-    .where(
-      and(
-        eq(containerServicePlacement.companyId, scope.companyId),
-        eq(containerServicePlacement.projectId, scope.projectId),
-        eq(containerServicePlacement.containerId, containerId),
-        latest ? lte(containerServicePlacement.validFrom, day) : validOn(containerServicePlacement, day),
-      ),
-    )
-    .orderBy(desc(containerServicePlacement.validFrom))
-    .limit(1)
-  return placed?.subscriptionId ?? null
 }
 
 /** A ticket as the consumer read it: its project and kind, what it ended in, when it closed, the agreement and pickup it names, and the product its completion named. */

@@ -4,8 +4,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { isPublicSlug } from "@waste/domain/access/public-slug"
+
 import type { BusinessRecord } from "../business-modules"
-import { driverAppReadingOf, publicPagesOf, publicSlugOf } from "../portals"
+import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "../portals"
 
 const record = (id: string, submittedValues: BusinessRecord["submittedValues"]): BusinessRecord => ({ id, name: id, facts: {}, submittedValues }) as BusinessRecord
 
@@ -16,12 +18,29 @@ describe("a project's public pages", () => {
     assert.equal(publicSlugOf(record("project-harbor", { publicSlug: "" })), null)
   })
 
-  test("its pages are the collection days, the drop-off points and the sorting guide, under the slug", () => {
+  test("its pages are the collection days and the drop-off points, under the slug", () => {
     assert.deepEqual(publicPagesOf("kystbyen"), [
       { label: "Collection days", href: "/p/kystbyen/calendar" },
       { label: "Drop-off points", href: "/p/kystbyen/drop-off" },
-      { label: "Sorting guide", href: "/p/kystbyen/sorting" },
     ])
+  })
+})
+
+describe("a project's public address", () => {
+  test("a name suggests a slug the API takes, the Danish letters folded", () => {
+    for (const [name, slug] of [["Copenhagen Central", "copenhagen-central"], ["Kystbyen Østerbro", "kystbyen-oesterbro"], ["  Århus / Nord  ", "aarhus-nord"]] as const) {
+      assert.equal(slugSuggestionOf(name), slug)
+      assert.ok(isPublicSlug(slug), slug)
+    }
+    assert.ok(slugSuggestionOf("x".repeat(80)).length <= 63)
+  })
+
+  test("a slug the API would refuse is refused before it is sent, by the same rule", () => {
+    for (const slug of ["kystbyen", "kystbyen-nord", "k2b"]) assert.equal(slugRefusalOf(slug), null, slug)
+    for (const slug of ["ab", "Kystbyen", "kyst byen", "kyst--byen", "-kyst", "a".repeat(64)]) {
+      assert.notEqual(slugRefusalOf(slug), null, slug)
+      assert.equal(isPublicSlug(slug), false, slug)
+    }
   })
 })
 

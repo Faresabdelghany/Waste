@@ -7,7 +7,10 @@
 // SLA's, a team default's and a ticket charge's checks, grown by `vehicle-defect`. Then the
 // migration, whose head is exactly those statements and whose tail is what
 // the tables owe the file. The file is found by its name, not its number,
-// which it takes at its turn. No database.
+// which it takes at its turn. The feature was removed later with its three
+// tables, so they are read as 0075 created them (pre-trip-as-of.ts) and the
+// lists with the two kinds the removal took (`withPreTripCheck`,
+// `withVehicleDefect`). No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -17,12 +20,12 @@ import { DRIVER_COMMAND_KINDS } from "@waste/domain/execution/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { preTripCheck, preTripChecklistItem, vehicleDefect } from "../schema/pre-trip"
 import { appendOnly } from "../sql/append-only"
-import { auditTrail, PRE_TRIP_AUDITED } from "../sql/audit-trail"
+import { auditTrail } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import { PRE_TRIP_AUDITED_AS_OF_0075, PRE_TRIP_TABLES_AS_OF_0075, preTripCheckAsOf0075 as preTripCheck, preTripChecklistItemAsOf0075 as preTripChecklistItem, vehicleDefectAsOf0075 as vehicleDefect, withPreTripCheck, withVehicleDefect } from "./pre-trip-as-of"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
@@ -32,16 +35,19 @@ const respelt = (table: string, column: string, name: string, values: readonly s
   `ALTER TABLE "wms"."${table}" ADD ${oneOfCheck(table, column, ...values).replace(/^CONSTRAINT "[^"]+"/, `CONSTRAINT "${name}"`)};`,
 ]
 
-/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0092 added (M23 of #293), and `record-volume`, which 0094 added (M11 of #293). */
-const KINDS_AS_OF_0075 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-fill" && kind !== "record-volume")
+/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0092 added (M23 of #293), and `record-volume`, which 0094 added (M11 of #293), with this file's `pre-trip-check`. */
+const KINDS_AS_OF_0075 = withPreTripCheck(DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-fill" && kind !== "record-volume"))
+
+/** A ticket's kinds as of this file: today's with this file's `vehicle-defect`. */
+const TICKET_KINDS_AS_OF_0075 = withVehicleDefect(TICKET_KINDS)
 
 /** What drizzle-kit wrote into the tables already applied: the five checks respelt. */
 const ALTERED = [
   ...respelt("driver_command", "kind", "driver_command_kind_one_of", KINDS_AS_OF_0075),
-  ...respelt("ticket", "kind", "ticket_kind_one_of", TICKET_KINDS),
-  ...respelt("ticket_sla", "kind", "ticket_sla_kind_one_of", TICKET_KINDS),
-  ...respelt("ticket_team_default", "kind", "ticket_team_default_kind_one_of", TICKET_KINDS),
-  ...respelt("ticket_kind_product", "ticket_kind", "ticket_kind_product_ticket_kind_one_of", TICKET_KINDS),
+  ...respelt("ticket", "kind", "ticket_kind_one_of", TICKET_KINDS_AS_OF_0075),
+  ...respelt("ticket_sla", "kind", "ticket_sla_kind_one_of", TICKET_KINDS_AS_OF_0075),
+  ...respelt("ticket_team_default", "kind", "ticket_team_default_kind_one_of", TICKET_KINDS_AS_OF_0075),
+  ...respelt("ticket_kind_product", "ticket_kind", "ticket_kind_product_ticket_kind_one_of", TICKET_KINDS_AS_OF_0075),
 ]
 
 /** What the file owes below drizzle-kit's statements: the three fences, the ledger's revoke, the two triggers, the two audit trails. */
@@ -52,7 +58,7 @@ const handWritten = (): string[] => [
   ...appendOnly(preTripCheck),
   ...touchUpdatedAt(preTripChecklistItem),
   ...touchUpdatedAt(vehicleDefect),
-  ...PRE_TRIP_AUDITED.flatMap(auditTrail),
+  ...PRE_TRIP_AUDITED_AS_OF_0075.flatMap(auditTrail),
 ]
 
 /** The migration, by its name: it takes its number at its turn. */
@@ -66,7 +72,7 @@ async function migration(): Promise<{ text: string; statements: string[] }> {
 describe("pre-trip inspection as drizzle-kit writes it", () => {
   test("the migration's head is exactly drizzle-kit's statements: the three tables with their keys and indexes, and the five checks respelt", async () => {
     const { statements } = await migration()
-    const generated = [...(await statementsFor({ preTripCheck, preTripChecklistItem, vehicleDefect })), ...ALTERED].map(normalised)
+    const generated = [...(await statementsFor(PRE_TRIP_TABLES_AS_OF_0075)), ...ALTERED].map(normalised)
     // The same statements, whatever order drizzle-kit's loader gave them.
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), [...generated].sort())
     assert.ok(generated.includes(normalised('ALTER TABLE "wms"."pre_trip_check" ADD CONSTRAINT "pre_trip_check_vehicle_id_fk" FOREIGN KEY ("company_id","project_id","vehicle_id") REFERENCES "wms"."vehicle"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;')), "a vehicle of the check's project")
@@ -78,15 +84,17 @@ describe("pre-trip inspection as drizzle-kit writes it", () => {
     const { text, statements } = await migration()
     const tail = handWritten().map(normalised)
     assert.deepEqual(statements.slice(statements.length - tail.length), tail)
-    assert.equal(statements.length, (await statementsFor({ preTripCheck, preTripChecklistItem, vehicleDefect })).length + ALTERED.length + tail.length, "nothing else in the file")
+    assert.equal(statements.length, (await statementsFor(PRE_TRIP_TABLES_AS_OF_0075)).length + ALTERED.length + tail.length, "nothing else in the file")
     assert.ok(tail.includes(normalised('REVOKE UPDATE, DELETE ON "wms"."pre_trip_check" FROM wms_api;')))
     assert.match(text, /^-- Pre-trip inspection \(O13 of #290\)/)
   })
 
-  test("the receipt's kinds grew by pre-trip-check, and a ticket's by vehicle-defect", () => {
+  test("the receipt's kinds grew by pre-trip-check, last, and a ticket's by vehicle-defect, before other; both went again with the feature", () => {
     assert.equal(KINDS_AS_OF_0075.at(-1), "pre-trip-check")
-    assert.equal(KINDS_AS_OF_0075.length, DRIVER_COMMAND_KINDS.length - 2, "two kinds added since")
-    assert.ok((TICKET_KINDS as readonly string[]).includes("vehicle-defect"))
+    assert.equal(KINDS_AS_OF_0075.length, DRIVER_COMMAND_KINDS.length - 1, "two kinds added since, and this file's taken again")
+    assert.deepEqual(TICKET_KINDS_AS_OF_0075.slice(-2), ["vehicle-defect", "other"])
+    assert.equal((DRIVER_COMMAND_KINDS as readonly string[]).includes("pre-trip-check"), false)
+    assert.equal((TICKET_KINDS as readonly string[]).includes("vehicle-defect"), false)
   })
 })
 

@@ -283,7 +283,7 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       if (row.createdBy !== null || row.sourceEventId !== null) return "a recurring charge is the billing run's: no person and no outbox event (billable_event_origin_shape)"
       return undefined
     case "job":
-      if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a work order's job names its stop and no ticket and no reversal (billable_event_kind_shape)"
+      if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a job names its stop and no ticket and no reversal (billable_event_kind_shape)"
       break
     case "hire":
       // Its placement and container are the table's to hold (billable_event_kind_shape, billable_event_charge_shape), written beside the composed row.
@@ -312,9 +312,9 @@ export type RecordBillableEventInput = {
 }
 
 /** The reason a project's own hold for review writes (M14 of #293), with no person. */
-export const HELD_FOR_REVIEW = "Held for review: the project holds its hires and work-order jobs"
+export const HELD_FOR_REVIEW = "Held for review: the project holds its hires and jobs"
 
-/** Whether a project holds its hires and work-order jobs for the office's review as they are charged (M14 of #293). */
+/** Whether a project holds its hires and jobs for the office's review as they are charged (M14 of #293). */
 export async function holdsForReview(tx: Tx, scope: Scope): Promise<boolean> {
   const [row] = await tx
     .select({ holds: project.holdForReview })
@@ -338,7 +338,7 @@ export async function autoHoldOf(tx: Tx, scope: Scope, kind: BillableEventKind, 
 
 /**
  * Records one billable event: the row, in the caller's transaction, its
- * shape checked before the insert. A work order's job of a project that holds
+ * shape checked before the insert. A job of a project that holds
  * for review (M14 of #293) is written held, with no person. Answers the row and the `BillableEvent`
  * as the route answers it — `blocked` or `ready`, since no line and no
  * reversal can name a row just written.
@@ -409,7 +409,7 @@ export async function reversalOfEvent(tx: Tx, companyId: string, reversesEventId
   return row
 }
 
-/** The kinds a stop's completion records: a pickup's charge, or a work order's job. */
+/** The kinds a stop's completion records: a pickup's charge, or a job. */
 export const STOP_EVENT_KINDS: readonly BillableEventKind[] = ["pickup", "job"]
 
 /** The kind a stop's Pickup Exception records (#293 M5), read apart from the stop's own. */
@@ -417,7 +417,7 @@ export const EXCEPTION_EVENT_KINDS: readonly BillableEventKind[] = ["pickup-exce
 
 /**
  * A pickup's live event of the kinds asked — by default the stop's own, its
- * `pickup` charge or a work order's `job` (M14 of #293), whichever its
+ * `pickup` charge or a `job` (M14 of #293), whichever its
  * completion recorded — not cancelled and not reversed: `ready`,
  * `blocked` or `invoiced` in the reading's words, since an invoiced event is
  * the one a correction reverses — under its row lock, so the consumer that

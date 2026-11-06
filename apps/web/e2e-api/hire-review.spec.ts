@@ -1,16 +1,14 @@
-// Container hire and work-order charges on the web (M14 of #293): a hire
-// product's free days set in Settings › Commercial › Products; the product
-// each of the office's work orders is charged at set in Settings › Commercial
-// › Work order charges, replaced whole; a project's hires and jobs held for
+// Container hire on the web (M14 of #293): a hire product's free days set in
+// Settings › Commercial › Products; a project's hires and jobs held for
 // review from Settings › Finance & invoicing; and a ready event held for
 // review with the office's reason, counted held by a run's preview, then
 // released. What the settings change is put back, since a developer's stack
 // is shared across runs; the event is uniquely made, on a day of its own.
-import type { APIRequestContext, Locator, Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 import { uniqueName } from "./env"
 import { expect, test } from "./fixtures"
-import { answerOf, toasts } from "./routes-support"
+import { answerOf } from "./routes-support"
 import { listAll, projectNamed, type Project } from "./tester"
 
 type Product = { id: string; name: string; unit: string; freeDays: number | null }
@@ -26,21 +24,13 @@ async function pick(dialog: Locator, page: Page, field: RegExp, option: RegExp) 
   await page.getByRole("option", { name: option }).first().click()
 }
 
-/** A product of the project made through the API, active, sold by the job and with a VAT rate: what a work order is charged at. */
-async function jobProduct(api: APIRequestContext, project: Project, prefix: string): Promise<Product> {
-  const name = uniqueName(prefix)
-  const response = await api.post("/products", { data: { projectId: project.id, name, kind: "additional-service", status: "active", unit: "job", vatPercent: 25 } })
-  expect(response.status(), await response.text()).toBe(201)
-  return (await response.json()) as Product
-}
-
 /** A service date of this spec's own, in the past — a run is for a closed period — and inside the seeded agreement's and price list's periods; the specs that bill keep months of their own. */
 function dayOfItsOwn(): string {
   const offset = Math.floor(Date.now() / 1000) % 59
   return new Date(Date.UTC(2026, 0, 1) + offset * 86_400_000).toISOString().slice(0, 10)
 }
 
-test.describe("container hire and work-order charges (#293 M14)", () => {
+test.describe("container hire (#293 M14)", () => {
   let copenhagen: Project
 
   test.beforeEach(async ({ api }) => {
@@ -67,31 +57,6 @@ test.describe("container hire and work-order charges (#293 M14)", () => {
     expect(created.request().postDataJSON()).toMatchObject({ unit: "day", freeDays: 7 })
     const product = (await created.json()) as Product
     expect(((await (await api.get(`/products/${product.id}`)).json()) as Product).freeDays).toBe(7)
-  })
-
-  test.describe("work order charges", () => {
-    test.afterEach(async ({ api }) => {
-      const cleared = await api.put("/work-order-charges", { data: { projectId: copenhagen.id, charges: [] } })
-      expect(cleared.status(), await cleared.text()).toBe(200)
-    })
-
-    test("Settings › Commercial › Work order charges sets the product a wash is charged at, the set replaced whole", async ({ api, page }) => {
-      const wash = await jobProduct(api, copenhagen, "E2E Container wash")
-      await page.goto("/settings?pane=commercial-work-order-charges")
-      await expect(page.getByRole("heading", { name: "Work order charges" }).first()).toBeVisible()
-      await page.getByLabel("Project", { exact: true }).click()
-      await page.getByRole("option", { name: copenhagen.name, exact: true }).click()
-      const charges = page.getByTestId("work-order-charges")
-      await charges.getByRole("combobox", { name: "Wash charged at" }).click()
-      await page.getByRole("option", { name: wash.name, exact: true }).click()
-      const [saved] = await Promise.all([answerOf(page, "PUT", "/work-order-charges"), page.getByRole("button", { name: "Save charges" }).click()])
-      expect(saved.status(), await saved.text()).toBe(200)
-      expect(saved.request().postDataJSON()).toEqual({ projectId: copenhagen.id, charges: [{ service: "wash", productId: wash.id }] })
-      await expect(toasts(page)).toContainText(`One work order is charged in ${copenhagen.name}.`)
-      await expect(page.getByRole("button", { name: "Save charges" })).toBeDisabled()
-      const read = (await (await api.get(`/work-order-charges?projectId=${copenhagen.id}`)).json()) as { charges: { service: string; productId: string }[] }
-      expect(read.charges).toEqual([{ service: "wash", productId: wash.id }])
-    })
   })
 
   test.describe("hold for review", () => {

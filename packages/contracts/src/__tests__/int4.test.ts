@@ -10,7 +10,6 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import * as accessModule from "../access"
-import * as accountingModule from "../accounting"
 import * as addressesModule from "../addresses"
 import * as agreementsModule from "../agreements"
 import * as alertsModule from "../alerts"
@@ -28,7 +27,6 @@ import * as customersModule from "../customers"
 import * as datesModule from "../dates"
 import * as driverCommandsModule from "../driver-commands"
 import * as dropOffPointsModule from "../drop-off-points"
-import * as emissionsModule from "../emissions"
 import * as executionModule from "../execution"
 import * as financeModule from "../finance"
 import * as fleetModule from "../fleet"
@@ -54,7 +52,6 @@ import * as planningModule from "../planning"
 import * as planningAreasModule from "../planning-areas"
 import * as plansModule from "../plans"
 import * as positionsModule from "../positions"
-import * as preTripModule from "../pre-trip"
 import * as tanksModule from "../tanks"
 import * as priceListsModule from "../price-lists"
 import * as problemModule from "../problem"
@@ -83,9 +80,7 @@ import * as fieldInspectionsModule from "../field-inspections"
 import * as rightSizingModule from "../right-sizing"
 import * as siteVisitsModule from "../site-visits"
 import * as settlementsModule from "../settlements"
-import * as sortingGuideModule from "../sorting-guide"
 import * as stockModule from "../stock"
-import * as sustainabilityModule from "../sustainability"
 import * as textModule from "../text"
 import * as ticketSlaModule from "../ticket-sla"
 import * as ticketTeamsModule from "../ticket-teams"
@@ -100,7 +95,6 @@ import * as notificationsModule from "../notifications"
 import * as routeMessagesModule from "../route-messages"
 import * as weightControlModule from "../weight-control"
 import * as weighbridgeModule from "../weighbridge"
-import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
 import { ServiceProviderPriceIndex } from "../service-provider-prices"
 
@@ -108,7 +102,6 @@ import { ServiceProviderPriceIndex } from "../service-provider-prices"
 const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "applications": applicationsModule,
   "access": accessModule,
-  "accounting": accountingModule,
   "addresses": addressesModule,
   "agreements": agreementsModule,
   "alerts": alertsModule,
@@ -128,7 +121,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "dates": datesModule,
   "driver-commands": driverCommandsModule,
   "drop-off-points": dropOffPointsModule,
-  "emissions": emissionsModule,
   "execution": executionModule,
   "finance": financeModule,
   "fleet": fleetModule,
@@ -156,7 +148,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "planning-areas": planningAreasModule,
   "plans": plansModule,
   "positions": positionsModule,
-  "pre-trip": preTripModule,
   tanks: tanksModule,
   "price-lists": priceListsModule,
   "problem": problemModule,
@@ -183,9 +174,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "field-inspections": fieldInspectionsModule,
   "right-sizing": rightSizingModule,
   "settlements": settlementsModule,
-  "sorting-guide": sortingGuideModule,
   "stock": stockModule,
-  "sustainability": sustainabilityModule,
   "text": textModule,
   "ticket-sla": ticketSlaModule,
   "ticket-teams": ticketTeamsModule,
@@ -197,7 +186,6 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "visit-rules": visitRulesModule,
   "weight-control": weightControlModule,
   "weighbridge": weighbridgeModule,
-  "work-order-charges": workOrderChargesModule,
 }
 
 describe("the shared whole numbers", () => {

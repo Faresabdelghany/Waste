@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { randomInt } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
+import { BillableEvent } from "@waste/contracts/billable-events"
 import { BulkyAvailability, BulkyBooking, BulkySchedule } from "@waste/contracts/bulky"
 import type { Polygon } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
@@ -13,15 +14,18 @@ import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { customer, property } from "@waste/db/schema/customers"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { outboxEvent, pickup, route as route_ } from "@waste/db/schema/execution"
+import { billableEvent } from "@waste/db/schema/finance"
 import { and, asc, eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 
 import { createApp } from "../app"
+import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/billable-events"
 import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedules"
 import { INACTIVE_CUSTOMER } from "../routes/bulky-bookings"
 import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
 import { bulkyKeepsTheDay } from "../routes/routes"
+import { unofferedProduct } from "../routes/statuses"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -286,6 +290,27 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
       await tx.update(customer).set({ status: "inactive" }).where(eq(customer.id, ids.stranger))
     })
     assert.equal((await refused(await post(olivia, "/bulky-bookings", booking({ customerId: ids.stranger, agreementId: ids.strangers })), 409)).detail, INACTIVE_CUSTOMER)
+  })
+
+  test("a bulky collection's job blocked for its product takes one the office names, sold by the job and offered, on the office's ad-hoc route", async () => {
+    // The fourth Tuesday, which no other test books.
+    const day = "2027-03-23"
+    const made = await book({ day })
+    const route = (await (await post(olivia, "/routes", { projectId: a.projects.copenhagen.id, operatingDate: day })).json()) as { id: string }
+    const stop = await created(olivia, `/routes/${route.id}/pickups`, await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), PickupDetail, "/pickups")
+    // As the consumer records a collected booking whose product will not do: blocked `no-product`, for the office to price.
+    const event = testId()
+    await withCompany(pool.db, a.companyId, (tx: Tx) =>
+      tx.insert(billableEvent).values({ id: event, companyId: a.companyId, projectId: a.projects.copenhagen.id, kind: "job", serviceDate: day, agreementId: ids.agreement, subscriptionId: null, productId: null, quantity: 1, blockReason: "no-product", routeId: route.id, pickupId: stop.id, sourceEventId: testId() }),
+    )
+    const reprice = (productId: string) => post(olivia, `/billable-events/${event}/reprice`, { productId })
+    assert.deepEqual((await refused(await reprice(ids.collection), 400)).errors, [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
+    assert.equal((await refused(await reprice(ids.draft), 409)).detail, unofferedProduct("draft"))
+    const response = await reprice(ids.bulky)
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    const repriced = BillableEvent.parse(await response.json())
+    // The project has no price list yet, so the block moves on to the next reason rather than pricing it.
+    assert.deepEqual([repriced.kind, repriced.productId, repriced.status, repriced.blockReason], ["job", ids.bulky, "blocked", "no-price-list"])
   })
 
   test("where two scheduled areas hold the place, a day is the lower area code's schedule's while it is in force, and the other's days are not offered", async () => {

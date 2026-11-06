@@ -7,7 +7,7 @@
 // the annual-access product whose subscription includes its visits; and the
 // threshold and window that flag a Property as a likely trade. The routes are
 // apps/api/src/routes/visit-rules.ts, under `commercial.products` as the
-// ticket and work order charges are; the rules are
+// ticket charges are; the rules are
 // @waste/domain/visits/charges.
 import * as z from "zod"
 

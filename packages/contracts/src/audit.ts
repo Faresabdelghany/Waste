@@ -79,7 +79,6 @@ export const AUDITED_TABLES = [
   "service_area_assignment",
   "service_provider_price",
   "settlement",
-  "sorting_guide_item",
   "subscription_pause",
   "ticket_sla",
   "drop_off_point",
@@ -93,15 +92,7 @@ export const AUDITED_TABLES = [
   "contaminant_code_fraction",
   "pickup_exception_rule",
   "pickup_exception_rule_step",
-  "fuel_emission_factor",
-  "vehicle_type_consumption",
   "application",
-  "waste_fraction_emission_factor",
-  "work_order_product",
-  "accounting_account",
-  "accounting_settings",
-  "accounting_vat_code",
-  "accounting_product_account",
   "bulky_schedule",
   "bulky_booking",
   "bulky_booking_item",
@@ -122,8 +113,6 @@ export const AUDITED_TABLES = [
   "service_provider_activity_fraction",
   "customer_contact",
   "message_template",
-  "pre_trip_checklist_item",
-  "vehicle_defect",
   "sensor",
   "sensor_pairing",
   "notification_preference",
@@ -171,12 +160,11 @@ export const AuditEvent = z.object({
 export type AuditEvent = z.infer<typeof AuditEvent>
 
 /**
- * A page of history, newest first: one row's — its own changes and those of
- * the sets it is the parent of, two levels down — when `table` and `rowId`
- * are both given, else the whole company's.
+ * A page of one row's history, newest first: its own changes and those of
+ * the sets it is the parent of, two levels down.
  */
 export const AuditEventListQuery = PageRequest.extend({
-  table: TableName.optional(),
-  rowId: Id.optional(),
-}).refine((query) => (query.table === undefined) === (query.rowId === undefined), { message: "Give both table and rowId, or neither", path: ["rowId"] })
+  table: TableName,
+  rowId: Id,
+})
 export type AuditEventListQuery = z.infer<typeof AuditEventListQuery>

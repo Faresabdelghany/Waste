@@ -6,16 +6,19 @@
 // them the item table's fence and trigger and the public door's role, grants
 // and policies as src/sql/public-door.ts spells them (ADR-0010). The role as
 // a database sees it is public-door.test.ts's. No database.
+//
+// A later migration dropped the items' table with the guide (drop_sorting_guide),
+// so the table and its statuses are read as they stood from schema/dropped.ts,
+// and the door's 0017 list keeps its grant and policy on them
+// (`SORTING_GUIDE_DOOR_AT_0017`).
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { SORTING_GUIDE_ITEM_STATUSES } from "@waste/domain/sorting-guide/vocabulary"
-
 import { MIGRATIONS_FOLDER } from "../migrate"
+import { SORTING_GUIDE_ITEM_STATUSES, sortingGuideItem } from "../schema/dropped"
 import { project } from "../schema/organisation"
-import { sortingGuideItem } from "../schema/sorting-guide"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { publicDoorStatements } from "../sql/public-door"
 import { checksOf, companyFk, createTable, index, oneOfCheck, projectFk, ref, tenantFk, uniqueKey } from "./rendering"
@@ -64,7 +67,7 @@ describe("the Sorting Guide and the public slug as drizzle-kit writes them", () 
 })
 
 describe("the checks", () => {
-  test("an item's status reads the guide's vocabulary, and the slug's shape is the domain's", () => {
+  test("an item's status reads the guide's vocabulary as it stood, and the slug's shape is the domain's", () => {
     assert.deepEqual([...checksOf(sortingGuideItem).keys()], ["sorting_guide_item_status_one_of"])
     assert.equal(checksOf(project).get("project_public_slug_shape"), SLUG)
   })

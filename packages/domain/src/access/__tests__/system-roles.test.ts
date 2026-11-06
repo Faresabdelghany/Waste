@@ -66,15 +66,12 @@ describe("the seeded system roles", () => {
     assert.deepEqual(actionsOn("customers.agreements"), ["view", "edit", "create"])
   })
 
-  test("Customer Service keeps the Sorting Guide's items (#293): view, edit and create, and no delete since an item is withdrawn; it reads the projects and fractions the pane names, and publishing the project stays the administrator's", () => {
+  test("Customer Service reads the projects and the fractions its panes name, and changes neither: a project's public slug is the organisation's edit", () => {
     const service = SYSTEM_ROLES.find((role) => role.key === "customer-service")
     assert.ok(service)
     const actionsOn = (moduleKey: string) => service.grants.find((grant) => grant.moduleKey === moduleKey)?.actions
-    assert.deepEqual(actionsOn("configure.sorting-guide"), ["view", "edit", "create"])
-    assert.deepEqual(actionsOn("configure.organization"), ["view"], "the projects a guide is kept for, read: a project's public slug is the organisation's edit")
-    assert.deepEqual(actionsOn("configure.master"), ["view"], "the fractions an item names, read")
-    const holders = SYSTEM_ROLES.filter((role) => role.grants.some((grant) => grant.moduleKey === "configure.sorting-guide")).map((role) => role.key)
-    assert.deepEqual(holders, ["company-administrator", "customer-service"])
+    assert.deepEqual(actionsOn("configure.organization"), ["view"], "the projects, read: a project's public slug is the organisation's edit")
+    assert.deepEqual(actionsOn("configure.master"), ["view"], "the fractions, read")
   })
 
   test("Customer Service reads the stops a ticket is about (M6 of #293): view on the stops, whose photos are the evidence a missed-collection dispute is answered with, and nothing else of Route Studio", () => {
@@ -87,7 +84,7 @@ describe("the seeded system roles", () => {
     )
   })
 
-  test("the Drop-off Points (#293, M3) are a place the operation runs: the resources workspace's roles hold them as they hold the depots, and Customer Service keeps them beside the guide", () => {
+  test("the Drop-off Points (#293, M3) are a place the operation runs: the resources workspace's roles hold them as they hold the depots, and Customer Service keeps them", () => {
     const actionsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "resources.drop-off-points")?.actions
     const depotsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "resources.depots")?.actions
     const holders = SYSTEM_ROLES.filter((role) => actionsOn(role.key) !== undefined).map((role) => role.key)

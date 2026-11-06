@@ -6,7 +6,10 @@
 // an object. Then the file: drizzle-kit's statements, but for the ticket's
 // type added nullable; the seed, the backfill and the NOT NULL
 // (src/sql/ticket-types.ts); then the three tables' fences, triggers and
-// audit trails. The file is found by its name, not its number. No database.
+// audit trails. The pre-trip inspection's removal took the `vehicle-defect`
+// kind since, so the file's seed is today's with that kind's default
+// (`seedAsOfThisFile`). The file is found by its name, not its number. No
+// database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -23,6 +26,14 @@ import { auditTrail, TICKET_TYPES_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { ticketTypesBackfill, ticketTypesRequired, ticketTypesSeed } from "../sql/ticket-types"
 import { checksOf, list, ref } from "./rendering"
+
+/** The seed as this file spells it: today's, with the `vehicle-defect` default before `other`, which the pre-trip inspection's removal took since. */
+function seedAsOfThisFile(): string {
+  const other = "('other', 'Other')"
+  const today = ticketTypesSeed()
+  assert.ok(today.includes(other), "other is the kind vehicle-defect preceded")
+  return today.replace(other, `('vehicle-defect', 'Vehicle defect'), ${other}`)
+}
 
 /** drizzle-kit's spelling of the ticket's type, which a database holding tickets refuses, and the file's. */
 const REQUIRED_TYPE = 'ALTER TABLE "wms"."ticket" ADD COLUMN "ticket_type_id" uuid NOT NULL;'
@@ -90,7 +101,7 @@ describe("the ticket types' migration", () => {
     assert.deepEqual([...statements.slice(0, head.length)].sort(), [...head].sort())
     assert.deepEqual(
       statements.slice(head.length),
-      [ticketTypesSeed(), ticketTypesBackfill(), ticketTypesRequired(), ...[ticketType, ticketTypeField, ticketTypePermission].flatMap(handWrittenStatements), ...TICKET_TYPES_AUDITED.flatMap(auditTrail)].map(normalised),
+      [seedAsOfThisFile(), ticketTypesBackfill(), ticketTypesRequired(), ...[ticketType, ticketTypeField, ticketTypePermission].flatMap(handWrittenStatements), ...TICKET_TYPES_AUDITED.flatMap(auditTrail)].map(normalised),
     )
     assert.match(text, /^-- Ticket Types \(#545 of #544\)/)
   })

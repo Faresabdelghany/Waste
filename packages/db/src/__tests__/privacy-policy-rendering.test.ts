@@ -3,16 +3,14 @@
 // three nullable columns on `project` — null is no policy of its own —
 // with each kind's days held to its bounds and the purpose to the
 // vocabulary. The migration is exactly those statements: no table is new, so
-// nothing is written by hand. organisation-access-rendering.test.ts spells the
-// project's CREATE TABLE as of today. The file is found by its name, not its
-// number, which it takes at its turn. No database.
+// nothing is written by hand. The policy went again with 0099
+// (drop-privacy-policy-rendering.test.ts), the domain's bounds and purposes
+// with it, so they are spelled here as 0077 wrote them. The file is found by
+// its name, not its number, which it takes at its turn. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
-
-import { RETENTION_DAYS_BOUNDS } from "@waste/domain/privacy/retention"
-import { GPS_PURPOSES } from "@waste/domain/privacy/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { statementsOf } from "../sql/hand-written"
@@ -24,6 +22,10 @@ async function migration(): Promise<string[]> {
   assert.ok(file !== undefined, "the privacy policy's migration")
   return statementsOf(await readFile(join(MIGRATIONS_FOLDER, file), "utf8"))
 }
+
+/** Each kind's days as 0077 bounds them, and the purposes it holds the column to. */
+const RETENTION_DAYS_BOUNDS = { positions: { min: 1, max: 30 }, proofs: { min: 1, max: 3650 } } as const
+const GPS_PURPOSES = ["dispatch", "dispatch-and-proof"] as const
 
 const range = (label: string, column: string, bounds: { min: number; max: number }) =>
   `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_${label}" CHECK (${ref("project", column)} between ${bounds.min} and ${bounds.max});`

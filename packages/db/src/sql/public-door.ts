@@ -16,10 +16,8 @@
 // Its rows are its own policies', since every table's tenant fence is
 // written `TO wms_api` and forced: a project is visible while it publishes
 // itself (`public_slug` set), and that row is how a request finds the company
-// it then sets with `wms.company_id`; a fraction and an item are visible
-// inside that company, an item only while it is published and its project
-// is too. Granted to the owner as well, so a test can look through its eyes.
-import { PUBLISHED_ITEM } from "@waste/domain/sorting-guide/vocabulary"
+// it then sets with `wms.company_id`; a fraction is visible inside that
+// company. Granted to the owner as well, so a test can look through its eyes.
 import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
@@ -27,7 +25,7 @@ import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
 import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
-import { collectionCalendarHoliday, DROPPED_TABLES } from "../schema/dropped"
+import { collectionCalendarHoliday, DROPPED_TABLES, sortingGuideItem } from "../schema/dropped"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
@@ -35,7 +33,6 @@ import { route } from "../schema/execution"
 import { generationMatch } from "../schema/generation"
 import { holidayList, holidayListHoliday, project } from "../schema/organisation"
 import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
-import { sortingGuideItem } from "../schema/sorting-guide"
 
 const HELPER = "publicDoor"
 
@@ -51,8 +48,13 @@ export type PublicDoorTable = { table: PgTable; columns: readonly PgColumn[]; ro
 
 const IN_COMPANY = `${quoted("company_id")} = (select wms.current_company_id())`
 
-/** What migration 0017 opened (the Sorting Guide, #293 M1): spelled as that file has it, never edited, since an applied file is not. */
-export const SORTING_GUIDE_DOOR: readonly PublicDoorTable[] = [
+/**
+ * What migration 0017 opened (the Sorting Guide, #293 M1): spelled as that
+ * file has it, never edited, since an applied file is not — the guide's
+ * items too, whose table a later migration dropped with its grant and policy
+ * (schema/dropped.ts), an item visible only while published.
+ */
+export const SORTING_GUIDE_DOOR_AT_0017: readonly PublicDoorTable[] = [
   {
     table: project,
     columns: [project.id, project.companyId, project.name, project.language, project.timezone, project.publicSlug],
@@ -75,7 +77,7 @@ export const SORTING_GUIDE_DOOR: readonly PublicDoorTable[] = [
       sortingGuideItem.instructions,
       sortingGuideItem.status,
     ],
-    rows: `${IN_COMPANY} and ${quoted("status")} = '${PUBLISHED_ITEM}' and exists (select 1 from "wms"."project" "published" where "published"."company_id" = ${quoted("sorting_guide_item")}.${quoted("company_id")} and "published"."id" = ${quoted("sorting_guide_item")}.${quoted("project_id")} and "published"."public_slug" is not null)`,
+    rows: `${IN_COMPANY} and ${quoted("status")} = 'published' and exists (select 1 from "wms"."project" "published" where "published"."company_id" = ${quoted("sorting_guide_item")}.${quoted("company_id")} and "published"."id" = ${quoted("sorting_guide_item")}.${quoted("project_id")} and "published"."public_slug" is not null)`,
   },
 ]
 
@@ -270,12 +272,15 @@ export const HOLIDAY_LISTS_DOOR: readonly PublicDoorTable[] = [
   },
 ]
 
+/** 0017's tables less those a later file dropped: the published project and its company's fractions, what the door opens of 0017 today. */
+export const PUBLISHED_PROJECT_DOOR: readonly PublicDoorTable[] = SORTING_GUIDE_DOOR_AT_0017.filter(({ table }) => !(DROPPED_TABLES as readonly PgTable[]).includes(table))
+
 /** 0021's tables less those a later file dropped: what the door opens of the collection days today. */
 export const COLLECTION_DAYS_DOOR: readonly PublicDoorTable[] = COLLECTION_DAYS_DOOR_AT_0021.filter(({ table }) => !(DROPPED_TABLES as readonly PgTable[]).includes(table))
 
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR, ...HOLIDAY_LISTS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...PUBLISHED_PROJECT_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR, ...BRANDING_DOOR, ...HOLIDAY_LISTS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -324,7 +329,7 @@ export const publicPolicyStatements = (tables: readonly PublicDoorTable[]): stri
   )
 
 /** Everything migration 0017 carries for the door below the tables' statements, in order: the role, its grants, its policies. */
-export const publicDoorStatements = (): string[] => [...publicRoleStatements(), ...publicGrantStatements(SORTING_GUIDE_DOOR), ...publicPolicyStatements(SORTING_GUIDE_DOOR)]
+export const publicDoorStatements = (): string[] => [...publicRoleStatements(), ...publicGrantStatements(SORTING_GUIDE_DOOR_AT_0017), ...publicPolicyStatements(SORTING_GUIDE_DOOR_AT_0017)]
 
 /** Everything the collection days' migration carries (#293 M2): the grants, then the policies of the tables it opens. */
 export const collectionDaysDoorStatements = (): string[] => [...publicGrantStatements(COLLECTION_DAYS_DOOR_AT_0021), ...publicPolicyStatements(COLLECTION_DAYS_DOOR_AT_0021)]

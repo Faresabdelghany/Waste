@@ -6,11 +6,11 @@
 // A plan is due on whichever interval comes first. The date is the last
 // service's day plus the days; the kilometres and the hours are the last
 // service's reading plus the interval, measured against the vehicle's latest
-// reading — what a driver's pre-trip check last read off the dashboard (O13
-// of #290), or the last service's own where no check has read one since. A
-// plan is `due-soon` inside a margin of each limit — two weeks, a thousand
-// kilometres, fifty hours — and `overdue` once a limit is passed; the worker's
-// `maintenance-due` rule raises an alert for each (resolution/alert-rules.ts).
+// reading where the caller has one, or the last service's own where it has
+// none newer. A plan is `due-soon` inside a margin of each limit — two weeks,
+// a thousand kilometres, fifty hours — and `overdue` once a limit is passed;
+// the worker's `maintenance-due` rule raises an alert for each
+// (resolution/alert-rules.ts).
 //
 // Completing a plan's order is the service done: its day and its readings are
 // the plan's new baseline, so the plan reads `ok` again and the alert clears.
