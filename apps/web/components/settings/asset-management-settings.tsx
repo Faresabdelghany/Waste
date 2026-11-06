@@ -409,6 +409,7 @@ export function AssetManagementSettings() {
 
 export function AssetPanelShell({
   heading = "Asset management",
+  header,
   tabs,
   action,
   toolbar,
@@ -418,8 +419,10 @@ export function AssetPanelShell({
 }: {
   /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
   heading?: string | null
+  /** A record's page: its `RecordPageHeader`, in place of the heading bar. */
+  header?: ReactNode
   tabs?: ReactNode
-  /** The buttons of a pane that has no list (Notifications' Save, Integrations' Refresh); a list's actions go in its `RecordsSection`, as a workspace's do. */
+  /** The buttons of a pane that has no list (Notifications' Save); a list's actions go in its `RecordsSection`, as a workspace's do. */
   action?: ReactNode
   toolbar?: ReactNode
   /** The table's title and its ⓘ; left out, the content starts at once. */
@@ -430,12 +433,12 @@ export function AssetPanelShell({
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">
-        {(heading !== null || action) && (
+        {header ?? ((heading !== null || action) && (
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <p className="text-base font-medium text-foreground">{heading}</p>
             {action && <PageActions>{action}</PageActions>}
           </div>
-        )}
+        ))}
         {(tabs || toolbar) && (
           <div className="flex flex-col gap-3 px-4 py-3">
             {tabs}

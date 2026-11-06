@@ -1393,6 +1393,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === "company" ||
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
+    paneId === HOLIDAY_LISTS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === TICKETS_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||

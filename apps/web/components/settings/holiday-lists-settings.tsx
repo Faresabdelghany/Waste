@@ -32,8 +32,7 @@ import {
 import { toast } from "sonner"
 
 import { ChipOverflow } from "@/components/chip-overflow"
-import { PageActions, TableCard } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { RecordPageHeader, TableCard } from "@/components/page-layout"
 import { AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -361,7 +360,9 @@ function HolidayListsIndex({
 
   return (
     <AssetPanelShell
-      heading={null}
+      heading="Operations"
+      title="Holiday lists"
+      description="The company's holiday lists, one per country, and the dated holidays of each; which list every project rests on, and its weekend."
       toolbar={
         <div className="flex flex-col gap-2">
           <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
@@ -730,63 +731,64 @@ function HolidayListPage({
   return (
     <AssetPanelShell
       heading={null}
+      header={
+        <RecordPageHeader
+          backLabel="Back to holiday lists"
+          onBack={onBack}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  Actions
+                  <CaretDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuItem onSelect={onEdit}>
+                  <PencilSimple className="h-4 w-4" />
+                  Edit list
+                </DropdownMenuItem>
+                {year !== ALL_YEARS && (
+                  <DropdownMenuItem onSelect={copyToNextYear} disabled={copied.length === 0}>
+                    <CopySimple className="h-4 w-4" />
+                    Copy {year} to {Number(year) + 1}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {/* A list a project rests on is not removed: the project moves first. */}
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onRemove} disabled={projects.length > 0}>
+                  <Trash className="h-4 w-4" />
+                  Remove list
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-base font-medium text-foreground">{name}</h1>
+            <HolidayListStatusBadge status={status} />
+          </div>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
+          </p>
+        </RecordPageHeader>
+      }
       toolbar={
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Breadcrumbs items={[{ label: "Holiday lists", onClick: onBack }, { label: name }]} />
-                <HolidayListStatusBadge status={status} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
-              </p>
-            </div>
-            <PageActions>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    Actions
-                    <CaretDown className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52">
-                  <DropdownMenuItem onSelect={onEdit}>
-                    <PencilSimple className="h-4 w-4" />
-                    Edit list
-                  </DropdownMenuItem>
-                  {year !== ALL_YEARS && (
-                    <DropdownMenuItem onSelect={copyToNextYear} disabled={copied.length === 0}>
-                      <CopySimple className="h-4 w-4" />
-                      Copy {year} to {Number(year) + 1}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  {/* A list a project rests on is not removed: the project moves first. */}
-                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onRemove} disabled={projects.length > 0}>
-                    <Trash className="h-4 w-4" />
-                    Remove list
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </PageActions>
-          </div>
-          <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-            <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holidays" />
-            <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="h-8 w-36 rounded-lg border-border/60 text-sm" aria-label="Year">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_YEARS}>All years</SelectItem>
-                {yearOptions.map((option) => (
-                  <SelectItem key={option} value={String(option)}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
+          <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holidays" />
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="h-8 w-36 rounded-lg border-border/60 text-sm" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_YEARS}>All years</SelectItem>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       }
     >

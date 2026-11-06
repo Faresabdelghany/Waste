@@ -14,7 +14,7 @@
 // Offered on the Pilot alone, beside the Ticket teams.
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowDown, ArrowLeft, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowDown, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
@@ -23,6 +23,7 @@ import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "@waste/domain/resolution/vocabulary"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
+import { RecordPageHeader } from "@/components/page-layout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -229,28 +230,14 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
 }
 
 /** The header a type's page stands under: the way back to the list, the type's name and what it is, and the page's own buttons. */
-function TicketTypeHeader({ onBack, children, action }: { onBack: () => void; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to ticket types" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">{children}</div>
-      </div>
-      {action}
-    </div>
-  )
-}
-
 /** The page of a type the address names that is not listed: still being read, not shown to the role, or not there. */
 function TicketTypeMissing({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="border-b border-border/40">
-        <TicketTypeHeader onBack={onBack}>
+        <RecordPageHeader backLabel="Back to ticket types" onBack={onBack}>
           <p className="truncate text-base font-medium text-foreground">Ticket type</p>
-        </TicketTypeHeader>
+        </RecordPageHeader>
       </header>
       <p className="p-8 text-center text-sm text-muted-foreground">{message}</p>
     </div>
@@ -318,9 +305,10 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex min-w-0 flex-1 flex-col gap-0">
       <header className="flex flex-col border-b border-border/40">
-        <TicketTypeHeader
+        <RecordPageHeader
+          backLabel="Back to ticket types"
           onBack={onBack}
-          action={
+          actions={
             <div className="flex flex-wrap items-center justify-end gap-3">
               {refusal !== null && <p className="max-w-xl text-sm text-destructive">{refusal}</p>}
               {editable && (
@@ -337,7 +325,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
             {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.facts.Kind}</p>
-        </TicketTypeHeader>
+        </RecordPageHeader>
         <div className="overflow-x-auto px-4 py-3">
           <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket type">
             <TabsTrigger value="details" className={tabClass}>

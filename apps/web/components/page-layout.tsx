@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr"
 
 import { NotificationsMenu } from "@/components/top-bar/notifications-menu"
 import { TopAccountMenu } from "@/components/top-bar/top-account-menu"
+import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
@@ -77,5 +79,34 @@ export function TableCard({
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * The header of one record's page inside a pane (a company, a ticket type, a
+ * holiday list): the way back to its list, the record's name and its line
+ * beneath on the left, the record's own actions in `PageActions` on the right.
+ */
+export function RecordPageHeader({
+  backLabel,
+  onBack,
+  actions,
+  children,
+}: {
+  backLabel: string
+  onBack: () => void
+  actions?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div data-slot="record-page-header" className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={backLabel} onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="min-w-0">{children}</div>
+      </div>
+      {actions ? <PageActions>{actions}</PageActions> : null}
+    </div>
   )
 }
