@@ -45,7 +45,7 @@ import { STATUS_CODES } from "node:http"
 
 import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
 import { Refused } from "@waste/db/commands/shared"
-import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
+import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, loggable, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
 import type { ErrorHandler, NotFoundHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import type { ClientErrorStatusCode, ServerErrorStatusCode } from "hono/utils/http-status"
@@ -147,33 +147,6 @@ export { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf }
 const CONFLICTS: Readonly<Record<string, string>> = {
   [UNIQUE_VIOLATION]: "A record with the same key already exists",
   [EXCLUSION_VIOLATION]: "A record overlapping this one already exists",
-}
-
-/** How far down a `cause` chain the projection below goes; Drizzle wraps postgres.js, which wraps nothing. */
-const LOG_CAUSE_DEPTH = 3
-
-/**
- * What goes in the log when a request became a 500: a projection of the
- * error, never the error itself. A postgres.js error carries the statement it
- * sent and the `parameters` it bound, so logging one whole would print an
- * invitee's e-mail address and name (a failed `POST /users`), a company's
- * registration number, or whatever else the body held, into the operator's
- * log — data the request never asked to have kept. What is left is what an
- * operator debugs with: who threw, what it said, the SQLSTATE and the
- * constraint when Postgres named one, the stack, and the same projection of
- * the cause, which is where Drizzle keeps the database's own error.
- */
-export function loggable(error: unknown, depth: number = LOG_CAUSE_DEPTH): unknown {
-  if (typeof error !== "object" || error === null) return error
-  const { name, message, code, constraint_name: constraint, stack, cause } = error as Record<string, unknown>
-  return {
-    ...(typeof name === "string" ? { name } : {}),
-    ...(typeof message === "string" ? { message } : {}),
-    ...(typeof code === "string" ? { code } : {}),
-    ...(typeof constraint === "string" ? { constraint_name: constraint } : {}),
-    ...(typeof stack === "string" ? { stack } : {}),
-    ...(cause === undefined || depth <= 0 ? {} : { cause: loggable(cause, depth - 1) }),
-  }
 }
 
 /**

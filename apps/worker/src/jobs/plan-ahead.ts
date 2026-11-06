@@ -33,12 +33,12 @@
 // count shows on /readyz.
 import { sendGenerateRoutes } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
+import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
 import { sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
-import { loggable } from "./loggable"
 
 export const PLAN_AHEAD_QUEUE = "planning.plan-ahead"
 /** 03:00 UTC every day: past midnight in every timezone the demo serves. */

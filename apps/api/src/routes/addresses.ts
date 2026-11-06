@@ -24,6 +24,7 @@
 // `addressId` alike, as the proofs' routes answer a deployment without
 // Storage.
 import { Address, AddressId, AddressSearch, AddressSearchQuery, ADDRESS_ATTRIBUTION } from "@waste/contracts/addresses"
+import { loggable } from "@waste/db/sqlstate"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { Hono, type Context, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -32,7 +33,7 @@ import * as z from "zod"
 import { NO_REGISTER, RegisterUnavailable, REGISTER_UNAVAILABLE, type AddressRegister } from "../address-register/register"
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { allows } from "../auth/require"
-import { describeProblem, loggable, problem, validate } from "../problem"
+import { describeProblem, problem, validate } from "../problem"
 import { describeJson } from "./shared"
 
 const MODULE: ModuleKey = "customers.properties"

@@ -110,6 +110,7 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
+import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
@@ -141,7 +142,6 @@ import { addDays } from "@waste/domain/days"
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
-import { loggable } from "./loggable"
 import { planReshaped, type HorizonAsks, type ReshapedRoute } from "./routing-horizon"
 import { daysWithBoundary, stopCandidatesByDay } from "./stop-matching"
 
