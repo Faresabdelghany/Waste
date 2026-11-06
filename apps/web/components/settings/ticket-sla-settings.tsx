@@ -47,7 +47,8 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const rows = base === null ? [] : editing ? edits.rows : slaRowsOf(base)
   // Every kind, each kind, and each type (#548 of #544): the active ones, and any the saved set names.
   const types = useTicketTypeChoices()
-  const scopeOptions = slaScopeOptions(typesListed(types, base === null ? [] : typesNamedBy(base)))
+  const listedTypes = typesListed(types, base === null ? [] : typesNamedBy(base))
+  const scopeOptions = slaScopeOptions(listedTypes)
   const rowsMax = scopeOptions.length * SLA_PRIORITY_OPTIONS.length
   const [refusal, setRefusal] = useState<SlaRefusal | null>(null)
   const [saving, setSaving] = useState(false)
@@ -61,7 +62,7 @@ export function TicketSlaSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const changeRow = (index: number, values: Partial<SlaRow>) => change(rows.map((row, at) => (at === index ? { ...row, ...values } : row)))
   const addRow = () => {
     minted.current += 1
-    change([...rows, newSlaRow(rows, `new-${minted.current}`)])
+    change([...rows, newSlaRow(rows, `new-${minted.current}`, listedTypes)])
   }
 
   const save = () => {

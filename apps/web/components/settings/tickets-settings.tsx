@@ -7,8 +7,6 @@
 // own deadline, default team and charge are rows of the Deadlines, Teams and
 // Charges tabs beside its kind's. Offered on the Pilot alone.
 
-import { useState } from "react"
-
 import { CountingRulesSettings } from "@/components/settings/counting-rules-settings"
 import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
@@ -17,12 +15,11 @@ import { TicketTypesSettings } from "@/components/settings/ticket-types-settings
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TICKETS_TABS, type TicketsTab } from "@/lib/data/tickets-settings"
 
-export function TicketsSettings({ initialTab = "types" }: { initialTab?: TicketsTab }) {
-  const [tab, setTab] = useState<TicketsTab>(initialTab)
-
+/** The page at `tab`, which the dialog holds so leaving and coming back finds the tab last used; `onTabChange` moves it. */
+export function TicketsSettings({ tab, onTabChange }: { tab: TicketsTab; onTabChange: (tab: TicketsTab) => void }) {
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      <Tabs value={tab} onValueChange={(value) => setTab(value as TicketsTab)}>
+      <Tabs value={tab} onValueChange={(value) => onTabChange(value as TicketsTab)}>
         <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket settings">
           {TICKETS_TABS.map((option) => (
             <TabsTrigger key={option.value} value={option.value} className="whitespace-nowrap rounded-full px-3">

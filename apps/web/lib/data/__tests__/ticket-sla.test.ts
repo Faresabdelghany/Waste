@@ -63,6 +63,11 @@ describe("a type's own target (#548 of #544)", () => {
     assert.ok(TicketSlaSet.safeParse(body).success)
   })
 
+  test("a new row offers a listed type once every kind is taken at every priority", () => {
+    const taken = [EVERY_KIND, ...TICKET_KINDS].flatMap((kind) => TICKET_PRIORITIES.map((priority) => row(kind, priority, "24")))
+    assert.deepEqual(newSlaRow(taken, "t", [{ id: BULKY }]), row(`type:${BULKY}`, "critical", "24", "t"))
+  })
+
   test("a type and its kind at one priority are two targets; the type twice is refused", () => {
     assert.ok(!("index" in slaBodyOf([row("container-request", "high", "24"), row(`type:${BULKY}`, "high", "72")])))
     assert.deepEqual(slaBodyOf([row(`type:${BULKY}`, "high", "72"), row(`type:${BULKY}`, "high", "48", "again")]), { index: 1, field: "kind", message: ONCE_SENTENCE })

@@ -200,6 +200,9 @@ describe("a project's default team per kind and per type", () => {
     )
     assert.deepEqual(body, { defaults: [{ kind: null, ticketTypeId: BULKY, teamId: yardId }, { kind: null, ticketTypeId: OLD, teamId: deskId }] })
     assert.ok(TicketTeamDefaultsSet.safeParse(body).success)
+    // A type no list the role reads holds: by its id, no kind made up for it.
+    const unread = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, [])
+    assert.equal(unread.at(-1)?.label, OLD)
   })
 
   test("its body names each kind with a team by server id, and refuses a team the API does not hold", () => {

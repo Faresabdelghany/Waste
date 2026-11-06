@@ -46,10 +46,10 @@ export const typesNamedBy = (sla: TicketSla): string[] => sla.targets.flatMap((t
 /** A row's kind or type and priority as the domain names a target by, every kind as null. */
 const pairOf = (row: Pick<SlaRow, "kind" | "priority">) => slaTargetKey({ ...scopeOfValue(row.kind, EVERY_KIND), priority: row.priority })
 
-/** A row to add: every kind at the first priority without one, else the first kind free at the first priority with room. */
-export function newSlaRow(rows: readonly SlaRow[], key: string): SlaRow {
+/** A row to add: every kind at the first priority without one, else the first kind free at the first priority with room, else the first type listed free (#548 of #544). */
+export function newSlaRow(rows: readonly SlaRow[], key: string, types: readonly Pick<TypeChoice, "id">[] = []): SlaRow {
   const taken = new Set(rows.map(pairOf))
-  for (const kind of [EVERY_KIND, ...TICKET_KINDS]) {
+  for (const kind of [EVERY_KIND, ...TICKET_KINDS, ...types.map((type) => typeScope(type.id))]) {
     const priority = TICKET_PRIORITIES.find((candidate) => !taken.has(pairOf({ kind, priority: candidate })))
     if (priority !== undefined) return { key, kind, priority, hours: NEW_ROW_HOURS }
   }

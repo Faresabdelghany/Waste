@@ -149,6 +149,13 @@ describe("ticket teams", { skip: database.skip || owner.skip }, () => {
       await olivia(`/teams/${team.id}`, { method: "PATCH", body: { status: "inactive" } })
       const retired = await refused(await putDefaults(olivia, harbor, [{ kind: "overflow", teamId: team.id }]), 409)
       assert.equal(retired.detail, retiredTeam("Weekend"))
+      // A team a row already names stands, retired since: the set restated whole is no new reference to it (#548 of #544).
+      const kept = await newTeam("Kept")
+      await ok(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }]), TicketTeamDefaults)
+      await olivia(`/teams/${kept.id}`, { method: "PATCH", body: { status: "inactive" } })
+      const restated = await ok(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }, { kind: "complaint", teamId: (await newTeam("Fresh")).id }]), TicketTeamDefaults)
+      assert.equal(restated.defaults.length, 2)
+      assert.equal((await refused(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }, { kind: "overflow", teamId: kept.id }]), 409)).detail, retiredTeam("Kept"), "named afresh on another row")
       await refused(await putDefaults(other, harbor, []), 404)
       await refused(await putDefaults(agent, a.projects.copenhagen.id, []), 403)
     })

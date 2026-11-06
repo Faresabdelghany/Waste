@@ -43,9 +43,10 @@ import { projectIdsOf } from "../auth/projects"
 import { allows, requireGrant, requireGrantOf } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
-import { requireTeam, requireUserAccount } from "./references"
+import { NOT_A_TEAM, requireUserAccount } from "./references"
+import { refuseRetiredTeam } from "./statuses"
 import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 import { requireSetTypes } from "./ticket-type-rules"
 
@@ -103,6 +104,16 @@ async function defaultsOf(tx: Tx, companyId: string, projectId: string): Promise
 
 /** Where a default sorts: the kinds in the vocabulary's order, then the types (#548 of #544) by id. */
 const defaultOrder = (row: Pick<DefaultRow, "kind" | "ticketTypeId">): number => (row.ticketTypeId !== null ? TICKET_KINDS.length : TICKET_KINDS.indexOf(row.kind as TicketKind))
+
+/** The company's teams among the ids a set names, with their names and statuses: one read for the whole set. */
+async function teamsNamed(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, { name: string; status: string }>> {
+  if (ids.length === 0) return new Map()
+  const found = await tx
+    .select({ id: team.id, name: team.name, status: team.status })
+    .from(team)
+    .where(and(eq(team.companyId, companyId), inArray(team.id, [...new Set(ids)])))
+  return new Map(found.map((row) => [row.id, row]))
+}
 
 /** A project's defaults on the wire, in the vocabulary's order of kinds, then the types'. */
 const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind" | "ticketTypeId" | "teamId">[]): TicketTeamDefaults => ({
@@ -316,7 +327,7 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putTicketTeamDefaults",
         summary: "Replace a project's default ticket teams",
         description:
-          "Replaces the whole set with the one in the body: a kind the body leaves out goes to no team, a ticket type to its kind's, and an empty list gives none a team. Each entry names a kind or a ticket type, exactly one (400 at `defaults.N`), each once (400 on `defaults`); each team is one of this company's (400 at `defaults.N.teamId`) that is active (409), and each type one of this company's (400 at `defaults.N.ticketTypeId`) that, where the set names it afresh, is active (409). A kind the body keeps keeps its id and moves only its team, and one whose team did not change is not written, so the audit log reads one row's history per kind. A ticket already open keeps its team: the default names one as a ticket opens.",
+          "Replaces the whole set with the one in the body: a kind the body leaves out goes to no team, a ticket type to its kind's, and an empty list gives none a team. Each entry names a kind or a ticket type, exactly one (400 at `defaults.N`), each once (400 on `defaults`); each team is one of this company's (400 at `defaults.N.teamId`) and, where the entry names it afresh, active (409) — a team the entry already names stands whatever its status — and each type one of this company's (400 at `defaults.N.ticketTypeId`) that, where the set names it afresh, is active (409). A kind the body keeps keeps its id and moves only its team, and one whose team did not change is not written, so the audit log reads one row's history per kind. A ticket already open keeps its team: the default names one as a ticket opens.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project's defaults as they now stand.", TicketTeamDefaults),
@@ -338,9 +349,15 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-team-defaults:${principal.companyId}:${id}`}, 0))`)
         const current = new Map((await defaultsOf(tx, principal.companyId, id)).map((row) => [kindOrTypeKey(row), row]))
-        // The types' 400s, then the teams' 400 and 409 each, then the types' 409.
+        // The 400s — the types', then the teams' — then the 409s on what is new: a team a row already names stands whatever its status, as a type the set already names does.
         const refuseRetiredTypes = await requireSetTypes(tx, principal.companyId, defaults, "defaults", new Set([...current.values()].flatMap((row) => (row.ticketTypeId === null ? [] : [row.ticketTypeId]))))
-        for (const [index, entry] of defaults.entries()) await requireTeam(tx, principal.companyId, entry.teamId, `defaults.${index}.teamId`)
+        const teams = await teamsNamed(tx, principal.companyId, defaults.map((entry) => entry.teamId))
+        const unknown = defaults.flatMap((entry, index) => (teams.has(entry.teamId) ? [] : [{ path: `defaults.${index}.teamId`, message: NOT_A_TEAM }]))
+        if (unknown.length > 0) throw invalidRequest("body", unknown)
+        for (const entry of defaults) {
+          const named = teams.get(entry.teamId)
+          if (named !== undefined && current.get(kindOrTypeKey(entry))?.teamId !== entry.teamId) refuseRetiredTeam(named.status as TeamStatus, named.name)
+        }
         refuseRetiredTypes()
         const kept = new Set<string>(defaults.map(kindOrTypeKey))
         const gone = [...current.entries()].filter(([key]) => !kept.has(key)).map(([, row]) => row.id)

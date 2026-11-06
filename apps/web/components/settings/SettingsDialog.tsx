@@ -1495,6 +1495,8 @@ export function SettingsWorkspace({
   // On the Pilot the account pane's profile is the person signed in, as `/me` answered (#282).
   const profile = configured ? profileOf(me, session?.email) : null
   const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
+  // The Tickets page's tab (#548 of #544): the one a link's pane names at first, then the last used, kept while the dialog stays open.
+  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => ticketsTabOf(initialPaneId))
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
       ? openedPaneId
@@ -1720,7 +1722,8 @@ export function SettingsWorkspace({
           <SettingsPane
             definition={profile !== null && activeItemId === "account" ? withSignedInProfile(activePane, profile) : activePane}
             paneId={activeItemId}
-            ticketsTab={ticketsTabOf(initialPaneId)}
+            ticketsTab={ticketsTab}
+            onTicketsTabChange={setTicketsTab}
             profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
@@ -1738,6 +1741,7 @@ function SettingsPane({
   definition,
   paneId,
   ticketsTab,
+  onTicketsTabChange,
   profile,
   values,
   dirtyControlIds,
@@ -1749,6 +1753,7 @@ function SettingsPane({
   paneId: string
   /** The tab Settings › Tickets opens at: the one a link to a pane it took the place of names (#548 of #544). */
   ticketsTab: TicketsTab
+  onTicketsTabChange: (tab: TicketsTab) => void
   /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
   profile: AccountProfile | null
   values: Record<string, SettingValue>
@@ -1816,7 +1821,7 @@ function SettingsPane({
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
       ) : paneId === TICKETS_SETTINGS_PANE_ID ? (
-        <TicketsSettings initialTab={ticketsTab} />
+        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (

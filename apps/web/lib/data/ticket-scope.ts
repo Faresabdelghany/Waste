@@ -7,12 +7,12 @@
 // reaching into the ticket types', which reads the teams'.
 import type { TicketType } from "@waste/contracts/ticket-types"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
-import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import type { TicketKind } from "@waste/domain/resolution/vocabulary"
 
 import { statusLabel } from "../api/records/adapter"
 
 /** A ticket type as the settings by type list it: its server id, its name, its kind, whether it takes new tickets, and whether it is its kind's default, whose setting is its kind's row. */
-export type TypeChoice = Pick<TicketType, "id" | "name" | "kind" | "status"> & { isDefault?: boolean }
+export type TypeChoice = Pick<TicketType, "id" | "name" | "status"> & { kind: TicketType["kind"] | null; isDefault?: boolean }
 
 /** A setting's scope as the wire names it: a kind, a type, or neither for every kind. */
 export type TicketScope = { kind: TicketKind | null; ticketTypeId: string | null }
@@ -34,11 +34,11 @@ export const valueOfScope = (scope: TicketScope, every: string): string => (scop
 /** A scope's row key, the domain's `kindOrTypeKey`. */
 export const scopeKey = (scope: TicketScope): string => kindOrTypeKey(scope)
 
-/** How a type reads in a list of settings: its name, and its kind's beside it. */
-export const typeLabel = (type: Pick<TypeChoice, "name" | "kind">): string => `${type.name} (${statusLabel(type.kind)})`
+/** How a type reads in a list of settings: its name, and its kind's beside it where the list told it. */
+export const typeLabel = (type: Pick<TypeChoice, "name" | "kind">): string => (type.kind === null ? type.name : `${type.name} (${statusLabel(type.kind)})`)
 
-/** A type a set names that no list the role reads holds: by its id. */
-const unknownType = (id: string): TypeChoice => ({ id, name: id, kind: TICKET_KINDS[0], status: "active" })
+/** A type a set names that no list the role reads holds: by its id, its kind unknown. */
+const unknownType = (id: string): TypeChoice => ({ id, name: id, kind: null, status: "active" })
 
 /** The types a pane lists a row for: the active ones in the order given but each kind's default, whose setting is its kind's row, then any the set names already that are retired, a default or unread, so a setting kept is shown. */
 export function typesListed(types: readonly TypeChoice[], named: Iterable<string>): TypeChoice[] {
