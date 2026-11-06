@@ -30,7 +30,7 @@ import { pickup, session, sessionPosition } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { plan, planLeg } from "@waste/db/schema/routing"
 import { routeEta, type EtaStop } from "@waste/domain/execution/eta"
-import { POSITION_RETENTION_CEILING_DAYS } from "@waste/domain/execution/positions"
+import { POSITION_RETENTION_DAYS } from "@waste/domain/execution/positions"
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { PlanTrip } from "@waste/domain/routing/vocabulary"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
@@ -178,7 +178,7 @@ export function positionRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
       describeRoute({
         operationId: "getRouteTrack",
         summary: "One session's track of a route",
-        description: `Where the route's vehicle was while a session ran (O8 of #290): the positions the Driver App recorded, in the order they were taken — the route's open session's, else its latest's, unless \`sessionId\` names another session of this route. A track longer than ${TRACK_POINTS_MAX} points is thinned evenly, its last point kept, and \`thinned\` says so; a route never started answers no session and no points. Positions are kept ${POSITION_RETENTION_CEILING_DAYS} days at most, so an older session's track is empty. Read per route only: an office account reads the routes of its projects, a Service Provider's account the routes it serves.`,
+        description: `Where the route's vehicle was while a session ran (O8 of #290): the positions the Driver App recorded, in the order they were taken — the route's open session's, else its latest's, unless \`sessionId\` names another session of this route. A track longer than ${TRACK_POINTS_MAX} points is thinned evenly, its last point kept, and \`thinned\` says so; a route never started answers no session and no points. Positions are kept ${POSITION_RETENTION_DAYS} days at most, so an older session's track is empty. Read per route only: an office account reads the routes of its projects, a Service Provider's account the routes it serves.`,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The track.", RouteTrack),

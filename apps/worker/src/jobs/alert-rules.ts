@@ -30,10 +30,9 @@
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route
 // planned, or a device last heard from, more than `RULE_LOOKBACK_HOURS` ago
-// is history and raises nothing; a paused session is not silent. The cadence
-// is `WORKER_RULES_INTERVAL_SECONDS` (apps/pilot/README.md), five minutes
-// unless set, and a missed occurrence is skipped: the next tick reads the
-// same.
+// is history and raises nothing; a paused session is not silent. A tick runs
+// every five minutes, and a missed occurrence is skipped: the next tick reads
+// the same.
 //
 // O8 of #290 added the fifth, `position-stale`: a running, unpaused session
 // on an active route whose device was heard from within the silence window —
@@ -112,15 +111,10 @@ import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, P
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
 
-import { cronEvery } from "../cadence"
 import { defineJob, type JobContext } from "./definition"
 
 export const ALERT_RULES_QUEUE = "resolution.alert-rules"
-/** The cadence unless `WORKER_RULES_INTERVAL_SECONDS` says otherwise: five minutes. */
-export const ALERT_RULES_INTERVAL_SECONDS = 300
-
-/** The rules' cron at an even cadence in seconds (cadence.ts; the environment refuses any other). */
-export const rulesSchedule = (seconds: number = ALERT_RULES_INTERVAL_SECONDS): string => cronEvery(seconds)
+export const ALERT_RULES_SCHEDULE = "*/5 * * * *"
 
 export type AlertRulesData = {
   /** Where the tick came from: the schedule, or a caller who sent one by hand. */
@@ -539,7 +533,7 @@ export const alertRulesJob = defineJob<AlertRulesData>({
   description:
     "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a container filled past its threshold, an outbound load not received, weighed beyond the tolerance or over its vehicle's payload, a route that never tipped — and resolves those whose condition has cleared (O4, O8 and O26 of #290, M17 of #293).",
   handler: async (_jobs, context) => await runAlertRules(context),
-  schedule: rulesSchedule(),
+  schedule: ALERT_RULES_SCHEDULE,
   scheduleData: { source: "schedule" },
   scheduleOptions: { tz: "UTC", missed: "skip" },
   // No retry: the next tick is the retry, reading the same.

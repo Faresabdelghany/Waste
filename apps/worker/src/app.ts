@@ -14,15 +14,14 @@
 // the boss probe over the started instance, so a test asks the app with a
 // database that goes nowhere and a boss that never started.
 //
-// The same split the API's `fly.toml` and Dockerfile make holds here: a host
-// checks `/healthz`, since `/readyz` answering 503 while the database is
-// down is the worker's own answer for an operator to read and never a reason
-// to restart a process that will reconnect on its next poll.
+// The API's split holds here: a host checks `/healthz`, since `/readyz`
+// answering 503 while the database is down is the worker's own answer for
+// an operator to read and never a reason to restart a process that will
+// reconnect on its next poll.
 //
 // Both probes answer Cache-Control: no-store, the API's convention (Issue
-// #152). `/healthz` names no build yet (`build: null`): the worker's image
-// bakes its commit in the way the API's does when its deployment lands, and
-// until then says so rather than guessing.
+// #152). `/healthz` names no build (`build: null`): the Pilot's image writes
+// its commit for the API alone, and the worker says so rather than guessing.
 import { HealthResponse, PROBE_HEADERS, type WorkerReadinessResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"

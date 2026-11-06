@@ -9,8 +9,8 @@
 # is a reviewed change to this file.
 #
 #   check           the journal check, the fingerprint against the committed
-#                   file (once nothing is pending), the service roles' LOGIN
-#                   state and the publication's tables; writes nothing
+#                   file (once nothing is pending) and the service roles'
+#                   LOGIN state; writes nothing
 #   release         a Pilot release, after CI on every push to main or by
 #                   hand: CI green on the commit, the journal checked,
 #                   an encrypted backup, the migrations, the seed on request,
@@ -26,7 +26,6 @@
 #   grant-logins    LOGIN for exactly wms_api and wms_worker from the
 #                   environment's app-role URLs
 #   restore         a named run's backup restored inside the write barrier
-#   repair          one allow-listed repair module
 #   recover-logins  the LOGIN states a named restore or reset recorded, put
 #                   back after it failed or was cancelled
 #
@@ -65,7 +64,6 @@ on:
           - reset-to-seed
           - grant-logins
           - restore
-          - repair
           - recover-logins
       run_seed:
         description: "release: run the idempotent demo seed after the migrations"
@@ -83,10 +81,6 @@ on:
         description: "restore, reset-to-seed: the Pilot's Suga service (the API and the worker) is stopped"
         type: boolean
         default: false
-      repair_id:
-        description: "repair: the allow-listed repair, <issue>-<slug>"
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -141,7 +135,7 @@ jobs:
         env:
           PENDING: ${{ steps.journal.outputs.pending }}
         run: echo "$PENDING migration(s) pending, so the committed fingerprint (the head's) does not apply yet; a release compares it after migrating." | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Identity, logins and the publication
+      - name: Identity and logins
         working-directory: packages/db
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
@@ -392,7 +386,7 @@ jobs:
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/barrier.ts open
-      - name: Verify the roles and the publication
+      - name: Verify the roles
         working-directory: packages/db
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
@@ -565,8 +559,8 @@ jobs:
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/barrier.ts open
-      # The roles and the publication as the restore left them — the check's own report, which fails while wms_api cannot log in.
-      - name: Verify the roles and the publication
+      # The roles as the restore left them — the check's own report, which fails while wms_api cannot log in.
+      - name: Verify the roles
         working-directory: packages/db
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
@@ -574,30 +568,6 @@ jobs:
       - name: Remove plaintext
         if: always()
         run: rm -rf "$RUNNER_TEMP"/pilot-backup.* "$RUNNER_TEMP"/pilot-restore-key.* "$RUNNER_TEMP/pilot-restore" "$RUNNER_TEMP/pilot-source" "$RUNNER_TEMP/pilot-backup"
-
-  repair:
-    name: Run an allow-listed repair
-    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'repair'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: pilot
-    steps:
-      - name: Require main and a repair id
-        env:
-          REPAIR_ID: ${{ inputs.repair_id }}
-        run: |
-          test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
-          [[ "$REPAIR_ID" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::repair_id is not <issue>-<slug>"; exit 1; }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/pilot-node
-      - name: Repair
-        working-directory: packages/db
-        env:
-          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
-          REPAIR_ID: ${{ inputs.repair_id }}
-        run: node --import tsx scripts/pilot/repair.ts
 
   recover-logins:
     name: Recover the app roles' logins

@@ -14,9 +14,10 @@
 // was or as the seed says, never onto one half swept.
 //
 // What is swept and what is kept (the Logins question of #142): every row of
-// the company in every table but Organisation & Access's eight — the company,
-// its projects and service providers, its roles with their grants, its User
-// Accounts with their Project and Service Provider Access. Those are kept,
+// the company in every table but the nine of `KEPT_TABLES`: Organisation &
+// Access's eight — the company, its projects and service providers, its roles
+// with their grants, its User Accounts with their Project and Service
+// Provider Access — and its Holiday Lists. Those are kept,
 // and the seed writes each seeded one back to what it says (demo.ts: an
 // edited name, a system role's scope, a grant a charter dropped, an access
 // row it does not name — but never a system role's name or description,
@@ -76,7 +77,7 @@ import { DEMO_COMPANY_ID } from "./seed/ids"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
 /**
- * Organisation & Access's eight tables, which the reset keeps: what makes a
+ * The nine tables the reset keeps: Organisation & Access's eight, what makes a
  * person able to sign in and be who they are; and the company's Holiday
  * Lists, which a kept project names by key. A list's days are swept, and the
  * seed writes its own back.
@@ -117,7 +118,7 @@ export function sweepOrder(tables: readonly PgTable[]): PgTable[] {
 
 /**
  * Every table the reset sweeps, children first: all of the schema's but the
- * kept eight — and the audit log last, whatever its keys say. The sweep's own
+ * kept nine — and the audit log last, whatever its keys say. The sweep's own
  * deletes of audited tables append to the log as they run, so a log swept in
  * its keys' place, first, would keep a row for every row the reset removed:
  * a reset leaves the tenant with no history but the seed's writing it back

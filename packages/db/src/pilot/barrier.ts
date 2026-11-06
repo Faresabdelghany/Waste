@@ -171,7 +171,7 @@ export function planRecovery(record: Pick<LoginRecord, "logins">, now: Record<st
   return plan
 }
 
-/** One line per role, for a log: `wms_api LOGIN, wms_worker NOLOGIN, wms_sync missing`. */
+/** One line per role, for a log: `wms_api LOGIN, wms_worker missing`. */
 export function spellLogins(logins: Record<string, boolean | null>): string {
   return Object.entries(logins)
     .map(([role, login]) => `${role} ${login === null ? "missing" : login ? "LOGIN" : "NOLOGIN"}`)

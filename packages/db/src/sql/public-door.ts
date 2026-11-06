@@ -1,6 +1,6 @@
 // The public door's role (Issue #293, ADR-0010): what an anonymous reader of a
 // project's published pages may see, spelled once here and copied into the
-// migration that creates it, as the sync role's statements are (publication.ts).
+// migration that creates it, as the worker role's statements are (pgboss.ts).
 //
 // `wms_public` logs in as nobody. The API's own connection, `wms_api`, holds
 // it with SET and without INHERIT, so a public request's transaction says

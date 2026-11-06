@@ -14,8 +14,8 @@
 #                              `manifest.ts verify` and the write barrier: one
 #                              psql, ON_ERROR_STOP, one transaction, dropping
 #                              the three application schemas and restoring
-#                              every schema dump, the publication's tables and
-#                              then every data dump the manifest lists, in its
+#                              every schema dump and then every data dump the
+#                              manifest lists, in its
 #                              order (wms, drizzle, pgboss; scripts/pilot/
 #                              restore-plan.ts); any error rolls the whole of
 #                              it back

@@ -1,7 +1,6 @@
-# What `docker build -f apps/api/Dockerfile .` (and `-f apps/worker/Dockerfile .`,
-# `-f apps/pilot/Dockerfile .`) may not see. Each Dockerfile copies only its
-# own app, the workspace packages it runs and the workspace manifests, so
-# everything here is either a secret,
+# What `docker build -f apps/pilot/Dockerfile .` may not see. The Dockerfile
+# copies only the two apps, the workspace packages they run and the workspace
+# manifests, so everything here is either a secret,
 # a build output, another tool's state, or bulk the image has no use for. The
 # web app is left out whole but for its manifest, which the frozen-lockfile
 # check reads.
@@ -33,8 +32,6 @@ packages/db/reference
 # Tests, which run in CI and have no reader in the image.
 **/__tests__
 **/*.test.ts
-# The recipes themselves: BuildKit reads each beside the context, not from it.
-apps/api/Dockerfile
-apps/worker/Dockerfile
+# The recipe itself: BuildKit reads it beside the context, not from it.
 apps/pilot/Dockerfile
 .dockerignore
