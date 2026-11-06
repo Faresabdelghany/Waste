@@ -42,8 +42,13 @@
 // `occurredAt` is the event's, `dueAt` the project's SLA (O4 of #290), `createdBy` null
 // and `sourceEventId` the event's id, which `ticket_origin_shape` ties
 // together.
-import { CLOSING_REASONS, type ClosingReason, type OutboxKind, type PickupReason, type PickupService } from "../execution/vocabulary"
+import { CLOSING_REASONS, type ClosingReason, type PickupReason, type PickupService } from "../execution/vocabulary"
+import type { OutboxKind } from "../outbox/vocabulary"
 import type { TicketKind, TicketPriority, TicketSource } from "./vocabulary"
+
+/** The kinds a ticket may come from, the queues Resolution's consumer works (#104 §6, #109 §3): a stop missed or skipped, a problem reported, a command refused. `route-cancelled` is not one (§7.10). */
+export const RESOLUTION_EVENT_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"] as const satisfies readonly OutboxKind[]
+export type ResolutionEventKind = (typeof RESOLUTION_EVENT_KINDS)[number]
 
 /** The events about a pickup, whose payload is the Pickup (or, for a problem on the route alone, the Route). */
 export const PICKUP_EVENT_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-completed", "pickup-corrected"] as const satisfies readonly OutboxKind[]

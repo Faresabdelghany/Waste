@@ -345,7 +345,7 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             .where(and(visitScope(principal), eq(siteVisit.id, id)))
           const found = await visitById(tx, principal.companyId, id)
           if (found === undefined) throw noSuchVisit(id)
-          await emit(tx, principal, { aggregate: "site-visit", aggregateId: id, kind: "site-visit-voided", payload: found.visit, projectId: current.projectId, occurredAt: at })
+          await emit(tx, principal, { aggregateId: id, kind: "site-visit-voided", payload: found.visit, projectId: current.projectId, occurredAt: at })
           return c.json(found.visit)
         },
       )

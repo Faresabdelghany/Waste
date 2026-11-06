@@ -46,9 +46,10 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { AggregateOf, OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { eq } from "drizzle-orm"
 
-import type { OutboxJob } from "../jobs/open-tickets"
+import type { RelayedEvent, RelayedJob } from "../outbox/subscribe"
 
 /** Ids that count up from the wall clock: a UUIDv7 the contracts accept, one sequence for the suite. */
 export const testId = createIdMinter()
@@ -360,7 +361,7 @@ export async function seedReceipt(pool: Database, tenant: ConsumerTenant, receip
 }
 
 /** One job's data as the relay publishes it: the outbox row with the tenant beside it. `occurredAt` is the command's instant. */
-export function outboxJob(tenant: ConsumerTenant, event: Pick<OutboxJob, "kind" | "aggregateKind" | "aggregateId" | "payload"> & Partial<Pick<OutboxJob, "id" | "occurredAt">>): OutboxJob {
+export function outboxJob<Kind extends OutboxKind>(tenant: ConsumerTenant, event: { kind: Kind; aggregateKind: AggregateOf<Kind>; aggregateId: string; payload: unknown } & Partial<Pick<RelayedJob, "id" | "occurredAt">>): RelayedEvent<Kind> {
   const occurredAt = event.occurredAt ?? at("07:12").toISOString()
   return {
     id: event.id ?? testId(),
@@ -370,11 +371,11 @@ export function outboxJob(tenant: ConsumerTenant, event: Pick<OutboxJob, "kind" 
     aggregateKind: event.aggregateKind,
     aggregateId: event.aggregateId,
     occurredAt,
-    payload: event.payload,
+    payload: event.payload as RelayedJob["payload"],
     publishedAt: null,
     createdAt: occurredAt,
     updatedAt: occurredAt,
-  }
+  } as RelayedEvent<Kind>
 }
 
 /**

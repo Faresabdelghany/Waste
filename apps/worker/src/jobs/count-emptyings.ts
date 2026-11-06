@@ -36,7 +36,7 @@
 // It starts fresh: the emptyings relayed before it ran are not counted as
 // news, though each is counted all the same by the next emptying at its
 // property, since a count reads the stops.
-import { Pickup } from "@waste/contracts/pickups"
+import type { Pickup } from "@waste/contracts/pickups"
 import type { TicketLinks } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { countedAt } from "@waste/db/commands/counting-rules"
@@ -55,7 +55,7 @@ import { countingTicketText, periodOf } from "@waste/domain/resolution/counting-
 import type { CountingPeriod, TicketKind } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm"
 
-import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
 
 /** What one stop's event came to: the tickets its count opened, by rule. */
@@ -164,8 +164,8 @@ async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">,
 }
 
 /** One stop's event to the tickets its count opened, in one fenced transaction as the tenant. */
-export async function countEmptying(event: RelayedEvent, { api, log, now, send }: Pick<JobContext, "api" | "log" | "now" | "send">): Promise<EmptyingCounted> {
-  const stop = Pickup.parse(event.payload)
+export async function countEmptying(event: RelayedEvent<"pickup-completed" | "pickup-corrected">, { api, log, now, send }: Pick<JobContext, "api" | "log" | "now" | "send">): Promise<EmptyingCounted> {
+  const stop = payloadOf(event)
   const { propertyId } = stop
   const opened: EmptyingCounted["opened"] = []
   if (stop.status === "completed" && stop.service === "empty" && propertyId !== null) {

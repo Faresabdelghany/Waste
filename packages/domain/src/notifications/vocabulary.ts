@@ -1,6 +1,7 @@
 // The notifications' closed lists (O16 of #290), spelled once for the
 // database's CHECK and the contracts' `z.enum`, as the Registry's are
 // (registry/vocabulary.ts says why one tuple serves both).
+import type { OutboxKind } from "../outbox/vocabulary"
 
 /**
  * What a staff member may be told about by e-mail: an alert raised in a
@@ -9,7 +10,7 @@
  * worker's notifications consumer takes. Nothing is sent to anyone who has
  * not opted in (the coordinator's default, pending the owner's review on #351).
  */
-export const NOTIFICATION_EVENTS = ["alert-raised", "ticket-assigned"] as const
+export const NOTIFICATION_EVENTS = ["alert-raised", "ticket-assigned"] as const satisfies readonly OutboxKind[]
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number]
 

@@ -23,7 +23,6 @@
 // paused it. The planned stops in the pause drop at the scheme's next run —
 // the nightly plan-ahead's or the next Generate — as for an office pause no
 // run was asked for.
-import { Application } from "@waste/contracts/applications"
 import type { Tx } from "@waste/db/client"
 import { projectToday } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
@@ -33,7 +32,7 @@ import { actAs, withCompany } from "@waste/db/tenant"
 import { pauseOfGrant } from "@waste/domain/registry/applications"
 import { and, eq } from "drizzle-orm"
 
-import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
 
 /** `EXCLUDE USING gist (company_id, subscription_id, daterange)`: one pause of a subscription in force at a time. */
@@ -59,8 +58,8 @@ async function lockedSubscription(tx: Tx, companyId: string, id: string) {
 }
 
 /** One decision to what was done with it, in one fenced transaction as the tenant. */
-export async function applyPauseGrant(event: RelayedEvent, { api, log, now }: Pick<JobContext, "api" | "log" | "now">): Promise<PauseApplied> {
-  const application = Application.parse(event.payload)
+export async function applyPauseGrant(event: RelayedEvent<"application-decided">, { api, log, now }: Pick<JobContext, "api" | "log" | "now">): Promise<PauseApplied> {
+  const application = payloadOf(event)
   const { decision } = application
   const nothing: PauseApplied = { event: event.id, did: "nothing", pauseId: null }
   const outcome =

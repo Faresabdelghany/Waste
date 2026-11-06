@@ -125,7 +125,7 @@ export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow
     { kind: "status-changed", status: "completed", assigneeUserAccountId: row.assigneeUserAccountId, resolution: "serviced", body: servicedBy({ position: stop.position, route: stop.routeLabel }, stillBooked), visibility: "internal", objectKey: null, recordedBy: actor.userAccountId, sourceEventId: null },
     mint,
   )
-  await emit(tx, { companyId: actor.companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
+  await emit(tx, { companyId: actor.companyId }, { aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
   // Its type's actions on completion (#546 of #544): the stop's completion is the change that sets them going.
   await runTicketAutomation(tx, { ...automation, companyId: actor.companyId, newId: mint, now: () => at }, row.id, "completed")
 }

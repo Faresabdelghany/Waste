@@ -499,7 +499,7 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
         // A tick that overlapped this one raised the occurrence already: the key is its word.
         .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
         .returning(alertColumns)
-      for (const row of written) await emit(tx, { companyId }, { aggregate: "alert", aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: at })
+      for (const row of written) await emit(tx, { companyId }, { aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: at })
       return written
     })
     raised += rows.length

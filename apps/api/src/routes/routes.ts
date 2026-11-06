@@ -400,7 +400,7 @@ async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date)
     .returning(routeColumns)
   if (row === undefined) throw noSuchRoute(id)
   const detail = await detailOf(tx, principal.companyId, row)
-  await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-dispatched", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+  await emit(tx, principal, { aggregateId: row.id, kind: "route-dispatched", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
   return detail
 }
 
@@ -528,7 +528,7 @@ export async function createAdHocRoute(tx: Tx, principal: Principal, scope: Scop
   await refuseDoubleBooked(tx, scope, row, { vehicle: true, driver: true, trailer: false }, values.acceptSameDay === true)
   if (row.plannedDriverId !== null || row.plannedVehicleId !== null) {
     const detail = await detailOf(tx, principal.companyId, row)
-    await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+    await emit(tx, principal, { aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
   }
   return row
 }
@@ -577,9 +577,9 @@ export async function cancelLockedRoute(tx: Tx, principal: Principal, current: R
       .where(and(eq(session.companyId, principal.companyId), eq(session.routeId, row.id), isNull(session.endedAt)))
   }
   const detail = await detailOf(tx, principal.companyId, row)
-  await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+  await emit(tx, principal, { aggregateId: row.id, kind: "route-cancelled", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
   for (const stop of closed) {
-    await emit(tx, principal, { aggregate: "pickup", aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
+    await emit(tx, principal, { aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
   }
   return detail
 }
@@ -795,7 +795,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
         if (row.plannedDriverId !== current.plannedDriverId || row.plannedVehicleId !== current.plannedVehicleId || row.plannedServiceProviderId !== current.plannedServiceProviderId) {
-          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+          await emit(tx, principal, { aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
         }
         return c.json(detail)
       },

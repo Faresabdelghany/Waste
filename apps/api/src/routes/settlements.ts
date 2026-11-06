@@ -657,7 +657,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const row = await setStatus(tx, principal, current, "closed", { closedAt: at, closedBy: principal.user.id })
         await appendEvent(tx, principal, row, "closed", null)
         const answered = await detailOf(tx, principal.companyId, row)
-        await emit(tx, principal, { aggregate: "settlement", aggregateId: row.id, kind: "settlement-closed", payload: answered, projectId: row.projectId, occurredAt: at })
+        await emit(tx, principal, { aggregateId: row.id, kind: "settlement-closed", payload: answered, projectId: row.projectId, occurredAt: at })
         return c.json(answered)
       },
     )

@@ -239,7 +239,7 @@ export async function writeUnload(tx: Tx, principal: Principal, ticket: { routeI
     source: "integration",
   })
   const answered = await unloadAnswered(tx, principal.companyId, row)
-  await emit(tx, principal, { aggregate: "unload", aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: ticket.weighedAt })
+  await emit(tx, principal, { aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: ticket.weighedAt })
   return { unloadId: row.id, projectId: row.projectId }
 }
 

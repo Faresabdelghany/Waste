@@ -148,7 +148,7 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
     return rows
   })
   const detail: InvoiceDetail = { ...invoiceOf(row), lines: written.sort((a, b) => a.position - b.position).map(lineOf), creditNotes: [] }
-  await emit(tx, { companyId }, { aggregate: "invoice", aggregateId: row.id, kind: "invoice-issued", payload: detail, projectId: draft.projectId, occurredAt: input.now() })
+  await emit(tx, { companyId }, { aggregateId: row.id, kind: "invoice-issued", payload: detail, projectId: draft.projectId, occurredAt: input.now() })
   return detail
 }
 

@@ -4,7 +4,7 @@
 // O28 of #290 `weight-reviewed` (`unload-recorded` is not read: only a
 // reviewed weight is billable, and the review is its own event) — taken through `defineOutboxConsumer` (../outbox/subscribe.ts), one
 // registry entry per kind, whose handler takes the job's event parsed with the
-// contracts (`RelayedEvent`), reads the facts beside the payload in one
+// contracts (`RelayedEvent`, its payload read through `payloadOf`), reads the facts beside the payload in one
 // statement each under `withCompany` (finance-facts.ts), hands the plain facts
 // to the domain's `billableFor`, and does what it answers: records the draft through
 // `recordBillableEvent` with no person and the event's id, cancels the
@@ -70,12 +70,7 @@
 // than an ordinary failover of the database, so a job that met one is retried
 // past it and not failed under it — the retention a week, written over the
 // relay's defaults on the three queues at every start.
-import { PickupDetail } from "@waste/contracts/pickups"
-import { SiteVisit } from "@waste/contracts/site-visits"
-import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
-import { WeightReview } from "@waste/contracts/weight-control"
-import { ScaleTicket } from "@waste/contracts/scale-house"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, ONE_WEIGHT_CHARGE_PER_STOP, recordBillableEvent, reversalOfEvent, weightChargeBySource } from "@waste/db/commands/billable-writes"
 import { eventOf, type EventReading } from "@waste/db/commands/billing-shapes"
 import { lockRow } from "@waste/db/commands/shared"
@@ -85,53 +80,44 @@ import { siteVisit } from "@waste/db/schema/site-visits"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
-import { billableActionsFor, PICKUP_EVENT_KINDS, SCALE_TICKET_EVENT_KINDS, VISIT_EVENT_KINDS, WEIGHT_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
+import { billableActionsFor, FINANCE_EVENT_KINDS, type BillableAction, type FinanceEventKind } from "@waste/domain/finance/from-event"
 
-import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
 import { pickupFacts, pickupRow, scaleTicketFacts, ticketFacts, ticketRow, visitFacts, weightFacts } from "./finance-facts"
-
-/** The kinds this consumer takes, one queue each: what Finance reads of the outbox (§3's table, the visits' two and the weight review; `unload-recorded` is not read, since only a reviewed weight is billable). */
-export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed", ...VISIT_EVENT_KINDS, ...WEIGHT_EVENT_KINDS, ...SCALE_TICKET_EVENT_KINDS] as const satisfies readonly OutboxKind[]
-
-/** The job's data as the relay sends it: the seam's `RelayedEvent`, under the name this module always used. */
-export type PublishedEvent = RelayedEvent
 
 /** What one action came to. */
 export type Done = { did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }
 
 /** What one job answered, for the log and the job's output: its first action's outcome, or nothing, and every action's in order (a tagged collection's two, #293 M5). */
-export type Recorded = { event: string; kind: OutboxKind; actions: Done[] } & Done
+export type Recorded = { event: string; kind: FinanceEventKind; actions: Done[] } & Done
 
 /**
  * The facts of one event, read under the company's fence: the payload
  * parsed with its kind's schema for the ids it names, the rows those ids
- * name read as they stand now. A kind this consumer takes and the
- * domain reads as news answers `OtherEventFacts`, so the rule says nothing
- * and the job completes with nothing.
+ * name read as they stand now.
  */
-async function factsOf(tx: Tx, event: PublishedEvent) {
+async function factsOf(tx: Tx, event: RelayedEvent<FinanceEventKind>) {
   switch (event.kind) {
     case "pickup-completed":
     case "pickup-corrected":
     case "pickup-failed":
     case "pickup-skipped": {
-      const detail = PickupDetail.parse(event.payload)
+      const detail = payloadOf(event)
       // The pickup's row lock first: two Finance events of one pickup — its completion and a correction to `completed`, on two queues, under two workers — would otherwise both read no live event and both record, and the source-event index holds one row per event, not per pickup.
       const found = await pickupRow(tx, event.companyId, detail.routeId, detail.id, { lock: true })
       if (found === undefined) throw new Error(`${event.kind} ${event.id} names pickup ${detail.id} of route ${detail.routeId}, which is not in company ${event.companyId}`)
       return await pickupFacts(tx, event.companyId, event.kind, found, detail.id)
     }
     case "ticket-completed": {
-      const answered = Ticket.parse(event.payload)
+      const answered = payloadOf(event)
       const found = await ticketRow(tx, event.companyId, answered.id)
       if (found === undefined) throw new Error(`ticket-completed ${event.id} names ticket ${answered.id}, which is not in company ${event.companyId}`)
       return { facts: await ticketFacts(tx, event.companyId, answered.id, found), live: [] }
     }
     case "site-visit-recorded":
     case "site-visit-voided": {
-      const answered = SiteVisit.parse(event.payload)
+      const answered = payloadOf(event)
       // The visit's row lock first: its recording and its void, on two queues, take turns, and the second reads the first's charge.
       await lockRow(tx, siteVisit, { companyId: event.companyId, id: answered.id })
       const found = await visitById(tx, event.companyId, answered.id)
@@ -139,22 +125,20 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
       return await visitFacts(tx, event.companyId, event.kind, found)
     }
     case "weight-reviewed": {
-      const review = WeightReview.parse(event.payload)
+      const review = payloadOf(event)
       return await weightFacts(tx, event.companyId, review.unloadId)
     }
     case "scale-ticket-completed":
     case "scale-ticket-voided": {
       // The ticket's id is all the consumer reads off the payload; the rest is read from the tables as they stand.
-      const named = ScaleTicket.pick({ id: true }).parse(event.payload)
+      const named = payloadOf(event)
       return await scaleTicketFacts(tx, event.companyId, event.kind, named.id)
     }
-    default:
-      return { facts: { kind: event.kind } as EventFacts, live: [] }
   }
 }
 
 /** Does one action the domain answered, in the event's company and project, and says what it did. */
-async function act(tx: Tx, event: PublishedEvent, action: BillableAction, live: readonly EventReading[]): Promise<Done> {
+async function act(tx: Tx, event: RelayedEvent<FinanceEventKind>, action: BillableAction, live: readonly EventReading[]): Promise<Done> {
   if (action.action === "cancel") {
     // The live event was read under its lock a statement ago; the row is what the lock let through.
     const reading = live.find((row) => row.id === action.eventId)
@@ -192,7 +176,7 @@ async function act(tx: Tx, event: PublishedEvent, action: BillableAction, live: 
 }
 
 /** One event to what was done with it: the facts read and the write made in one fenced transaction as the tenant. */
-export async function recordBillableEventFor(event: PublishedEvent, { api, log }: Pick<JobContext, "api" | "log">): Promise<Recorded> {
+export async function recordBillableEventFor(event: RelayedEvent<FinanceEventKind>, { api, log }: Pick<JobContext, "api" | "log">): Promise<Recorded> {
   const outcome = await withCompany(api.db, event.companyId, async (tx): Promise<Recorded> => {
     const { facts, live } = await factsOf(tx, event)
     const actions: Done[] = []

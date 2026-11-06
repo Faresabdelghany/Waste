@@ -97,6 +97,6 @@ export async function recordCustomerReply(
     sourceEventId: null,
   })
   // The reply's news (C18 of #291): the comment as the history answers it, for the customer notices to send where the project's rule names a template.
-  await emit(tx, { companyId: ref.companyId }, { aggregate: "ticket", aggregateId: ref.id, kind: "ticket-replied", payload: eventOf(row), projectId: ref.projectId, occurredAt: row.recordedAt })
+  await emit(tx, { companyId: ref.companyId }, { aggregateId: ref.id, kind: "ticket-replied", payload: eventOf(row), projectId: ref.projectId, occurredAt: row.recordedAt })
   return row
 }

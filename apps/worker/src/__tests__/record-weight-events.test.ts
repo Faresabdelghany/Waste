@@ -29,8 +29,8 @@ import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
 
 import type { JobContext } from "../jobs"
-import { recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
-import { consumerQueue } from "../outbox/subscribe"
+import { recordBillableEvents, type Recorded } from "../jobs/record-billable-events"
+import { consumerQueue, type RelayedJob } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type SeededRoute } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
@@ -100,7 +100,7 @@ describe("finance.record-billable-events over an Unload's weight review (O28 of 
       return { id: row.id, recordedAt: row.recordedAt.toISOString(), projectId: row.projectId, unloadId: row.unloadId, decision: row.decision as WeightReviewDecision, note: row.note, correctionUnloadId: row.correctionUnloadId, reviewedBy: row.reviewedBy }
     })
 
-  const published = (payload: WeightReview, id = testId()): PublishedEvent => ({
+  const published = (payload: WeightReview, id = testId()): RelayedJob => ({
     id,
     companyId: tenant.companyId,
     projectId: copenhagen,
@@ -114,10 +114,10 @@ describe("finance.record-billable-events over an Unload's weight review (O28 of 
     updatedAt: NOON.toISOString(),
   })
 
-  const handle = async (event: PublishedEvent): Promise<Recorded["did"][]> => {
+  const handle = async (event: RelayedJob): Promise<Recorded["did"][]> => {
     const consumer = recordBillableEvents.find((job) => job.queue === consumerQueue(event.kind, "finance"))
     assert.ok(consumer, `${event.kind}: no Finance entry`)
-    const job: Job<PublishedEvent> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
+    const job: Job<RelayedJob> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     await consumer.handler([job], context())
     const line = lines.findLast((candidate) => candidate.includes(` ${event.id} → `))
     assert.ok(line, "the consumer logged the event")

@@ -56,7 +56,8 @@ import { licenceRefusal, licenceSentence, type Licence } from "../resources/lice
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
-import type { DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
+import { subjectOf, type OutboxKind, type OutboxSubject } from "../outbox/vocabulary"
+import type { DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
 /** A point as the device recorded it: `[longitude, latitude]`. */
 export type FlatPoint = { type: "Point"; coordinates: [number, number] }
@@ -227,7 +228,10 @@ export type Effect =
   /** The stop's fill estimate set (M23 of #293): a later estimate of the same stop replaces it, and no event, as no consumer reads one yet. */
   | { kind: "estimate-fill"; pickupId: string; fill: FillLevel }
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
-  | { kind: "event"; event: OutboxKind; aggregate: OutboxAggregate; aggregateId: string }
+  | { kind: "event"; event: OutboxSubject<DriverEventKind> }
+
+/** The outbox events a driver's command writes: the route started or completed, a stop's outcome or problem, a problem on the route alone, an unload. */
+export type DriverEventKind = "route-started" | "route-completed" | "pickup-completed" | "pickup-skipped" | "pickup-failed" | "pickup-problem-reported" | "unload-recorded"
 
 /** The effects to run — with a note for the log where applying nothing is the right answer — or the rejection to record. */
 export type Decision = { apply: Effect[]; note?: string } | { reject: Rejection }
@@ -299,7 +303,7 @@ const OUTCOME_COMMANDS: Readonly<Partial<Record<DriverCommandKind, PickupCommand
 /** The proof each outcome command appends. */
 const OUTCOME_PROOFS: Readonly<Record<PickupCommand, ProofKind>> = { complete: "completion", skip: "skip", fail: "failure" }
 /** The event each outcome is worth. */
-const OUTCOME_EVENTS: Readonly<Record<PickupOutcome, OutboxKind>> = { completed: "pickup-completed", skipped: "pickup-skipped", failed: "pickup-failed" }
+const OUTCOME_EVENTS = { completed: "pickup-completed", skipped: "pickup-skipped", failed: "pickup-failed" } as const satisfies Record<PickupOutcome, OutboxKind>
 
 /** A proof draft of the kind, with the command's id and instant, the columns the body did not give null. */
 function proof(command: Command, kind: ProofKind, fields: Partial<Omit<ProofDraft, "id" | "kind" | "occurredAt">> & Located): ProofDraft {
@@ -318,7 +322,7 @@ function proof(command: Command, kind: ProofKind, fields: Partial<Omit<ProofDraf
   }
 }
 
-const event = (kind: OutboxKind, aggregate: OutboxAggregate, aggregateId: string): Effect => ({ kind: "event", event: kind, aggregate, aggregateId })
+const event = (kind: Exclude<DriverEventKind, "pickup-problem-reported">, aggregateId: string): Effect => ({ kind: "event", event: subjectOf(kind, aggregateId) })
 
 /**
  * The decision: the effects to run, or the rejection to record. Judged in
@@ -357,7 +361,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
       apply: [
         { kind: "append-proof", proof: proof(command, OUTCOME_PROOFS[outcomeCommand], { pickupId: pickup.id, reason, note: body.note, location: body.location, accuracyM: body.accuracyM }) },
         { kind: "pickup-outcome", pickupId: pickup.id, status, reason, at: command.occurredAt },
-        event(OUTCOME_EVENTS[status], "pickup", pickup.id),
+        event(OUTCOME_EVENTS[status], pickup.id),
       ],
     }
   }
@@ -381,7 +385,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
       return {
         apply: [
           { kind: "append-proof", proof: proof(command, "problem", { pickupId: pickup?.id, reason: command.body.reason, note: command.body.note, location: command.body.location, accuracyM: command.body.accuracyM }) },
-          pickup === undefined ? event("pickup-problem-reported", "route", route.id) : event("pickup-problem-reported", "pickup", pickup.id),
+          { kind: "event", event: pickup === undefined ? { kind: "pickup-problem-reported", aggregate: "route", aggregateId: route.id } : { kind: "pickup-problem-reported", aggregate: "pickup", aggregateId: pickup.id } },
         ],
       }
     case "add-photo":
@@ -420,7 +424,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
         refusalReason: body.refusal?.reason ?? null,
         refusalNote: body.refusal?.note ?? null,
       }
-      return { apply: [{ kind: "append-unload", unload }, event("unload-recorded", "unload", command.id)] }
+      return { apply: [{ kind: "append-unload", unload }, event("unload-recorded", command.id)] }
     }
     case "pause":
       return { apply: session.pausedAt === null ? [{ kind: "pause", at: command.occurredAt }] : [] }
@@ -433,7 +437,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
         apply: [
           { kind: "append-proof", proof: proof(command, "route-ended", { note: command.body.note, location: command.body.location, accuracyM: command.body.accuracyM }) },
           { kind: "end-route", at: command.occurredAt },
-          event("route-completed", "route", route.id),
+          event("route-completed", route.id),
         ],
       }
     default:
@@ -480,7 +484,7 @@ function decideStart(command: Command<"start-route">, driver: CommandDriver, rou
     apply: [
       { kind: "start-route", sessionId: command.id, vehicleId: vehicle.id, trailerId: body.trailerId ?? null, appVersion: body.appVersion ?? null, at: command.occurredAt },
       { kind: "append-proof", proof: proof(command, "route-started", { location: body.location, accuracyM: body.accuracyM }) },
-      event("route-started", "route", route.id),
+      event("route-started", route.id),
     ],
   }
 }

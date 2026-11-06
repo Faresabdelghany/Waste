@@ -455,7 +455,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           recordedAt: at,
         })
         const decided = await answer(tx, principal.companyId, row)
-        await emit(tx, { companyId: principal.companyId }, { aggregate: "application", aggregateId: row.id, kind: "application-decided", payload: decided, projectId: row.projectId, occurredAt: at })
+        await emit(tx, { companyId: principal.companyId }, { aggregateId: row.id, kind: "application-decided", payload: decided, projectId: row.projectId, occurredAt: at })
         return c.json(decided)
       },
     )
