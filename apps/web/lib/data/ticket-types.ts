@@ -224,7 +224,10 @@ export function fieldOfDraft(draft: FieldDraft): TicketTypeField {
   return { key: draft.key.trim(), label: draft.label.trim(), helpText: draft.helpText.trim() === "" ? null : draft.helpText.trim(), input: draft.input, choices, requirement: draft.requirement }
 }
 
-/** A type after the pane's edit: its own fields, its fields, its permissions and its automation as the record carries them, which the adapter writes each through its route where it changed. */
+/**
+ * A type after the pane's edit: its own fields, its fields, its permissions and its automation as the record carries them, which the adapter writes each through its route where it changed.
+ * The status rides in the values alone, as a team's does: the record's own status is a lifecycle move, which the store refuses for a type, and the API's answer brings the new one.
+ */
 export function updatedTicketTypeRecord(
   record: BusinessRecord,
   edit: { name: string; description: string; status: string; isDefault: boolean; fields: readonly TicketTypeField[]; permissions: readonly TicketTypePermission[]; actions?: readonly TicketTypeAction[] },
@@ -232,7 +235,6 @@ export function updatedTicketTypeRecord(
   return {
     ...record,
     name: edit.name.trim() === "" ? record.name : edit.name.trim(),
-    status: edit.status,
     submittedValues: {
       ...record.submittedValues,
       name: edit.name.trim(),
