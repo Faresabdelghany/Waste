@@ -115,19 +115,22 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
       tabs={tabs}
       title="Counting rules"
       description="Count the emptyings at each property over a month, a quarter or a year, and open a ticket when a limit is reached."
-      action={
-        <Button size="sm" disabled={!access.create || client === null} onClick={() => setEditing("new")}>
-          <Plus className="h-4 w-4" weight="bold" />
-          Add rule
-        </Button>
-      }
       toolbar={
         <span className="text-sm text-muted-foreground">
           {rows.length === 0 ? "No rule counts yet." : `${rows.filter((rule) => rule.status === "active").length} of ${rows.length} ${rows.length === 1 ? "rule is" : "rules are"} counting.`}
         </span>
       }
     >
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          <Button size="sm" disabled={!access.create || client === null} onClick={() => setEditing("new")}>
+            <Plus className="h-4 w-4" weight="bold" />
+            Add rule
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
             <TableHeader>

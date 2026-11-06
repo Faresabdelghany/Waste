@@ -113,19 +113,6 @@ export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange, o
       tabs={tabs}
       title="Default teams"
       description="Each project's default team per kind and per ticket type: the team a ticket opened without one waits with."
-      action={
-        <div className="flex items-center gap-2">
-          {editing && (
-            <Button variant="outline" size="sm" disabled={saving} onClick={() => setEdits(null)}>
-              Discard
-            </Button>
-          )}
-          <Button size="sm" disabled={!access.edit || !editing || saving} onClick={save}>
-            <FloppyDisk className="h-4 w-4" />
-            Save defaults
-          </Button>
-        </div>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="ticket-team-defaults-project" className="text-sm text-muted-foreground">
@@ -165,7 +152,23 @@ export function TicketDefaultTeamsSettings({ tabs, projectId, onProjectChange, o
           )}
         </div>
       )}
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          <>
+            {editing && (
+              <Button variant="outline" size="sm" disabled={saving} onClick={() => setEdits(null)}>
+                Discard
+              </Button>
+            )}
+            <Button size="sm" disabled={!access.edit || !editing || saving} onClick={save}>
+              <FloppyDisk className="h-4 w-4" />
+              Save defaults
+            </Button>
+          </>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[520px]">
             <TableHeader>

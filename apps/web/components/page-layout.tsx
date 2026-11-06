@@ -51,3 +51,31 @@ export function PageActions({ children, className }: { children: ReactNode; clas
     </div>
   )
 }
+
+/**
+ * The card every list sits in, a workspace module's and a Settings pane's
+ * alike: its header carries the count of its rows on the left and the list's
+ * own actions (New …, Add …, Export) on the right, in `PageActions`. A list's
+ * actions go here, never in the page's or the pane's header above.
+ */
+export function TableCard({
+  summary,
+  actions,
+  children,
+  testId,
+}: {
+  summary: ReactNode
+  actions?: ReactNode
+  children: ReactNode
+  testId?: string
+}) {
+  return (
+    <section data-slot="table-card" className="overflow-hidden rounded-xl border border-border/60" data-testid={testId}>
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+        <p className="text-xs text-muted-foreground">{summary}</p>
+        {actions ? <PageActions>{actions}</PageActions> : null}
+      </div>
+      {children}
+    </section>
+  )
+}

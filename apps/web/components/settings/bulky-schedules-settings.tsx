@@ -142,12 +142,6 @@ export function BulkySchedulesSettings() {
       heading="Operations"
       title="Bulky schedules"
       description="The days each planning area collects bulky waste on, how many bookings a day takes, and what a booking is charged once collected."
-      action={
-        <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
-          <Plus className="h-4 w-4" weight="bold" />
-          Add schedule
-        </Button>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="bulky-schedules-project" className="text-sm text-muted-foreground">
@@ -168,7 +162,16 @@ export function BulkySchedulesSettings() {
         </div>
       }
     >
-      <RecordsSection shown={schedules.length} total={schedules.length}>
+      <RecordsSection
+        shown={schedules.length}
+        total={schedules.length}
+        actions={
+          <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
+            <Plus className="h-4 w-4" weight="bold" />
+            Add schedule
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
             <TableHeader>

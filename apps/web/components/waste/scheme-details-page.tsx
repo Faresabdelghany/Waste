@@ -118,7 +118,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
-import { PageActions, PageTopBar } from "@/components/page-layout"
+import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
@@ -1016,17 +1016,9 @@ function SchemeRoutesTab({
             readers={SCHEME_ROUTE_FILTER_READERS}
           />
 
-          <section className="overflow-hidden rounded-xl border border-border/60">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-              <p className="text-xs text-muted-foreground">
-                {recordCountLabel(filtered.length, rows.length)}
-              </p>
-              {generatedStamp && (
-                <p className="text-xs text-muted-foreground">
-                  Last generated {GENERATED_AT_FORMAT.format(new Date(generatedStamp))}
-                </p>
-              )}
-            </div>
+          <TableCard
+            summary={`${recordCountLabel(filtered.length, rows.length)}${generatedStamp ? ` · Last generated ${GENERATED_AT_FORMAT.format(new Date(generatedStamp))}` : ""}`}
+          >
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -1131,7 +1123,7 @@ function SchemeRoutesTab({
               totalCount={totalCount}
               onPageChange={setPage}
             />
-          </section>
+          </TableCard>
         </>
       )}
     </div>
@@ -1199,12 +1191,7 @@ function SchemeStopsTab({
         readers={SCHEME_STOP_FILTER_READERS}
       />
 
-      <section className="overflow-hidden rounded-xl border border-border/60">
-        <div className="border-b border-border px-4 py-2">
-          <p className="text-xs text-muted-foreground">
-            {recordCountLabel(filtered.length, stops.length)}
-          </p>
-        </div>
+      <TableCard summary={recordCountLabel(filtered.length, stops.length)}>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -1310,7 +1297,7 @@ function SchemeStopsTab({
           totalCount={totalCount}
           onPageChange={setPage}
         />
-      </section>
+      </TableCard>
     </div>
   )
 }
