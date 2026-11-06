@@ -81,6 +81,7 @@ import {
   FIXTURE_COMPANY_ID,
   fixtureRecordScopeById,
 } from "@/lib/data/business-modules"
+import { AssetPanelShell, RecordsSection } from "@/components/settings/asset-management-settings"
 import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 
 function projectStatusTone(status: string): StatusTone {
@@ -246,27 +247,6 @@ function TableViewPopover({
         </label>
       </PopoverContent>
     </Popover>
-  )
-}
-
-function RecordsSection({
-  shown,
-  total,
-  children,
-}: {
-  shown: number
-  total: number
-  children: ReactNode
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60">
-      <div className="border-b border-border px-4 py-2">
-        <p className="text-xs text-muted-foreground">
-          {recordCountLabel(shown, total)}
-        </p>
-      </div>
-      {children}
-    </section>
   )
 }
 
@@ -455,16 +435,12 @@ function CompanyList({
     useTablePagination(visibleCompanies)
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <p className="text-base font-medium text-foreground">Company &amp; projects</p>
-          <Button size="sm" onClick={onAddCompany}>
-            <Plus className="h-4 w-4" weight="bold" />
-            Add company
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+    <AssetPanelShell
+      heading="Company & projects"
+      title="Companies"
+      description="Manage company identities, administrators, projects, and tenant-level operational data."
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] max-w-md flex-1">
             <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -487,125 +463,126 @@ function CompanyList({
             ]}
           />
         </div>
-      </header>
+      }
+    >
+      <RecordsSection
+        shown={visibleCompanies.length}
+        total={totalCompanyCount}
+        actions={
+          <Button size="sm" onClick={onAddCompany}>
+            <Plus className="h-4 w-4" weight="bold" />
+            Add company
+          </Button>
+        }
+      >
+        <div className="overflow-x-auto">
+          <Table className="min-w-[1080px]">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10">Company</TableHead>
+                <TableHead className="h-10">Registration</TableHead>
+                <TableHead className="h-10">Status</TableHead>
+                <TableHead className="h-10">Projects</TableHead>
+                <TableHead className="h-10">Primary administrator</TableHead>
+                <TableHead className="h-10">Data</TableHead>
+                <TableHead className="h-10 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleCompanies.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-52 text-center">
+                    <MagnifyingGlass className="mx-auto h-6 w-6 text-muted-foreground" />
+                    <p className="mt-2 text-sm font-medium">{totalCompanyCount > 0 ? "No matching companies" : "No companies yet"}</p>
+                    {totalCompanyCount > 0 ? <p className="mt-1 text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                pageRows.map((company) => {
+              const companyProjects = projectsForCompany(company.id)
+              const administrator =
+                primaryAdministratorForCompany(company.id)
+              const recordCount =
+                company.source === "fixture" ? fixtureRecordCount : 0
 
-      <div className="flex-1 p-4">
-        <div className="mx-auto max-w-[1500px] space-y-4">
-          <SectionTitle
-            title="Companies"
-            description="Manage company identities, administrators, projects, and tenant-level operational data."
-          />
-          <RecordsSection shown={visibleCompanies.length} total={totalCompanyCount}>
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1080px]">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-10">Company</TableHead>
-                    <TableHead className="h-10">Registration</TableHead>
-                    <TableHead className="h-10">Status</TableHead>
-                    <TableHead className="h-10">Projects</TableHead>
-                    <TableHead className="h-10">Primary administrator</TableHead>
-                    <TableHead className="h-10">Data</TableHead>
-                    <TableHead className="h-10 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleCompanies.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-52 text-center">
-                        <MagnifyingGlass className="mx-auto h-6 w-6 text-muted-foreground" />
-                        <p className="mt-2 text-sm font-medium">{totalCompanyCount > 0 ? "No matching companies" : "No companies yet"}</p>
-                        {totalCompanyCount > 0 ? <p className="mt-1 text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pageRows.map((company) => {
-                  const companyProjects = projectsForCompany(company.id)
-                  const administrator =
-                    primaryAdministratorForCompany(company.id)
-                  const recordCount =
-                    company.source === "fixture" ? fixtureRecordCount : 0
-
-                  return (
-                    <TableRow
-                      key={company.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Open ${company.name}`}
-                      className="cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                      onClick={() => onOpenCompany(company.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault()
-                          onOpenCompany(company.id)
-                        }
+              return (
+                <TableRow
+                  key={company.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open ${company.name}`}
+                  className="cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                  onClick={() => onOpenCompany(company.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      onOpenCompany(company.id)
+                    }
+                  }}
+                >
+                  <TableCell className="min-w-[240px] py-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {company.name}
+                    </p>
+                    {showDetails ? (
+                      <p className="mt-0.5 max-w-[340px] truncate text-xs text-muted-foreground">
+                        {company.legalName}
+                        {company.source === "fixture" ? " · Sample data" : ""}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="min-w-[150px] text-sm text-muted-foreground">
+                    {company.registrationNumber || "Not provided"}
+                  </TableCell>
+                  <TableCell>
+                    <ProjectStatusBadge status={company.status} />
+                  </TableCell>
+                  <TableCell className="min-w-[120px] text-sm">
+                    {companyProjects.length}
+                  </TableCell>
+                  <TableCell className="min-w-[220px] text-sm text-muted-foreground">
+                    <p>{administrator?.fullName ?? "Missing"}</p>
+                    {showDetails ? (
+                      <p className="mt-0.5 truncate text-xs">
+                        {administrator?.email ?? "Administrator required"}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {recordCountLabel(recordCount)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2.5"
+                      aria-label={`Edit ${company.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onEditCompany(company.id)
                       }}
+                      onKeyDown={(event) => event.stopPropagation()}
                     >
-                      <TableCell className="min-w-[240px] py-3">
-                        <p className="text-sm font-medium text-foreground">
-                          {company.name}
-                        </p>
-                        {showDetails ? (
-                          <p className="mt-0.5 max-w-[340px] truncate text-xs text-muted-foreground">
-                            {company.legalName}
-                            {company.source === "fixture" ? " · Sample data" : ""}
-                          </p>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="min-w-[150px] text-sm text-muted-foreground">
-                        {company.registrationNumber || "Not provided"}
-                      </TableCell>
-                      <TableCell>
-                        <ProjectStatusBadge status={company.status} />
-                      </TableCell>
-                      <TableCell className="min-w-[120px] text-sm">
-                        {companyProjects.length}
-                      </TableCell>
-                      <TableCell className="min-w-[220px] text-sm text-muted-foreground">
-                        <p>{administrator?.fullName ?? "Missing"}</p>
-                        {showDetails ? (
-                          <p className="mt-0.5 truncate text-xs">
-                            {administrator?.email ?? "Administrator required"}
-                          </p>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {recordCountLabel(recordCount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 gap-1.5 px-2.5"
-                          aria-label={`Edit ${company.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onEditCompany(company.id)
-                          }}
-                          onKeyDown={(event) => event.stopPropagation()}
-                        >
-                          <PencilSimple className="h-4 w-4" />
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            <TablePagination
-              page={page}
-              pageCount={pageCount}
-              totalCount={totalCount}
-              onPageChange={setPage}
-            />
-          </RecordsSection>
+                      <PencilSimple className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
-      </div>
-    </div>
+        <TablePagination
+          page={page}
+          pageCount={pageCount}
+          totalCount={totalCount}
+          onPageChange={setPage}
+        />
+      </RecordsSection>
+    </AssetPanelShell>
   )
 }
 
@@ -686,6 +663,7 @@ function ProjectsTable({
   ordering,
   showDetails,
   onEditProject,
+  actions,
 }: {
   projects: Project[]
   query: string
@@ -693,6 +671,7 @@ function ProjectsTable({
   ordering: string
   showDetails: boolean
   onEditProject: (projectId: string) => void
+  actions: ReactNode
 }) {
   const normalizedQuery = query.trim().toLowerCase()
   const visibleProjects = useMemo(() => {
@@ -730,7 +709,7 @@ function ProjectsTable({
     useTablePagination(visibleProjects)
 
   return (
-    <RecordsSection shown={visibleProjects.length} total={projects.length}>
+    <RecordsSection shown={visibleProjects.length} total={projects.length} actions={actions}>
         <div className="overflow-x-auto">
           <Table className="min-w-[960px]">
             <TableHeader>
@@ -865,14 +844,6 @@ function CompanyDetails({
               </p>
             </div>
           </div>
-          {activeTab === "projects" ? (
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={onAddProject}>
-                <Plus className="h-4 w-4" weight="bold" />
-                Add project
-              </Button>
-            </div>
-          ) : null}
         </div>
         <div className="flex flex-col gap-3 px-4 py-3">
           <div className="overflow-x-auto pb-0.5">
@@ -962,6 +933,12 @@ function CompanyDetails({
             ordering={projectOrdering}
             showDetails={showProjectDetails}
             onEditProject={onEditProject}
+            actions={
+              <Button size="sm" onClick={onAddProject}>
+                <Plus className="h-4 w-4" weight="bold" />
+                Add project
+              </Button>
+            }
           />
           </>
         )}

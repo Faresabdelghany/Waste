@@ -14,7 +14,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ArrowClockwise, CheckCircle, Gear, Warning } from "@phosphor-icons/react/dist/ssr"
 
-import { AssetPanelShell } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, RecordsSection } from "@/components/settings/asset-management-settings"
 import { useReport } from "@/components/insight/use-report"
 import { Button } from "@/components/ui/button"
 import { useApiSession } from "@/components/waste/api-session-store"
@@ -56,22 +56,22 @@ export function IntegrationsSettingsOnApi() {
       title="Integrations"
       description="The services this deployment calls, which way data goes, and their state."
       toolbar={null}
-      action={
-        granted ? (
-          <Button variant="outline" size="sm" onClick={() => {
-              setNow(new Date())
-              setReading((count) => count + 1)
-            }} disabled={integrations.loading}>
-            <ArrowClockwise className="h-4 w-4" />
-            Refresh
-          </Button>
-        ) : null
-      }
     >
-      <section className="rounded-xl border border-border/60" aria-labelledby="integrations-connections">
-        <h3 id="integrations-connections" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-          Connections
-        </h3>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          granted ? (
+            <Button variant="outline" size="sm" onClick={() => {
+                setNow(new Date())
+                setReading((count) => count + 1)
+              }} disabled={integrations.loading}>
+              <ArrowClockwise className="h-4 w-4" />
+              Refresh
+            </Button>
+          ) : null
+        }
+      >
         {!granted && <p className="px-4 py-6 text-sm text-muted-foreground">The integrations are not shown to your role.</p>}
         {granted && integrations.problem !== null && <p className="px-4 py-6 text-sm text-muted-foreground">The integrations could not be read: {problemSentence(integrations.problem)}</p>}
         {granted && integrations.problem === null && integrations.shown === null && <p className="px-4 py-6 text-sm text-muted-foreground">Reading the integrations…</p>}
@@ -98,7 +98,7 @@ export function IntegrationsSettingsOnApi() {
             ))}
           </ul>
         )}
-      </section>
+      </RecordsSection>
     </AssetPanelShell>
   )
 }

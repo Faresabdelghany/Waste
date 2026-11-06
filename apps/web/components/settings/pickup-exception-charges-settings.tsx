@@ -139,12 +139,6 @@ export function PickupExceptionChargesSettings() {
       heading="Commercial"
       title="Exception charges"
       description="What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence."
-      action={
-        <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
-          <Plus className="h-4 w-4" weight="bold" />
-          Add rule
-        </Button>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="exception-charges-project" className="text-sm text-muted-foreground">
@@ -165,7 +159,16 @@ export function PickupExceptionChargesSettings() {
         </div>
       }
     >
-      <RecordsSection shown={rules.length} total={rules.length}>
+      <RecordsSection
+        shown={rules.length}
+        total={rules.length}
+        actions={
+          <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
+            <Plus className="h-4 w-4" weight="bold" />
+            Add rule
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
             <TableHeader>

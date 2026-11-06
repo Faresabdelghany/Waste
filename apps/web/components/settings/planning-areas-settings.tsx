@@ -237,12 +237,6 @@ export function PlanningAreasSettings() {
       heading="Operations"
       title={areasModule.label}
       description={areasModule.description}
-      action={
-        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!areas.ready || !organisation.ready}>
-          <Plus className="h-4 w-4" weight="bold" />
-          {areasModule.primaryAction}
-        </Button>
-      }
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search planning areas"
@@ -264,7 +258,16 @@ export function PlanningAreasSettings() {
         />
       }
     >
-      <RecordsSection shown={filtered.length} total={areaRecords.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={areaRecords.length}
+        actions={
+          <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!areas.ready || !organisation.ready}>
+            <Plus className="h-4 w-4" weight="bold" />
+            {areasModule.primaryAction}
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[1080px]">
             <TableHeader>

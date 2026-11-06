@@ -23,6 +23,7 @@ import {
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { serviceFrequencyOfRecord } from "@waste/domain/service-frequencies"
 import { cn } from "@/lib/utils"
+import { TableCard } from "@/components/page-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -641,10 +642,7 @@ function ContainerTable({
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(records)
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-        {records.length} container{records.length === 1 ? "" : "s"}
-      </div>
+    <TableCard summary={`${records.length} container${records.length === 1 ? "" : "s"}`}>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -746,7 +744,7 @@ function ContainerTable({
         totalCount={totalCount}
         onPageChange={setPage}
       />
-    </section>
+    </TableCard>
   )
 }
 
@@ -801,10 +799,7 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
   } = useTablePagination(groups)
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-        {groups.length} container groups
-      </div>
+    <TableCard summary={`${groups.length} container ${groups.length === 1 ? "group" : "groups"}`}>
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -833,7 +828,7 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
         totalCount={groupsTotalCount}
         onPageChange={setGroupsPage}
       />
-    </section>
+    </TableCard>
   )
 }
 

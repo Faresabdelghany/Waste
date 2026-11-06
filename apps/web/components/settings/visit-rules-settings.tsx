@@ -139,12 +139,6 @@ export function VisitRulesSettings() {
       heading="Commercial"
       title="Recycling-centre charges"
       description="How a project's recycling-centre visits are charged: a household's free visits a year and the price of each after them, the fractions brought free, and a business's visit."
-      action={
-        <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
-          <Plus className="h-4 w-4" weight="bold" />
-          Add rule
-        </Button>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="visit-rules-project" className="text-sm text-muted-foreground">
@@ -165,7 +159,16 @@ export function VisitRulesSettings() {
         </div>
       }
     >
-      <RecordsSection shown={rules.length} total={rules.length}>
+      <RecordsSection
+        shown={rules.length}
+        total={rules.length}
+        actions={
+          <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
+            <Plus className="h-4 w-4" weight="bold" />
+            Add rule
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[860px]">
             <TableHeader>

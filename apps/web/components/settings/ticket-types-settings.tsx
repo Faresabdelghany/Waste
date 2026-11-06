@@ -153,14 +153,17 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
       tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
-      action={
-        <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
-          <Plus className="h-4 w-4" weight="bold" />
-          New type
-        </Button>
-      }
     >
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" weight="bold" />
+            New type
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
             <TableHeader>

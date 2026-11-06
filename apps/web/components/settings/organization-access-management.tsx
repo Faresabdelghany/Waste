@@ -4,7 +4,6 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   DotsThree,
   Funnel,
-  Info,
   MagnifyingGlass,
   Plus,
   Sliders,
@@ -19,7 +18,7 @@ import {
   whenSaved,
 } from "@/components/waste/business-record-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
 import { NewRoleDialog } from "@/components/settings/new-role-dialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -71,11 +70,6 @@ import {
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import {
   DEACTIVATE_USER,
   isCompanyRecord,
@@ -373,61 +367,7 @@ function Toolbar({
   )
 }
 
-function PanelShell({
-  action,
-  tabs,
-  toolbar,
-  title,
-  description,
-  children,
-}: {
-  action?: ReactNode
-  tabs: ReactNode
-  toolbar: ReactNode
-  title: string
-  description: string
-  children: ReactNode
-}) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex flex-col border-b border-border/40">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <p className="text-base font-medium text-foreground">Users &amp; roles</p>
-          {action && <div className="flex items-center gap-2">{action}</div>}
-        </div>
-        <div className="flex flex-col gap-3 px-4 py-3">
-          {tabs}
-          {toolbar}
-        </div>
-      </header>
-      <div className="flex-1 p-4">
-        <div className="mx-auto max-w-[1500px] space-y-4">
-          <section className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="unstyled"
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label={`About ${title}`}
-                  >
-                    <Info className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-sm text-xs">
-                  {description}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </section>
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
+const USERS_ROLES_HEADING = "Users & roles"
 
 const defaultUserView: TableView = { ordering: "name", showDetails: true }
 const defaultRoleView: TableView = { ordering: "default", showDetails: true }
@@ -540,13 +480,9 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
 
   return (
     <>
-      <PanelShell
+      <AssetPanelShell
+        heading={USERS_ROLES_HEADING}
         tabs={tabs}
-        action={
-          <Button size="sm" onClick={() => setCreating(true)} disabled={!access.create || !teams.ready || saving}>
-            <Plus className="h-4 w-4" weight="bold" /> New team
-          </Button>
-        }
         toolbar={
           <Toolbar
             searchPlaceholder="Search teams"
@@ -565,7 +501,15 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
         title="Teams"
         description="The teams the company's tickets wait with. A team's queue is its open tickets nobody works: anyone who works tickets takes one, member or not."
       >
-        <RecordsSection shown={filtered.length} total={rows.length}>
+        <RecordsSection
+          shown={filtered.length}
+          total={rows.length}
+          actions={
+            <Button size="sm" onClick={() => setCreating(true)} disabled={!access.create || !teams.ready || saving}>
+              <Plus className="h-4 w-4" weight="bold" /> New team
+            </Button>
+          }
+        >
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -604,7 +548,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
           </Table>
           <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
         </RecordsSection>
-      </PanelShell>
+      </AssetPanelShell>
 
       <BusinessRecordFormDialog schema={TICKET_TEAM_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={relationOptions} />
       {editing && (
@@ -1043,18 +987,9 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
           }}
         />
       ) : activeTab === "users" ? (
-        <PanelShell
+        <AssetPanelShell
+          heading={USERS_ROLES_HEADING}
           tabs={tabs}
-          action={
-            <Button
-              size="sm"
-              onClick={() => setAddUserOpen(true)}
-              disabled={!pilotReady}
-              title={pilotUsersEmpty?.message}
-            >
-              <Plus className="h-4 w-4" weight="bold" /> Add user
-            </Button>
-          }
           toolbar={
             <Toolbar
               searchPlaceholder="Search users"
@@ -1086,7 +1021,20 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
           title="Users"
           description="Everyone with access to the company — office users, service provider users, and machine accounts — with their role, organization, and project scope."
         >
-          <RecordsSection shown={filteredUsers.length} total={userRows.length}>
+          <RecordsSection
+            shown={filteredUsers.length}
+            total={userRows.length}
+            actions={
+              <Button
+                size="sm"
+                onClick={() => setAddUserOpen(true)}
+                disabled={!pilotReady}
+                title={pilotUsersEmpty?.message}
+              >
+                <Plus className="h-4 w-4" weight="bold" /> Add user
+              </Button>
+            }
+          >
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -1163,7 +1111,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
               onPageChange={setUsersPage}
             />
           </RecordsSection>
-        </PanelShell>
+        </AssetPanelShell>
       ) : selectedRoleId ? (
         // On the Pilot the access module's role, its matrix saved whole and a system role's read-only (#291); in fixture mode the organisation store's.
         configured ? (
@@ -1178,18 +1126,9 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
           />
         )
       ) : (
-        <PanelShell
+        <AssetPanelShell
+          heading={USERS_ROLES_HEADING}
           tabs={tabs}
-          action={
-            <Button
-              size="sm"
-              onClick={() => setNewRoleOpen(true)}
-              disabled={!pilotReady}
-              title={pilotRolesEmpty?.message}
-            >
-              <Plus className="h-4 w-4" weight="bold" /> New role
-            </Button>
-          }
           toolbar={
             <Toolbar
               searchPlaceholder="Search roles"
@@ -1221,7 +1160,20 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
           title="Roles"
           description="Roles bundle permissions at a scope — company, assigned projects, or own service provider. System roles are built in; custom roles are defined by your company."
         >
-          <RecordsSection shown={filteredRoles.length} total={roleRows.length}>
+          <RecordsSection
+            shown={filteredRoles.length}
+            total={roleRows.length}
+            actions={
+              <Button
+                size="sm"
+                onClick={() => setNewRoleOpen(true)}
+                disabled={!pilotReady}
+                title={pilotRolesEmpty?.message}
+              >
+                <Plus className="h-4 w-4" weight="bold" /> New role
+              </Button>
+            }
+          >
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -1284,7 +1236,7 @@ export function OrganizationAccessManagement({ tab, onTabChange }: { tab: UsersR
               onPageChange={setRolesPage}
             />
           </RecordsSection>
-        </PanelShell>
+        </AssetPanelShell>
       )}
 
       {configured && (

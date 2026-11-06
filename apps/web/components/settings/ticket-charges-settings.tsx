@@ -131,11 +131,6 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
       tabs={tabs}
       title="Ticket charges"
       description="The product a completed re-collection or service of each ticket kind or type is charged at when its completion names none, a type's own winning over its kind's. A kind left at None waits for the office's product on the billable event; a type left as its kind is charged at its kind's."
-      action={
-        <Button size="sm" disabled={!changed || saving} onClick={() => void save()}>
-          {saving ? "Saving…" : "Save charges"}
-        </Button>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="ticket-charges-project" className="text-sm text-muted-foreground">
@@ -163,7 +158,15 @@ export function TicketChargesSettings({ tabs, projectId, onProjectChange }: { ta
         </div>
       }
     >
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          <Button size="sm" disabled={!changed || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save charges"}
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[640px]" data-testid="ticket-charges">
             <TableHeader>
