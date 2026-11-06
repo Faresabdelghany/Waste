@@ -18,8 +18,11 @@ import { TicketTypesSettings } from "@/components/settings/ticket-types-settings
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TICKETS_TABS, type TicketsProjectPick, type TicketsTab } from "@/lib/data/tickets-settings"
 
-/** The page at `tab`, which the dialog holds so leaving and coming back finds the tab last used; `onTabChange` moves it. */
-export function TicketsSettings({ tab, onTabChange }: { tab: TicketsTab; onTabChange: (tab: TicketsTab) => void }) {
+/**
+ * The page at `tab`, which the dialog holds so leaving and coming back finds the tab last used; `onTabChange` moves it.
+ * `typeId` is the ticket type whose own page the Types tab shows in its place, by the API's id; `onTypeChange` opens one, or the list again with null.
+ */
+export function TicketsSettings({ tab, onTabChange, typeId, onTypeChange }: { tab: TicketsTab; onTabChange: (tab: TicketsTab) => void; typeId: string | null; onTypeChange: (typeId: string | null) => void }) {
   // One project for the Deadlines, Teams and Charges tabs: picked on one, the others open on it.
   const [projectId, setProjectId] = useState<string | null>(null)
   const pick: TicketsProjectPick = { projectId, onProjectChange: setProjectId }
@@ -39,7 +42,7 @@ export function TicketsSettings({ tab, onTabChange }: { tab: TicketsTab; onTabCh
 
   switch (tab) {
     case "types":
-      return <TicketTypesSettings tabs={tabs} />
+      return <TicketTypesSettings tabs={tabs} openTypeId={typeId} onOpenType={onTypeChange} />
     case "teams":
       return <TicketTeamsSettings tabs={tabs} {...pick} />
     case "deadlines":

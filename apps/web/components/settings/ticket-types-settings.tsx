@@ -9,10 +9,12 @@
 // `/ticket-types` through lib/api/records/ticket-types.ts. Every company
 // starts with a default type per kind, the type of a ticket opened by kind
 // alone; a ticket's form offers a type's fields once the type is picked.
+// A row opens the type's own page in the tab's place, its four tabs edited
+// and saved there, under an address of its own (`?pane=tickets&type=<id>`).
 // Offered on the Pilot alone, beside the Ticket teams.
 
-import { useState, type ReactNode } from "react"
-import { ArrowDown, ArrowUp, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
@@ -23,7 +25,6 @@ import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -34,7 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
 import { vehicleAdapter } from "@/lib/api/records/fleet"
 import { roleAdapter, userAdapter } from "@/lib/api/records/organisation"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
@@ -67,13 +68,17 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 
-/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
-export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
+/**
+ * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.
+ * `openTypeId` is the type whose own page stands in the list's place, by the API's id, or null for the list; `onOpenType` opens one, or the list with null.
+ */
+export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: ReactNode; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
   const configured = useApiConfigured()
   const session = useApiSession()
   const { me } = session
   const access = ticketTypesAccessOf(me?.role.grants)
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
+  const resolver = useServerResolver()
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, NO_RECORDS)
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
   const roles = users.records.filter((record) => roleAdapter.owns(record) && !isSoftDeleted(record))
@@ -89,16 +94,24 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
     vehicles: named(vehicles.records.filter((record) => vehicleAdapter.owns(record) && !isSoftDeleted(record))),
   }
   const [creating, setCreating] = useState(false)
-  const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
+  // A type is addressed by the API's id, which a reload maps to the same row; a row the server does not hold yet by its own.
+  const addressOf = (record: BusinessRecord) => resolver.serverIdOf(record.id) ?? record.id
+  const addressed = openTypeId === null ? undefined : (resolver.byServerId(openTypeId)?.id ?? openTypeId)
+  const opened = rows.find((record) => record.id === addressed)
+  // Whether the list is what shows, read when a create answers: a person who has moved on meanwhile is not pulled to the new type.
+  const listShowing = useRef(true)
+  useEffect(() => {
+    listShowing.current = addressed === undefined
+  })
 
-  const write = (record: BusinessRecord, done: () => void, said: string, madeDefault: boolean) => {
+  const write = (record: BusinessRecord, done: (saved: SavedOutcome | undefined) => void, said: string, madeDefault: boolean) => {
     if (saving) return
     setSaving(true)
     whenSaved(
       upsertRecord(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, record),
-      () => {
-        done()
+      (saved) => {
+        done(saved)
         toast.success(said, { description: record.name })
         // The API unmade the kind's other default too, a row the write did not answer: the module is read again.
         if (madeDefault) void refreshModule(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId)
@@ -109,7 +122,12 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const madeDefault = (before: BusinessRecord | null, after: BusinessRecord) => after.submittedValues?.isDefault === true && before?.submittedValues?.isDefault !== true
   const handleCreate = (values: BusinessFormValues) => {
     const made = createTicketTypeRecord(values, { now: Date.now() })
-    write(made, () => setCreating(false), "Ticket type added", madeDefault(null, made))
+    // A new type lands on its own page, addressed by the id the API gave it, while the list still shows; one whose answer named none is found on the list.
+    const landOn = (saved: SavedOutcome | undefined) => {
+      setCreating(false)
+      if (listShowing.current && saved !== undefined && saved.kind !== "unchanged" && saved.serverId !== undefined) onOpenType(saved.serverId)
+    }
+    write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
 
   const emptyMessage = !configured
@@ -121,6 +139,12 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
         : types.problem
           ? `The ticket types could not be read from the API: ${types.problem.detail ?? types.problem.title}`
           : "No ticket type yet.")
+
+  if (addressed !== undefined) {
+    if (opened === undefined) return <TicketTypeMissing message={types.ready ? "No ticket type has this address." : emptyMessage} onBack={() => onOpenType(null)} />
+    const save = (record: BusinessRecord, saved: (row: BusinessRecord) => void) => write(record, (outcome) => saved(savedRow(outcome, record)), "Ticket type saved", madeDefault(opened, record))
+    return <TicketTypePage key={opened.id} record={opened} roles={roles} choices={choices} saving={saving} editable={access.edit} onBack={() => onOpenType(null)} onSave={save} />
+  }
 
   return (
     <AssetPanelShell
@@ -146,15 +170,27 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
                 <TableHead>Fields</TableHead>
                 <TableHead>Automation</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
-                <EmptyRow colSpan={6} message={emptyMessage} hint={types.notGranted ? types.problem?.detail : undefined} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={types.notGranted ? types.problem?.detail : undefined} />
               ) : (
                 rows.map((record) => (
-                  <TableRow key={record.id}>
+                  <TableRow
+                    key={record.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${record.name}`}
+                    className="cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                    onClick={() => onOpenType(addressOf(record))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        onOpenType(addressOf(record))
+                      }
+                    }}
+                  >
                     <TableCell className="text-sm font-medium text-foreground">
                       {record.name}
                       {record.submittedValues?.isDefault === true && <span className="ml-2 text-xs font-normal text-muted-foreground">Default</span>}
@@ -165,11 +201,6 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
                     <TableCell className="whitespace-nowrap">
                       <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${record.name}`} disabled={!access.edit || saving} onClick={() => setEditing(record)}>
-                        <PencilSimple className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -179,14 +210,55 @@ export function TicketTypesSettings({ tabs }: { tabs?: ReactNode } = {}) {
       </RecordsSection>
 
       {/* The form names no row of another module: every option is its own. */}
-      <BusinessRecordFormDialog schema={TICKET_TYPE_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={(field) => field.options ?? []} />
-      {editing && <TicketTypeEditor record={editing} roles={roles} choices={choices} saving={saving} onClose={() => setEditing(null)} onSave={(record) => write(record, () => setEditing(null), "Ticket type saved", madeDefault(editing, record))} />}
+      {/* Held open while the create is out, so the answer finds the person where they asked. */}
+      <BusinessRecordFormDialog
+        schema={TICKET_TYPE_FORM}
+        open={creating}
+        onOpenChange={(open) => {
+          if (!saving) setCreating(open)
+        }}
+        onSubmit={handleCreate}
+        relationOptions={(field) => field.options ?? []}
+        submitting={saving}
+      />
     </AssetPanelShell>
   )
 }
 
-/** One type's editor: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed. */
-function TicketTypeEditor({ record, roles, choices, saving, onClose, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; onClose: () => void; onSave: (record: BusinessRecord) => void }) {
+/** The header a type's page stands under: the way back to the list, the type's name and what it is, and the page's own buttons. */
+function TicketTypeHeader({ onBack, children, action }: { onBack: () => void; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to ticket types" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="min-w-0">{children}</div>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+/** The page of a type the address names that is not listed: still being read, not shown to the role, or not there. */
+function TicketTypeMissing({ message, onBack }: { message: string; onBack: () => void }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <header className="border-b border-border/40">
+        <TicketTypeHeader onBack={onBack}>
+          <p className="truncate text-base font-medium text-foreground">Ticket type</p>
+        </TicketTypeHeader>
+      </header>
+      <p className="p-8 text-center text-sm text-muted-foreground">{message}</p>
+    </div>
+  )
+}
+
+/**
+ * One type's page: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed.
+ * Read-only for a role that may not edit types. `onSave` hands back the row the save left, once the API has answered.
+ */
+function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; editable: boolean; onBack: () => void; onSave: (record: BusinessRecord, saved: (row: BusinessRecord) => void) => void }) {
   const isDefault = record.submittedValues?.isDefault === true
   const [name, setName] = useState(record.name)
   const [description, setDescription] = useState(typeof record.submittedValues?.description === "string" ? record.submittedValues.description : "")
@@ -230,191 +302,215 @@ function TicketTypeEditor({ record, roles, choices, saving, onClose, onSave }: {
     if (unlabelled !== -1) return setRefusal(`Field ${unlabelled + 1}: give it a label.`)
     const automation = actionsIssue(actions)
     if (automation !== undefined) return setRefusal(automation)
-    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }))
+    // A field the API now holds keeps its key from here on: tickets carry their values under it, so a later relabel must not move it.
+    const freezeSavedKeys = (saved: BusinessRecord) => {
+      const held = new Set(typeFieldsOf(saved).map((field) => field.key))
+      setFields((current) => current.map((draft) => (held.has(draft.key) ? { ...draft, keyTouched: true } : draft)))
+    }
+    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }), freezeSavedKeys)
   }
 
+  const tabClass = "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background"
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1200px]">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>{record.name}</DialogTitle>
-          <DialogDescription>
-            A type of {record.facts.Kind?.toLowerCase() ?? "case"}. Its kind never changes, since the tickets of the type carry it.
-          </DialogDescription>
-        </DialogHeader>
-        <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="mx-6 mt-4 w-fit">
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="fields">Fields ({fields.length})</TabsTrigger>
-            <TabsTrigger value="permissions">Status permissions</TabsTrigger>
-            <TabsTrigger value="automation">Automation ({actions.length})</TabsTrigger>
-          </TabsList>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-            <TabsContent value="details" className="mt-0 grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="ticket-type-name">Name</Label>
-                <Input id="ticket-type-name" value={name} onChange={(event) => setName(event.target.value)} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Kind</Label>
-                <Input value={record.facts.Kind ?? ""} disabled />
-              </div>
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="ticket-type-description">Description</Label>
-                <Textarea id="ticket-type-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What the type is for, for the office." />
-              </div>
-              <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                <span>
-                  <span className="font-medium">Active</span>
-                  <span className="block text-xs text-muted-foreground">A retired type is offered to no new ticket and keeps the tickets it holds.</span>
-                </span>
-                <Switch checked={active} onCheckedChange={setActive} disabled={isDefault} aria-label="Active" />
-              </label>
-              <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                <span>
-                  <span className="font-medium">Default for its kind</span>
-                  <span className="block text-xs text-muted-foreground">{isDefault ? "Make another type of the kind the default to change it." : "Makes this the type of a ticket opened by its kind alone."}</span>
-                </span>
-                <Switch checked={makeDefault} onCheckedChange={setMakeDefault} disabled={isDefault} aria-label="Default for its kind" />
-              </label>
-            </TabsContent>
-
-            <TabsContent value="fields" className="mt-0 space-y-3">
-              <p className="text-sm text-muted-foreground">The facts the office records on a ticket of this type, in the order its form asks for them. A field taken off keeps its values on the tickets that hold them.</p>
-              {fields.length === 0 && <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No field yet.</p>}
-              {fields.map((draft, index) => (
-                <div key={index} className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_10rem_10rem_auto]" aria-label={`Field ${index + 1}`}>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor={`field-label-${index}`}>Label</Label>
-                    <Input id={`field-label-${index}`} value={draft.label} onChange={(event) => changeField(index, (current) => relabelled(current, event.target.value))} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor={`field-key-${index}`}>Key</Label>
-                    <Input id={`field-key-${index}`} value={draft.key} onChange={(event) => changeField(index, (current) => ({ ...current, key: event.target.value, keyTouched: true }))} className="font-mono text-xs" />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label>Input</Label>
-                    <Select value={draft.input} onValueChange={(input) => changeField(index, (current) => ({ ...current, input: input as TicketFieldInput }))}>
-                      <SelectTrigger aria-label={`Input of field ${index + 1}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FIELD_INPUT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label>Required</Label>
-                    <Select value={draft.requirement} onValueChange={(requirement) => changeField(index, (current) => ({ ...current, requirement: requirement as TicketFieldRequirement }))}>
-                      <SelectTrigger aria-label={`Requirement of field ${index + 1}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FIELD_REQUIREMENT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-end gap-1">
-                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Move field ${index + 1} up`} disabled={index === 0} onClick={() => moveField(index, -1)}>
-                      <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Move field ${index + 1} down`} disabled={index === fields.length - 1} onClick={() => moveField(index, 1)}>
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Remove field ${index + 1}`} onClick={() => setFields((current) => current.filter((_, at) => at !== index))}>
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  {draft.input === "choice" && (
-                    <div className="grid gap-1.5 sm:col-span-2">
-                      <Label htmlFor={`field-choices-${index}`}>Choices</Label>
-                      <Input id={`field-choices-${index}`} value={draft.choices} placeholder="Granted, Refused" onChange={(event) => changeField(index, (current) => ({ ...current, choices: event.target.value }))} />
-                    </div>
-                  )}
-                  <div className={draft.input === "choice" ? "grid gap-1.5 sm:col-span-3" : "grid gap-1.5 sm:col-span-5"}>
-                    <Label htmlFor={`field-help-${index}`}>Help text</Label>
-                    <Input id={`field-help-${index}`} value={draft.helpText} placeholder="Shown under the input" onChange={(event) => changeField(index, (current) => ({ ...current, helpText: event.target.value }))} />
-                  </div>
-                </div>
-              ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => setFields((current) => [...current, newFieldDraft()])}>
-                <Plus className="h-4 w-4" />
-                Add field
-              </Button>
-            </TabsContent>
-
-            <TabsContent value="permissions" className="mt-0 space-y-3">
-              <p className="text-sm text-muted-foreground">Who may move a ticket of this type. A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone. The system&apos;s own work — a stop serving its ticket — is not held to it.</p>
-              <div className="overflow-x-auto rounded-md border">
-                <Table className="min-w-[760px]">
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead>Role</TableHead>
-                      {COMMAND_HEADINGS.map((heading) => (
-                        <TableHead key={heading.command} className="text-center">
-                          {heading.heading}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {roles.length === 0 ? (
-                      <EmptyRow colSpan={COMMAND_HEADINGS.length + 1} message="The roles are not read yet." hint="Users & roles lists them." />
-                    ) : (
-                      roles.map((roleRecord) => (
-                        <TableRow key={roleRecord.id}>
-                          <TableCell className="text-sm">{roleRecord.name}</TableCell>
-                          {COMMAND_HEADINGS.map((heading) => (
-                            <TableCell key={heading.command} className="text-center">
-                              <Checkbox
-                                aria-label={`${roleRecord.name} may ${heading.heading.toLowerCase()}`}
-                                checked={rolesOf(heading.command).includes(roleRecord.id)}
-                                onCheckedChange={(checked) => toggleRole(heading.command, roleRecord.id, checked === true)}
-                              />
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {COMMAND_HEADINGS.map((heading) => `${heading.heading}: ${rolesOf(heading.command).length === 0 ? "everyone" : `${rolesOf(heading.command).length} role${rolesOf(heading.command).length === 1 ? "" : "s"}`}`).join(" · ")}
-              </p>
-            </TabsContent>
-
-            <TabsContent value="automation" className="mt-0">
-              <TicketTypeAutomation
-                kind={kind}
-                actions={actions}
-                choices={choices}
-                onChange={(next) => {
-                  setActions(next)
-                  setRefusal(null)
-                }}
-              />
-            </TabsContent>
+    <Tabs defaultValue="details" className="flex min-w-0 flex-1 flex-col gap-0">
+      <header className="flex flex-col border-b border-border/40">
+        <TicketTypeHeader
+          onBack={onBack}
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {refusal !== null && <p className="max-w-xl text-sm text-destructive">{refusal}</p>}
+              {editable && (
+                <Button size="sm" onClick={save} disabled={saving}>
+                  Save type
+                </Button>
+              )}
+            </div>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-base font-medium text-foreground">{record.name}</h1>
+            <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
+            {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
           </div>
-        </Tabs>
-        <DialogFooter className="border-t px-6 py-4">
-          {refusal !== null && <p className="mr-auto text-sm text-destructive">{refusal}</p>}
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={saving}>
-            Save type
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.facts.Kind}</p>
+        </TicketTypeHeader>
+        <div className="overflow-x-auto px-4 py-3">
+          <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket type">
+            <TabsTrigger value="details" className={tabClass}>
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="fields" className={tabClass}>
+              Fields
+              <span className="ml-1.5 text-[10px] text-muted-foreground">{fields.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="permissions" className={tabClass}>
+              Status permissions
+            </TabsTrigger>
+            <TabsTrigger value="automation" className={tabClass}>
+              Automation
+              <span className="ml-1.5 text-[10px] text-muted-foreground">{actions.length}</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+      </header>
+      <div className="flex-1 p-4">
+        {/* A role that may not edit types reads the page: every control of the tabs is disabled with the fieldset. */}
+        <fieldset disabled={!editable} className="mx-auto min-w-0 max-w-[1500px]">
+          <TabsContent value="details" className="mt-0 grid max-w-4xl gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="ticket-type-name">Name</Label>
+              <Input id="ticket-type-name" value={name} onChange={(event) => setName(event.target.value)} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Kind</Label>
+              <Input value={record.facts.Kind ?? ""} disabled />
+            </div>
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label htmlFor="ticket-type-description">Description</Label>
+              <Textarea id="ticket-type-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What the type is for, for the office." />
+            </div>
+            <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <span>
+                <span className="font-medium">Active</span>
+                <span className="block text-xs text-muted-foreground">A retired type is offered to no new ticket and keeps the tickets it holds.</span>
+              </span>
+              <Switch checked={active} onCheckedChange={setActive} disabled={isDefault} aria-label="Active" />
+            </label>
+            <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <span>
+                <span className="font-medium">Default for its kind</span>
+                <span className="block text-xs text-muted-foreground">{isDefault ? "Make another type of the kind the default to change it." : "Makes this the type of a ticket opened by its kind alone."}</span>
+              </span>
+              <Switch checked={makeDefault} onCheckedChange={setMakeDefault} disabled={isDefault} aria-label="Default for its kind" />
+            </label>
+          </TabsContent>
+
+          <TabsContent value="fields" className="mt-0 space-y-3">
+            <p className="text-sm text-muted-foreground">The facts the office records on a ticket of this type, in the order its form asks for them. A field taken off keeps its values on the tickets that hold them.</p>
+            {fields.length === 0 && <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No field yet.</p>}
+            {fields.map((draft, index) => (
+              <div key={index} className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_10rem_10rem_auto]" aria-label={`Field ${index + 1}`}>
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`field-label-${index}`}>Label</Label>
+                  <Input id={`field-label-${index}`} value={draft.label} onChange={(event) => changeField(index, (current) => relabelled(current, event.target.value))} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`field-key-${index}`}>Key</Label>
+                  <Input id={`field-key-${index}`} value={draft.key} onChange={(event) => changeField(index, (current) => ({ ...current, key: event.target.value, keyTouched: true }))} className="font-mono text-xs" />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Input</Label>
+                  <Select value={draft.input} onValueChange={(input) => changeField(index, (current) => ({ ...current, input: input as TicketFieldInput }))}>
+                    <SelectTrigger aria-label={`Input of field ${index + 1}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FIELD_INPUT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Required</Label>
+                  <Select value={draft.requirement} onValueChange={(requirement) => changeField(index, (current) => ({ ...current, requirement: requirement as TicketFieldRequirement }))}>
+                    <SelectTrigger aria-label={`Requirement of field ${index + 1}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FIELD_REQUIREMENT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-1">
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Move field ${index + 1} up`} disabled={index === 0} onClick={() => moveField(index, -1)}>
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Move field ${index + 1} down`} disabled={index === fields.length - 1} onClick={() => moveField(index, 1)}>
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Remove field ${index + 1}`} onClick={() => setFields((current) => current.filter((_, at) => at !== index))}>
+                    <Trash className="h-4 w-4" />
+                  </Button>
+                </div>
+                {draft.input === "choice" && (
+                  <div className="grid gap-1.5 sm:col-span-2">
+                    <Label htmlFor={`field-choices-${index}`}>Choices</Label>
+                    <Input id={`field-choices-${index}`} value={draft.choices} placeholder="Granted, Refused" onChange={(event) => changeField(index, (current) => ({ ...current, choices: event.target.value }))} />
+                  </div>
+                )}
+                <div className={draft.input === "choice" ? "grid gap-1.5 sm:col-span-3" : "grid gap-1.5 sm:col-span-5"}>
+                  <Label htmlFor={`field-help-${index}`}>Help text</Label>
+                  <Input id={`field-help-${index}`} value={draft.helpText} placeholder="Shown under the input" onChange={(event) => changeField(index, (current) => ({ ...current, helpText: event.target.value }))} />
+                </div>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={() => setFields((current) => [...current, newFieldDraft()])}>
+              <Plus className="h-4 w-4" />
+              Add field
+            </Button>
+          </TabsContent>
+
+          <TabsContent value="permissions" className="mt-0 space-y-3">
+            <p className="text-sm text-muted-foreground">Who may move a ticket of this type. A command no role is ticked for stays open to everyone who works tickets; ticking roles makes it theirs alone. The system&apos;s own work — a stop serving its ticket — is not held to it.</p>
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[760px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead>Role</TableHead>
+                    {COMMAND_HEADINGS.map((heading) => (
+                      <TableHead key={heading.command} className="text-center">
+                        {heading.heading}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {roles.length === 0 ? (
+                    <EmptyRow colSpan={COMMAND_HEADINGS.length + 1} message="The roles are not read yet." hint="Users & roles lists them." />
+                  ) : (
+                    roles.map((roleRecord) => (
+                      <TableRow key={roleRecord.id}>
+                        <TableCell className="text-sm">{roleRecord.name}</TableCell>
+                        {COMMAND_HEADINGS.map((heading) => (
+                          <TableCell key={heading.command} className="text-center">
+                            <Checkbox
+                              aria-label={`${roleRecord.name} may ${heading.heading.toLowerCase()}`}
+                              checked={rolesOf(heading.command).includes(roleRecord.id)}
+                              onCheckedChange={(checked) => toggleRole(heading.command, roleRecord.id, checked === true)}
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {COMMAND_HEADINGS.map((heading) => `${heading.heading}: ${rolesOf(heading.command).length === 0 ? "everyone" : `${rolesOf(heading.command).length} role${rolesOf(heading.command).length === 1 ? "" : "s"}`}`).join(" · ")}
+            </p>
+          </TabsContent>
+
+          <TabsContent value="automation" className="mt-0">
+            <TicketTypeAutomation
+              kind={kind}
+              actions={actions}
+              choices={choices}
+              onChange={(next) => {
+                setActions(next)
+                setRefusal(null)
+              }}
+            />
+          </TabsContent>
+        </fieldset>
+      </div>
+    </Tabs>
   )
 }

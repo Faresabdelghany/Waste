@@ -14,6 +14,8 @@ export const metadata: Metadata = {
 type SettingsPageProps = {
   searchParams: Promise<{
     pane?: string | string[]
+    /** A ticket type's page on Settings › Tickets, by the API's id. */
+    type?: string | string[]
     from?: string | string[]
   }>
 }
@@ -39,6 +41,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   return (
     <SettingsWorkspace
       initialPaneId={initialPaneId}
+      ticketTypeId={typeof params.type === "string" ? params.type : null}
       returnTo={safeReturnPath(params.from)}
     />
   )

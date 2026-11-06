@@ -67,7 +67,7 @@ import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
-import { TICKETS_SETTINGS_PANE_ID, ticketsTabOf, type TicketsTab } from "@/lib/data/tickets-settings"
+import { TICKETS_SETTINGS_PANE_ID, ticketsSettingsHref, ticketsTabOf, type TicketsTab } from "@/lib/data/tickets-settings"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -1410,6 +1410,8 @@ function isFullPanelPane(paneId: string): boolean {
 
 type SettingsWorkspaceProps = {
   initialPaneId?: string
+  /** The ticket type whose page the address opens on Settings › Tickets, by the API's id; null for none. */
+  ticketTypeId?: string | null
   returnTo?: string
 }
 
@@ -1487,6 +1489,7 @@ function mergeStoredSettingValues(
 
 export function SettingsWorkspace({
   initialPaneId,
+  ticketTypeId: addressedTicketTypeId = null,
   returnTo = "/",
 }: SettingsWorkspaceProps) {
   const router = useRouter()
@@ -1499,7 +1502,16 @@ export function SettingsWorkspace({
   const profile = configured ? profileOf(me, session?.email) : null
   const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
   // The Tickets page's tab (#548 of #544): the one a link's pane names at first, then the last used, kept while the dialog stays open.
-  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => ticketsTabOf(initialPaneId))
+  // An address naming a ticket type opens the Types tab, whose page it is.
+  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => (addressedTicketTypeId !== null ? "types" : ticketsTabOf(initialPaneId)))
+  // The ticket type whose page the Types tab shows: opened at once on a click, and following the address when Back or Forward moves it.
+  const [ticketTypeId, setTicketTypeId] = useState<string | null>(addressedTicketTypeId)
+  const [ticketTypeAddressed, setTicketTypeAddressed] = useState<string | null>(addressedTicketTypeId)
+  if (ticketTypeAddressed !== addressedTicketTypeId) {
+    setTicketTypeAddressed(addressedTicketTypeId)
+    setTicketTypeId(addressedTicketTypeId)
+    if (addressedTicketTypeId !== null) setTicketsTab("types")
+  }
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
       ? openedPaneId
@@ -1616,9 +1628,15 @@ export function SettingsWorkspace({
     visiblePaneDefinitions[activeItemId] ?? visiblePaneDefinitions.account
   const selectPane = (paneId: string) => {
     setActiveItemId(paneId)
+    setTicketTypeId(null)
     const params = new URLSearchParams({ pane: paneId })
     if (returnTo !== "/") params.set("from", returnTo)
     router.replace(`/settings?${params.toString()}`, { scroll: false })
+  }
+  // A ticket type's page is an address of its own, so Back returns to the list and a reload lands on the type.
+  const openTicketType = (typeId: string | null) => {
+    setTicketTypeId(typeId)
+    router.push(ticketsSettingsHref(typeId, returnTo), { scroll: false })
   }
   const updateValue = (controlId: string, value: SettingValue) => {
     setValues((current) => ({ ...current, [controlId]: value }))
@@ -1727,6 +1745,8 @@ export function SettingsWorkspace({
             paneId={activeItemId}
             ticketsTab={ticketsTab}
             onTicketsTabChange={setTicketsTab}
+            ticketTypeId={ticketTypeId}
+            onTicketTypeChange={openTicketType}
             profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
@@ -1745,6 +1765,8 @@ function SettingsPane({
   paneId,
   ticketsTab,
   onTicketsTabChange,
+  ticketTypeId,
+  onTicketTypeChange,
   profile,
   values,
   dirtyControlIds,
@@ -1757,6 +1779,9 @@ function SettingsPane({
   /** The tab Settings › Tickets opens at: the one a link to a pane it took the place of names (#548 of #544). */
   ticketsTab: TicketsTab
   onTicketsTabChange: (tab: TicketsTab) => void
+  /** The ticket type whose page the Types tab shows, by the API's id, or null for the list; `onTicketTypeChange` opens one or goes back. */
+  ticketTypeId: string | null
+  onTicketTypeChange: (typeId: string | null) => void
   /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
   profile: AccountProfile | null
   values: Record<string, SettingValue>
@@ -1826,7 +1851,7 @@ function SettingsPane({
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
       ) : paneId === TICKETS_SETTINGS_PANE_ID ? (
-        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} />
+        <TicketsSettings tab={ticketsTab} onTabChange={onTicketsTabChange} typeId={ticketTypeId} onTypeChange={onTicketTypeChange} />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
         <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
