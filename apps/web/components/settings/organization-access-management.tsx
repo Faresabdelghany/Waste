@@ -16,6 +16,7 @@ import {
   useBusinessRecordStore,
   useServerModuleState,
 } from "@/components/waste/business-record-store"
+import { EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
 import { NewRoleDialog } from "@/components/settings/new-role-dialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -358,47 +359,6 @@ function Toolbar({
         />
       </div>
     </div>
-  )
-}
-
-function RecordsSection({
-  shown,
-  total,
-  children,
-}: {
-  shown: number
-  total: number
-  children: ReactNode
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60">
-      <div className="border-b border-border px-4 py-2">
-        <p className="text-xs text-muted-foreground">
-          {shown === total ? `${shown} records` : `${shown} of ${total} records`}
-        </p>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function EmptyRow({
-  colSpan,
-  message,
-  hint = "Try a different search or filter.",
-}: {
-  colSpan: number
-  message: string
-  hint?: string
-}) {
-  return (
-    <TableRow>
-      <TableCell colSpan={colSpan} className="h-52 text-center">
-        <MagnifyingGlass className="mx-auto h-6 w-6 text-muted-foreground" />
-        <p className="mt-2 text-sm font-medium">{message}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-      </TableCell>
-    </TableRow>
   )
 }
 
@@ -941,8 +901,9 @@ export function OrganizationAccessManagement() {
                 {filteredUsers.length === 0 && (
                   <EmptyRow
                     colSpan={configured ? 6 : 5}
-                    message={pilotUsersEmpty?.message ?? "No users match your search."}
+                    message={pilotUsersEmpty?.message ?? (userRows.length > 0 ? "No users match your search." : "No users yet.")}
                     hint={pilotUsersEmpty?.hint}
+                    narrowed={userRows.length > 0}
                   />
                 )}
               </TableBody>
@@ -1063,6 +1024,7 @@ export function OrganizationAccessManagement() {
                     colSpan={roleView.showDetails ? 5 : 4}
                     message={pilotRolesEmpty?.message ?? "No roles match your search."}
                     hint={pilotRolesEmpty?.hint}
+                    narrowed={roleRows.length > 0}
                   />
                 )}
               </TableBody>
