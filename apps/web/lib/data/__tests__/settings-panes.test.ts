@@ -14,7 +14,7 @@ import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "../ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "../ticket-types"
 import { COUNTING_RULES_SETTINGS_PANE_ID } from "../counting-rules"
-import { projectShown, TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
+import { projectShown, TICKET_CHARGES_SETTINGS_PANE_ID, TICKETS_SETTINGS_PANE_ID, ticketsSettingsHref, TICKETS_TABS, ticketsTabOf } from "../tickets-settings"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -55,6 +55,13 @@ describe("the Settings panes offered", () => {
     }
     assert.equal(ticketsTabOf(undefined), "types")
     assert.deepEqual(TICKETS_TABS.map((tab) => tab.label), ["Types", "Teams", "Deadlines", "Charges", "Counting rules"])
+  })
+
+  test("a ticket type's page has an address of its own, under the Tickets pane, keeping where Back to app returns", () => {
+    assert.equal(ticketsSettingsHref("3f1c", "/"), "/settings?pane=tickets&type=3f1c")
+    assert.equal(ticketsSettingsHref("3f1c", "/tickets"), "/settings?pane=tickets&type=3f1c&from=%2Ftickets")
+    assert.equal(ticketsSettingsHref(null, "/"), "/settings?pane=tickets")
+    assert.equal(ticketsSettingsHref(null, "/tickets"), "/settings?pane=tickets&from=%2Ftickets")
   })
 
   test("the Deadlines, Teams and Charges tabs open on one project: the one picked where a tab lists it, else the first by name", () => {
