@@ -1382,9 +1382,6 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
 }
 
-/** Panes whose title stands alone, the description kept for the settings search only. */
-const PANES_WITHOUT_LEAD: ReadonlySet<string> = new Set([HOLIDAY_LISTS_SETTINGS_PANE_ID])
-
 /**
  * Panes that render their own full-height panel (header, toolbar, table)
  * instead of the centred control groups.
@@ -1831,11 +1828,6 @@ function SettingsPane({
               <h1 className="text-xl font-semibold tracking-tight">
                 {definition.title}
               </h1>
-              {!PANES_WITHOUT_LEAD.has(paneId) && (
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  {definition.description}
-                </p>
-              )}
             </div>
             {paneId === "account" &&
               (profile === null ? (
@@ -1910,12 +1902,6 @@ function SettingsPane({
                         </span>
                         <ScopeBadge scope={control.scope} />
                       </div>
-                      <p
-                        id={`${control.id}-description`}
-                        className="text-xs leading-5 text-muted-foreground"
-                      >
-                        {control.description}
-                      </p>
                     </div>
                     <div className="md:justify-self-stretch">
                       {control.type === "input" && (
@@ -1925,7 +1911,6 @@ function SettingsPane({
                           value={String(values[control.id] ?? control.value)}
                           className="h-9 text-sm"
                           aria-labelledby={`${control.id}-label`}
-                          aria-describedby={`${control.id}-description`}
                           onChange={(event) => onValueChange(control.id, event.target.value)}
                         />
                       )}
@@ -1938,7 +1923,6 @@ function SettingsPane({
                             id={control.id}
                             className="h-9 text-sm"
                             aria-labelledby={`${control.id}-label`}
-                            aria-describedby={`${control.id}-description`}
                           >
                             <SelectValue />
                           </SelectTrigger>
@@ -1957,7 +1941,6 @@ function SettingsPane({
                             id={control.id}
                             checked={Boolean(values[control.id] ?? control.checked)}
                             aria-labelledby={`${control.id}-label`}
-                            aria-describedby={`${control.id}-description`}
                             onCheckedChange={(checked) => onValueChange(control.id, checked)}
                           />
                         </div>
@@ -1966,7 +1949,6 @@ function SettingsPane({
                         <div
                           className="flex flex-wrap items-center gap-2"
                           aria-labelledby={`${control.id}-label`}
-                          aria-describedby={`${control.id}-description`}
                         >
                           <StatusIndicator tone={control.tone} value={control.value} />
                         </div>
@@ -1976,7 +1958,6 @@ function SettingsPane({
                           id={control.id}
                           className="text-sm text-foreground"
                           aria-labelledby={`${control.id}-label`}
-                          aria-describedby={`${control.id}-description`}
                         >
                           {control.value}
                         </p>
@@ -1998,7 +1979,7 @@ function SettingsPane({
                   ? `${dirtyControlIds.length} unsaved change${dirtyControlIds.length === 1 ? "" : "s"} · save to keep ${dirtyControlIds.length === 1 ? "it" : "them"} on this device.`
                   : configurationHistory[0]
                     ? `Saved on this device at ${configurationHistory[0].at} · ${configurationHistory[0].controls.length} change${configurationHistory[0].controls.length === 1 ? "" : "s"}.`
-                    : "Changes are saved on this device when you select Save changes."}
+                    : null}
               </p>
               <Button disabled={!isDirty} onClick={onSave}>
                 Save changes

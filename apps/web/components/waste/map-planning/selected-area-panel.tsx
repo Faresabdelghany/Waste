@@ -181,10 +181,6 @@ export function SelectedAreaPanel({
                 <CountRow label="In no route scheme" value={coverage.uncovered} color={UNCOVERED_COLOR} />
                 <CountRow label="Scheme stops that cannot be served" value={coverage.unservable} />
               </dl>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Needing service: Available with an agreement that is not ended, paused, or future. Covered: listed
-                by a Validated, Scheduled, or Effective Route Scheme.
-              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant={coverageOnMap ? "default" : "outline"}

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import {
-  CheckCircle,
   Plus,
   ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr"
@@ -20,7 +19,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -154,14 +152,10 @@ export function CompanyOnboardingDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>Create company</DialogTitle>
-            <DialogDescription>
-              A company cannot be created on its own. Its first project and
-              primary company administrator are created in the same action.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-5">
@@ -172,10 +166,6 @@ export function CompanyOnboardingDialog({
                 </div>
                 <div>
                   <legend className="text-sm font-semibold">Company</legend>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    The tenant boundary for projects, users, and operational
-                    data.
-                  </p>
                 </div>
               </div>
               <div className="grid gap-4 pl-11 sm:grid-cols-2">
@@ -231,10 +221,6 @@ export function CompanyOnboardingDialog({
                 </div>
                 <div>
                   <legend className="text-sm font-semibold">First project</legend>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Every company starts with one operating scope. The project
-                    starts empty and in onboarding.
-                  </p>
                 </div>
               </div>
               <div className="grid gap-4 pl-11 sm:grid-cols-2">
@@ -294,10 +280,6 @@ export function CompanyOnboardingDialog({
                   <legend className="text-sm font-semibold">
                     Company administrator
                   </legend>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    This user receives company-wide control and access to all
-                    current and future projects.
-                  </p>
                 </div>
               </div>
               <div className="grid gap-4 pl-11 sm:grid-cols-2">
@@ -334,10 +316,6 @@ export function CompanyOnboardingDialog({
                     </span>
                     <Badge variant="outline">All projects</Badge>
                   </div>
-                  <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                    The invitation is part of company creation. No company is
-                    left without a primary administrator if validation fails.
-                  </p>
                 </div>
               </div>
             </fieldset>
@@ -435,15 +413,10 @@ export function ProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit project" : "Add project"}</DialogTitle>
-            <DialogDescription>
-              {isEditing
-                ? `Update this operating scope inside ${company?.name ?? "the company"}.`
-                : `Create another operating scope inside ${company?.name ?? "the company"}. Company administrators receive access automatically.`}
-            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-5 sm:grid-cols-2">
             <div className="space-y-2">
@@ -892,18 +865,6 @@ export function OrganizationStructureManagement() {
               </TabsContent>
             </Tabs>
 
-            <div className="mt-5 flex gap-3 border-y border-success/20 bg-success/5 px-4 py-3">
-                <CheckCircle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-success"
-                  weight="fill"
-                />
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Relationship checks are enforced on creation: every project
-                  belongs to one company, every user belongs to one company,
-                  project grants cannot cross companies, and every new company
-                  starts with a primary administrator and at least one project.
-                </p>
-              </div>
           </section>
         )}
       </div>

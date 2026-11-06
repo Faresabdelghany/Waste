@@ -187,17 +187,10 @@ export function ThemeCustomizer() {
                 Personal
               </span>
             </div>
-            <p
-              id="account-theme-description"
-              className="text-xs leading-5 text-muted-foreground"
-            >
-              Canvas, sidebar, panels, and controls update together.
-            </p>
           </div>
           <div
             role="radiogroup"
             aria-labelledby="account-theme-label"
-            aria-describedby="account-theme-description"
             className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
           >
             {customThemePresets.map((preset) => (
@@ -247,9 +240,6 @@ export function ThemeCustomizer() {
               <div>
                 <p className="text-sm font-medium text-foreground">
                   Custom colors
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Changes apply and save immediately.
                 </p>
               </div>
               <Select onValueChange={loadPreset}>

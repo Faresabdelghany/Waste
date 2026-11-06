@@ -9,7 +9,7 @@
 // say: the start is sent, and a refusal comes back as its sentence on the
 // route, which stays ready.
 import { useEffect, useState } from "react"
-import { ArrowClockwise, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
+import { ArrowClockwise, Play } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,10 +41,6 @@ function StartContent() {
   return (
     <main className="flex flex-col gap-4">
       <KeptNotice readAt={state.shownFrom.me} />
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <MapPin aria-hidden className="shrink-0" />
-        Your position travels with your actions on your route, when this phone shares it.
-      </p>
       {open !== undefined && (
         <section className="flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4">
           <div>

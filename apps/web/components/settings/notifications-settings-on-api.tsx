@@ -112,7 +112,7 @@ export function NotificationsSettingsOnApi() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">{withheld ?? "In the projects you work in."}</p>
+              {withheld !== null && <p className="text-xs text-muted-foreground">{withheld}</p>}
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>

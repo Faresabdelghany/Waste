@@ -429,7 +429,6 @@ export function BusinessRecordFormDialog({
   const [attempted, setAttempted] = useState(false)
   const [step, setStep] = useState<"form" | "review">("form")
   const [reviewConfirmed, setReviewConfirmed] = useState(false)
-  const showInstructions = schema.mode !== "create"
 
   // Filled as it opens and when it becomes a form of another kind, never on
   // a new seed of the same form (lib/data/business-form-seed.ts): the schema
@@ -604,19 +603,18 @@ export function BusinessRecordFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
-        {...(!showInstructions ? { "aria-describedby": undefined } : {})}
+        // A form says no instructions — no subtitle, no section or field descriptions, in any mode — only the review step its confirmation and an action its warning.
+        {...(step !== "review" && schema.warning === undefined ? { "aria-describedby": undefined } : {})}
       >
         <DialogHeader className="shrink-0 border-b border-border px-6 py-5 pr-12">
           <DialogTitle>
             {step === "review" ? `Review ${schema.recordKind.toLowerCase()}` : schema.title}
           </DialogTitle>
-          {showInstructions && (step === "review" || schema.description) && (
-            <DialogDescription>
-              {step === "review"
-                ? "Confirm the resolved scope, linked records, and calculated outcome before applying this action."
-                : schema.description}
-            </DialogDescription>
-          )}
+          {step === "review" ? (
+            <DialogDescription>Confirm the resolved scope, linked records, and calculated outcome before applying this action.</DialogDescription>
+          ) : schema.warning !== undefined ? (
+            <DialogDescription className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground">{schema.warning}</DialogDescription>
+          ) : null}
         </DialogHeader>
 
         {step === "form" ? (
@@ -637,11 +635,6 @@ export function BusinessRecordFormDialog({
                 >
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold">{section.title}</h3>
-                    {showInstructions && section.description && (
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {section.description}
-                      </p>
-                    )}
                   </div>
 
                   <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
@@ -684,11 +677,6 @@ export function BusinessRecordFormDialog({
                                   <span className="ml-1 text-destructive">*</span>
                                 )}
                               </Label>
-                              {showInstructions && field.description && (
-                                <p className="text-xs leading-5 text-muted-foreground">
-                                  {field.description}
-                                </p>
-                              )}
                               {error && (
                                 <p className="text-xs text-destructive">{error}</p>
                               )}
@@ -811,11 +799,6 @@ export function BusinessRecordFormDialog({
                             </div>
                           )}
 
-                          {showInstructions && field.description && (
-                            <p className="text-xs leading-5 text-muted-foreground">
-                              {field.description}
-                            </p>
-                          )}
                           {error && (
                             <p className="text-xs text-destructive">{error}</p>
                           )}

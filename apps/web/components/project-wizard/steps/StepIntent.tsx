@@ -32,10 +32,6 @@ export function StepIntent({ selected, onSelect }: StepIntentProps) {
 
   return (
     <div className="flex flex-col space-y-4 p-4 rounded-xl bg-muted">
-      <p className="text-xs text-muted-foreground">
-        This helps us set up the right structure for you.
-      </p>
-
       <div className="flex flex-col gap-2 rounded-xl bg-muted/40">
         {options.map((option) => {
           const isActive = selected === option.id;

@@ -337,11 +337,7 @@ function ReassignRouteDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Reassign route</DialogTitle>
-          <DialogDescription>
-            Changes {routeReference(record)} only. The route scheme&apos;s
-            defaults stay as they are, and this override survives
-            regeneration.
-          </DialogDescription>
+          <DialogDescription>{routeReference(record)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -1143,9 +1139,6 @@ export function TicketsTab({
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="border-b border-border px-5 py-4">
         <h2 className="text-sm font-semibold">Tickets related to this Route</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Open requests and deviations linked to a stop or the Route.
-        </p>
       </div>
       <div className="p-4">
         <div className="overflow-hidden rounded-xl border border-border">
@@ -1263,9 +1256,6 @@ function SessionsTab({
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="border-b border-border px-5 py-4">
         <h2 className="text-sm font-semibold">Route sessions</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Driver runs, synchronization state, and execution progress.
-        </p>
       </div>
       <div className="p-4">
         <div className="overflow-hidden rounded-xl border border-border">

@@ -300,13 +300,6 @@ export function BusinessViewOptionsPopover({
               <p className="text-sm font-semibold">
                 {showViewTypeTabs ? "View options" : "Table view"}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {showViewTypeTabs
-                  ? "Choose a layout and control density, ordering, and visible fields."
-                  : variant === "containers"
-                    ? "Control row density, ordering, and visible registry columns."
-                    : "Control row density, ordering, and visible business context."}
-              </p>
             </div>
           )}
 
@@ -561,11 +554,6 @@ export function BusinessViewOptionsPopover({
           ) : isRecordsVariant ? (
             <div>
               <span className="text-sm font-medium">Columns</span>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {fixedColumnChips.length > 0 && columnOptions.length === 0
-                  ? "These columns are always shown; only Updated can be toggled."
-                  : "Toggle visible columns or add more from the record data."}
-              </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {fixedColumnChips.map((column) => {
                   const Icon = columnIcon(column)

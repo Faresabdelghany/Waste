@@ -14,7 +14,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -89,10 +89,9 @@ export function SensorPairingSurface({ record }: RowSurfaceProps) {
       />
 
       <Dialog open={pairing !== null} onOpenChange={(open) => !open && setPairing(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Pair {record.name} with a container</DialogTitle>
-            <DialogDescription>The sensor measures one container at a time, and a container is measured by one sensor at a time.</DialogDescription>
           </DialogHeader>
           {pairing !== null && (
             <div className="space-y-3">
@@ -137,10 +136,9 @@ export function SensorPairingSurface({ record }: RowSurfaceProps) {
       </Dialog>
 
       <Dialog open={changing !== null} onOpenChange={(open) => !open && setChanging(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Change {record.name}&apos;s pairing</DialogTitle>
-            <DialogDescription>Move the threshold or the booking, or give the last day the sensor measures the container; leave it blank while it does.</DialogDescription>
           </DialogHeader>
           {changing !== null && (
             <div className="space-y-3">

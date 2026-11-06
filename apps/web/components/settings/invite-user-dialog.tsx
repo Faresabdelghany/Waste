@@ -18,7 +18,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -143,15 +142,10 @@ export function InviteUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
-            <DialogDescription>
-              Writes an Invitation in your company. Nothing is sent: the
-              account lists as invited until a Login with this address first
-              signs in.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-5 sm:grid-cols-2">
@@ -175,10 +169,6 @@ export function InviteUserDialog({
                 autoComplete="email"
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                The address the Login is created with; it is what binds the
-                two on first sign-in.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="invite-user-role">Role</Label>
@@ -268,10 +258,6 @@ export function InviteUserDialog({
                     )}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  A service provider&apos;s account reaches its provider and takes
-                  no project access.
-                </p>
               </div>
             )}
             {refusal && (

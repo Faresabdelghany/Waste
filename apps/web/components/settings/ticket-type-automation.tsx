@@ -118,9 +118,6 @@ export function TicketTypeAutomation({ kind, actions, choices, onChange }: { kin
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        What the system does on its own when a ticket of this type opens or reaches a status, in order. Each action leaves a line in the ticket&apos;s history; one that cannot run — a team since retired, no route to plan in — says why, and the rest still run. The roles and fields asked of people do not bind it.
-      </p>
       {TICKET_ACTION_TRIGGERS.map((trigger) => {
         const offered = actionKindsFor(trigger, kind)
         const listed = actions.flatMap((action, index) => (action.trigger === trigger ? [{ action, index }] : []))

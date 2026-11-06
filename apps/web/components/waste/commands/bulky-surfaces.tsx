@@ -165,11 +165,10 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
         {label}
       </Button>
       <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <form onSubmit={submit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Book bulky collection</DialogTitle>
-              <DialogDescription>The customer&apos;s items, collected at their place on a day of its area&apos;s bulky schedule and charged to their agreement once collected.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -380,11 +379,10 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
       )}
 
       <Dialog open={routing} onOpenChange={(next) => !busy && setRouting(next)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <form onSubmit={route} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Route booking</DialogTitle>
-              <DialogDescription>Put the booking on a route of its day as a stop at its place. The route has not started.</DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
               <Label htmlFor="bulky-route">Route</Label>
@@ -415,11 +413,10 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
       </Dialog>
 
       <Dialog open={moving} onOpenChange={(next) => !busy && setMoving(next)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <form onSubmit={move} className="space-y-4">
             <DialogHeader>
               <DialogTitle>Change day</DialogTitle>
-              <DialogDescription>Move the booking to another day its place offers, a slot of that day taken and this one freed. A missed stop&apos;s booking is moved here, then routed again.</DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
               <Label htmlFor="bulky-new-day">Day</Label>

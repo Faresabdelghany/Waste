@@ -131,7 +131,7 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
 
       <div className="flex flex-col gap-3 p-3 lg:p-4">
         {notice === null && warnings.length > 0 && (
-          <ReportCard title="Before you file" subtitle="What the file warns of: each is a row of its own below its data rows" loading={read.loading} testId="waste-data-warnings">
+          <ReportCard title="Before you file" loading={read.loading} testId="waste-data-warnings">
             <ul className="divide-y divide-border/70">
               {warnings.map((warning, index) => (
                 <li key={`${warning.kind}-${index}`} className="flex items-start gap-2 px-4 py-2.5 text-xs text-foreground">
@@ -145,7 +145,7 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
 
         <ReportCard
           title="Waste data"
-          subtitle={`Approved unloads${shown === null ? "" : `, ${periodLabel(shown.window)}`}, per municipality, unloading station and waste fraction, in kilograms`}
+          subtitle={`Approved unloads${shown === null ? "" : `, ${periodLabel(shown.window)}`}, in kilograms`}
           loading={read.loading}
           testId="waste-data"
         >

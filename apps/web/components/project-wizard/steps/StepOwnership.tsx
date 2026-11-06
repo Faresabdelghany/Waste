@@ -210,9 +210,6 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
 
   return (
     <div className="flex flex-col space-y-1.5 bg-muted p-2 rounded-lg">
-      <p className="text-sm px-3 py-2 text-muted-foreground">
-        Define the customer, contributors, and followers.
-      </p>
 
       <div className="space-y-2">
         {/* Customer selection */}

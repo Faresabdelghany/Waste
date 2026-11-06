@@ -67,6 +67,7 @@ export const ALERT_COMMAND_FORMS: Readonly<Record<AlertCommandWithForm, Business
     recordKind: "Alert",
     title: "Resolve",
     description: "The condition is over. A resolved alert changes no more.",
+    warning: "A resolved alert changes no more.",
     submitLabel: "Resolve",
     sections: [{ id: "command", title: "Resolve", fields: [{ id: "note", label: "Resolution note", type: "textarea" }] }],
     execution: { kind: "append-event", completionMessage: "Alert resolved." },

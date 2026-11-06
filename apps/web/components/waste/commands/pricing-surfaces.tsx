@@ -187,6 +187,7 @@ export function ExplainPrice({ initial = {}, label = "Explain price" }: { initia
                 </TableBody>
               </Table>
             </div>
+            {/* Part of the answer Explain price was asked for, not an instruction: why the row that won, won. */}
             <p className="text-xs leading-5 text-muted-foreground">{RESOLUTION_RULE}</p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("question")}>

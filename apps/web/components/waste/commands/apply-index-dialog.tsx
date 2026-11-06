@@ -34,7 +34,6 @@ export type ApplyIndexScope = { field: ReactNode; ready: boolean; waiting?: stri
 
 export function ApplyIndexDialog({
   title,
-  description,
   defaultDay,
   waiting,
   currencyOf,
@@ -47,7 +46,6 @@ export function ApplyIndexDialog({
   onClose,
 }: {
   title: string
-  description: string
   /** The day the index applies from until one is typed: today on the project's clock. */
   defaultDay: string
   /** Why Preview cannot be asked yet — the rows a line is named by still being read — or undefined when it can. */
@@ -105,7 +103,8 @@ export function ApplyIndexDialog({
       <DialogContent className="sm:max-w-3xl" data-testid="apply-index">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          {/* What Apply ends, said before it is pressed. */}
+          <DialogDescription className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground">Each price in force on the day ends on it, and a new one carries the indexed price.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           {scope?.field}
@@ -116,7 +115,7 @@ export function ApplyIndexDialog({
           <div className="space-y-1.5">
             <Label htmlFor="apply-index-percent">Change (%)</Label>
             <Input id="apply-index-percent" value={percent} placeholder="3.2" inputMode="decimal" aria-invalid={percentRefused} onChange={(event) => setPercent(event.target.value)} />
-            <p className={percentRefused ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{percentRefused ? INDEX_REFUSAL : "Two decimals at most; negative for a deflator."}</p>
+            {percentRefused && <p className="text-xs text-destructive">{INDEX_REFUSAL}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="apply-index-from">From</Label>

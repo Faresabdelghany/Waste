@@ -146,7 +146,14 @@ export type BusinessFormSchema = {
   mode: BusinessFormMode
   recordKind: string
   title: string
+  /** What the form is for. Kept for the record and never shown: a form says no instructions. */
   description: string
+  /**
+   * What a command does that cannot be undone, or what it ends, cancels or
+   * closes: the one sentence an action's form shows above its fields, since
+   * an action has no review step to warn on.
+   */
+  warning?: string
   submitLabel: string
   /**
    * Disabled modules explain which upstream workflow owns creation instead of

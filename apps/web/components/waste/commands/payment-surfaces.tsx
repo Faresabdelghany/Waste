@@ -166,7 +166,7 @@ function ImportBankStatement() {
           <DialogContent className="sm:max-w-3xl" data-testid="bank-import">
             <DialogHeader>
               <DialogTitle>Import bank statement</DialogTitle>
-              <DialogDescription>Our CSV: booked_on, amount, currency, reference and text, separated by semicolons. You see what each line would be first; nothing is written until you import it.</DialogDescription>
+              <DialogDescription>Our CSV: booked_on, amount, currency, reference and text, separated by semicolons.</DialogDescription>
             </DialogHeader>
             <input type="file" accept=".csv,text/csv" aria-label="Bank statement file" disabled={busy} onChange={(event) => void choose(event.target.files?.[0])} />
             {read !== null && (
@@ -341,7 +341,7 @@ export function CustomerStatementSurface({ record }: RowSurfaceProps) {
             <DialogHeader>
               <DialogTitle>Statement of {record.name}</DialogTitle>
               <DialogDescription>
-                {statement.from} – {statement.to}, in {statement.currency}: an invoice raises the balance, a credit note and a payment lower it.
+                {statement.from} – {statement.to}, in {statement.currency}
               </DialogDescription>
             </DialogHeader>
             <div className="max-h-96 overflow-auto rounded-lg border border-border/60">

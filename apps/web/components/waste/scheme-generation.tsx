@@ -22,7 +22,7 @@ import { addDays, formatServiceDate, todayIso } from "@waste/domain/route-scheme
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -207,12 +207,9 @@ export function SchemeGenerateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Generate routes</DialogTitle>
-          <DialogDescription>
-            The worker plans {record.name}&apos;s collections from the first day to the last, both included, and the run list shows its progress.
-          </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
@@ -251,7 +248,6 @@ export function SchemeGenerationRunsSection({ generation }: { generation: Scheme
         <h3 id="scheme-generation-runs" className="text-sm font-semibold">
           Generation runs
         </h3>
-        <p className="mt-1 text-xs text-muted-foreground">The scheme&apos;s newest runs, from Generate routes and the nightly plan-ahead. A run still open is read again every few seconds.</p>
       </div>
       {problem !== null ? (
         <p role="alert" className="text-sm text-destructive">

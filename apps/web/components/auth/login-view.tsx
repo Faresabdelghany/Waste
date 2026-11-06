@@ -80,13 +80,6 @@ export function LoginView() {
               <Image src="/logo-wrapper.png" alt="Waste" width={24} height={24} />
             </div>
             <h1 className="mt-2 text-xl font-semibold">Sign in to Waste</h1>
-            <p className="text-sm text-muted-foreground">
-              {apiConfigured
-                ? "Sign in with your e-mail address and password."
-                : passwordSignInAvailable
-                  ? "Sign in with your account, or choose a demo account."
-                  : "Choose an account to continue."}
-            </p>
           </div>
 
           {refusal !== null && (
@@ -152,11 +145,11 @@ export function LoginView() {
           )}
         </div>
 
-        <div className="border-t border-border/70 bg-muted/40 px-6 py-4 text-center text-xs text-muted-foreground">
-          {apiConfigured
-            ? "Signing in with a temporary password? Change it from the account menu once you are in."
-            : "Demo environment — accounts sign in without a password."}
-        </div>
+        {!apiConfigured && (
+          <div className="border-t border-border/70 bg-muted/40 px-6 py-4 text-center text-xs text-muted-foreground">
+            Demo environment — accounts sign in without a password.
+          </div>
+        )}
       </div>
     </main>
   )

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Calendar } from "../../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { cn } from "@/lib/utils";
-import { Target, Check, Question, CalendarBlank, Plus, Info, Trash } from "@phosphor-icons/react/dist/ssr";
+import { Target, Check, Question, CalendarBlank, Plus, Trash } from "@phosphor-icons/react/dist/ssr";
 
 interface StepOutcomeProps {
   data: ProjectData;
@@ -142,10 +142,6 @@ export function StepOutcome({ data, updateData }: StepOutcomeProps) {
   return (
     <div className="flex flex-col space-y-8">
       <div className="space-y-4 rounded-2xl bg-muted p-4">
-        <p className="text-sm text-muted-foreground">
-          Help your team understand what success looks like.
-        </p>
-
         <RadioGroup
           value={data.successType}
           onValueChange={(val) => handleSuccessTypeChange(val as SuccessType)}
@@ -318,13 +314,6 @@ export function StepOutcome({ data, updateData }: StepOutcomeProps) {
           )}
 
         </div>
-
-        {data.successType === "deliverable" && (
-          <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
-            <Info className="h-4 w-4 text-primary" />
-            <span>This will help generate Expected Timeline.</span>
-          </div>
-        )}
       </div>
 
       {/* Project Description / Brief block */}

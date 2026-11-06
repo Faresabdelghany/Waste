@@ -205,7 +205,6 @@ export function ImportsOnApi() {
       <header>
         <PageTopBar>
           <Breadcrumbs items={[{ label: "Dashboard", href: "/performance" }, { label: "Imports" }]} />
-          <p className="hidden text-[11px] text-muted-foreground sm:block">Customers, properties, containers and agreements from a CSV file, previewed before anything is written</p>
         </PageTopBar>
       </header>
 
@@ -217,7 +216,6 @@ export function ImportsOnApi() {
         ) : (
           <ReportCard
             title="New import"
-            subtitle="Choose what the file holds, then the file. Nothing is written until you import it."
             actions={
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={downloadTemplate} disabled={client === null} data-testid="import-template">
                 <DownloadSimple className="h-4 w-4" />

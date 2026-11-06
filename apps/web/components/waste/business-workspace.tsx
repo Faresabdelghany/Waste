@@ -6311,10 +6311,6 @@ function ActionDecisionDialog({
                     value={effectiveDate}
                     onChange={(event) => setEffectiveDate(event.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty for an immediate governed action. Future-dated changes stay separate
-                    from the current active version.
-                  </p>
                 </div>
               )}
 

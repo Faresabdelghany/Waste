@@ -36,7 +36,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -226,9 +225,6 @@ function TableViewPopover({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 rounded-xl p-4">
         <p className="text-sm font-semibold">Table view</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Choose the row order and level of detail.
-        </p>
         <div className="mt-4 flex items-center justify-between gap-4">
           <span className="text-sm">Ordering</span>
           <Select value={ordering} onValueChange={onOrderingChange}>
@@ -335,13 +331,10 @@ function EditCompanyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>Edit company</DialogTitle>
-            <DialogDescription>
-              Update the company identity shown across settings.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-5">

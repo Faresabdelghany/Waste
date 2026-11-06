@@ -239,7 +239,7 @@ function completionPercent(row: RoutePerformanceRow) {
 
 export function PerformanceControlRoom({
   breadcrumbLabel = "Route performance",
-  subtitle = "Operational delivery and service health",
+  subtitle,
   rows = ROUTE_PERFORMANCE_ROWS,
   series = THROUGHPUT_SERIES,
   summary = PORTFOLIO_SUMMARY,
@@ -516,7 +516,7 @@ export function PerformanceControlRoom({
       <header className="shrink-0 border-b border-border/70">
         <PageTopBar>
           <Breadcrumbs items={[{ label: breadcrumbLabel }]} />
-          <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>
+          {subtitle !== undefined && <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>}
         </PageTopBar>
 
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">

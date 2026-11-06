@@ -15,7 +15,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useModuleRecords } from "@/components/waste/business-record-store"
@@ -82,10 +82,9 @@ export function VehicleCompartmentsSurface({ record }: RowSurfaceProps) {
       </Button>
       {drafts !== null && (
         <Dialog open onOpenChange={(open) => !open && setDrafts(null)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Compartments of {record.name}</DialogTitle>
-              <DialogDescription>Each compartment carries the fractions ticked, up to its payload on one trip. Routes, moves and allocations are held to them.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               {drafts.map((draft, index) => (

@@ -148,7 +148,7 @@ export function PerformanceTab({ current, previous, against, viewed, projectName
           )}
         </ReportCard>
 
-        <ReportCard title="Missed pickups by reason" subtitle="Skipped and failed, the withdrawn left out" loading={service.loading} testId="missed-by-reason">
+        <ReportCard title="Missed pickups by reason" loading={service.loading} testId="missed-by-reason">
           {routesShown && shown !== null && !service.problem ? (
             shown.missedByReason.length === 0 ? (
               <ReportNotice empty="No pickup was missed in this period." />
@@ -181,7 +181,6 @@ export function PerformanceTab({ current, previous, against, viewed, projectName
       <div className="grid gap-3 px-3 pb-3 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.95fr)] lg:px-4 lg:pb-4">
         <ReportCard
           title="Route schemes"
-          subtitle="Their routes and pickups in this period, the most missed first"
           loading={service.loading}
           testId="route-schemes"
           actions={
@@ -232,7 +231,7 @@ export function PerformanceTab({ current, previous, against, viewed, projectName
           )}
         </ReportCard>
 
-        <ReportCard title="Tickets" subtitle="Opened and closed in this period, open now" loading={tickets.loading} testId="tickets">
+        <ReportCard title="Tickets" loading={tickets.loading} testId="tickets">
           {ticketsShown && ticketsNow !== null && !tickets.problem ? (
             <div>
               <dl className="grid grid-cols-2 gap-px border-b border-border/70 bg-border/70 text-xs">

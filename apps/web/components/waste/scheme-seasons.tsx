@@ -12,7 +12,7 @@ import { Plus, Trash } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -96,12 +96,9 @@ function SeasonsDialog({ record, onClose }: { record: BusinessRecord; onClose: (
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Seasons</DialogTitle>
-          <DialogDescription>
-            Each season is a stretch of every year in which the scheme serves its service days at another cadence. A season runs from its first day to its last, over the new year where it ends before it starts. Outside every season the scheme runs at its own cadence.
-          </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] space-y-3 overflow-y-auto">
           {drafts.length === 0 && <p className="text-sm text-muted-foreground">No seasons: the scheme runs at its own cadence all year.</p>}

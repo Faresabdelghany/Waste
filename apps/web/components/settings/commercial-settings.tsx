@@ -206,22 +206,12 @@ export function CommercialDefaultsExtras() {
       <div className="space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-foreground">Registries</h3>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Created inline where the work happens; renamed, merged and retired here.
-          </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {registries.map((registry) => (
             <RegistryCard key={registry.title} registry={registry} />
           ))}
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">
-          Price lists are managed in the Commercial section. A price row&apos;s
-          zone is a planning area and its customer type a customer&apos;s kind;
-          container types and waste fractions are Operations-owned registries —
-          price rows can condition on them, but they are managed under
-          Operations setup.
-        </p>
       </div>
 
       {/* 3. Service provider performance — read-only card (spec §6 cut: no editor) */}
