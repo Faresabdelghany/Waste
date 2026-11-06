@@ -25,7 +25,8 @@
 // `slaTargetFor`), or never where the project sets none (O4 of #290, #548 of
 // #544): the office's create when its body names no due date, and every
 // ticket the consumer opens — so a job the queue held back hands its ticket
-// no extra time. A draft that names no team waits with the project's default
+// no extra time. A priority its type's actions set as it opens judges that
+// due date again (`dueBySla` on the run), since the opening is one change. A draft that names no team waits with the project's default
 // team for its type, else for its kind (`ticket_team_default`, O30 of #290,
 // row 7.20, #548 of #544), the first of them whose team is active, and with
 // none otherwise: the
@@ -172,7 +173,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   // The type first: its own deadline and team win over its kind's (#548 of #544).
   const ticketTypeId = draft.ticketTypeId ?? (await defaultTicketTypeOf(tx, companyId, draft.kind, input.newId))
   const typed = { ...draft, ticketTypeId }
-  const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, typed) : draft.dueAt
+  const dueAt = draft.dueAt === BY_SLA ? dueWithin(draft.occurredAt, await slaHoursOf(tx, companyId, typed)) : draft.dueAt
   const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, typed) : draft.teamId
   const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
@@ -218,7 +219,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   // The draft's assignee hears of it as it opened, before any action of its type hands it on (O16 of #290).
   if (row.assigneeUserAccountId !== null) await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-assigned", payload: opened, projectId: row.projectId, occurredAt: input.now() })
   // Its type's actions on opening (#546 of #544), after the news of its opening; the ticket is answered as they leave it.
-  await runTicketAutomation(tx, { ...input.automation, companyId, newId: input.newId, now: input.now }, row.id, "opened")
+  await runTicketAutomation(tx, { ...input.automation, companyId, newId: input.newId, now: input.now, dueBySla: draft.dueAt === BY_SLA }, row.id, "opened")
   const [latest] = await tx
     .select(ticketColumns)
     .from(ticket)
@@ -228,13 +229,16 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
 }
 
 /** The draft's kind and type, for the rows a project keeps of either. */
-type Typed = Pick<TicketDraft, "projectId" | "kind"> & { ticketTypeId: string }
+export type Typed = Pick<TicketDraft, "projectId" | "kind"> & { ticketTypeId: string }
 
 /** The rows of a kind-or-type setting the draft's kind or type names. */
 const ownOrKinds = (columns: { kind: Parameters<typeof eq>[0]; ticketTypeId: Parameters<typeof eq>[0] }, draft: Typed): SQL | undefined => or(eq(columns.ticketTypeId, draft.ticketTypeId), and(isNull(columns.ticketTypeId), eq(columns.kind, draft.kind)))
 
-/** The due date the project's SLA gives a ticket of the draft's type, kind and priority, from when it happened: its type's target, else its kind's, else every kind's; null where none is set. */
-async function dueBySlaOf(tx: Tx, companyId: string, draft: Typed & Pick<TicketDraft, "priority" | "occurredAt">): Promise<Date | null> {
+/** The due date `hours` after it happened, or none where no target is set. */
+export const dueWithin = (occurredAt: Date, hours: number | null): Date | null => (hours === null ? null : dueBySla(occurredAt, hours))
+
+/** The hours the project's SLA gives a ticket of the draft's type, kind and priority: its type's target, else its kind's, else every kind's; null where none is set. */
+export async function slaHoursOf(tx: Tx, companyId: string, draft: Typed & Pick<TicketDraft, "priority">): Promise<number | null> {
   const targets = await tx
     .select({ kind: ticketSla.kind, ticketTypeId: ticketSla.ticketTypeId, priority: ticketSla.priority, hours: ticketSla.hours })
     .from(ticketSla)
@@ -244,7 +248,7 @@ async function dueBySlaOf(tx: Tx, companyId: string, draft: Typed & Pick<TicketD
     draft,
     draft.priority,
   )
-  return target === undefined ? null : dueBySla(draft.occurredAt, target.hours)
+  return target?.hours ?? null
 }
 
 /** The project's default team for the draft's type, else its kind, the first that takes tickets; null where the project names none or each named is retired. */

@@ -159,7 +159,7 @@ export const TICKET_COMMAND_FORMS: Readonly<Record<TicketCommandWithForm, Busine
     { id: "resolution", label: "Resolution", type: "select", required: true, options: tokenOptions(TICKET_RESOLUTIONS) },
     { id: "recollectionRouteId", label: "Re-collection route", type: "select", relation: ROUTES_MODULE, visibleWhen: RECOLLECTED, requiredWhen: RECOLLECTED, description: "The routes that have not ended." },
     { id: "recollectionPickupId", label: "Re-collection stop", type: "select", relation: PICKUPS_MODULE, visibleWhen: RECOLLECTED, description: "A stop on that route, planned or collected: the one the office added for it. None names the route alone." },
-    { id: "productId", label: "Charged at", type: "select", relation: PRODUCTS_MODULE, visibleWhen: BILLABLE, description: "A product of the ticket's project, never one sold by the month. None leaves the project's charge for the ticket's kind to stand in (Settings › Commercial › Ticket charges)." },
+    { id: "productId", label: "Charged at", type: "select", relation: PRODUCTS_MODULE, visibleWhen: BILLABLE, description: "A product of the ticket's project, never one sold by the month. None takes the charge Settings › Tickets › Charges sets for its type, else its kind." },
     note("How it was resolved", true),
   ]),
   reject: commandForm("Reject", "The case is not taken; the reason goes into its history.", "Reject", [{ id: "reason", label: "Reason", type: "textarea", required: true }]),

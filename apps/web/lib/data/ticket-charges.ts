@@ -1,6 +1,6 @@
 // A project's ticket charges on the web (#291 C3): the product each ticket
-// kind's work is charged at when a completion names none, as Settings ›
-// Commercial › Ticket charges reads and writes it (`GET`/`PUT
+// kind's or type's work is charged at when a completion names none, as
+// Settings › Tickets › Charges reads and writes it (`GET`/`PUT
 // /ticket-charges`), and the products the completion's own "Charged at"
 // offers. A product sold by the month is never offered — a recurring charge
 // is not a ticket's work, the reference's own rule (400) — and a retired one

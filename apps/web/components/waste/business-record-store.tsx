@@ -170,11 +170,12 @@ export type BusinessRecordStores = {
    * `workspace.module`, keyed like the records above, each the server's rows
    * as the prototype shows them once its read has landed. Empty while the
    * adapter is off or nobody is signed in, so every module reads the
-   * browser's own path then. Until a module is `ready` — the load pending,
-   * failed, or not granted — `getRecords` answers its fixtures alone: the
-   * browser's own bucket for that module is not shown in that window, and a
-   * write made in it is refused (`writeRouteOf`, #243), never kept there.
-   * Never a mixture.
+   * browser's own path then. Until a module is `ready`, `getRecords` answers
+   * nothing while its load is pending or failed — a sample row shown on the
+   * Pilot is a row that does not exist — and its fixtures alone where the
+   * role does not view it: the browser's own bucket for that module is not
+   * shown in that window, and a write made in it is refused (`writeRouteOf`,
+   * #243), never kept there. Never a mixture.
    */
   server: ExternalStore<ServerRecordsState>
   /**
@@ -606,6 +607,8 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     stores.server.getServerSnapshot,
   )
   const apiConfigured = useApiConfigured()
+  // Signed in against the API: a switched module not yet read shows nothing, never its fixtures.
+  const identity = useApiSessionIdentity()
   /** The switched module's state, or null for a module still on the browser's own path. */
   const serverModuleState = useCallback(
     (workspaceId: WorkspaceId, moduleId: string): ModuleState | null =>
@@ -619,12 +622,14 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
       moduleId: string,
       fixtureRecords: readonly BusinessRecord[],
     ) => {
-      // A switched module answers the server's rows once they are here and
-      // the fixtures until then — never a mixture with the browser's own
-      // bucket, whose records were made against a store that no longer
-      // decides (Issue #81).
+      // A switched module answers the server's rows once they are here —
+      // never a mixture with the browser's own bucket, whose records were
+      // made against a store that no longer decides (Issue #81). Signed in,
+      // nothing until then, nor where the read failed: a sample row is no
+      // row of the API's. A module the role does not view keeps its fixtures.
       const server = serverModuleState(workspaceId, moduleId)
       if (server !== null && server.status === "ready") return recordsOf(server, fixtureRecords)
+      if (server !== null && identity !== null && server.status !== "not-granted") return []
 
       const stored = storedRecords[moduleKey(workspaceId, moduleId)] ?? []
       const storedById = new Map(stored.map((record) => [record.id, record]))
@@ -636,7 +641,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
 
       return [...createdRecords, ...mergedFixtures]
     },
-    [serverModuleState, storedRecords],
+    [serverModuleState, storedRecords, identity],
   )
 
   const upsertRecord = useCallback(

@@ -55,7 +55,7 @@ import { LOCK_NOT_AVAILABLE, sqlstate } from "../sqlstate"
 import { queueMessage } from "./messaging"
 import { placementStopOn } from "./fill-emptying"
 import { misfitOf, pickupFitStops, vehicleLabel } from "./fleet-fit"
-import { appendTicketEvent, BY_SLA, openTicket } from "./open-ticket"
+import { appendTicketEvent, BY_SLA, dueWithin, openTicket, slaHoursOf } from "./open-ticket"
 import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
 import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
@@ -68,8 +68,8 @@ export type AutomationBudget = { left: number }
 /** What a change hands the automation it may set going: the job sender a message is queued through, the account whose command set it going or null for the system's own, and, inside a chain, how deep it is and what is left of its budget. */
 export type AutomationCause = { send: Send; by: string | null; depth?: number; budget?: AutomationBudget }
 
-/** A run: the company, the cause, and the clock and the id minter the change writes with. */
-export type AutomationRun = AutomationCause & { companyId: string; newId: IdMinter; now: () => Date }
+/** A run: the company, the cause, and the clock and the id minter the change writes with; `dueBySla` where the ticket is opening with its SLA's due date, which a priority set then judges again. */
+export type AutomationRun = AutomationCause & { companyId: string; newId: IdMinter; now: () => Date; dueBySla?: boolean }
 
 type Action = { id: string; kind: TicketActionKind; vehicleProjectId: string | null } & TicketActionParameters
 
@@ -231,16 +231,21 @@ async function assignPerson(tx: Tx, run: AutomationRun, row: TicketRow, userAcco
   return { said, recorded: true }
 }
 
-/** Sets the ticket's priority. */
+/** Sets the ticket's priority; as it opens with its SLA's due date, the due date by the new priority's target too. */
 async function setPriority(tx: Tx, run: AutomationRun, row: TicketRow, priority: TicketPriority): Promise<Done> {
   const words = priority.replaceAll("-", " ")
   if (isClosedTicketStatus(row.status as TicketStatus)) throw new Refused(409, `priority not set to ${words}: the ticket is ${row.status} and keeps its priority.`)
   if (row.priority === priority) return { said: `priority already ${words}.`, recorded: false }
+  const hours = run.dueBySla === true ? await slaHoursOf(tx, run.companyId, { projectId: row.projectId, kind: row.kind as TicketKind, ticketTypeId: row.ticketTypeId, priority }) : undefined
+  const dueAt = hours === undefined ? row.dueAt : dueWithin(row.occurredAt, hours)
   await tx
     .update(ticket)
-    .set({ priority })
+    .set({ priority, dueAt })
     .where(and(eq(ticket.companyId, run.companyId), eq(ticket.id, row.id)))
-  return { said: `priority set to ${words}.`, recorded: false }
+  // The due date is told only where it moved.
+  if (dueAt?.getTime() === row.dueAt?.getTime()) return { said: `priority set to ${words}.`, recorded: false }
+  if (hours === null || hours === undefined) return { said: `priority set to ${words}; the SLA sets no target at ${words}, so it has no due date.`, recorded: false }
+  return { said: `priority set to ${words}, due within the SLA's ${hours} ${hours === 1 ? "hour" : "hours"}.`, recorded: false }
 }
 
 /**

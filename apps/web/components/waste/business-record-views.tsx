@@ -110,15 +110,16 @@ function RecordStatusBadge({ status }: { status: string }) {
 }
 
 /**
- * What a record view says in place of rows. `narrowed` says the module has rows its search or filters hide,
- * the one case another search is worth suggesting; with none, it says there are no records yet.
+ * What a record view says in place of rows. `waiting` says the rows have not come from the API yet, or why
+ * they could not (`awaitedRowsSentence`); `narrowed` says the module has rows its search or filters hide,
+ * the one case another search is worth suggesting; with neither, it says there are no records yet.
  */
-export function NoRecordsShown({ narrowed }: { narrowed: boolean }) {
+export function NoRecordsShown({ narrowed, waiting = null }: { narrowed: boolean; waiting?: string | null }) {
   return (
     <div className="flex h-52 flex-col items-center justify-center gap-2 text-center">
       <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
-      <p className="text-sm font-medium">{narrowed ? "No matching records" : "No records yet"}</p>
-      {narrowed ? <p className="text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
+      <p className="text-sm font-medium">{waiting ?? (narrowed ? "No matching records" : "No records yet")}</p>
+      {waiting === null && narrowed ? <p className="text-xs text-muted-foreground">{NARROWED_HINT}</p> : null}
     </div>
   )
 }
@@ -265,6 +266,8 @@ type BusinessRecordCardsViewProps = {
   records: BusinessRecord[]
   /** The module has rows the search or filters hide (`NoRecordsShown`). */
   narrowed: boolean
+  /** The rows have not come from the API yet, or why they could not (`NoRecordsShown`). */
+  waiting?: string | null
   entityLabel: string
   onOpenRecord: (record: BusinessRecord) => void
   onCreateRecord?: () => void
@@ -275,13 +278,14 @@ type BusinessRecordCardsViewProps = {
 export function BusinessRecordCardsView({
   records,
   narrowed,
+  waiting = null,
   entityLabel,
   onOpenRecord,
   onCreateRecord,
   onEditRecord,
   onDeleteRecord,
 }: BusinessRecordCardsViewProps) {
-  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} />
+  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} waiting={waiting} />
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -333,6 +337,8 @@ type BusinessRecordBoardViewProps = {
   records: BusinessRecord[]
   /** The module has rows the search or filters hide (`NoRecordsShown`). */
   narrowed: boolean
+  /** The rows have not come from the API yet, or why they could not (`NoRecordsShown`). */
+  waiting?: string | null
   lifecycle: readonly string[]
   entityLabel: string
   onOpenRecord: (record: BusinessRecord) => void
@@ -344,6 +350,7 @@ type BusinessRecordBoardViewProps = {
 export function BusinessRecordBoardView({
   records,
   narrowed,
+  waiting = null,
   lifecycle,
   entityLabel,
   onOpenRecord,
@@ -386,7 +393,7 @@ export function BusinessRecordBoardView({
     )
   }
 
-  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} />
+  if (records.length === 0) return <NoRecordsShown narrowed={narrowed} waiting={waiting} />
 
   return (
     <div className="flex gap-4 overflow-x-auto p-4">
