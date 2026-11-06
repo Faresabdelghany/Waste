@@ -361,6 +361,8 @@ export async function movePickup(pool: Database, tenant: FinanceTenant, pickupId
 }
 
 export type TicketSeed = {
+  /** Its Ticket Type (#548 of #544); absent, its kind's default. */
+  ticketTypeId?: string
   resolution: TicketResolution | null
   agreementId?: string | null
   /** A pickup of a route the ticket names, for the agreement reached through its placement. */
@@ -394,7 +396,7 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       projectId: tenant.projects.copenhagen.id,
       number: (numbered?.next ?? 1) - 1,
       kind: seed.kind ?? "missed-collection",
-      ticketTypeId: await defaultTicketTypeOf(tx, companyId, seed.kind ?? "missed-collection", newId),
+      ticketTypeId: seed.ticketTypeId ?? (await defaultTicketTypeOf(tx, companyId, seed.kind ?? "missed-collection", newId)),
       status: seed.resolution === null ? "open" : "completed",
       source: "phone",
       subject: "Bin not emptied",

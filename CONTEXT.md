@@ -375,7 +375,7 @@ A case that owns the resolution of a request, deviation, complaint, task, or ope
 _Avoid_: Alert, message
 
 **Ticket Type**:
-The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
+The company's own name for a kind of case, such as "Bulky waste collection" inside the container-request kind, which keeps the kind's behaviour: the stop that answers it, the event that opens it, how it is charged. It carries the custom fields a Ticket of it holds values for, each required never, to open or to complete, and may name the roles that may give each status command. A project may give a type its own SLA target, default Team and charge, which win over its kind's. Each kind has one default type, the type of a ticket opened by kind alone. Retired rather than deleted, so a ticket of it keeps it.
 _Avoid_: Ticket kind (the built-in category a type belongs to), category, form
 
 **Counting Rule**:

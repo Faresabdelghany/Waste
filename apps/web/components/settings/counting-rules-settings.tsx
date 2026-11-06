@@ -13,7 +13,7 @@
 // still reads by its name; the rows and bodies are
 // lib/data/counting-rules.ts's. Offered on the Pilot alone.
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Calculator, FloppyDisk, PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -75,7 +75,8 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
   return { types, teams, fractions, containerTypes }
 }
 
-export function CountingRulesSettings() {
+/** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header. */
+export function CountingRulesSettings({ tabs }: { tabs?: ReactNode } = {}) {
   const client = useApiClient()
   const { me } = useApiSession()
   const access = countingRulesAccessOf(me?.role.grants)
@@ -96,7 +97,8 @@ export function CountingRulesSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
+      heading="Tickets"
+      tabs={tabs}
       title="Counting rules"
       description="Count the emptyings at each property over a month, a quarter or a year, and open a ticket when a limit is reached."
       action={

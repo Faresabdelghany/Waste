@@ -80,7 +80,8 @@ import { chargedByWeight, stopsCarried, tonnageShares } from "@waste/domain/fina
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
-import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
+import { settingFor } from "@waste/domain/resolution/ticket-types"
+import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
 import type { SiteVisit } from "@waste/contracts/site-visits"
 import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, liveWeightEventsOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
@@ -103,7 +104,7 @@ import { ticketKindProduct } from "@waste/db/schema/finance"
 import { bulkyBooking, bulkyBookingItem } from "@waste/db/schema/bulky"
 import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
@@ -398,6 +399,7 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
 export type TicketRow = {
   projectId: string
   kind: string
+  ticketTypeId: string
   status: string
   resolution: string | null
   closedAt: Date | null
@@ -415,7 +417,7 @@ export type TicketRow = {
 export async function ticketRow(tx: Tx, companyId: string, ticketId: string): Promise<TicketRow | undefined> {
   await lockRow(tx, ticket, { companyId, id: ticketId })
   const [row] = await tx
-    .select({ projectId: ticket.projectId, kind: ticket.kind, status: ticket.status, resolution: ticket.resolution, closedAt: ticket.closedAt, agreementId: ticket.agreementId, routeId: ticket.routeId, pickupId: ticket.pickupId, chargeProductId: ticket.chargeProductId })
+    .select({ projectId: ticket.projectId, kind: ticket.kind, ticketTypeId: ticket.ticketTypeId, status: ticket.status, resolution: ticket.resolution, closedAt: ticket.closedAt, agreementId: ticket.agreementId, routeId: ticket.routeId, pickupId: ticket.pickupId, chargeProductId: ticket.chargeProductId })
     .from(ticket)
     .where(and(eq(ticket.companyId, companyId), eq(ticket.id, ticketId)))
     .limit(1)
@@ -453,7 +455,8 @@ export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, f
 
 /**
  * The product a completed ticket charges for (#291 C3) — the completion's,
- * else the project's for the ticket's kind; null where neither names one —
+ * else the project's for the ticket's type, else for its kind (#548 of #544);
+ * null where none names one —
  * with what the resolver prices it from: the agreement's facts and, unless it
  * is a draft, which blocks before any list is read, the list it is priced
  * under in force on the day the ticket closed with its rows for the product.
@@ -462,13 +465,22 @@ async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string
   let source: TicketChargeFacts["source"] = "completion"
   let productId = found.chargeProductId
   if (productId === null) {
-    const [mapped] = await tx
-      .select({ productId: ticketKindProduct.productId })
+    const charges = await tx
+      .select({ kind: ticketKindProduct.ticketKind, ticketTypeId: ticketKindProduct.ticketTypeId, productId: ticketKindProduct.productId })
       .from(ticketKindProduct)
-      .where(and(eq(ticketKindProduct.companyId, scope.companyId), eq(ticketKindProduct.projectId, scope.projectId), eq(ticketKindProduct.ticketKind, found.kind)))
-      .limit(1)
+      .where(
+        and(
+          eq(ticketKindProduct.companyId, scope.companyId),
+          eq(ticketKindProduct.projectId, scope.projectId),
+          or(eq(ticketKindProduct.ticketTypeId, found.ticketTypeId), and(isNull(ticketKindProduct.ticketTypeId), eq(ticketKindProduct.ticketKind, found.kind))),
+        ),
+      )
+    const mapped = settingFor(
+      charges.map((row) => ({ ...row, kind: row.kind as TicketKind | null })),
+      { kind: found.kind as TicketKind, ticketTypeId: found.ticketTypeId },
+    )
     if (mapped === undefined) return null
-    source = "kind"
+    source = mapped.ticketTypeId === null ? "kind" : "type"
     productId = mapped.productId
   }
   const [named] = await tx

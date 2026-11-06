@@ -72,8 +72,8 @@ test.describe("ticket work priced (#291 C3)", () => {
     await page.getByRole("option", { name: bulky.name, exact: true }).click()
     const [saved] = await Promise.all([answerOf(page, "PUT", "/ticket-charges"), page.getByRole("button", { name: "Save charges" }).click()])
     expect(saved.status(), await saved.text()).toBe(200)
-    expect(saved.request().postDataJSON()).toEqual({ projectId: project.id, charges: [{ kind: "overflow", productId: bulky.id }] })
-    await expect(toasts(page)).toContainText(`One ticket kind is charged in ${project.name}.`)
+    expect(saved.request().postDataJSON()).toEqual({ projectId: project.id, charges: [{ kind: "overflow", ticketTypeId: null, productId: bulky.id }] })
+    await expect(toasts(page)).toContainText(`One ticket kind or type is charged in ${project.name}.`)
     await expect(page.getByRole("button", { name: "Save charges" })).toBeDisabled()
 
     const { ticket } = await overflow(api, project, agreement)

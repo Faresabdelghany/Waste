@@ -15,6 +15,12 @@
 // type's set of fields keeps, which the contracts read at the boundary and
 // the web reads in its form.
 //
+// A project keeps three settings by kind that a type may set for itself
+// (#548 of #544): the SLA's deadlines (sla.ts), the team a new ticket waits
+// with and the product its completion is charged at. Each row names a kind or
+// one type, and a ticket takes its type's own, else its kind's
+// (`settingFor`).
+//
 // A type may name, per status command, the roles allowed to give it; a
 // command naming none is anyone's who works tickets, as every command was
 // before (`mayGive`). The rule binds a person's command in the office: a stop
@@ -203,3 +209,20 @@ const orList = (names: readonly string[]): string => (names.length <= 1 ? names.
 
 /** What a person whose role the type does not name for a command is told: "Only Case handler or Administrator may complete a ticket of type Bulky waste collection". */
 export const onlyRolesMay = (roleNames: readonly string[], command: TicketCommand, typeName: string): string => `Only ${orList(roleNames)} may ${TICKET_COMMAND_VERBS[command]} a ticket of type ${typeName}`
+
+/** The most ticket types one project's set of a setting names (#548 of #544): far more than a company keeps. */
+export const TICKET_TYPE_SETTINGS_MAX = 200
+
+/** A setting a project keeps for one kind or for one type of it (#548 of #544): exactly one of the two. */
+export type KindOrTypeSetting = { kind: TicketKind | null; ticketTypeId: string | null }
+
+/** The setting a ticket takes: its type's own, else its kind's; undefined where neither is set. */
+export function settingFor<T extends KindOrTypeSetting>(rows: readonly T[], ticket: { kind: TicketKind; ticketTypeId: string | null }): T | undefined {
+  return (ticket.ticketTypeId === null ? undefined : rows.find((row) => row.ticketTypeId === ticket.ticketTypeId)) ?? rows.find((row) => row.ticketTypeId === null && row.kind === ticket.kind)
+}
+
+/** What a setting naming both a kind and a type, or neither, is told. */
+export const KIND_OR_TYPE = "Name a kind or a ticket type, one of the two"
+
+/** What names a setting within a project: its kind or its type. The one spelling a set's checks and its writes compare by. */
+export const kindOrTypeKey = (row: { kind: string | null; ticketTypeId: string | null }): string => (row.ticketTypeId === null ? `kind:${row.kind ?? ""}` : `type:${row.ticketTypeId}`)

@@ -150,7 +150,7 @@ import { tableObjectName } from "../names"
 import { role, userAccount } from "./access"
 import { agreement } from "./agreements"
 import { containerType, product, wasteFraction } from "./catalogue"
-import { literal, lowercase, oneOf, positive } from "./checks"
+import { exactlyOne, literal, lowercase, oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container } from "./containers"
 import { customer, property, sharedCollectionPoint } from "./customers"
@@ -769,9 +769,11 @@ export const alert = wms.table(
 
 // The SLA (O4 of #290): the hours a project gives a ticket of a priority from
 // when it happened to its due date, for every kind (`kind` null) or for one kind, the
-// kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). A pair
-// is named once per project, every kind included, since the key treats nulls
-// as equal. Configuration the office edits under `configure.templates`, so
+// kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). Since
+// #548 of #544 a target may be one Ticket Type's instead (`ticket_type_id`),
+// the type's own winning over its kind's, never a kind's and a type's at once
+// (`ticket_sla_scope_shape`). A kind or a type and a priority are named once
+// per project, every kind included, since the key treats nulls as equal. Configuration the office edits under `configure.templates`, so
 // its rows are audited (sql/audit-trail.ts); `openTicket` reads them as it
 // opens a ticket, the API's and the consumer's alike.
 export const ticketSla = wms.table(
@@ -780,8 +782,10 @@ export const ticketSla = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    /** The kind the target is for; null for every kind without one of its own. */
+    /** The kind the target is for; null for every kind without one of its own, or where a type is named. */
     kind: text(),
+    /** The Ticket Type the target is for (#548 of #544), whose own wins over its kind's; null for a kind's or every kind's. */
+    ticketTypeId: uuid(),
     priority: text().notNull(),
     /** From when the ticket's issue happened to its due date, on the wall clock: 1 to a year. */
     hours: integer().notNull(),
@@ -789,9 +793,13 @@ export const ticketSla = wms.table(
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
-    tenantUnique(t, t.projectId, t.kind, t.priority).nullsNotDistinct(),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantUnique(t, t.projectId, t.kind, t.ticketTypeId, t.priority).nullsNotDistinct(),
     oneOf(t.kind, TICKET_KINDS),
     oneOf(t.priority, TICKET_PRIORITIES),
+    // A type is of one kind already: a target names its kind, its type, or neither.
+    check(tableObjectName(t.id.table, "scope_shape", "ticketSla"), sql`${t.kind} is null or ${t.ticketTypeId} is null`),
+    tenantIndex(t, t.ticketTypeId),
     check(tableObjectName(t.id.table, "hours_range", "ticketSla"), sql`${t.hours} between 1 and ${sql.raw(String(TICKET_SLA_HOURS_MAX))}`),
   ],
 )
@@ -799,6 +807,8 @@ export const ticketSla = wms.table(
 // The team a project's ticket of a kind goes to when its opener names none
 // (O30 of #290, row 7.20): one per kind and project, read by `openTicket` as
 // it opens a ticket, the office's and the consumer's alike, as the SLA is.
+// Since #548 of #544 a row may name one Ticket Type instead of a kind, the
+// type's own winning over its kind's: exactly one of the two.
 // Configuration under `configure.templates`, audited, a set of its project.
 export const ticketTeamDefault = wms.table(
   "ticket_team_default",
@@ -806,15 +816,21 @@ export const ticketTeamDefault = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    kind: text().notNull(),
+    /** The kind the default is for; null where a type is named. */
+    kind: text(),
+    /** The Ticket Type the default is for (#548 of #544); null where a kind is named. */
+    ticketTypeId: uuid(),
     teamId: uuid().notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.teamId], team),
-    tenantUnique(t, t.projectId, t.kind),
+    tenantReference(t, [t.ticketTypeId], ticketType),
+    tenantUnique(t, t.projectId, t.kind, t.ticketTypeId).nullsNotDistinct(),
     oneOf(t.kind, TICKET_KINDS),
+    exactlyOne(t, "kind_or_type", [t.kind, t.ticketTypeId]),
     tenantIndex(t, t.teamId),
+    tenantIndex(t, t.ticketTypeId),
   ],
 )

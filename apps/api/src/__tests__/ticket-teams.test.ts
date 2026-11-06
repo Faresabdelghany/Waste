@@ -8,12 +8,14 @@ import { after, before, describe, test } from "node:test"
 import { AuditEvent } from "@waste/contracts/audit"
 import { Page } from "@waste/contracts/pagination"
 import { Team, TicketTeamDefaults } from "@waste/contracts/ticket-teams"
+import { TicketType } from "@waste/contracts/ticket-types"
 import { Ticket } from "@waste/contracts/tickets"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { NOT_A_TEAM, NOT_A_USER_ACCOUNT } from "../routes/references"
-import { retiredTeam } from "../routes/statuses"
+import { retiredTeam, retiredTicketType } from "../routes/statuses"
+import { NOT_A_TICKET_TYPE } from "../routes/ticket-type-rules"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -129,12 +131,12 @@ describe("ticket teams", { skip: database.skip || owner.skip }, () => {
       const containers = await newTeam("Container yard")
       const answer = await ok(await putDefaults(olivia, harbor, [{ kind: "complaint", teamId: service.id }, { kind: "container-request", teamId: containers.id }]), TicketTeamDefaults)
       assert.deepEqual(answer.defaults, [
-        { kind: "container-request", teamId: containers.id },
-        { kind: "complaint", teamId: service.id },
+        { kind: "container-request", ticketTypeId: null, teamId: containers.id },
+        { kind: "complaint", ticketTypeId: null, teamId: service.id },
       ])
       assert.deepEqual(await ok(await olivia(`/projects/${harbor}/ticket-team-defaults`), TicketTeamDefaults), answer)
       const moved = await ok(await putDefaults(olivia, harbor, [{ kind: "complaint", teamId: containers.id }]), TicketTeamDefaults)
-      assert.deepEqual(moved.defaults, [{ kind: "complaint", teamId: containers.id }])
+      assert.deepEqual(moved.defaults, [{ kind: "complaint", ticketTypeId: null, teamId: containers.id }])
     })
 
     test("a kind twice is a 400, another company's team a 400 at its entry, a retired team a 409; another company's project is none here", async () => {
@@ -147,6 +149,13 @@ describe("ticket teams", { skip: database.skip || owner.skip }, () => {
       await olivia(`/teams/${team.id}`, { method: "PATCH", body: { status: "inactive" } })
       const retired = await refused(await putDefaults(olivia, harbor, [{ kind: "overflow", teamId: team.id }]), 409)
       assert.equal(retired.detail, retiredTeam("Weekend"))
+      // A team a row already names stands, retired since: the set restated whole is no new reference to it (#548 of #544).
+      const kept = await newTeam("Kept")
+      await ok(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }]), TicketTeamDefaults)
+      await olivia(`/teams/${kept.id}`, { method: "PATCH", body: { status: "inactive" } })
+      const restated = await ok(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }, { kind: "complaint", teamId: (await newTeam("Fresh")).id }]), TicketTeamDefaults)
+      assert.equal(restated.defaults.length, 2)
+      assert.equal((await refused(await putDefaults(olivia, harbor, [{ kind: "access-issue", teamId: kept.id }, { kind: "overflow", teamId: kept.id }]), 409)).detail, retiredTeam("Kept"), "named afresh on another row")
       await refused(await putDefaults(other, harbor, []), 404)
       await refused(await putDefaults(agent, a.projects.copenhagen.id, []), 403)
     })
@@ -168,6 +177,32 @@ describe("ticket teams", { skip: database.skip || owner.skip }, () => {
       assert.equal((await open({ kind: "access-issue" })).teamId, null, "a kind without a default")
       assert.equal((await open({ teamId: null })).teamId, null)
       assert.equal((await open({ teamId: yard.id })).teamId, yard.id)
+    })
+
+    test("a ticket type's own default wins over its kind's, and where its team is retired the kind's stands; a type is the company's and, named afresh, active (#548 of #544)", async () => {
+      const bulky = created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Bulky complaint", kind: "complaint" } }), TicketType)
+      const desk = await newTeam("Bulky desk")
+      const typed = await ok(
+        await putDefaults(olivia, a.projects.copenhagen.id, [
+          { kind: "complaint", teamId: service.id },
+          { kind: "overflow", teamId: yard.id },
+          { ticketTypeId: (await bulky).id, teamId: desk.id },
+        ]),
+        TicketTeamDefaults,
+      )
+      assert.deepEqual(typed.defaults.at(-1), { kind: null, ticketTypeId: (await bulky).id, teamId: desk.id }, "the types after the kinds")
+      assert.equal((await open({ ticketTypeId: (await bulky).id })).teamId, desk.id, "the type's own")
+      assert.equal((await open({})).teamId, service.id, "the kind's default type keeps the kind's")
+      await olivia(`/teams/${desk.id}`, { method: "PATCH", body: { status: "inactive" } })
+      assert.equal((await open({ ticketTypeId: (await bulky).id })).teamId, service.id, "its team retired, the kind's")
+
+      const unknown = await refused(await putDefaults(olivia, a.projects.copenhagen.id, [{ ticketTypeId: (await newTeamOf(olivia, "Not a type")).id, teamId: service.id }]), 400)
+      assert.deepEqual(unknown.errors, [{ path: "defaults.0.ticketTypeId", message: NOT_A_TICKET_TYPE }])
+      const both = await refused(await putDefaults(olivia, a.projects.copenhagen.id, [{ kind: "complaint", ticketTypeId: (await bulky).id, teamId: service.id }]), 400)
+      assert.deepEqual(both.errors?.map((error) => error.path), ["defaults.0"])
+      const old = await created(olivia, "/ticket-types", await olivia("/ticket-types", { method: "POST", body: { name: "Old complaint", kind: "complaint", status: "inactive" } }), TicketType)
+      assert.equal((await refused(await putDefaults(olivia, a.projects.copenhagen.id, [{ ticketTypeId: old.id, teamId: service.id }]), 409)).detail, retiredTicketType("Old complaint"))
+      await ok(await putDefaults(olivia, a.projects.copenhagen.id, [{ kind: "complaint", teamId: service.id }, { kind: "overflow", teamId: yard.id }]), TicketTeamDefaults)
     })
 
     test("a retired team is named by no new ticket, and its default gives a new ticket none", async () => {

@@ -11,7 +11,7 @@ const PROJECT = "01a0d2a4-a280-7001-8000-000000000001"
 const BULKY = "01a0d2a4-a280-700a-8000-000000000005"
 
 describe("a project's ticket charges through the client (#291 C3)", () => {
-  const set: TicketCharges = { projectId: PROJECT, charges: [{ kind: "overflow", productId: BULKY }] }
+  const set: TicketCharges = { projectId: PROJECT, charges: [{ kind: "overflow", ticketTypeId: null, productId: BULKY }] }
 
   test("reads the project's set and replaces it whole, the answer being the set as it now stands", async () => {
     const { fetch, calls } = scripted([() => json(set), () => json(set)])

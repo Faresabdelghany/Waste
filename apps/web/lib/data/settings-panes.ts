@@ -43,7 +43,7 @@ import { VISIT_RULES_SETTINGS_PANE_ID } from "./site-visits"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "./ticket-teams"
 import { TICKET_TYPES_SETTINGS_PANE_ID } from "./ticket-types"
-import { COUNTING_RULES_SETTINGS_PANE_ID } from "./counting-rules"
+import { opensTickets, TICKETS_SETTINGS_PANE_ID } from "./tickets-settings"
 
 export const ASSET_MANAGEMENT_SETTINGS_PANE_ID = "asset-management"
 export const FINANCE_SETTINGS_PANE_ID = "finance"
@@ -84,12 +84,12 @@ export const ACCOUNT_DEFAULTS_GROUP = "Defaults"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === COUNTING_RULES_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === TICKET_TYPES_SETTINGS_PANE_ID || paneId === TICKETS_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Integrations' and Portals & branding's the API's, Tickets & communication's the Ticket SLA, and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Integrations and Portals panes are the browser's. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Integrations' and Portals & branding's the API's, Tickets & communication's and the five ticket panes' Settings › Tickets (#548 of #544), and the browser-only panes' where their subject lives; in fixture mode, the API's Finance, Integrations and Portals panes are the browser's. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
   if (!configured) {
     if (paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return FINANCE_SETTINGS_PANE_ID
@@ -103,6 +103,7 @@ export function settingsPaneOpened(paneId: string, configured: boolean): string 
   if (landing !== undefined) return landing
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID) return MASTER_DATA_SETTINGS_PANE_ID
   if (paneId === FINANCE_SETTINGS_PANE_ID) return FINANCE_ON_API_SETTINGS_PANE_ID
-  if (paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID) return TICKET_SLA_SETTINGS_PANE_ID
+  // Tickets & communication, and the ticket panes Settings › Tickets took the place of, open it at their tab (#548 of #544).
+  if (paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || opensTickets(paneId)) return TICKETS_SETTINGS_PANE_ID
   return paneId
 }

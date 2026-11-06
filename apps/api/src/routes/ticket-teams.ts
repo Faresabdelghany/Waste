@@ -32,6 +32,7 @@ import { Page } from "@waste/contracts/pagination"
 import { Team, TeamCreate, TeamListQuery, TeamMembersSet, TeamPatch, TicketTeamDefaults, TicketTeamDefaultsSet, type TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { team, teamMember, ticketTeamDefault } from "@waste/db/schema/resolution"
+import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -42,10 +43,12 @@ import { projectIdsOf } from "../auth/projects"
 import { allows, requireGrant, requireGrantOf } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
-import { requireTeam, requireUserAccount } from "./references"
+import { NOT_A_TEAM, requireUserAccount } from "./references"
+import { refuseRetiredTeam } from "./statuses"
 import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { requireSetTypes } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
 const TICKETS = "operate.tickets"
@@ -90,19 +93,34 @@ async function findTeam(tx: Tx, principal: Principal, id: string): Promise<Row |
   return row
 }
 
-type DefaultRow = { id: string; kind: string; teamId: string }
+type DefaultRow = { id: string; kind: string | null; ticketTypeId: string | null; teamId: string }
 
 async function defaultsOf(tx: Tx, companyId: string, projectId: string): Promise<DefaultRow[]> {
   return await tx
-    .select({ id: ticketTeamDefault.id, kind: ticketTeamDefault.kind, teamId: ticketTeamDefault.teamId })
+    .select({ id: ticketTeamDefault.id, kind: ticketTeamDefault.kind, ticketTypeId: ticketTeamDefault.ticketTypeId, teamId: ticketTeamDefault.teamId })
     .from(ticketTeamDefault)
     .where(and(eq(ticketTeamDefault.companyId, companyId), eq(ticketTeamDefault.projectId, projectId)))
 }
 
-/** A project's defaults on the wire, in the vocabulary's order of kinds. */
-const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind" | "teamId">[]): TicketTeamDefaults => ({
+/** Where a default sorts: the kinds in the vocabulary's order, then the types (#548 of #544) by id. */
+const defaultOrder = (row: Pick<DefaultRow, "kind" | "ticketTypeId">): number => (row.ticketTypeId !== null ? TICKET_KINDS.length : TICKET_KINDS.indexOf(row.kind as TicketKind))
+
+/** The company's teams among the ids a set names, with their names and statuses: one read for the whole set. */
+async function teamsNamed(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, { name: string; status: string }>> {
+  if (ids.length === 0) return new Map()
+  const found = await tx
+    .select({ id: team.id, name: team.name, status: team.status })
+    .from(team)
+    .where(and(eq(team.companyId, companyId), inArray(team.id, [...new Set(ids)])))
+  return new Map(found.map((row) => [row.id, row]))
+}
+
+/** A project's defaults on the wire, in the vocabulary's order of kinds, then the types'. */
+const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind" | "ticketTypeId" | "teamId">[]): TicketTeamDefaults => ({
   projectId,
-  defaults: [...rows].sort((a, b) => TICKET_KINDS.indexOf(a.kind as TicketKind) - TICKET_KINDS.indexOf(b.kind as TicketKind)).map((row) => ({ kind: row.kind as TicketKind, teamId: row.teamId })),
+  defaults: [...rows]
+    .sort((a, b) => defaultOrder(a) - defaultOrder(b) || (a.ticketTypeId ?? "").localeCompare(b.ticketTypeId ?? ""))
+    .map((row) => ({ kind: row.kind as TicketKind | null, ticketTypeId: row.ticketTypeId, teamId: row.teamId })),
 })
 
 const commonProblems = (action: "view" | "edit" | "create") => ({
@@ -284,7 +302,7 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "getTicketTeamDefaults",
         summary: "A project's default ticket teams",
         description:
-          "The team a ticket of the project goes to when its opener names none, one per kind, in the vocabulary's order of kinds. A kind the project names no team for opens its tickets with none, and so does a default whose team is retired.",
+          "The team a ticket of the project goes to when its opener names none, one per kind and, since #548 of #544, one per ticket type, whose own wins over its kind's: the kinds in the vocabulary's order, then the types. A ticket whose type and kind the project names no team for opens with none, and so does one whose defaults' teams are retired.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project's defaults.", TicketTeamDefaults),
@@ -309,14 +327,14 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putTicketTeamDefaults",
         summary: "Replace a project's default ticket teams",
         description:
-          "Replaces the whole set with the one in the body: a kind the body leaves out goes to no team, and an empty list gives none a team. Each kind is named once (400 on `defaults`), and each team is one of this company's (400 at `defaults.N.teamId`) that is active (409). A kind the body keeps keeps its id and moves only its team, and one whose team did not change is not written, so the audit log reads one row's history per kind. A ticket already open keeps its team: the default names one as a ticket opens.",
+          "Replaces the whole set with the one in the body: a kind the body leaves out goes to no team, a ticket type to its kind's, and an empty list gives none a team. Each entry names a kind or a ticket type, exactly one (400 at `defaults.N`), each once (400 on `defaults`); each team is one of this company's (400 at `defaults.N.teamId`) and, where the entry names it afresh, active (409) — a team the entry already names stands whatever its status — and each type one of this company's (400 at `defaults.N.ticketTypeId`) that, where the set names it afresh, is active (409). A kind the body keeps keeps its id and moves only its team, and one whose team did not change is not written, so the audit log reads one row's history per kind. A ticket already open keeps its team: the default names one as a ticket opens.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project's defaults as they now stand.", TicketTeamDefaults),
           400: describeProblem("The path does not hold an id, or the body is missing `defaults`, names a member it does not own, names a kind twice or one the vocabulary does not hold, or names a team that is not this company's."),
           ...commonProblems("edit"),
           404: describeProblem("No project with that id in the projects this account works in."),
-          409: describeProblem("A team named is retired."),
+          409: describeProblem("A team named is retired, or a ticket type the set names afresh is."),
         },
       }),
       guard,
@@ -329,26 +347,35 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
-        for (const [index, entry] of defaults.entries()) await requireTeam(tx, principal.companyId, entry.teamId, `defaults.${index}.teamId`)
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-team-defaults:${principal.companyId}:${id}`}, 0))`)
-        const current = new Map((await defaultsOf(tx, principal.companyId, id)).map((row) => [row.kind, row]))
-        const kept = new Set<string>(defaults.map((entry) => entry.kind))
-        const gone = [...current.values()].filter((row) => !kept.has(row.kind)).map((row) => row.id)
-        if (gone.length > 0) await tx.delete(ticketTeamDefault).where(and(eq(ticketTeamDefault.companyId, principal.companyId), inArray(ticketTeamDefault.id, gone)))
-        const added = defaults.filter((entry) => !current.has(entry.kind))
-        if (added.length > 0) {
-          await tx.insert(ticketTeamDefault).values(added.map((entry) => ({ id: newId(), companyId: principal.companyId, projectId: id, kind: entry.kind, teamId: entry.teamId })))
-        }
-        // A kind kept is written only where its team moved: one statement each, and a person moves a handful at a time.
+        const current = new Map((await defaultsOf(tx, principal.companyId, id)).map((row) => [kindOrTypeKey(row), row]))
+        // The 400s — the types', then the teams' — then the 409s on what is new: a team a row already names stands whatever its status, as a type the set already names does.
+        const refuseRetiredTypes = await requireSetTypes(tx, principal.companyId, defaults, "defaults", new Set([...current.values()].flatMap((row) => (row.ticketTypeId === null ? [] : [row.ticketTypeId]))))
+        const teams = await teamsNamed(tx, principal.companyId, defaults.map((entry) => entry.teamId))
+        const unknown = defaults.flatMap((entry, index) => (teams.has(entry.teamId) ? [] : [{ path: `defaults.${index}.teamId`, message: NOT_A_TEAM }]))
+        if (unknown.length > 0) throw invalidRequest("body", unknown)
         for (const entry of defaults) {
-          const before = current.get(entry.kind)
+          const named = teams.get(entry.teamId)
+          if (named !== undefined && current.get(kindOrTypeKey(entry))?.teamId !== entry.teamId) refuseRetiredTeam(named.status as TeamStatus, named.name)
+        }
+        refuseRetiredTypes()
+        const kept = new Set<string>(defaults.map(kindOrTypeKey))
+        const gone = [...current.entries()].filter(([key]) => !kept.has(key)).map(([, row]) => row.id)
+        if (gone.length > 0) await tx.delete(ticketTeamDefault).where(and(eq(ticketTeamDefault.companyId, principal.companyId), inArray(ticketTeamDefault.id, gone)))
+        const added = defaults.filter((entry) => !current.has(kindOrTypeKey(entry)))
+        if (added.length > 0) {
+          await tx.insert(ticketTeamDefault).values(added.map((entry) => ({ id: newId(), companyId: principal.companyId, projectId: id, kind: entry.kind, ticketTypeId: entry.ticketTypeId, teamId: entry.teamId })))
+        }
+        // A kind or type kept is written only where its team moved: one statement each, and a person moves a handful at a time.
+        for (const entry of defaults) {
+          const before = current.get(kindOrTypeKey(entry))
           if (before === undefined || before.teamId === entry.teamId) continue
           await tx
             .update(ticketTeamDefault)
             .set({ teamId: entry.teamId })
             .where(and(eq(ticketTeamDefault.companyId, principal.companyId), eq(ticketTeamDefault.id, before.id)))
         }
-        // The set just written is the body, each kind once: answered in kind order, not read back.
+        // The set just written is the body, each kind or type once: answered in order, not read back.
         return c.json(defaultsAnswer(id, defaults))
       },
     )
