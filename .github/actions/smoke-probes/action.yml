@@ -1,0 +1,76 @@
+name: The probes' answers
+description: >-
+  Waits, within a deadline, for every process named to answer GET /readyz
+  with the status asked for — 200 on a live stack, 503 against a database
+  nobody answers on — then holds each GET /healthz to 200 and, where a commit
+  is given, the first process's /healthz to name it as build.commit and the
+  image's revision label to be it. Every answer is printed with its body.
+inputs:
+  urls:
+    description: The processes' origins, one a line (http://127.0.0.1:3001).
+    required: true
+  ready:
+    description: The status every GET /readyz must answer.
+    required: true
+  attempts:
+    description: How many times /readyz is asked before the wait gives up.
+    default: "60"
+  interval:
+    description: Seconds between two asks.
+    default: "2"
+  container:
+    description: A container that must stay running while the wait lasts; its stop fails the wait at once rather than at the deadline.
+    default: ""
+  commit:
+    description: The commit the first process's GET /healthz must name as build.commit.
+    default: ""
+  image:
+    description: An image whose org.opencontainers.image.revision label must be `commit`.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Ask the probes
+      shell: bash
+      env:
+        URLS: ${{ inputs.urls }}
+        READY: ${{ inputs.ready }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        INTERVAL: ${{ inputs.interval }}
+        CONTAINER: ${{ inputs.container }}
+        COMMIT: ${{ inputs.commit }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        status() { curl --silent --output /dev/null --write-out '%{http_code}' "$1" || echo 000; }
+        body() { curl --silent "$1" || true; }
+        origins=()
+        while read -r origin; do
+          if [ -n "$origin" ]; then origins+=("$origin"); fi
+        done <<< "$URLS"
+        for attempt in $(seq 1 "$ATTEMPTS"); do
+          if [ -n "$CONTAINER" ] && [ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER")" != true ]; then
+            echo "::error::the container $CONTAINER stopped before it answered (attempt $attempt)"
+            exit 1
+          fi
+          answered=0
+          for origin in "${origins[@]}"; do
+            [ "$(status "$origin/readyz")" = "$READY" ] && answered=$((answered + 1))
+          done
+          [ "$answered" = "${#origins[@]}" ] && break
+          sleep "$INTERVAL"
+        done
+        failed=0
+        for origin in "${origins[@]}"; do
+          healthz=$(status "$origin/healthz")
+          readyz=$(status "$origin/readyz")
+          echo "GET $origin/healthz -> $healthz $(body "$origin/healthz")"
+          echo "GET $origin/readyz -> $readyz $(body "$origin/readyz")"
+          { [ "$healthz" = 200 ] && [ "$readyz" = "$READY" ]; } || failed=1
+        done
+        [ "$failed" = 0 ] || { echo "::error::not every process answered GET /healthz 200 and GET /readyz $READY after $attempt attempts"; exit 1; }
+        if [ -n "$COMMIT" ]; then
+          body "${origins[0]}/healthz" | jq --exit-status --arg commit "$COMMIT" '.build.commit == $commit'
+        fi
+        if [ -n "$IMAGE" ]; then
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$COMMIT"
+        fi

@@ -31,7 +31,7 @@ runs:
         echo "key=supabase-images-${{ runner.os }}-${version}-${{ inputs.name }}-${starts}-${{ hashFiles('supabase/config.toml') }}" >> "$GITHUB_OUTPUT"
         echo "dir=${RUNNER_TEMP}/supabase-images" >> "$GITHUB_OUTPUT"
     - id: restore
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.key.outputs.dir }}
         key: ${{ steps.key.outputs.key }}
@@ -64,7 +64,7 @@ runs:
           echo "saved=true" >> "$GITHUB_OUTPUT"
         fi
     - if: steps.save.outputs.saved == 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.key.outputs.dir }}
         key: ${{ steps.key.outputs.key }}

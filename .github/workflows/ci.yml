@@ -51,17 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-
-      # Reads the pnpm version from the packageManager field in package.json.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm typecheck
       - run: pnpm lint
 
@@ -102,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The Pilot's image (apps/pilot/Dockerfile: the API and the worker
       # under the supervisor, bundled; ADR-0008), built from the repository
@@ -113,8 +104,8 @@ jobs:
       # (#152): the image labels itself with it and bakes it into the API's
       # build.json, which GET /healthz names; on the deploy branch the same
       # file is written from apps/pilot/release.json.
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/pilot/Dockerfile
@@ -125,41 +116,37 @@ jobs:
           cache-from: type=gha,scope=pilot
           cache-to: type=gha,scope=pilot,mode=max
 
-      # Against a database nobody answers on: the API answers /healthz 200
-      # naming this commit and /readyz 503 (apps/api/src/readiness.ts), the
-      # worker child exits and the supervisor restarts it with backoff — its
-      # first "restarting in 5 s" line, then a second start — while the API
-      # keeps answering, and `docker stop` ends the container cleanly with
-      # exit 0 through the supervisor's forwarded SIGTERM. Both waits poll
-      # with a deadline: up to 40 s for liveness (the bundles boot in about
-      # two seconds here), up to 40 s for the second start, since the
-      # worker's exit and its 5 s backoff run beside the API's boot at
-      # whatever share of a core the runner gives.
-      - name: Smoke test the image
+      # Against a database nobody answers on: the API answers /readyz 503
+      # (@waste/db/probe) and /healthz 200 naming this commit, the worker
+      # child exits and the supervisor restarts it with backoff — its first
+      # "restarting in 5 s" line, then a second start — while the API keeps
+      # answering, and `docker stop` ends the container cleanly with exit 0
+      # through the supervisor's forwarded SIGTERM. Both waits poll with a
+      # deadline: up to 40 s for the API (the bundles boot in about two
+      # seconds here), up to 40 s for the second start, since the worker's
+      # exit and its 5 s backoff run beside the API's boot at whatever share
+      # of a core the runner gives.
+      - name: Start the image
         run: |
           docker run --detach --name pilot --publish 3001:3001 \
             --env DATABASE_URL=postgresql://wms_api:x@127.0.0.1:1/postgres \
             --env WORKER_DATABASE_URL=postgresql://wms_worker:x@127.0.0.1:1/postgres \
             --env SUPABASE_URL="$SUPABASE_URL" \
             waste-pilot:ci
+      - name: Smoke test the probes
+        uses: ./.github/actions/smoke-probes
+        with:
+          urls: http://127.0.0.1:3001
+          ready: "503"
+          attempts: "40"
+          interval: "1"
+          container: pilot
+          commit: ${{ github.sha }}
+          image: waste-pilot:ci
+      - name: Smoke test the supervisor
+        run: |
           status() { curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:3001$1" || echo 000; }
-          body() { curl --silent "http://127.0.0.1:3001$1" || true; }
-          for attempt in $(seq 1 40); do
-            if [ "$(docker inspect --format '{{.State.Running}}' pilot)" != true ]; then
-              echo "the container stopped before it answered (attempt $attempt)"
-              exit 1
-            fi
-            [ "$(status /healthz)" = 200 ] && break
-            sleep 1
-          done
-          healthz=$(status /healthz)
-          readyz=$(status /readyz)
-          echo "GET /healthz -> $healthz $(body /healthz)"
-          echo "GET /readyz -> $readyz $(body /readyz)"
-          test "$healthz" = 200 && test "$readyz" = 503
-          body /healthz | jq --exit-status --arg commit "$GITHUB_SHA" '.build.commit == $commit'
-          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' waste-pilot:ci)" = "$GITHUB_SHA"
-          for attempt in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             [ "$(docker logs pilot 2>&1 | grep -c '^\[pilot\] worker started pid=')" -ge 2 ] && break
             sleep 1
           done
@@ -178,33 +165,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      # The browser Playwright drives, cached under the @playwright/test
-      # version pnpm install resolved — read from the installed package, not
-      # from the specifier in apps/web/package.json, so a range or a lockfile
-      # bump can never hit a cache holding the Chromium of an older Playwright
-      # while the install step is skipped. A new Playwright wants a new
-      # Chromium build, nothing else does. On a hit only the system libraries
-      # Chromium links against are installed, since the cache holds the
-      # browser and not them.
-      - id: playwright
-        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: browser
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - if: steps.browser.outputs.cache-hit != 'true'
-        run: pnpm --filter @waste/web exec playwright install --with-deps chromium
-      - if: steps.browser.outputs.cache-hit == 'true'
-        run: pnpm --filter @waste/web exec playwright install-deps chromium
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/playwright-browser
 
       # The root tsconfig excludes e2e/, so `pnpm typecheck` in verify never
       # sees a spec; this is the one type check the suite gets.
@@ -227,7 +190,7 @@ jobs:
       # retry leaves the job green (the github reporter annotates it flaky)
       # and its failed attempt's trace is the one thing that says why.
       # `if-no-files-found: ignore` covers the clean case.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
@@ -275,26 +238,9 @@ jobs:
       # exists here.
       ADDRESS_PROVIDER: fake
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      # The fixture job's browser cache, under the same key.
-      - id: playwright
-        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: browser
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - if: steps.browser.outputs.cache-hit != 'true'
-        run: pnpm --filter @waste/web exec playwright install --with-deps chromium
-      - if: steps.browser.outputs.cache-hit == 'true'
-        run: pnpm --filter @waste/web exec playwright install-deps chromium
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/playwright-browser
 
       # The trimmed local stack — Postgres, Kong, GoTrue and Storage (the
       # proofs' private bucket, O1 of #290), the other services excluded by name — migrated, bootstrapped, seeded and given
@@ -333,21 +279,19 @@ jobs:
       # their output kept for the failure artifact below. Playwright starts
       # only once both answer ready, bounded: two minutes for pg-boss to take
       # its queues and the API to reach its pool, else the step fails with
-      # the last two answers in the log.
+      # the last answers in the log.
       - name: Start the API and the worker
         run: |
           mkdir -p logs
           nohup pnpm --filter @waste/api start > logs/api.log 2>&1 &
           nohup pnpm --filter @waste/worker start > logs/worker.log 2>&1 &
-          status() { curl --silent --output /dev/null --write-out '%{http_code}' "$1" || echo 000; }
-          for attempt in $(seq 1 60); do
-            api=$(status http://127.0.0.1:3001/readyz)
-            worker=$(status http://127.0.0.1:3002/readyz)
-            [ "$api" = 200 ] && [ "$worker" = 200 ] && break
-            sleep 2
-          done
-          echo "GET /readyz: api $api, worker $worker, after $attempt attempts"
-          test "$api" = 200 && test "$worker" = 200
+      - name: Wait for both to answer ready
+        uses: ./.github/actions/smoke-probes
+        with:
+          urls: |
+            http://127.0.0.1:3001
+            http://127.0.0.1:3002
+          ready: "200"
 
       # playwright.api.config.ts serves the build on port 3000 under CI and
       # runs the suite serially with two retries. The served build reads the
@@ -358,7 +302,7 @@ jobs:
         env:
           WASTE_API_ORIGIN: http://127.0.0.1:3001
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-api
@@ -369,7 +313,7 @@ jobs:
           if-no-files-found: ignore
       # A browser failure can be a background job's: the two processes' logs
       # go up beside the report when the job fails.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: e2e-api-process-logs
