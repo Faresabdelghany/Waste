@@ -115,8 +115,8 @@ export function driverMe(overrides: Partial<DriverMe> = {}): DriverMe {
     openSession: null,
     routes: [route()],
     vehicles: [
-      { id: VEHICLE_ID, kind: "powered-vehicle", requiredLicenceClass: "c", label: "WH-24", checklist: [] },
-      { id: TRAILER_ID, kind: "trailer", requiredLicenceClass: "ce", label: "TR-03", checklist: [] },
+      { id: VEHICLE_ID, kind: "powered-vehicle", requiredLicenceClass: "c", label: "WH-24" },
+      { id: TRAILER_ID, kind: "trailer", requiredLicenceClass: "ce", label: "TR-03" },
     ],
     unloadingStations: [{ id: STATION_ID, name: "ARC Amager", location: { type: "Point", coordinates: [12.62, 55.68] }, weighbridge: true, wasteFractionIds: [FRACTION_ID] }],
     wasteFractions: [{ id: FRACTION_ID, key: "residual", name: "Residual" }],

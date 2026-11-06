@@ -35,7 +35,7 @@ import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { product } from "@waste/db/schema/catalogue"
 import { pickup } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, ticketKindProduct } from "@waste/db/schema/finance"
 import { contaminantCode, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { project } from "@waste/db/schema/organisation"
 import { ticket } from "@waste/db/schema/resolution"
@@ -283,23 +283,9 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual(await eventsOfPickup(pickupId), [])
   })
 
-  test("a work order the office booked records a job at the project's product for its service (M14 of #293), charged to the container's agreement — a delivery's through the subscription it books — and priced as a pickup is; nothing for a service the project prices nothing for; no-product for a product not sold by the job; and a correction away cancels it", async () => {
-    const projectId = tenant.projects.copenhagen.id
-    await withCompany(pool.db, tenant.companyId, async (tx) => {
-      await tx.insert(workOrderProduct).values([
-        { id: testId(), companyId: tenant.companyId, projectId, service: "deliver", productId: tenant.products.bulky.id },
-        { id: testId(), companyId: tenant.companyId, projectId, service: "wash", productId: tenant.products.bulky.id },
-        { id: testId(), companyId: tenant.companyId, projectId, service: "remove", productId: tenant.products.residual.id },
-        { id: testId(), companyId: tenant.companyId, projectId, service: "swap", productId: tenant.products.bulky.id },
-      ])
-    })
-    const job = async (event: Recorded) => {
-      const row = (await allEvents()).find((candidate) => candidate.id === event.billableEventId)
-      return [event.did, row?.kind, row?.status, row?.agreementId, row?.subscriptionId, row?.productId, row?.unitPriceMinor, row?.netMinor, row?.vatMinor, row?.blockReason]
-    }
-    // A wash of Anna's bin: the bulky pickup's default row, 350.00 kr and its VAT, under the placement's subscription.
+  test("a work order the office booked records nothing — a wash, a delivery, a repair, a removal, a swap — when it is completed or corrected to completed: an office stop is charged nothing but a bulky collection's job", async () => {
     const washed = await placeBin(pool, tenant, "BIN-JOB-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
-    // A delivery for the housing association: the stop names the subscription it books, whatever the container stood under before.
+    // A delivery for the housing association: the stop names the subscription it books.
     const delivered = await placeBin(pool, tenant, "BIN-JOB-2", { agreementId: tenant.agreements.housing.id, productId: tenant.products.residual.id })
     const stock = await placeBin(pool, tenant, "BIN-JOB-3", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
     // A removal's and a swap's container: its placement ended on the day by the completion's return, as the driver door leaves it.
@@ -313,24 +299,22 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       { containerId: swapped.containerId, propertyId: swapped.propertyId, origin: "office", service: "swap", warehouseId: tenant.warehouse.id, replacementContainerId: stock.containerId },
     ])
     const [wash, delivery, repair, removal, swap] = stops.pickupIds
-    const office = (pickupId: string, containerId: string, service: string, status: "completed" | "skipped" = "completed") => ({ ...pickupPayload(stops.id, pickupId, containerId, status), origin: "office", service })
-    const washJob = await handle(published("pickup-completed", wash, office(wash, washed.containerId, "wash")))
-    assert.deepEqual(await job(washJob), ["recorded", "job", "ready", tenant.agreements.anna.id, washed.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
-    const [recorded] = await eventsOfPickup(wash)
-    assert.deepEqual([recorded.links, recorded.quantity, recorded.priceListRowId], [{ routeId: stops.id, pickupId: wash, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }, 1, tenant.priceList.rows.bulky.id])
-    assert.deepEqual(await job(await handle(published("pickup-completed", delivery, office(delivery, stock.containerId, "deliver")))), ["recorded", "job", "ready", tenant.agreements.housing.id, delivered.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
-    // A repair the project prices nothing for records nothing, as an office stop did before; a removal mapped to a product sold by the pickup is the office's to fix, blocked.
-    assert.deepEqual([(await handle(published("pickup-completed", repair, office(repair, washed.containerId, "repair")))).did, await eventsOfPickup(repair)], ["nothing", []])
-    assert.deepEqual(await job(await handle(published("pickup-completed", removal, office(removal, taken.containerId, "remove")))), ["recorded", "job", "blocked", tenant.agreements.anna.id, taken.subscriptionId, null, null, null, null, "no-product"], "the placement it took away, ended that day")
-    assert.deepEqual(await job(await handle(published("pickup-completed", swap, office(swap, swapped.containerId, "swap")))), ["recorded", "job", "ready", tenant.agreements.housing.id, swapped.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null], "a swap is charged to the placement it ended, as a removal is")
-    // The job is the stop's live event: the same completion again is nothing, and a correction to skipped cancels it.
-    assert.equal((await handle(published("pickup-completed", wash, office(wash, washed.containerId, "wash")))).did, "nothing")
-    await movePickup(pool, tenant, wash, "skipped")
-    assert.equal((await handle(published("pickup-corrected", wash, office(wash, washed.containerId, "wash", "skipped")))).did, "cancelled")
-    assert.equal((await eventsOfPickup(wash))[0].status, "cancelled")
+    const office = (pickupId: string, containerId: string, service: string) => ({ ...pickupPayload(stops.id, pickupId, containerId), origin: "office", service })
+    const workOrders = [
+      [wash, washed.containerId, "wash"],
+      [delivery, stock.containerId, "deliver"],
+      [repair, washed.containerId, "repair"],
+      [removal, taken.containerId, "remove"],
+      [swap, swapped.containerId, "swap"],
+    ] as const
+    for (const [pickupId, containerId, service] of workOrders) {
+      const completed = await handle(published("pickup-completed", pickupId, office(pickupId, containerId, service)))
+      const corrected = await handle(published("pickup-corrected", pickupId, office(pickupId, containerId, service)))
+      assert.deepEqual([completed.did, completed.billableEventId, corrected.did, await eventsOfPickup(pickupId)], ["nothing", null, "nothing", []], service)
+    }
   })
 
-  test("a public bin's stop (M12 of #293) records nothing — its collection, a correction to completed, the office's wash of it under the project's wash product (the work order test above names it) — rather than a blocked no-subscription event: the project's contract pays for public service", async () => {
+  test("a public bin's stop (M12 of #293) records nothing — its collection, a correction to completed, the office's wash of it — rather than a blocked no-subscription event: the project's contract pays for public service", async () => {
     const litter = await placePublicBin(pool, tenant, "BIN-PUB-1")
     const seeded = await seedCompletedRoute(pool, tenant, [
       { containerId: litter.containerId, propertyId: null, sharedCollectionPointId: litter.sharedCollectionPointId },
@@ -389,40 +373,16 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual([(await handle(published("pickup-completed", collected, payload))).did, await eventsOfPickup(collected)], ["nothing", []])
   })
 
-  test("a stop a ticket was booked for and then booked away from records no job when it completes after all: the ticket's charge is the one, never two (#422)", async () => {
-    const projectId = tenant.projects.copenhagen.id
-    const priced = testId()
-    // The project prices a repair, so a repair the office booked for nothing would be a job.
-    await withCompany(pool.db, tenant.companyId, (tx) => tx.insert(workOrderProduct).values({ id: priced, companyId: tenant.companyId, projectId, service: "repair", productId: tenant.products.bulky.id }))
-    try {
-      const bin = await placeBin(pool, tenant, "BIN-REBOOK-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
-      const stops = await seedCompletedRoute(pool, tenant, [
-        { containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "repair" },
-        { containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "repair" },
-      ])
-      const [missed, rebooked] = stops.pickupIds
-      // The defect was booked for the first stop, which failed, and then for the second: the ticket names the second, the ledger both.
-      await seedTicket(pool, tenant, { resolution: null, kind: "container-defect", booked: { routeId: stops.id, pickupId: rebooked }, bookedBefore: [{ routeId: stops.id, pickupId: missed }] })
-      // The office corrects the first stop to completed: the ticket is serviced by it, and its charge is the one.
-      const corrected = await handle(published("pickup-corrected", missed, { ...pickupPayload(stops.id, missed, bin.containerId), origin: "office", service: "repair" }))
-      assert.deepEqual([corrected.did, await eventsOfPickup(missed)], ["nothing", []], "no job beside the ticket's charge")
-      const done = await handle(published("pickup-completed", rebooked, { ...pickupPayload(stops.id, rebooked, bin.containerId), origin: "office", service: "repair" }))
-      assert.deepEqual([done.did, await eventsOfPickup(rebooked)], ["nothing", []])
-    } finally {
-      await withCompany(pool.db, tenant.companyId, (tx) => tx.delete(workOrderProduct).where(eq(workOrderProduct.id, priced)))
-    }
-  })
-
-  test("a work order's job of a project that holds its jobs for review is recorded held, with no person and the project's reason, for the office to release (M14 of #293)", async () => {
+  test("a bulky collection's job of a project that holds its jobs for review is recorded held, with no person and the project's reason, for the office to release (M14 of #293)", async () => {
     const projectId = tenant.projects.copenhagen.id
     await withCompany(pool.db, tenant.companyId, (tx) => tx.update(project).set({ holdForReview: true }).where(eq(project.id, projectId)))
     try {
-      const bin = await placeBin(pool, tenant, "BIN-HELD-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
-      const stops = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "wash" }])
-      const [wash] = stops.pickupIds
-      const done = await handle(published("pickup-completed", wash, { ...pickupPayload(stops.id, wash, bin.containerId), origin: "office", service: "wash" }))
+      const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id })
+      const stops = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.havnegade.id, origin: "office", service: "bulky", bulkyBookingId: booking.id }], FIXTURE_DAY, { adHoc: true })
+      const [collected] = stops.pickupIds
+      const done = await handle(published("pickup-completed", collected, { ...pickupPayload(stops.id, collected, null, "completed"), origin: "office", service: "bulky", bulkyBookingId: booking.id }))
       assert.equal(done.did, "recorded")
-      const [recorded] = await eventsOfPickup(wash)
+      const [recorded] = await eventsOfPickup(collected)
       assert.deepEqual([recorded.kind, recorded.status, recorded.hold?.by, recorded.hold?.reason], ["job", "held", null, HELD_FOR_REVIEW])
     } finally {
       await withCompany(pool.db, tenant.companyId, (tx) => tx.update(project).set({ holdForReview: false }).where(eq(project.id, projectId)))
@@ -438,14 +398,14 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual([(await handle(published("pickup-completed", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId)))).did, await eventsOfPickup(pickupId)], ["nothing", []])
   })
 
-  test("a delivery the office booked to answer a container request records nothing as it completes, though the project prices deliveries: the ticket is priced once, from its own completion, and exactly one live event comes of the two (O3c of #290)", async () => {
+  test("a delivery the office booked to answer a container request records nothing as it completes: the ticket is priced once, from its own completion, and exactly one live event comes of the two (O3c of #290)", async () => {
     const bin = await placeBin(pool, tenant, "BIN-OFF-2", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
     const booked = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "deliver", subscriptionId: bin.subscriptionId }])
     const [delivery] = booked.pickupIds
     const closedAt = new Date("2026-10-07T22:30:00Z")
     const request = await seedTicket(pool, tenant, { resolution: "serviced", kind: "container-request", agreementId: tenant.agreements.anna.id, closedAt, chargeProductId: tenant.products.bulky.id, booked: { routeId: booked.id, pickupId: delivery } })
     const done = await handle(published("pickup-completed", delivery, { ...pickupPayload(booked.id, delivery, bin.containerId), origin: "office", service: "deliver", subscriptionId: bin.subscriptionId }))
-    assert.deepEqual([done.did, done.billableEventId], ["nothing", null], "the project's delivery product is not charged: the ticket the stop answered is the charge")
+    assert.deepEqual([done.did, done.billableEventId], ["nothing", null], "the delivery is not charged: the ticket the stop answered is the charge")
     assert.deepEqual(await eventsOfPickup(delivery), [])
     const charged = await handle(published("ticket-completed", request.id, { ...ticketPayload(request.id, 31, "serviced", closedAt, { agreementId: tenant.agreements.anna.id }), kind: "container-request" }))
     assert.equal(charged.did, "recorded")

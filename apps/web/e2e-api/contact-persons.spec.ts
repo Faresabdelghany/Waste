@@ -61,6 +61,6 @@ test("an organisation's contact persons: one added with a role and an e-mail, th
   await page.keyboard.press("Escape")
   await search.fill(personName)
   await page.getByRole("button", { name: `Open ${personName}` }).first().click()
-  await expect(page.getByTestId("customer-sustainability")).toBeVisible()
+  await expect(page.getByTestId("customer-statement")).toBeVisible()
   await expect(page.getByTestId("contact-persons")).toHaveCount(0)
 })

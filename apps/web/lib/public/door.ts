@@ -17,7 +17,6 @@
 // configured, a refusal the page has no words for, or no answer at all. A
 // public page never shows an API's sentence.
 import type { AddressMatches, PublicCollectionDays, PublicDropOffPoints, PublishedProject } from "@waste/contracts/public"
-import type { SortingGuideAnswer } from "@waste/contracts/sorting-guide"
 
 export type DoorAnswer<T> = { kind: "ok"; body: T } | { kind: "not-published" } | { kind: "too-many"; retryAfterSeconds: number } | { kind: "unavailable" }
 
@@ -33,7 +32,7 @@ export type DoorOptions = {
 /** The door as a page or the feed asks it for the request in hand: the API's origin, and the visitor as this server's own proxy named them. */
 export const doorFor = (incoming: Pick<Headers, "get">): DoorOptions => ({ origin: process.env.WASTE_API_ORIGIN, forwardedFor: incoming.get("x-forwarded-for") })
 
-/** How long a page waits for the door before it says the guide cannot be reached. */
+/** How long a page waits for the door before it says the page cannot be shown. */
 export const DOOR_TIMEOUT_MS = 5_000
 
 /** The seconds a 429's `Retry-After` names, or a minute where it names none. */
@@ -52,7 +51,7 @@ export function visitorOf(forwardedFor: string | null): string | null {
   return last ?? null
 }
 
-/** Asks the public door for `path` (`<slug>` or `<slug>/sorting-guide?q=…`), answering one of the four. */
+/** Asks the public door for `path` (`<slug>` or `<slug>/addresses?q=…`), answering one of the four. */
 export const readDoor = <T>(path: string, options: DoorOptions): Promise<DoorAnswer<T>> => askDoor(path, options, "application/json", (response) => response.json() as Promise<T>)
 
 /** Asks the door for `path` in `accept`, the body read by `read`; a body `read` cannot read is the door unreachable. */
@@ -81,10 +80,6 @@ async function askDoor<T>(path: string, { origin, forwardedFor, fetch: fetching 
 
 /** The published project under the slug. */
 export const readPublishedProject = (slug: string, options: DoorOptions) => readDoor<PublishedProject>(encodeURIComponent(slug), options)
-
-/** A search of the project's sorting guide. */
-export const searchSortingGuide = (slug: string, query: string, options: DoorOptions) =>
-  readDoor<SortingGuideAnswer>(`${encodeURIComponent(slug)}/sorting-guide?q=${encodeURIComponent(query)}`, options)
 
 /** The published project's addresses that hold `query`. */
 export const searchAddresses = (slug: string, query: string, options: DoorOptions) =>

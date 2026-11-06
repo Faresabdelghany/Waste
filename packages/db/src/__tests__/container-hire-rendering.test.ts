@@ -15,8 +15,10 @@
 // the window prices' migrations added after them (O28 of #290, M16b of #293;
 // window-prices-as-of.ts). Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
-// trigger, a set of its project read under `commercial.products`. The file is
-// found by its name, not its number, which it takes at its turn. No database.
+// trigger, a set of its project read under `commercial.products` — spelt here
+// as the file wrote them, since the work order charges' removal dropped the
+// table and the schema no longer holds it. The file is found by its name, not
+// its number, which it takes at its turn. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -28,9 +30,8 @@ import { BILLABLE_EVENT_KINDS } from "@waste/domain/finance/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { product } from "../schema/catalogue"
-import { billableEvent, workOrderProduct } from "../schema/finance"
-import { auditTrail, CONTAINER_HIRE_AUDITED } from "../sql/audit-trail"
-import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { billableEvent } from "../schema/finance"
+import { normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, companyFk, createTable, foreignKey, index, oneOfCheck, partialUniqueIndex, projectFk, projectFkTo, ref, uniqueKey } from "./rendering"
 import { kindShapeAsOfWeightCharges, PRODUCT_UNITS_AS_OF_WEIGHT_CHARGES } from "./window-prices-as-of"
 
@@ -95,6 +96,14 @@ const generated = (): string[] => [
   ...EVENT_SHAPES.map((name) => respelt("billable_event", checksAsOf0044(), name)),
 ]
 
+/** The new table's fence, its `updated_at` trigger and its audit trigger as 0044 wrote them, the table since dropped from the schema. */
+const WORK_ORDER_PRODUCT_HAND_WRITTEN = [
+  'ALTER TABLE "wms"."work_order_product" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;',
+  'CREATE POLICY "work_order_product_tenant_fence" ON "wms"."work_order_product" AS PERMISSIVE FOR ALL TO wms_api USING ("company_id" = (select wms.current_company_id())) WITH CHECK ("company_id" = (select wms.current_company_id()));',
+  'CREATE TRIGGER "work_order_product_touch_updated_at" BEFORE UPDATE ON "wms"."work_order_product" FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at();',
+  `CREATE TRIGGER "work_order_product_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."work_order_product" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id');`,
+]
+
 /** The migration, by its name: it takes its number at its turn. */
 async function migration(): Promise<string[]> {
   const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_container_hire\.sql$/.test(name))
@@ -104,9 +113,7 @@ async function migration(): Promise<string[]> {
 
 describe("container hire as drizzle-kit writes it", () => {
   test("the migration is exactly drizzle-kit's statements, then the new table's fence, its updated_at trigger and its audit trigger, a set of its project", async () => {
-    const audit = CONTAINER_HIRE_AUDITED.flatMap(auditTrail)
-    assert.deepEqual(await migration(), [...generated(), ...handWrittenStatements(workOrderProduct), ...audit].map(normalised))
-    assert.deepEqual(audit, [`CREATE TRIGGER "work_order_product_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."work_order_product" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id');`])
+    assert.deepEqual(await migration(), [...generated(), ...WORK_ORDER_PRODUCT_HAND_WRITTEN].map(normalised))
   })
 
   test("the vocabularies the checks spell: the five work orders, the day, and the two kinds", () => {

@@ -104,7 +104,7 @@ describe("DropOffPointListQuery and the public shapes", () => {
     assert.equal(DropOffPointListQuery.safeParse({ projectId: OTHER, kind: "depot" }).success, false)
   })
 
-  test("the map asks by the guide's fraction key, or for every point", () => {
+  test("the map asks by a fraction's key, or for every point", () => {
     assert.deepEqual(DropOffPointsQuery.parse({}), {})
     assert.deepEqual(DropOffPointsQuery.parse({ fraction: "glass" }), { fraction: "glass" })
     assert.equal(DropOffPointsQuery.safeParse({ fraction: "Glass jars" }).success, false)

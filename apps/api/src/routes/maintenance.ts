@@ -2,9 +2,9 @@
 // Maintenance Orders that do them, under `fleet.vehicles`.
 //
 // A plan is answered with where it stands (`due`): its next limits, counted
-// from the last service, against the vehicle's latest readings — the
-// odometer and the engine hours a driver's pre-trip check last read (O13 of
-// #290) — on its project's day (@waste/domain/resources/maintenance). The
+// from the last service, against the last service's own readings, since
+// nothing reads a vehicle's odometer or engine hours between services, on
+// its project's day (@waste/domain/resources/maintenance). The
 // rule a plan is held to, an interval and the reading each distance or hours
 // interval counts from, is the contracts' on a create and the domain's over
 // the merged row on a patch. A plan is retired, never deleted.
@@ -35,9 +35,8 @@ import { dayInTimezone } from "@waste/db/commands/days"
 import { vehicle } from "@waste/db/schema/fleet"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { project } from "@waste/db/schema/organisation"
-import { preTripCheck } from "@waste/db/schema/pre-trip"
 import { maintenanceDue, planIssue, type VehicleReadings } from "@waste/domain/resources/maintenance"
-import { and, asc, desc, eq, gt, inArray, isNotNull } from "drizzle-orm"
+import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -94,27 +93,8 @@ type PlanRow = Pick<typeof vehicleMaintenancePlan.$inferSelect, keyof typeof pla
 
 const planScope = (principal: Principal) => and(eq(vehicleMaintenancePlan.companyId, principal.companyId), inProjects(vehicleMaintenancePlan.projectId, principal))
 
-/** The vehicles' latest readings: the newest odometer and the newest engine hours a pre-trip check read of each, in two statements. */
-export async function latestReadings(tx: Tx, companyId: string, vehicleIds: readonly string[]): Promise<Map<string, VehicleReadings>> {
-  const readings = new Map<string, VehicleReadings>(vehicleIds.map((id) => [id, { odometerKm: null, engineHours: null }]))
-  if (vehicleIds.length === 0) return readings
-  const ids = [...new Set(vehicleIds)]
-  const [odometers, hours] = await Promise.all([
-    tx
-      .selectDistinctOn([preTripCheck.vehicleId], { vehicleId: preTripCheck.vehicleId, value: preTripCheck.odometerKm })
-      .from(preTripCheck)
-      .where(and(eq(preTripCheck.companyId, companyId), inArray(preTripCheck.vehicleId, ids), isNotNull(preTripCheck.odometerKm)))
-      .orderBy(asc(preTripCheck.vehicleId), desc(preTripCheck.occurredAt)),
-    tx
-      .selectDistinctOn([preTripCheck.vehicleId], { vehicleId: preTripCheck.vehicleId, value: preTripCheck.engineHours })
-      .from(preTripCheck)
-      .where(and(eq(preTripCheck.companyId, companyId), inArray(preTripCheck.vehicleId, ids), isNotNull(preTripCheck.engineHours)))
-      .orderBy(asc(preTripCheck.vehicleId), desc(preTripCheck.occurredAt)),
-  ])
-  for (const row of odometers) readings.set(row.vehicleId, { ...readings.get(row.vehicleId)!, odometerKm: row.value })
-  for (const row of hours) readings.set(row.vehicleId, { ...readings.get(row.vehicleId)!, engineHours: row.value })
-  return readings
-}
+/** The readings a plan is judged on between services: none, since nothing reads a vehicle's odometer or engine hours, so the last service's own stand. */
+const NO_READINGS: VehicleReadings = { odometerKm: null, engineHours: null }
 
 /** Today on each of the projects' clocks, by project id. */
 async function todaysOf(tx: Tx, companyId: string, projectIds: readonly string[], now: Date): Promise<Map<string, string>> {
@@ -126,21 +106,14 @@ async function todaysOf(tx: Tx, companyId: string, projectIds: readonly string[]
   return new Map(rows.map((row) => [row.id, dayInTimezone(now, row.timezone)]))
 }
 
-/** The plans on the wire, each with where it stands on its project's day against its vehicle's latest readings. */
+/** The plans on the wire, each with where it stands on its project's day against its last service's readings. */
 async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now: Date): Promise<MaintenancePlan[]> {
-  const [readings, todays] = await Promise.all([
-    latestReadings(
-      tx,
-      companyId,
-      rows.map((row) => row.vehicleId),
-    ),
-    todaysOf(
-      tx,
-      companyId,
-      rows.map((row) => row.projectId),
-      now,
-    ),
-  ])
+  const todays = await todaysOf(
+    tx,
+    companyId,
+    rows.map((row) => row.projectId),
+    now,
+  )
   return rows.map((row) => ({
     id: row.id,
     ...stampsOf(row),
@@ -154,7 +127,7 @@ async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now:
     lastDoneKm: row.lastDoneKm,
     lastDoneHours: row.lastDoneHours,
     status: row.status as MaintenancePlanStatus,
-    due: maintenanceDue(row, todays.get(row.projectId)!, readings.get(row.vehicleId) ?? { odometerKm: null, engineHours: null }),
+    due: maintenanceDue(row, todays.get(row.projectId)!, NO_READINGS),
   }))
 }
 
@@ -231,7 +204,7 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         operationId: "listMaintenancePlans",
         summary: "The maintenance plans of the caller's vehicles",
         description:
-          "One page of maintenance plans (O20 of #290) of the vehicles and trailers of the projects the caller works in, oldest first, each with `due`: its next limits counted from the last service, the readings it was judged on — the newest a driver's pre-trip check read, else the last service's — and its state on its project's day, `ok`, `due-soon` inside two weeks, a thousand kilometres or fifty hours of a limit, or `overdue` past one. `projectId`, `vehicleId` and `status` narrow it. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of maintenance plans (O20 of #290) of the vehicles and trailers of the projects the caller works in, oldest first, each with `due`: its next limits counted from the last service, the readings it was judged on — the last service's — and its state on its project's day, `ok`, `due-soon` inside two weeks, a thousand kilometres or fifty hours of a limit, or `overdue` past one. `projectId`, `vehicleId` and `status` narrow it. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: { 200: describeJson("One page of plans.", PlanPage), ...page, ...forbidden("view") },
       }),

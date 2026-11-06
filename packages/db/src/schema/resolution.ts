@@ -240,8 +240,8 @@ export const ticketType = wms.table(
 // reads; the input it takes; the choices a choice field offers, and only a
 // choice field (`ticket_type_field_choices_shape`); and when it must be
 // filled in. The set is replaced whole (`PUT /ticket-types/:id/fields`), each
-// replacement minting new ids, so the unique position is safe, as a pre-trip
-// checklist's is. Nothing references a field: a ticket holds its values by key.
+// replacement minting new ids, so the unique position is safe. Nothing
+// references a field: a ticket holds its values by key.
 export const ticketTypeField = wms.table(
   "ticket_type_field",
   {

@@ -10,7 +10,7 @@ import { DROP_OFF_COPY as COPY } from "./drop-off-points-copy"
 /** The longest key a fraction has (the contracts' KEY_MAX), spelled again since the web imports the contracts as types only. */
 export const FRACTION_KEY_MAX = 50
 
-/** The guide's fraction key the address asks for, a lowercase slug the door takes; null for none, or one no key could be, so the map shows every point. */
+/** The fraction key the address asks for, a lowercase slug the door takes; null for none, or one no key could be, so the map shows every point. */
 export function fractionKeyOf(fraction: string | string[] | undefined): string | null {
   const first = (Array.isArray(fraction) ? fraction[0] : fraction)?.trim() ?? ""
   return first.length <= FRACTION_KEY_MAX && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(first) ? first : null

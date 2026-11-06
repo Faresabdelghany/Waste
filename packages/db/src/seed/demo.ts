@@ -87,7 +87,6 @@ import { createDb, type Tx } from "../client"
 import { systemGrantRows, systemRoleRows } from "../commands/provision-company"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
-import { applyEmissions, EMISSIONS_COUNTS, EMISSIONS_IDS, type EmissionsCounts } from "./emissions"
 import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from "./finance"
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS } from "./ids"
 import { applyPlanning, PLANNING_COUNTS, PLANNING_IDS, type PlanningCounts } from "./planning"
@@ -135,7 +134,6 @@ export const DEMO_IDS = {
   pickupExceptions: PICKUP_EXCEPTIONS_IDS,
   decommissionReasons: DECOMMISSION_REASON_IDS,
   holidayLists: HOLIDAY_LIST_IDS,
-  emissions: EMISSIONS_IDS,
   ticketTypes: TICKET_TYPE_IDS,
   planning: PLANNING_IDS,
   finance: FINANCE_IDS,
@@ -289,7 +287,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293), the decommission reasons (O30 of #290) and the fleet's emissions' two (M10 of #293). */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293) and the decommission reasons (O30 of #290). */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -305,7 +303,6 @@ export type DemoSeedCounts = {
   PickupExceptionsCounts &
   DecommissionReasonsCounts &
   HolidayListsCounts &
-  EmissionsCounts &
   TicketTypesCounts
 
 export type DemoSeedReport = {
@@ -330,7 +327,6 @@ const COUNTS: DemoSeedCounts = {
   ...PICKUP_EXCEPTIONS_COUNTS,
   ...DECOMMISSION_REASONS_COUNTS,
   ...HOLIDAY_LISTS_COUNTS,
-  ...EMISSIONS_COUNTS,
   ...TICKET_TYPES_COUNTS,
 }
 
@@ -465,8 +461,6 @@ export async function applyDemo(tx: Tx): Promise<number> {
   changed += await applyPickupExceptions(tx)
   // The decommission reasons (O30 of #290) name the company alone.
   changed += await applyDecommissionReasons(tx)
-  // The fleet's emission factors and its vehicle types' consumption (M10 of #293) name Resources' types and nothing after them.
-  changed += await applyEmissions(tx)
   // The default ticket types (#545 of #544) name the company alone.
   changed += await applyTicketTypes(tx)
 

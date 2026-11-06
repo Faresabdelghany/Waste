@@ -202,12 +202,10 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       // Whether a customer's payment arrived (#291 C6): read, never registered or matched.
       only("commercial.payments", VIEW),
       only("configure.templates", VIEW_EDIT),
-      // The citizen-facing Sorting Guide (#293): it keeps the items up to date — adds, edits, withdraws — and leaves publishing the project to the administrator.
-      // The pane reads the projects a guide is kept for and the fractions an item names, so it views both and changes neither.
-      only("configure.sorting-guide", VIEW_EDIT_CREATE),
+      // The projects and the fractions its panes name, read: it changes neither, and publishing a project stays the administrator's.
       only("configure.organization", VIEW),
       only("configure.master", VIEW),
-      // The Drop-off Points residents bring waste to (#293, M3): it keeps their hours and fractions up to date, as it keeps the guide that points to them.
+      // The Drop-off Points residents bring waste to (#293, M3): it keeps their hours and fractions up to date.
       only("resources.drop-off-points", VIEW_EDIT_CREATE),
     ),
   },
@@ -290,7 +288,6 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     grants: charter(
       only("improve.imports", VIEW_EDIT_CREATE),
       only("configure.integrations", VIEW_EDIT),
-      only("configure.privacy", VIEW),
       // A weighbridge's tickets (O27 of #290): the ingest and its queue's read, never the office's match or dismissal.
       only("route-studio.weighbridge", ["view", "create"]),
       // A sensor vendor's integration (O26 of #290): it reads the sensors, registers and pairs them as a vendor's provisioning does, and appends their readings; retiring a sensor and ending or moving a pairing are the office's edits.

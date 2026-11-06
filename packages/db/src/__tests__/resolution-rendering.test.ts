@@ -45,12 +45,13 @@
 // team, `team_id`, the same way: `CHANGED_LATER` maps it onto 0009's,
 // `ADDED_IN_0070` is left out, and ticket-teams-rendering.test.ts pins its
 // statements. Migration 0075 (O13 of #290) grew the ticket's kinds by
-// `vehicle-defect`: today's ticket carries it, `CHANGED_LATER` maps it onto
-// 0009's, and pre-trip-rendering.test.ts pins the replacement. The ticket
-// types' migration (#545 of #544) gave the ticket its type, `ticket_type_id`,
-// its fields' values, `field_values`, and their check, the same way:
-// `CHANGED_LATER` maps today's ticket onto 0009's, `ADDED_FOR_TICKET_TYPES`
-// is left out, and ticket-types-rendering.test.ts pins its statements.
+// `vehicle-defect`, and the ticket types' migration (#545 of #544) gave the
+// ticket its type, `ticket_type_id`, its fields' values, `field_values`, and
+// their check, the same way: `ADDED_FOR_TICKET_TYPES` is left out, and
+// ticket-types-rendering.test.ts pins its statements. The pre-trip
+// inspection's removal took `vehicle-defect` again: `CHANGED_LATER` maps
+// today's ticket onto 0009's, and pre-trip-rendering.test.ts and
+// pre-trip-removal-rendering.test.ts pin the two replacements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -110,11 +111,11 @@ const stampsShape = (() => {
 })()
 
 /** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" | "0075" | "types"): string =>
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" | "0075" | "types" | "pre-trip-removal"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
-    ...(asOf === "types" ? ['"ticket_type_id" uuid NOT NULL', `"field_values" jsonb DEFAULT '{}'::jsonb NOT NULL`] : []),
+    ...(asOf === "types" || asOf === "pre-trip-removal" ? ['"ticket_type_id" uuid NOT NULL', `"field_values" jsonb DEFAULT '{}'::jsonb NOT NULL`] : []),
     `"status" text DEFAULT 'open' NOT NULL`,
     `"priority" text DEFAULT 'none' NOT NULL`,
     '"source" text NOT NULL',
@@ -143,7 +144,7 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" |
     ...(asOf >= "0035" ? ['"booked_route_id" uuid', '"booked_pickup_id" uuid'] : []),
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0075" ? ["vehicle-defect"] : []), "other"),
+    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0075" && asOf !== "pre-trip-removal" ? ["vehicle-defect"] : []), "other"),
     oneOfCheck("ticket", "status", ...STATUSES),
     oneOfCheck("ticket", "priority", "critical", "high", "medium", "low", "none"),
     oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf >= "0031" ? ["service-provider"] : [])),
@@ -158,7 +159,7 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070" |
     // The resolution named not null: `null in (...)` is null, and a null check passes.
     ...(asOf >= "0033" ? [`CONSTRAINT "ticket_charge_shape" CHECK (${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in ('recollected', 'serviced')))`] : []),
     ...(asOf >= "0035" ? [`CONSTRAINT "ticket_booked_shape" CHECK (${BOOKED_SHAPE})`] : []),
-    ...(asOf === "types" ? [`CONSTRAINT "ticket_field_values_shape" CHECK (jsonb_typeof(${ref("ticket", "field_values")}) = 'object')`] : []),
+    ...(asOf === "types" || asOf === "pre-trip-removal" ? [`CONSTRAINT "ticket_field_values_shape" CHECK (jsonb_typeof(${ref("ticket", "field_values")}) = 'object')`] : []),
     `CONSTRAINT "ticket_closed_shape" CHECK ((${ref("ticket", "status")} in ('completed', 'rejected')) = (${ref("ticket", "closed_at")} is not null))`,
   ])
 
@@ -234,9 +235,9 @@ const alertTable = (asOf: "0009" | "0034" | "loads"): string =>
 /** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
 const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
-/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035, 0070 and 0075 (O4, O3c, O30 and O13 of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035, 0070 and 0075 (O4, O3c, O30 and O13 of #290) and the pre-trip inspection's removal changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("types"), ticketTable("0009")],
+  [ticketTable("pre-trip-removal"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
   [alertTable("loads"), alertTable("0009")],
 ])
@@ -261,7 +262,7 @@ const TYPE_INDEX = index("ticket", "ticket_ticket_type_id_kind_idx", "company_id
 const ADDED_FOR_TICKET_TYPES = [TYPE_FK, TYPE_INDEX]
 
 const expected = [
-  ticketTable("types"),
+  ticketTable("pre-trip-removal"),
   ticketEventTable("0031"),
   alertTable("loads"),
   companyFk("ticket"),

@@ -15,7 +15,9 @@
 import type { SubmittedValues } from "@waste/domain/prototype-record"
 
 import type { BusinessRecord } from "./business-modules"
-import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, holidayListCountry, holidayListEntries } from "@waste/domain/route-schemes/holiday-list-records"
+import { countryName } from "./countries"
+import { csvOf } from "./csv"
+import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, holidayListCountry, holidayListEntries, holidayListName } from "@waste/domain/route-schemes/holiday-list-records"
 import {
   carryHolidaysToYear,
   holidayEntryIssue,
@@ -24,7 +26,7 @@ import {
 } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
 import { weekendLabel } from "@waste/domain/route-schemes/project-calendar"
-import { sortServiceDays, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { formatServiceDate, sortServiceDays, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
 
 export type ProjectCalendarSettings = {
   /** The list's name; null when the project has no holiday list. */
@@ -171,4 +173,92 @@ export function nextYearEntries(record: BusinessRecord, fromYear: number): Holid
   const held = new Set(entries.map((entry) => entry.date))
   const thisYear = entries.filter((entry) => entry.date.startsWith(`${fromYear}-`))
   return carryHolidaysToYear(thisYear, year, holidayNamesForCountry(holidayListCountry(record))).filter((entry) => !held.has(entry.date))
+}
+
+/* ------------------------------ The lists' table ------------------------------ */
+
+/**
+ * A list's status in the table, laid out as the Routes table is (search,
+ * Filter, View, and a status per row): in use while a project rests on it —
+ * which is also what holds its removal back — else not in use.
+ */
+export const HOLIDAY_LIST_STATUSES = ["In use", "Not in use"] as const
+export type HolidayListStatus = (typeof HOLIDAY_LIST_STATUSES)[number]
+
+/** The columns the View popover turns on and off, beside the list's name and status, which always show. */
+export const HOLIDAY_LIST_OPTIONAL_COLUMNS = ["Holidays", "Next holiday", "Projects"] as const
+export type HolidayListColumn = (typeof HOLIDAY_LIST_OPTIONAL_COLUMNS)[number]
+
+/** One list as its row reads. */
+export type HolidayListRow = {
+  record: BusinessRecord
+  name: string
+  country: string | undefined
+  /** The country's name, or "—" for a list that names none. */
+  countryLabel: string
+  holidays: number
+  /** The next holiday on or after today, its day and name; "—" when none is ahead. */
+  nextHoliday: string
+  projects: number
+  status: HolidayListStatus
+}
+
+/** The name a holiday reads as: its own, else what its country's known list calls the day, else "Holiday". */
+export function shownHolidayName(entry: HolidayEntry, country: string | undefined): string {
+  return entry.name || holidayNamesForCountry(country)(entry.date) || "Holiday"
+}
+
+/** The lists as their rows read on `today`, a list's projects counted by `projectCount`. */
+export function holidayListRows(lists: readonly BusinessRecord[], projectCount: (list: BusinessRecord) => number, today: string): HolidayListRow[] {
+  return lists.map((record) => {
+    const country = holidayListCountry(record)
+    const entries = holidayListEntries(record)
+    const next = entries.find((entry) => entry.date >= today)
+    const projects = projectCount(record)
+    return {
+      record,
+      name: holidayListName(record),
+      country,
+      countryLabel: country ? countryName(country) : "—",
+      holidays: entries.length,
+      nextHoliday: next ? `${formatServiceDate(next.date)} · ${shownHolidayName(next, country)}` : "—",
+      projects,
+      status: projects > 0 ? "In use" : "Not in use",
+    }
+  })
+}
+
+/** Whether the row holds the search, in any of its shown words; a blank search holds every row. */
+export function holidayListRowMatches(row: HolidayListRow, query: string): boolean {
+  const needle = query.trim().toLowerCase()
+  if (needle === "") return true
+  return [row.name, row.countryLabel, row.country ?? "", row.nextHoliday, row.status, row.record.description].join(" ").toLowerCase().includes(needle)
+}
+
+/** The rows by the View's order: by list name, or the lists in use first and then by name. */
+export function orderHolidayListRows(rows: readonly HolidayListRow[], ordering: "name" | "status" | "updated"): HolidayListRow[] {
+  const byName = (a: HolidayListRow, b: HolidayListRow) => a.name.localeCompare(b.name)
+  const rank = (row: HolidayListRow) => HOLIDAY_LIST_STATUSES.indexOf(row.status)
+  return [...rows].sort(ordering === "status" ? (a, b) => rank(a) - rank(b) || byName(a, b) : byName)
+}
+
+/** The rows the table shows as a CSV, by the columns it draws: the name, the description and the country where shown, the status, then each optional column shown. */
+export function holidayListsCsv(
+  rows: readonly HolidayListRow[],
+  shown: { description: boolean; country: boolean; columns: readonly HolidayListColumn[] },
+): string {
+  const optional = HOLIDAY_LIST_OPTIONAL_COLUMNS.filter((column) => shown.columns.includes(column))
+  const header = ["Holiday list", ...(shown.description ? ["Description"] : []), ...(shown.country ? ["Country"] : []), "Status", ...optional]
+  const cell = (row: HolidayListRow, column: HolidayListColumn) =>
+    column === "Holidays" ? row.holidays : column === "Projects" ? row.projects : row.nextHoliday
+  return csvOf(
+    header,
+    rows.map((row) => [
+      row.name,
+      ...(shown.description ? [row.record.description] : []),
+      ...(shown.country ? [row.countryLabel] : []),
+      row.status,
+      ...optional.map((column) => cell(row, column)),
+    ]),
+  )
 }

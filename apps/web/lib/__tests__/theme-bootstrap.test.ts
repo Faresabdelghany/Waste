@@ -33,7 +33,7 @@ function run(pathname: string, stored: Record<string, string>, prefersDark = fal
 describe("the theme bootstrap", () => {
   test("gives a public page Ash under a saved staff theme or a dark preference, and writes nothing", () => {
     for (const saved of ["midnight", "dawn", "pale"]) {
-      const ran = run("/p/kystbyen/sorting-guide", { [APP_THEME_SELECTION_STORAGE_KEY]: saved })
+      const ran = run("/p/kystbyen/drop-off", { [APP_THEME_SELECTION_STORAGE_KEY]: saved })
       assert.deepEqual([ran.theme, ran.dark], ["ash", false], saved)
       assert.equal(ran.storage.get(APP_THEME_SELECTION_STORAGE_KEY), saved, "the staff member's theme is still theirs")
     }

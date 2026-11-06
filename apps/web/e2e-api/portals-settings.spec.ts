@@ -44,7 +44,7 @@ test.describe("portals & branding (#487)", () => {
     expect(published.request().postDataJSON()).toMatchObject({ publicSlug: slug })
     await expect(toasts(page)).toContainText("Public pages published")
     await expect(row).toContainText(`Published at /p/${slug}`)
-    for (const [label, path] of [["Collection days", "calendar"], ["Drop-off points", "drop-off"], ["Sorting guide", "sorting"]] as const) {
+    for (const [label, path] of [["Collection days", "calendar"], ["Drop-off points", "drop-off"]] as const) {
       await expect(row.getByRole("link", { name: label })).toHaveAttribute("href", `/p/${slug}/${path}`)
     }
     expect(((await (await api.get(`/projects/${harbor.id}`)).json()) as { publicSlug: string | null }).publicSlug).toBe(slug)

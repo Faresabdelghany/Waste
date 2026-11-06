@@ -25,31 +25,22 @@
 // direction is sound — the innermost ring
 // depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
-// line here. Issue #293 added three: organisation.ts reads the public slug's
-// shape from @waste/domain/access/public-slug, sorting-guide.ts the Sorting
-// Guide's statuses from @waste/domain/sorting-guide/vocabulary and the
-// search's `normalise` from @waste/domain/sorting-guide/search, so a synonym
-// is "each once" by the spelling the search compares, and drop-off-points.ts
+// line here. Issue #293 added two: organisation.ts reads the public slug's
+// shape from @waste/domain/access/public-slug, and drop-off-points.ts
 // runs @waste/domain/resources/drop-off-points's opening rules as its refines
 // (M3), so a form and the public map judge hours alike. O4 of #290
 // added @waste/domain/resolution/sla: ticket-sla.ts reads the longest target
 // and the rule a set names a kind and a priority once by. #291 C4 added one:
 // finance.ts reads the invoice identity's shapes and the payment terms' range
 // from @waste/domain/finance/payment, the patterns the database's checks read
-// too. M10 of #293 added @waste/domain/resources/emissions: emissions.ts
-// bounds a factor and a consumption by the domain's caps, which the
-// database's checks read too. M7 of #293 added
+// too. M7 of #293 added
 // @waste/domain/registry/applications: applications.ts holds a Decision's
 // period and appeal text to the domain's rules in the domain's sentences.
 // #291 C6 added @waste/domain/finance/payments: payments.ts reads the
-// invoice's payment statuses from it, the reading the API answers.
-// M13 of #293 added @waste/domain/insight/sustainability: sustainability.ts
-// reads a factor's bound from it, the bound the database's check reads. M14
+// invoice's payment statuses from it, the reading the API answers. M14
 // of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
 // free days by its cap and holds them to its unit, which the database reads.
-// #291 C7 added @waste/domain/finance/accounting: accounting.ts reads the
-// account number's and the VAT code's patterns the database's checks read,
-// and the CSV's columns its file is documented by. O11 of #290 added
+// O11 of #290 added
 // @waste/domain/execution/bulky: bulky.ts bounds a booking's items and an
 // availability window by the domain's caps. M4 of #293 added
 // @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
@@ -77,13 +68,9 @@
 // @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
 // messaging.ts reads the channels, purposes and statuses, and refuses a
 // template naming a placeholder no message fills, or out of its channel's
-// shape, in the domain's sentences. O13 of #290 added
-// @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
-// check by the domain's cap. O20 of #290 added
+// shape, in the domain's sentences. O20 of #290 added
 // @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
-// interval rule and bounds, and reads its due states. C19 of #291 added
-// @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
-// project's privacy policy by the domain's days and reads its purposes. M22 of #293 added
+// interval rule and bounds, and reads its due states. M22 of #293 added
 // @waste/domain/access/branding: organisation.ts holds a project's branding to
 // its shapes and its colour to WCAG 2.1 AA's contrast.
 // O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
@@ -125,7 +112,6 @@ definePurityTests({
     "@waste/domain/execution/weighbridge",
     "@waste/domain/execution/work-orders",
     "@waste/domain/execution/workload",
-    "@waste/domain/finance/accounting",
     "@waste/domain/finance/hire",
     "@waste/domain/finance/payment",
     "@waste/domain/finance/payments",
@@ -133,15 +119,12 @@ definePurityTests({
     "@waste/domain/imports/vocabulary",
     "@waste/domain/inspections/rules",
     "@waste/domain/inspections/vocabulary",
-    "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
     "@waste/domain/notifications/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
-    "@waste/domain/privacy/retention",
-    "@waste/domain/privacy/vocabulary",
     "@waste/domain/registry/address",
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
@@ -153,9 +136,7 @@ definePurityTests({
     "@waste/domain/resolution/transitions",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
-    "@waste/domain/resources/emissions",
     "@waste/domain/resources/maintenance",
-    "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
@@ -165,8 +146,6 @@ definePurityTests({
     "@waste/domain/routing/balance",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/service-providers/vocabulary",
-    "@waste/domain/sorting-guide/search",
-    "@waste/domain/sorting-guide/vocabulary",
     "@waste/domain/visits/charges",
     "@waste/domain/visits/vocabulary",
     "zod",

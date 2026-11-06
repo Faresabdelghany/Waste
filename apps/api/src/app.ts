@@ -65,12 +65,9 @@ import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
-import { emissionReportRoutes } from "./routes/emissions"
 import { fieldInspectionRoutes } from "./routes/field-inspections"
-import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
-import { preTripRoutes } from "./routes/pre-trip-checks"
 import { maintenanceRoutes } from "./routes/maintenance"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
@@ -79,7 +76,6 @@ import { integrationRoutes } from "./routes/integrations"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { accessCredentialRoutes } from "./routes/access-credentials"
-import { accountingRoutes } from "./routes/accounting"
 import { paymentRoutes } from "./routes/payments"
 import { FakeProvider } from "@waste/routing/fake"
 import type { RoutingIdentity } from "@waste/routing/provider"
@@ -125,10 +121,7 @@ import { siteVisitRoutes } from "./routes/site-visits"
 import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { bulkyBookingRoutes } from "./routes/bulky-bookings"
 import { bulkyScheduleRoutes } from "./routes/bulky-schedules"
-import { sortingGuideRoutes } from "./routes/sorting-guide"
-import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
-import { workOrderProductRoutes } from "./routes/work-order-charges"
 import { routeMessageRoutes } from "./routes/route-messages"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
 import { ticketTeamRoutes } from "./routes/ticket-teams"
@@ -143,7 +136,6 @@ import { visitRuleRoutes } from "./routes/visit-rules"
 import { vehicleRoutes } from "./routes/vehicles"
 import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
-import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
 import { weighbridgeRoutes } from "./routes/weighbridge"
 import { weightControlRoutes } from "./routes/weight-control"
 
@@ -288,7 +280,6 @@ export function createApp({
   app.route("/", roleRoutes(guard))
   app.route("/", auditEventRoutes(guard))
   app.route("/", catalogueRoutes(guard))
-  app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
   app.route("/", customerContactRoutes(guard))
@@ -319,8 +310,6 @@ export function createApp({
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
-  // The fleet's emission factors (M10 of #293), master data beside the vehicle types whose consumption they measure.
-  app.route("/", fuelEmissionFactorRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", stockBalanceRoutes(guard))
   app.route("/", depotRoutes(guard))
@@ -330,7 +319,6 @@ export function createApp({
   app.route("/", vehicleRoutes(guard, { now }))
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
-  app.route("/", preTripRoutes(guard, { now }))
   app.route("/", maintenanceRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
@@ -361,7 +349,6 @@ export function createApp({
   app.route("/", driverDoorRoutes(guard, { now, jobs }))
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now, jobs }))
-  app.route("/", sortingGuideRoutes(guard))
   app.route("/", ticketSlaRoutes(guard))
   app.route("/", routeMessageRoutes(guard))
   app.route("/", ticketTeamRoutes(guard))
@@ -408,22 +395,15 @@ export function createApp({
   app.route("/", billableEventRoutes(guard, { now }))
   // A project's ticket charges (#291 C3): the product a completed ticket's work is charged at; nothing stamped, no clock.
   app.route("/", ticketChargeRoutes(guard))
-  app.route("/", workOrderProductRoutes(guard))
   app.route("/", billingRunRoutes(guard, { pool, identified: identify({ pool, verifier }), now }))
   app.route("/", invoiceRoutes(guard, { now }))
   // Payments and reconciliation (#291 C6): an invoice's standing is read on its project's day, so the module takes `now`; a payment's `recordedAt` is the database's.
   app.route("/", paymentRoutes(guard, { now }))
-  // The accounting export (#291 C7): a project's mapping onto the office's chart, and a period's invoices, credit notes and payments as a file.
-  app.route("/", accountingRoutes(guard, { now }))
   // The settlements and weight control: a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
   app.route("/", settlementRoutes(guard, { now }))
   app.route("/", weightControlRoutes(guard))
   // The reports (#292): reads that count the rows above and store nothing. The ticket report reads "open now" and "overdue" at the request's clock, so the module takes `now`.
   app.route("/", reportRoutes(guard, { now }))
-  // The fleet's emissions (M10 of #293): a report of its own, read like the others.
-  app.route("/", emissionReportRoutes(guard))
-  // A customer's sustainability report (M13 of #293), likewise.
-  app.route("/", sustainabilityRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
   app.route("/", importRoutes(guard, { now }))
 

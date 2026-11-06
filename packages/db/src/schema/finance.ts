@@ -90,11 +90,9 @@
 // reads it when the ticket's completion arrives, and an event recorded keeps
 // the product it was priced at.
 import type { InvoiceParties } from "@waste/domain/finance/invoice-document"
-import { ACCOUNT_NUMBER_PATTERN, VAT_CODE_PATTERN } from "@waste/domain/finance/accounting"
 import { PAYMENT_REFERENCE_PATTERN } from "@waste/domain/finance/payment"
-import { ACCOUNTING_SOURCE_KINDS, BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, PAYMENT_SOURCES, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
+import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, PAYMENT_SOURCES, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
-import { WORK_ORDER_SERVICES } from "@waste/domain/execution/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { bigint, boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -461,7 +459,7 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), a recycling-centre visit's its visit (#393), and a weight charge its Unload and its stop (O28 of #290).
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), a recycling-centre visit's its visit (#393), and a weight charge its Unload and its stop (O28 of #290).
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
       sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'visit' then ${t.visitId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'weight' then ${t.unloadId} is not null and ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'scale-ticket' then ${t.scaleTicketLineId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
@@ -836,32 +834,6 @@ export const weightReview = wms.table(
   ],
 )
 
-/**
- * The product each of a project's work orders bills (M14 of #293): a delivery,
- * a removal, a swap, a repair, a wash, each at one `job` product, a set the
- * project replaces whole as its ticket charges (#291 C3) are. A service it
- * names none for bills nothing.
- */
-export const workOrderProduct = wms.table(
-  "work_order_product",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    service: text().notNull(),
-    productId: uuid().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.productId], product),
-    oneOf(t.service, WORK_ORDER_SERVICES),
-    // A service is billed at one product in a project.
-    tenantUnique(t, t.projectId, t.service),
-    tenantIndex(t, t.productId),
-  ],
-)
-
 export const ticketKindProduct = wms.table(
   "ticket_kind_product",
   {
@@ -965,209 +937,5 @@ export const paymentAllocation = wms.table(
     tenantIndex(t, t.paymentId),
     tenantIndex(t, t.invoiceId),
     tenantIndex(t, t.recordedBy),
-  ],
-)
-
-// The accounting export (#291 slice 7, #292 C7): the project's chart as the
-// export books to it, and the exports themselves. `accounting_account` is an
-// account of the office's own chart — its number and name, and its number in
-// Erhvervsstyrelsen's standard chart, which Danish SAF-T maps every account
-// to (C7b) — once per number in a project. `accounting_settings` is the
-// project's four: the receivable control account, the bank, the suspense
-// account an unmatched payment waits on, and the revenue a line falls to when
-// its product names none, and the first day an export books; `accounting_vat_code` a VAT rate's code and the
-// account its VAT is booked to; `accounting_product_account` a product's own
-// revenue account. Each is configuration, audited.
-//
-// An export is three ledgers. `accounting_export` the run: the project, its
-// booking period and the voucher numbers it took. `accounting_export_voucher`
-// one voucher per source row — an invoice, a credit note, a payment or an
-// allocation (@waste/domain/finance/accounting) — on the row's own day, its
-// document and currency; the source a soft uuid, polymorphic as
-// `source_event_id` is, and its unique (company, kind, source) the export's
-// idempotency key: a row is exported once, ever. A row dated before its
-// export's period (`back_dated`) arrived after an earlier export took that
-// period. `accounting_export_line` the voucher's lines as frozen — the
-// account as it was named, the amount signed, debit positive — which the file
-// is rendered from, so a download is the same bytes whatever the chart
-// becomes.
-export const accountingAccount = wms.table(
-  "accounting_account",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    number: text().notNull(),
-    name: text().notNull(),
-    /** The account's number in Erhvervsstyrelsen's standard chart, which SAF-T requires (C7b); null until the office maps it. */
-    standardAccount: text(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectKey(t),
-    tenantUnique(t, t.projectId, t.number),
-    check(tableObjectName(t.id.table, "number_shape", "accountingAccount"), sql`${t.number} ~ ${sql.raw(`'${ACCOUNT_NUMBER_PATTERN}'`)} and (${t.standardAccount} is null or ${t.standardAccount} ~ ${sql.raw(`'${ACCOUNT_NUMBER_PATTERN}'`)})`),
-  ],
-)
-
-export const accountingSettings = wms.table(
-  "accounting_settings",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    receivableAccountId: uuid(),
-    bankAccountId: uuid(),
-    suspenseAccountId: uuid(),
-    revenueAccountId: uuid(),
-    /** The first day an export books: rows dated before it were booked by other means before the office exported from here; null books from the first. */
-    exportsFrom: date(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    // One row per project.
-    tenantUnique(t, t.projectId),
-    projectReference(t, [t.receivableAccountId], accountingAccount),
-    projectReference(t, [t.bankAccountId], accountingAccount),
-    projectReference(t, [t.suspenseAccountId], accountingAccount),
-    projectReference(t, [t.revenueAccountId], accountingAccount),
-    tenantIndex(t, t.receivableAccountId),
-    tenantIndex(t, t.bankAccountId),
-    tenantIndex(t, t.suspenseAccountId),
-    tenantIndex(t, t.revenueAccountId),
-  ],
-)
-
-export const accountingVatCode = wms.table(
-  "accounting_vat_code",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    vatPercent: integer().notNull(),
-    code: text().notNull(),
-    accountId: uuid().notNull(),
-    /** The code in Erhvervsstyrelsen's standard tax codes (`S1`, `K1`, …) that a SAF-T file names beside the office's own (C7b); null where it is not mapped. */
-    standardTaxCode: text(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.accountId], accountingAccount),
-    // A rate has one code in a project.
-    tenantUnique(t, t.projectId, t.vatPercent),
-    // No `between`: nested in an `and`, its expansion deparses one way as written and another once a dump is restored, and the Pilot rehearsal compares the two.
-    check(tableObjectName(t.id.table, "shape", "accountingVatCode"), sql`${t.vatPercent} >= 0 and ${t.vatPercent} <= 100 and ${t.code} ~ ${sql.raw(`'${VAT_CODE_PATTERN}'`)}`),
-    tenantIndex(t, t.accountId),
-    // A standard code is of the shape a SAF-T TaxCode takes (C7b).
-    check(tableObjectName(t.id.table, "standard_shape", "accountingVatCode"), sql`${t.standardTaxCode} is null or ${t.standardTaxCode} ~ ${sql.raw(`'${VAT_CODE_PATTERN}'`)}`),
-  ],
-)
-
-export const accountingProductAccount = wms.table(
-  "accounting_product_account",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    productId: uuid().notNull(),
-    accountId: uuid().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.productId], product),
-    projectReference(t, [t.accountId], accountingAccount),
-    // A product books to one account.
-    tenantUnique(t, t.projectId, t.productId),
-    tenantIndex(t, t.productId),
-    tenantIndex(t, t.accountId),
-  ],
-)
-
-export const accountingExport = wms.table(
-  "accounting_export",
-  {
-    ...id,
-    ...projectScoped,
-    ...recorded,
-    periodFrom: date().notNull(),
-    periodTo: date().notNull(),
-    /** The first and last voucher numbers it took, of the project's sequence. */
-    voucherFrom: integer().notNull(),
-    voucherTo: integer().notNull(),
-    lineCount: integer().notNull(),
-    createdBy: uuid(),
-    note: text(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    tenantReference(t, [t.createdBy], userAccount),
-    projectKey(t),
-    // An export books something: an empty one is refused, so it has its vouchers and their lines.
-    check(tableObjectName(t.id.table, "shape", "accountingExport"), sql`${t.periodTo} >= ${t.periodFrom} and ${t.voucherFrom} > 0 and ${t.voucherTo} >= ${t.voucherFrom} and ${t.lineCount} > 0`),
-    tenantIndex(t, t.projectId, t.periodFrom),
-    tenantIndex(t, t.createdBy),
-  ],
-)
-
-export const accountingExportVoucher = wms.table(
-  "accounting_export_voucher",
-  {
-    ...id,
-    ...projectScoped,
-    ...recorded,
-    exportId: uuid().notNull(),
-    voucher: integer().notNull(),
-    bookedOn: date().notNull(),
-    sourceKind: text().notNull(),
-    /** The row booked: an invoice's, a payment's or an allocation's id; a soft uuid, as the kind says which. */
-    sourceId: uuid().notNull(),
-    /** The document's label, a payment's reference, or an allocation's invoice; null for a payment of no reference. */
-    document: text(),
-    currency: text().notNull(),
-    customerName: text(),
-    /** Dated before its export's period: it arrived after an earlier export took that period. */
-    backDated: boolean().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.exportId], accountingExport),
-    projectKey(t),
-    oneOf(t.sourceKind, ACCOUNTING_SOURCE_KINDS),
-    positive(t.voucher),
-    // A row is exported once, ever.
-    tenantUnique(t, t.sourceKind, t.sourceId),
-    // A voucher number is the project's once.
-    tenantUnique(t, t.projectId, t.voucher),
-    tenantIndex(t, t.exportId),
-  ],
-)
-
-export const accountingExportLine = wms.table(
-  "accounting_export_line",
-  {
-    ...id,
-    ...projectScoped,
-    ...recorded,
-    voucherId: uuid().notNull(),
-    position: integer().notNull(),
-    accountNumber: text().notNull(),
-    accountName: text().notNull(),
-    vatCode: text(),
-    /** Signed: a debit positive, a credit negative; a voucher's lines sum to zero. */
-    amountMinor: total().notNull(),
-    text: text().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.voucherId], accountingExportVoucher),
-    tenantUnique(t, t.voucherId, t.position),
-    positive(t.position),
   ],
 )

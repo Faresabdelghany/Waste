@@ -9,7 +9,7 @@ import { chainLanded, expect, test } from "./fixtures"
 // lands on the wire as the point and its three sets. A line the domain refuses
 // is told in the domain's words, the dialog kept open. An edit of the hours alone is
 // that set's own PUT and nothing else. Published, the project's map answers
-// the point by the fraction a Sorting Guide answer names. The shared tenant
+// the point by its fraction's key. The shared tenant
 // keeps the point, closed, and the project as it found it.
 
 type WasteFraction = { id: string; key: string; name: string }
@@ -84,7 +84,7 @@ test("the office registers a drop-off point with what it takes, its hours and an
     expect(((await rehoured.json()) as DropOffPoint).hours).toHaveLength(5)
     expect(requests).toEqual([`PUT /drop-off-points/${point.id}/hours`])
 
-    // Published, the map answers it by the guide's fraction key; the project's own slug is put back after.
+    // Published, the map answers it by its fraction's key; the project's own slug is put back after.
     const before = ((await (await api.get(`/projects/${point.projectId}`)).json()) as { publicSlug: string | null }).publicSlug
     const slug = before ?? `e2e-drop-off-office-${Date.now().toString(36)}`
     try {

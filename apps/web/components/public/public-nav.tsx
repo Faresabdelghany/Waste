@@ -1,6 +1,5 @@
 // The links between a published project's public pages (Issue #293): the
-// Sorting Guide, the Collection Days and the Drop-off Points, the one shown
-// marked as current.
+// Collection Days and the Drop-off Points, the one shown marked as current.
 // Hidden on paper.
 import Link from "next/link"
 
@@ -8,11 +7,9 @@ import { calendarHrefOf } from "@/lib/public/collection-days"
 import { COLLECTION_DAYS_COPY } from "@/lib/public/collection-days-copy"
 import { dropOffHrefOf } from "@/lib/public/drop-off-points"
 import { DROP_OFF_COPY } from "@/lib/public/drop-off-points-copy"
-import { SORTING_GUIDE_COPY } from "@/lib/public/sorting-guide-copy"
 
-export function PublicNav({ slug, current }: { slug: string; current: "sorting" | "calendar" | "drop-off" }) {
+export function PublicNav({ slug, current }: { slug: string; current: "calendar" | "drop-off" }) {
   const pages = [
-    { key: "sorting", href: `/p/${encodeURIComponent(slug)}/sorting`, label: SORTING_GUIDE_COPY.title },
     { key: "calendar", href: calendarHrefOf(slug), label: COLLECTION_DAYS_COPY.title },
     { key: "drop-off", href: dropOffHrefOf(slug), label: DROP_OFF_COPY.title },
   ] as const
