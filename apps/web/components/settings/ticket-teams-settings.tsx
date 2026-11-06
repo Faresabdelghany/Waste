@@ -29,6 +29,7 @@ import { problemSentence } from "@/lib/api/problem"
 import { webIdOf } from "@/lib/api/records/adapter"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
+import { accessUnknownSentence } from "@/lib/api/session"
 import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
@@ -54,7 +55,8 @@ const NO_RECORDS: readonly BusinessRecord[] = []
 export function TicketTeamsSettings({ tabs, projectId, onProjectChange }: { tabs?: ReactNode } & TicketsProjectPick) {
   const client = useApiClient()
   const configured = useApiConfigured()
-  const { me } = useApiSession()
+  const session = useApiSession()
+  const { me } = session
   const access = ticketTeamsAccessOf(me?.role.grants)
   const { upsertRecord } = useBusinessRecordStore()
   const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
@@ -90,13 +92,13 @@ export function TicketTeamsSettings({ tabs, projectId, onProjectChange }: { tabs
 
   const emptyMessage = !configured
     ? "The ticket teams are kept on the API: sign in on the Pilot to read and write them."
-    : teams.pending
+    : accessUnknownSentence(session) ?? (teams.pending
       ? "Reading the teams from the API…"
       : teams.notGranted
         ? "The ticket teams are not shown to your role."
         : teams.problem
           ? `The teams could not be read from the API: ${teams.problem.detail ?? teams.problem.title}`
-          : "No team yet. A ticket waits with a team once the company has one."
+          : "No team yet. A ticket waits with a team once the company has one.")
 
   return (
     <AssetPanelShell
@@ -104,7 +106,7 @@ export function TicketTeamsSettings({ tabs, projectId, onProjectChange }: { tabs
       tabs={tabs}
       title="Ticket teams"
       description="The teams the company's tickets wait with, and each project's default team per kind. A team's queue is its open tickets nobody works: anyone who works tickets takes one, member or not."
-      toolbar={<p className="text-sm text-muted-foreground">A ticket&apos;s team is picked as it opens, or left to its kind&apos;s default below, and handed on from its details.</p>}
+      toolbar={<p className="text-sm text-muted-foreground">A ticket&apos;s team is picked as it opens, or left to its type&apos;s default below, else its kind&apos;s, and handed on from its details.</p>}
       action={
         <Button size="sm" disabled={!configured || !access.create || !teams.ready || saving} onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" weight="bold" />
@@ -150,6 +152,7 @@ export function TicketTeamsSettings({ tabs, projectId, onProjectChange }: { tabs
         serverIdOf={(webId) => teamIds?.get(webId)}
         webIdOf={(serverId) => [...(teamIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(TICKET_TEAM_PREFIX, serverId)}
         canRead={configured && access.view}
+        accessUnknown={configured ? accessUnknownSentence(session) : null}
         canEdit={access.edit}
         client={client}
         projects={me?.projects ?? []}
@@ -180,6 +183,7 @@ function TeamDefaults({
   serverIdOf,
   webIdOf,
   canRead,
+  accessUnknown,
   canEdit,
   client,
   projects,
@@ -190,6 +194,8 @@ function TeamDefaults({
   serverIdOf: (webId: string) => string | undefined
   webIdOf: (serverId: string) => string
   canRead: boolean
+  /** What to say while the grants are unknown (`accessUnknownSentence`), in place of the role's refusal. */
+  accessUnknown: string | null
   canEdit: boolean
   client: ReturnType<typeof useApiClient>
   projects: readonly { id: string; name: string }[]
@@ -234,13 +240,13 @@ function TeamDefaults({
       .finally(() => setSaving(false))
   }
 
-  const emptyMessage = !canRead
+  const emptyMessage = accessUnknown ?? (!canRead
     ? "The default teams are not shown to your role."
     : project === null
       ? "No project to set default teams for."
       : read.problem !== null
         ? `The default teams could not be read from the API: ${problemSentence(read.problem)}`
-        : "Reading the default teams from the API…"
+        : "Reading the default teams from the API…")
 
   return (
     <section className="border-t border-border">

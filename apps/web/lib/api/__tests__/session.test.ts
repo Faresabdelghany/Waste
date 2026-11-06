@@ -13,7 +13,7 @@ import { PasswordChangeRefused, SignInRefused, type ApiSession } from "../auth"
 import { get } from "../client"
 import { landingOf } from "../landing"
 import { ApiProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "../problem"
-import { createApiSession } from "../session"
+import { accessUnknownSentence, createApiSession } from "../session"
 import { memoryStorage } from "./memory-storage"
 
 type Call = { url: string; init: RequestInit }
@@ -76,6 +76,19 @@ describe("the landing, by /me after sign-in", () => {
     const read = await session.loadMe()
     assert.equal(landingOf(read), "/operate")
     assert.equal(session.store.getSnapshot().me?.user.fullName, "Mads Jensen")
+  })
+
+  test("a /me the API does not answer leaves the grants unknown and says why, never that the role is refused; its next answer clears it", async () => {
+    const { session } = await signedIn([() => new Response("", { status: 503 }), () => me(null)])
+    assert.equal(accessUnknownSentence(session.store.getSnapshot()), "Reading your access from the API…")
+    await assert.rejects(() => session.loadMe())
+    const failed = session.store.getSnapshot()
+    assert.equal(failed.session?.accessToken, "a1", "the session stays open")
+    assert.equal(failed.meProblem?.status, 503)
+    assert.match(accessUnknownSentence(failed) ?? "", /^Your access could not be read from the API \(.+\)\. Reload the page to try again\.$/)
+    await session.loadMe()
+    assert.equal(session.store.getSnapshot().meProblem, null)
+    assert.equal(accessUnknownSentence(session.store.getSnapshot()), null)
   })
 })
 
@@ -192,7 +205,7 @@ describe("the session-ending rule", () => {
     const session = createApiSession({ api: API, auth: AUTH, fetch: scripted([]).fetch, now: () => NOW })
     session.hydrate(stored({ refreshToken: null, expiresAt: NOW - 1 }))
     await session.refreshIfDue()
-    assert.deepEqual(session.store.getSnapshot(), { session: null, hydrated: true, ended: { reason: "expired" }, me: null })
+    assert.deepEqual(session.store.getSnapshot(), { session: null, hydrated: true, ended: { reason: "expired" }, me: null, meProblem: null })
   })
 
   test("a refusal that arrives for a session already over does not end the one signed in since", async () => {
