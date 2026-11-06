@@ -40,7 +40,7 @@ describe("a login-state record", () => {
       [{ ...record, recordedAt: "yesterday" }, /has no time/],
       [{ ...record, identity: "" }, /names no database/],
       [{ ...record, logins: { wms_api: true } }, /does not name exactly wms_api and wms_worker/],
-      [{ ...record, logins: { wms_api: true, wms_worker: false, wms_sync: false } }, /does not name exactly/],
+      [{ ...record, logins: { wms_api: true, wms_worker: false, wms_public: false } }, /does not name exactly/],
       [{ ...record, logins: { wms_api: "yes", wms_worker: false } }, /says nothing usable about wms_api/],
     ]
     for (const [value, reason] of refusals) {

@@ -1,10 +1,10 @@
 // The Driver App's recording rules (O8 of #290, decided on #344): which fix is
-// kept, when a batch is closed, the distance between two fixes, and the days
-// a purge keeps — over plain values and no clock of its own.
+// kept, when a batch is closed and the distance between two fixes — over
+// plain values and no clock of its own.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { batchDue, keepsFix, metresBetween, POSITION_RETENTION_CEILING_DAYS, POSITION_RULES, positionRetentionDays, type PositionFix } from "../positions"
+import { batchDue, keepsFix, metresBetween, POSITION_RULES, type PositionFix } from "../positions"
 
 const AT = Date.parse("2026-10-05T08:00:00.000Z")
 const at = (seconds: number): string => new Date(AT + seconds * 1000).toISOString()
@@ -52,15 +52,5 @@ describe("batchDue", () => {
     const full = Array.from({ length: POSITION_RULES.batchMax }, (_, index) => fix(index))
     assert.equal(batchDue(full, AT), true)
     assert.equal(batchDue(full.slice(1), AT + 60_000), false)
-  })
-})
-
-describe("positionRetentionDays", () => {
-  test("is the setting, never past the thirty-day ceiling, and the ceiling when unset", () => {
-    assert.equal(POSITION_RETENTION_CEILING_DAYS, 30)
-    assert.equal(positionRetentionDays(undefined), 30)
-    assert.equal(positionRetentionDays(7), 7)
-    assert.equal(positionRetentionDays(30), 30)
-    assert.equal(positionRetentionDays(90), 30, "a longer setting is held to the ceiling")
   })
 })

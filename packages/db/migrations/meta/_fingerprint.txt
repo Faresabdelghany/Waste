@@ -2,20 +2,17 @@
 # `pnpm db:fingerprint --write` regenerates this file from a freshly migrated database; `pnpm db:fingerprint --check` compares a database with it.
 schema drizzle owner=<owner> acl=[<owner>=CREATE,USAGE/<owner>]
 schema pgboss owner=<owner> acl=[<owner>=CREATE,USAGE/<owner> wms_api=USAGE/<owner> wms_worker=USAGE/<owner>]
-schema wms owner=<owner> acl=[<owner>=CREATE,USAGE/<owner> wms_api=USAGE/<owner> wms_public=USAGE/<owner> wms_sync=USAGE/<owner> wms_worker=USAGE/<owner>]
+schema wms owner=<owner> acl=[<owner>=CREATE,USAGE/<owner> wms_api=USAGE/<owner> wms_public=USAGE/<owner> wms_worker=USAGE/<owner>]
 schema extensions service-role-grants=[wms_api=USAGE wms_worker=USAGE]
 extension btree_gist schema=extensions
 extension postgis schema=extensions
 role wms_api superuser=false inherit=true createrole=false createdb=false replication=false bypassrls=false connlimit=-1
-role wms_sync superuser=false inherit=true createrole=false createdb=false replication=true bypassrls=true connlimit=-1
 role wms_worker superuser=false inherit=true createrole=false createdb=false replication=false bypassrls=true connlimit=-1
 role-setting wms_api database=* search_path=wms, extensions
 role-setting wms_worker database=* search_path=wms, extensions
 membership wms_api member=<owner> grantor=<owner> admin=false inherit=true set=true
 membership wms_api member=<owner> grantor=supabase_admin admin=true inherit=false set=false
 membership wms_public member=wms_api grantor=<owner> admin=false inherit=false set=true
-membership wms_sync member=<owner> grantor=<owner> admin=false inherit=true set=true
-membership wms_sync member=<owner> grantor=supabase_admin admin=true inherit=false set=false
 membership wms_worker member=<owner> grantor=<owner> admin=false inherit=true set=true
 membership wms_worker member=<owner> grantor=supabase_admin admin=true inherit=false set=false
 relation drizzle.__drizzle_migrations kind=table owner=<owner> persistence=p rls=false force-rls=false replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner>]
@@ -931,7 +928,7 @@ index wms.company company_pkey CREATE UNIQUE INDEX company_pkey ON wms.company U
 trigger wms.company company_audit_trail enabled=O CREATE TRIGGER company_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number')
 trigger wms.company company_touch_updated_at enabled=O CREATE TRIGGER company_touch_updated_at BEFORE UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.company company_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.container 1 id uuid not-null default=wms.uuidv7()
 column wms.container 2 company_id uuid not-null
 column wms.container 3 project_id uuid not-null
@@ -996,7 +993,7 @@ policy wms.container_service_placement container_service_placement_public_door p
    FROM wms.project published
   WHERE ((published.company_id = container_service_placement.company_id) AND (published.id = container_service_placement.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.container_service_placement container_service_placement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.container_type 1 id uuid not-null default=wms.uuidv7()
 column wms.container_type 2 company_id uuid not-null
 column wms.container_type 3 created_at timestamp with time zone not-null default=now()
@@ -1183,7 +1180,7 @@ index wms.decommission_reason decommission_reason_tenant_key CREATE UNIQUE INDEX
 trigger wms.decommission_reason decommission_reason_audit_trail enabled=O CREATE TRIGGER decommission_reason_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.decommission_reason FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.decommission_reason decommission_reason_touch_updated_at enabled=O CREATE TRIGGER decommission_reason_touch_updated_at BEFORE UPDATE ON wms.decommission_reason FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.decommission_reason decommission_reason_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.depot kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.depot kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.depot 1 id uuid not-null default=wms.uuidv7()
 column wms.depot 2 company_id uuid not-null
 column wms.depot 3 project_id uuid not-null
@@ -1221,7 +1218,7 @@ index wms.depot depot_service_provider_id_idx CREATE INDEX depot_service_provide
 trigger wms.depot depot_audit_trail enabled=O CREATE TRIGGER depot_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.depot FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.depot depot_touch_updated_at enabled=O CREATE TRIGGER depot_touch_updated_at BEFORE UPDATE ON wms.depot FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.depot depot_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.driver kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.driver kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.driver 1 id uuid not-null default=wms.uuidv7()
 column wms.driver 2 company_id uuid not-null
 column wms.driver 3 project_id uuid not-null
@@ -1291,7 +1288,7 @@ index wms.driver_absence driver_absence_project_id_valid_from_idx CREATE INDEX d
 trigger wms.driver_absence driver_absence_audit_trail enabled=O CREATE TRIGGER driver_absence_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.driver_absence FOR EACH ROW EXECUTE FUNCTION wms.audit_row('driver', 'driver_id')
 trigger wms.driver_absence driver_absence_touch_updated_at enabled=O CREATE TRIGGER driver_absence_touch_updated_at BEFORE UPDATE ON wms.driver_absence FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.driver_absence driver_absence_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.driver_command kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.driver_command kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.driver_command 1 id uuid not-null default=wms.uuidv7()
 column wms.driver_command 2 company_id uuid not-null
 column wms.driver_command 3 project_id uuid not-null
@@ -2084,7 +2081,7 @@ index wms.payment_allocation payment_allocation_project_key CREATE UNIQUE INDEX 
 index wms.payment_allocation payment_allocation_recorded_by_idx CREATE INDEX payment_allocation_recorded_by_idx ON wms.payment_allocation USING btree (company_id, recorded_by)
 index wms.payment_allocation payment_allocation_reverses_allocation_id_idx CREATE UNIQUE INDEX payment_allocation_reverses_allocation_id_idx ON wms.payment_allocation USING btree (company_id, reverses_allocation_id) WHERE (reverses_allocation_id IS NOT NULL)
 policy wms.payment_allocation payment_allocation_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.pickup kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.pickup kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.pickup 1 id uuid not-null default=wms.uuidv7()
 column wms.pickup 2 company_id uuid not-null
 column wms.pickup 3 project_id uuid not-null
@@ -2569,7 +2566,7 @@ index wms.project_access project_access_user_account_id_project_id_key CREATE UN
 trigger wms.project_access project_access_audit_trail enabled=O CREATE TRIGGER project_access_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.project_access FOR EACH ROW EXECUTE FUNCTION wms.audit_row('user_account', 'user_account_id')
 trigger wms.project_access project_access_touch_updated_at enabled=O CREATE TRIGGER project_access_touch_updated_at BEFORE UPDATE ON wms.project_access FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.project_access project_access_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.proof_of_service kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.proof_of_service kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.proof_of_service 1 id uuid not-null default=wms.uuidv7()
 column wms.proof_of_service 2 company_id uuid not-null
 column wms.proof_of_service 3 project_id uuid not-null
@@ -2635,7 +2632,7 @@ index wms.proof_of_service proof_of_service_recorded_by_idx CREATE INDEX proof_o
 index wms.proof_of_service proof_of_service_route_id_idx CREATE INDEX proof_of_service_route_id_idx ON wms.proof_of_service USING btree (company_id, route_id, id)
 index wms.proof_of_service proof_of_service_session_id_idx CREATE INDEX proof_of_service_session_id_idx ON wms.proof_of_service USING btree (company_id, session_id)
 policy wms.proof_of_service proof_of_service_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.property kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.property kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.property 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.property 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.property 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -2840,7 +2837,7 @@ index wms.role_grant role_grant_role_id_module_key_action_key CREATE UNIQUE INDE
 trigger wms.role_grant role_grant_audit_trail enabled=O CREATE TRIGGER role_grant_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.role_grant FOR EACH ROW EXECUTE FUNCTION wms.audit_row('role', 'role_id')
 trigger wms.role_grant role_grant_touch_updated_at enabled=O CREATE TRIGGER role_grant_touch_updated_at BEFORE UPDATE ON wms.role_grant FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.role_grant role_grant_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.route kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.route kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.route 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.route 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.route 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -3535,7 +3532,7 @@ index wms.service_provider_price service_provider_price_project_key CREATE UNIQU
 trigger wms.service_provider_price service_provider_price_audit_trail enabled=O CREATE TRIGGER service_provider_price_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_price FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_area_assignment', 'service_area_assignment_id')
 trigger wms.service_provider_price service_provider_price_touch_updated_at enabled=O CREATE TRIGGER service_provider_price_touch_updated_at BEFORE UPDATE ON wms.service_provider_price FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider_price service_provider_price_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.session kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.session kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.session 1 id uuid not-null default=wms.uuidv7()
 column wms.session 2 company_id uuid not-null
 column wms.session 3 project_id uuid not-null
@@ -3695,7 +3692,7 @@ index wms.settlement_line settlement_line_service_provider_price_id_idx CREATE I
 index wms.settlement_line settlement_line_settlement_id_billable_event_id_key CREATE UNIQUE INDEX settlement_line_settlement_id_billable_event_id_key ON wms.settlement_line USING btree (company_id, settlement_id, billable_event_id)
 trigger wms.settlement_line settlement_line_touch_updated_at enabled=O CREATE TRIGGER settlement_line_touch_updated_at BEFORE UPDATE ON wms.settlement_line FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.settlement_line settlement_line_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.shared_collection_point kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.shared_collection_point kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.shared_collection_point 1 id uuid not-null default=wms.uuidv7()
 column wms.shared_collection_point 2 company_id uuid not-null
 column wms.shared_collection_point 3 project_id uuid not-null
@@ -4454,7 +4451,7 @@ index wms.ticket_type_permission ticket_type_permission_role_id_idx CREATE INDEX
 trigger wms.ticket_type_permission ticket_type_permission_audit_trail enabled=O CREATE TRIGGER ticket_type_permission_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_type_permission FOR EACH ROW EXECUTE FUNCTION wms.audit_row('ticket_type', 'ticket_type_id')
 trigger wms.ticket_type_permission ticket_type_permission_touch_updated_at enabled=O CREATE TRIGGER ticket_type_permission_touch_updated_at BEFORE UPDATE ON wms.ticket_type_permission FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_type_permission ticket_type_permission_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.unload kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.unload kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.unload 1 id uuid not-null default=wms.uuidv7()
 column wms.unload 2 company_id uuid not-null
 column wms.unload 3 project_id uuid not-null
@@ -4503,7 +4500,7 @@ index wms.unload unload_session_id_idx CREATE INDEX unload_session_id_idx ON wms
 index wms.unload unload_unloading_station_id_idx CREATE INDEX unload_unloading_station_id_idx ON wms.unload USING btree (company_id, unloading_station_id)
 index wms.unload unload_waste_fraction_id_idx CREATE INDEX unload_waste_fraction_id_idx ON wms.unload USING btree (company_id, waste_fraction_id)
 policy wms.unload unload_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.unloading_station kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.unloading_station kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.unloading_station 1 id uuid not-null default=wms.uuidv7()
 column wms.unloading_station 2 company_id uuid not-null
 column wms.unloading_station 3 created_at timestamp with time zone not-null default=now()
@@ -4539,7 +4536,7 @@ index wms.unloading_station unloading_station_tenant_key CREATE UNIQUE INDEX unl
 trigger wms.unloading_station unloading_station_audit_trail enabled=O CREATE TRIGGER unloading_station_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.unloading_station FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.unloading_station unloading_station_touch_updated_at enabled=O CREATE TRIGGER unloading_station_touch_updated_at BEFORE UPDATE ON wms.unloading_station FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.unloading_station unloading_station_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.unloading_station_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.unloading_station_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.unloading_station_fraction 1 id uuid not-null default=wms.uuidv7()
 column wms.unloading_station_fraction 2 company_id uuid not-null
 column wms.unloading_station_fraction 3 created_at timestamp with time zone not-null default=now()
@@ -4557,7 +4554,7 @@ index wms.unloading_station_fraction unloading_station_fraction_waste_fraction_i
 trigger wms.unloading_station_fraction unloading_station_fraction_audit_trail enabled=O CREATE TRIGGER unloading_station_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.unloading_station_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('unloading_station', 'unloading_station_id')
 trigger wms.unloading_station_fraction unloading_station_fraction_touch_updated_at enabled=O CREATE TRIGGER unloading_station_fraction_touch_updated_at BEFORE UPDATE ON wms.unloading_station_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.unloading_station_fraction unloading_station_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.user_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.user_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.user_account 1 id uuid not-null default=wms.uuidv7()
 column wms.user_account 2 company_id uuid not-null
 column wms.user_account 3 created_at timestamp with time zone not-null default=now()
@@ -4590,7 +4587,7 @@ index wms.user_account user_account_tenant_key CREATE UNIQUE INDEX user_account_
 trigger wms.user_account user_account_audit_trail enabled=O CREATE TRIGGER user_account_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.user_account FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.user_account user_account_touch_updated_at enabled=O CREATE TRIGGER user_account_touch_updated_at BEFORE UPDATE ON wms.user_account FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.user_account user_account_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.vehicle kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.vehicle kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.vehicle 1 id uuid not-null default=wms.uuidv7()
 column wms.vehicle 2 company_id uuid not-null
 column wms.vehicle 3 project_id uuid not-null
@@ -4968,7 +4965,7 @@ index wms.warehouse warehouse_project_key CREATE UNIQUE INDEX warehouse_project_
 trigger wms.warehouse warehouse_audit_trail enabled=O CREATE TRIGGER warehouse_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.warehouse FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.warehouse warehouse_touch_updated_at enabled=O CREATE TRIGGER warehouse_touch_updated_at BEFORE UPDATE ON wms.warehouse FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.warehouse warehouse_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.waste_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
+relation wms.waste_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.waste_fraction 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 3 created_at timestamp with time zone not-null default=now()
@@ -5087,24 +5084,6 @@ default-acl pgboss functions for=<owner> acl=[wms_api=EXECUTE/<owner> wms_worker
 default-acl pgboss tables for=<owner> acl=[wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=DELETE,INSERT,SELECT,UPDATE/<owner>]
 default-acl wms sequences for=<owner> acl=[wms_api=SELECT,USAGE/<owner>]
 default-acl wms tables for=<owner> acl=[wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-publication powersync owner=<owner> all-tables=false insert=true update=true delete=true truncate=true via-root=false
-publication-table powersync wms.container
-publication-table powersync wms.container_type
-publication-table powersync wms.depot
-publication-table powersync wms.driver
-publication-table powersync wms.driver_command
-publication-table powersync wms.pickup
-publication-table powersync wms.proof_of_service
-publication-table powersync wms.property
-publication-table powersync wms.route
-publication-table powersync wms.session
-publication-table powersync wms.shared_collection_point
-publication-table powersync wms.unload
-publication-table powersync wms.unloading_station
-publication-table powersync wms.unloading_station_fraction
-publication-table powersync wms.user_account
-publication-table powersync wms.vehicle
-publication-table powersync wms.waste_fraction
 journal 1789703334818 e8a04545adfcb594cecd61f3f2dd66b87097ae9746f5b2a0b8a7b8274a065a0c
 journal 1789703374553 384a94b141e18873a47c65efb2bcb55c6f24b81650854072a81e88c45cf94d8a
 journal 1790208926290 f55dce5ac5a0b2f9a1ff251e02d61699212e9e3b7d35cabeda1151f300959db9
@@ -5217,4 +5196,5 @@ journal 1793952146294 6e4653033ff4f3f7b9e3200818c56d138bc8d38fb4c806dd93f058898d
 journal 1793952149939 ae5d9ea5151ab1c6d9546163ac5bcdaf3fcaa731d85bb01586b3684f506ae4d2
 journal 1793954181730 4695abc819cd6ddcbf7028781d8cded88ec465531dc76ed40e859747885ab300
 journal 1793955942536 a6e59802616e92b100c765800949a9c45787ccdd84a971d2d1358c90e7d7a6a6
+journal 1793999801743 47f11911aece01533dc9c4f50b8f8ff62c306963555afad6fc345c2de9028aaf
 pgboss-version 42

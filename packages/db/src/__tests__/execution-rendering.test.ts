@@ -8,8 +8,9 @@
 // which has to begin with exactly those statements, so the file and `pnpm
 // db:generate` cannot drift apart, and to carry below them what the helpers
 // write for each table — the fence and the trigger, or for the three ledgers
-// the fence and the revoke — and then what is nobody's table, the sync role
-// and the publication, verbatim from sql/publication.ts. No database.
+// the fence and the revoke — and then what is nobody's table, PowerSync's sync
+// role and publication, which a later migration dropped and this test spells
+// as 0008 wrote them. No database.
 //
 // This is also what makes a change to the vocabulary or to PROOF_SHAPES a
 // migration: the values and the CASE are spelled here as the file spells
@@ -131,13 +132,11 @@ import { describe, test } from "node:test"
 
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
 import { PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES } from "@waste/domain/execution/vocabulary"
-import { getTableName, is, sql } from "drizzle-orm"
-import { check, integer, PgTable, text } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import { check, integer, text } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
-import { API_ROLE, SYNC_ROLE } from "../roles"
-import * as schema from "../schema"
 import { oneOf } from "../schema/checks"
 import { id, tenant, timestamps } from "../schema/columns"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
@@ -145,7 +144,6 @@ import { COMPANY_STATUSES } from "../schema/organisation"
 import { uniqueOn } from "../schema/references"
 import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { PUBLICATION, powersyncStatements, publicationStatement, SYNCED_TABLES, syncedTableNames, syncGrantStatements, syncRoleStatements } from "../sql/publication"
 import { BOOKED_SHAPES, RESERVED_CONTAINER, TAKEN_CONTAINER } from "./execution-shapes"
 import { checksOf, companyFk, createTable, foreignKey, geometryCheck, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { REFUSAL_REASONS, REFUSAL_SHAPE } from "./weighbridge-shapes"
@@ -792,8 +790,58 @@ const companyAsOf0008 = wms.table(
 /** What 0008 does to `company`: the counter, as one ALTER TABLE. */
 const companyAltered = [`ALTER TABLE "wms"."company" ADD COLUMN "next_route_number" integer DEFAULT 1000 NOT NULL;`]
 
+/** The seventeen tables PowerSync's sync rules read, which 0008 granted its role and published. */
+const SYNCED_AS_OF_0008 = [
+  "user_account",
+  "waste_fraction",
+  "container_type",
+  "container",
+  "property",
+  "shared_collection_point",
+  "depot",
+  "unloading_station",
+  "unloading_station_fraction",
+  "vehicle",
+  "driver",
+  "route",
+  "pickup",
+  "session",
+  "proof_of_service",
+  "unload",
+  "driver_command",
+]
+
+/** The sync role, its grants and the publication as 0008 wrote them (Issue #104, ADR-0004): spelled here, since the drop of PowerSync's side took the helper they were copied from. */
+const POWERSYNC_AS_OF_0008 = [
+  `DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wms_sync') THEN
+    BEGIN
+      CREATE ROLE wms_sync NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION BYPASSRLS;
+    EXCEPTION
+      WHEN duplicate_object OR unique_violation THEN
+        NULL;
+    END;
+  END IF;
+END
+$$;`,
+  `DO $$
+BEGIN
+  BEGIN
+    EXECUTE format('GRANT wms_sync TO %I', current_user);
+  EXCEPTION
+    WHEN unique_violation THEN
+      NULL;
+  END;
+END
+$$;`,
+  "GRANT USAGE ON SCHEMA wms TO wms_sync;",
+  ...SYNCED_AS_OF_0008.map((name) => `GRANT SELECT ON "wms"."${name}" TO wms_sync;`),
+  `CREATE PUBLICATION powersync FOR TABLE ${SYNCED_AS_OF_0008.map((name) => `"wms"."${name}"`).join(", ")};`,
+]
+
 /** What the seven tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table; then the sync role and the publication. */
-const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStatements(table)), ...powersyncStatements()]
+const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStatements(table)), ...POWERSYNC_AS_OF_0008]
 
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
@@ -912,52 +960,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(tail.filter((statement) => statement.startsWith("REVOKE UPDATE, DELETE")).length, 3, "the three ledgers")
     assert.equal(tail.filter((statement) => statement.startsWith("CREATE TRIGGER")).length, 4, "every table but the ledgers")
     assert.equal(tail.filter((statement) => statement.startsWith("CREATE POLICY")).length, 7, "every table")
-    assert.equal(tail.filter((statement) => statement.startsWith("GRANT SELECT ON")).length, SYNCED_TABLES.length)
+    assert.equal(tail.filter((statement) => statement.startsWith("GRANT SELECT ON")).length, SYNCED_AS_OF_0008.length)
     assert.equal(tail.filter((statement) => statement.startsWith("CREATE PUBLICATION")).length, 1)
-  })
-})
-
-describe("the sync role and the publication", () => {
-  test("wms_sync is created REPLICATION and BYPASSRLS and NOLOGIN, tolerating the race, granted to the owner, with USAGE on wms", () => {
-    const [role, grant, usage] = syncRoleStatements()
-    assert.equal(SYNC_ROLE, "wms_sync")
-    assert.match(role, /IF NOT EXISTS \(SELECT 1 FROM pg_roles WHERE rolname = 'wms_sync'\)/)
-    assert.match(role, /CREATE ROLE wms_sync NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION BYPASSRLS;/)
-    assert.match(role, /WHEN duplicate_object OR unique_violation THEN/)
-    assert.match(grant, /EXECUTE format\('GRANT wms_sync TO %I', current_user\);/)
-    assert.equal(usage, "GRANT USAGE ON SCHEMA wms TO wms_sync;")
-    for (const statement of powersyncStatements()) assert.equal(statement.includes(API_ROLE), false, "nothing here is the API role's")
-  })
-
-  test("the synced tables are the seventeen the sync rules read, each a table of the schema, each granted SELECT once, and the publication is over exactly them", () => {
-    const names = syncedTableNames()
-    assert.deepEqual(names, [
-      "user_account",
-      "waste_fraction",
-      "container_type",
-      "container",
-      "property",
-      "shared_collection_point",
-      "depot",
-      "unloading_station",
-      "unloading_station_fraction",
-      "vehicle",
-      "driver",
-      "route",
-      "pickup",
-      "session",
-      "proof_of_service",
-      "unload",
-      "driver_command",
-    ])
-    const known = new Set<unknown>(Object.values(schema as Record<string, unknown>).filter((value) => is(value, PgTable)))
-    for (const table of SYNCED_TABLES) assert.ok(known.has(table), getTableName(table))
-    assert.deepEqual(
-      syncGrantStatements(),
-      names.map((name) => `GRANT SELECT ON "wms"."${name}" TO wms_sync;`),
-    )
-    assert.equal(publicationStatement(), `CREATE PUBLICATION ${PUBLICATION} FOR TABLE ${names.map((name) => `"wms"."${name}"`).join(", ")};`)
-    assert.equal(PUBLICATION, "powersync")
   })
 })
 

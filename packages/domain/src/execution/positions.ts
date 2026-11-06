@@ -15,9 +15,8 @@
 //               the Command Queue, so a position survives a dead zone and is
 //               idempotent through the receipt like every command;
 //   retention — personal location data (#381): a point is kept
-//               `POSITION_RETENTION_DAYS` days, a Pilot setting, and never
-//               more than `POSITION_RETENTION_CEILING_DAYS`, which is also
-//               what the worker's purge keeps when the setting is unset.
+//               `POSITION_RETENTION_DAYS` days, and the worker's nightly
+//               purge deletes it after.
 //
 // The rules here are the device's and the purge's; what the door judges of a
 // command's points — the clock bounds and the session's start, point by
@@ -52,11 +51,7 @@ export const POSITION_RULES = {
   batchMax: 60,
 } as const
 
-/** The longest a position is kept, in days, whatever the setting says; and what is kept when it says nothing. */
-export const POSITION_RETENTION_CEILING_DAYS = 30
-
-/** The days a purge keeps: the setting, never past the ceiling, and the ceiling when unset. */
-export const positionRetentionDays = (setting: number | undefined): number => (setting === undefined ? POSITION_RETENTION_CEILING_DAYS : Math.min(setting, POSITION_RETENTION_CEILING_DAYS))
+export const POSITION_RETENTION_DAYS = 30
 
 const EARTH_RADIUS_M = 6_371_008.8
 const radians = (degrees: number): number => (degrees * Math.PI) / 180

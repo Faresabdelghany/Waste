@@ -35,8 +35,8 @@ export function summary(line: string): void {
 
 /**
  * What a failure says: the error's message with a statement's text and
- * parameters cut off (src/sqlstate.ts's rule), since a repair's failing
- * statement would otherwise put a row's values in a public log, and the
+ * parameters cut off (src/sqlstate.ts's rule), since a failing statement
+ * would otherwise put a row's values in a public log, and the
  * database's own sentence kept where Drizzle wrapped one.
  */
 function said(error: unknown): string {

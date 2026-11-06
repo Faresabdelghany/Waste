@@ -70,7 +70,7 @@ export type MigrateOptions = {
  * Runs `fn` while this connection holds the migration lock: the pool for the
  * work, the reserved connection that holds the lock for reads that must see
  * the journal as it stands under it. Every holder of the lock goes through
- * here — the migrator, the journal check, a Pilot repair (Issue #152).
+ * here — the migrator and the journal check (Issue #152).
  */
 export async function withMigrationLock<T>(
   url: string,

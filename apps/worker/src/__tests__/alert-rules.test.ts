@@ -27,32 +27,17 @@ import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq } from "drizzle-orm"
 
-import { isEvenCadence } from "../cadence"
-import { alertRulesJob, alertsToClear, ALERT_RULES_INTERVAL_SECONDS, occurrencesToRaise, rulesSchedule, runAlertRules } from "../jobs/alert-rules"
+import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../jobs/alert-rules"
 import type { JobContext } from "../jobs/definition"
-import { JOBS, jobsWithRulesEvery } from "../jobs/index"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
 
 describe("the rules' cadence", () => {
-  test("five minutes unless the knob says otherwise, on an even cadence alone: whole minutes that divide an hour, whole hours that divide a day", () => {
-    assert.equal(ALERT_RULES_INTERVAL_SECONDS, 300)
+  test("every five minutes, and a missed tick is the next tick's to read", () => {
     assert.equal(alertRulesJob.schedule, "*/5 * * * *")
-    assert.deepEqual([60, 120, 300, 900, 1800, 3600, 7200, 21_600, 86_400].map(rulesSchedule), ["* * * * *", "*/2 * * * *", "*/5 * * * *", "*/15 * * * *", "*/30 * * * *", "0 * * * *", "0 */2 * * *", "0 */6 * * *", "0 0 * * *"])
-    // A cron's */N starts again every hour or day: 7 minutes would leave a 4-minute gap at the hour, 45 a 15-minute one.
-    for (const seconds of [30, 90, 420, 2700, 18_000, 172_800]) {
-      assert.equal(isEvenCadence(seconds), false, String(seconds))
-      assert.throws(() => rulesSchedule(seconds), /no even cadence/, String(seconds))
-    }
-    assert.equal(alertRulesJob.scheduleOptions?.missed, "skip", "a missed tick is the next tick's to read")
-  })
-
-  test("the knob moves the rules' schedule and nothing else of the registry", () => {
-    assert.equal(jobsWithRulesEvery(undefined), JOBS)
-    const moved = jobsWithRulesEvery(900)
-    for (const [index, job] of moved.entries()) assert.equal(job.schedule, job.queue === alertRulesJob.queue ? "*/15 * * * *" : JOBS[index].schedule, job.queue)
+    assert.equal(alertRulesJob.scheduleOptions?.missed, "skip")
   })
 })
 

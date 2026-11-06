@@ -1,7 +1,7 @@
 // The Postgres side of the worker (Issue #97 part B, ADR-0007): the role its
 // pg-boss connects as and the schema pg-boss runs on, hand-written into
-// `0011_worker.sql` the way `0008_execution.sql` carries the sync role and the
-// publication below its tables. Neither is a table's, so the gate in
+// `0011_worker.sql` the way `0002_organisation_access.sql` carries the access
+// token hook below its tables. Neither is a table's, so the gate in
 // hand-written.ts knows nothing of them, and this module is the one spelling
 // the file is copied from and the rendering test holds it to.
 //
@@ -17,8 +17,8 @@
 // `withCompany`" is a rule the database holds and not one the worker's code
 // promises — an INSERT as `wms_worker` is 42501; and `NOLOGIN`, since a
 // password is given per environment by bootstrap.ts and never by a
-// migration. The owner is granted membership, as it is in `wms_api` and
-// `wms_sync`, so a test can `SET LOCAL ROLE wms_worker` and see what the
+// migration. The owner is granted membership, as it is in `wms_api`, so a
+// test can `SET LOCAL ROLE wms_worker` and see what the
 // worker sees. The role statements tolerate the concurrent-creation race the
 // way `wms_api`'s do, roles being cluster-wide while the migrator's lock is
 // per database.

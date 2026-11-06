@@ -14,10 +14,7 @@
 // plain schema with a default, or without one when the process cannot run
 // without it. Anything else in the environment is dropped, not carried
 // around.
-import { POSITION_RETENTION_CEILING_DAYS } from "@waste/domain/execution/positions"
 import * as z from "zod"
-
-import { EVEN_CADENCE, isEvenCadence } from "./cadence"
 
 /** The address to bind the probes to. Loopback by default; a container sets `0.0.0.0`. */
 const Host = z
@@ -129,10 +126,6 @@ export const Env = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   /** How many days a photo or a signature is kept before the nightly purge removes it, unless an open ticket names its stop; a Pilot setting (apps/pilot/README.md), unset means no purge. */
   PROOF_RETENTION_DAYS: wholeNumber(1, " of days, at least 1"),
-  /** How many days a position is kept before the nightly purge removes it (O8 of #290): personal location data (#381), so at most the domain's ceiling of thirty, which is also what is kept when it is unset; a Pilot setting (apps/pilot/README.md). */
-  POSITION_RETENTION_DAYS: wholeNumber(1, " of days, at least 1").refine((days) => days === undefined || days <= POSITION_RETENTION_CEILING_DAYS, { error: `must be at most ${POSITION_RETENTION_CEILING_DAYS} days: a position is kept no longer` }),
-  /** How often the alert rules run, in seconds (O4 of #290): an even cadence (cadence.ts); the job's five minutes unless set. */
-  WORKER_RULES_INTERVAL_SECONDS: wholeNumber(60, " of seconds, at least 60").refine((seconds) => seconds === undefined || isEvenCadence(seconds), { error: EVEN_CADENCE }),
   /** Where batch routing work stops, per family (#132 §1): the remaining it leaves for the office's own calls; the Standard plan's 500 directions and 100 optimisations unless set. */
   ROUTING_DIRECTIONS_RESERVE: wholeNumber(0, " of requests"),
   ROUTING_OPTIMISATION_RESERVE: wholeNumber(0, " of requests"),
