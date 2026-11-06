@@ -13,7 +13,7 @@
 // and saved there, under an address of its own (`?pane=tickets&type=<id>`).
 // Offered on the Pilot alone, beside the Ticket teams.
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -35,7 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
 import { vehicleAdapter } from "@/lib/api/records/fleet"
 import { roleAdapter, userAdapter } from "@/lib/api/records/organisation"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
@@ -99,6 +99,11 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   const addressOf = (record: BusinessRecord) => resolver.serverIdOf(record.id) ?? record.id
   const addressed = openTypeId === null ? undefined : (resolver.byServerId(openTypeId)?.id ?? openTypeId)
   const opened = rows.find((record) => record.id === addressed)
+  // Whether the list is what shows, read when a create answers: a person who has moved on meanwhile is not pulled to the new type.
+  const listShowing = useRef(true)
+  useEffect(() => {
+    listShowing.current = addressed === undefined
+  })
 
   const write = (record: BusinessRecord, done: (saved: SavedOutcome | undefined) => void, said: string, madeDefault: boolean) => {
     if (saving) return
@@ -117,10 +122,10 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   const madeDefault = (before: BusinessRecord | null, after: BusinessRecord) => after.submittedValues?.isDefault === true && before?.submittedValues?.isDefault !== true
   const handleCreate = (values: BusinessFormValues) => {
     const made = createTicketTypeRecord(values, { now: Date.now() })
-    // A new type lands on its own page, addressed by the id the API gave it; one whose answer named none is found on the list.
+    // A new type lands on its own page, addressed by the id the API gave it, while the list still shows; one whose answer named none is found on the list.
     const landOn = (saved: SavedOutcome | undefined) => {
       setCreating(false)
-      if (saved !== undefined && saved.kind !== "unchanged" && saved.serverId !== undefined) onOpenType(saved.serverId)
+      if (listShowing.current && saved !== undefined && saved.kind !== "unchanged" && saved.serverId !== undefined) onOpenType(saved.serverId)
     }
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
@@ -137,7 +142,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
 
   if (addressed !== undefined) {
     if (opened === undefined) return <TicketTypeMissing message={types.ready ? "No ticket type has this address." : emptyMessage} onBack={() => onOpenType(null)} />
-    const save = (record: BusinessRecord) => write(record, () => undefined, "Ticket type saved", madeDefault(opened, record))
+    const save = (record: BusinessRecord, saved: (row: BusinessRecord) => void) => write(record, (outcome) => saved(savedRow(outcome, record)), "Ticket type saved", madeDefault(opened, record))
     return <TicketTypePage key={opened.id} record={opened} roles={roles} choices={choices} saving={saving} editable={access.edit} onBack={() => onOpenType(null)} onSave={save} />
   }
 
@@ -205,7 +210,17 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
       </RecordsSection>
 
       {/* The form names no row of another module: every option is its own. */}
-      <BusinessRecordFormDialog schema={TICKET_TYPE_FORM} open={creating} onOpenChange={setCreating} onSubmit={handleCreate} relationOptions={(field) => field.options ?? []} />
+      {/* Held open while the create is out, so the answer finds the person where they asked. */}
+      <BusinessRecordFormDialog
+        schema={TICKET_TYPE_FORM}
+        open={creating}
+        onOpenChange={(open) => {
+          if (!saving) setCreating(open)
+        }}
+        onSubmit={handleCreate}
+        relationOptions={(field) => field.options ?? []}
+        submitting={saving}
+      />
     </AssetPanelShell>
   )
 }
@@ -239,8 +254,11 @@ function TicketTypeMissing({ message, onBack }: { message: string; onBack: () =>
   )
 }
 
-/** One type's page: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed. */
-function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; editable: boolean; onBack: () => void; onSave: (record: BusinessRecord) => void }) {
+/**
+ * One type's page: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed.
+ * Read-only for a role that may not edit types. `onSave` hands back the row the save left, once the API has answered.
+ */
+function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; editable: boolean; onBack: () => void; onSave: (record: BusinessRecord, saved: (row: BusinessRecord) => void) => void }) {
   const isDefault = record.submittedValues?.isDefault === true
   const [name, setName] = useState(record.name)
   const [description, setDescription] = useState(typeof record.submittedValues?.description === "string" ? record.submittedValues.description : "")
@@ -284,7 +302,12 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
     if (unlabelled !== -1) return setRefusal(`Field ${unlabelled + 1}: give it a label.`)
     const automation = actionsIssue(actions)
     if (automation !== undefined) return setRefusal(automation)
-    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }))
+    // A field the API now holds keeps its key from here on: tickets carry their values under it, so a later relabel must not move it.
+    const freezeSavedKeys = (saved: BusinessRecord) => {
+      const held = new Set(typeFieldsOf(saved).map((field) => field.key))
+      setFields((current) => current.map((draft) => (held.has(draft.key) ? { ...draft, keyTouched: true } : draft)))
+    }
+    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }), freezeSavedKeys)
   }
 
   const tabClass = "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background"
@@ -296,9 +319,11 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
           action={
             <div className="flex flex-wrap items-center justify-end gap-3">
               {refusal !== null && <p className="max-w-xl text-sm text-destructive">{refusal}</p>}
-              <Button size="sm" onClick={save} disabled={saving || !editable}>
-                Save type
-              </Button>
+              {editable && (
+                <Button size="sm" onClick={save} disabled={saving}>
+                  Save type
+                </Button>
+              )}
             </div>
           }
         >
@@ -329,7 +354,8 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
         </div>
       </header>
       <div className="flex-1 p-4">
-        <div className="mx-auto max-w-[1500px]">
+        {/* A role that may not edit types reads the page: every control of the tabs is disabled with the fieldset. */}
+        <fieldset disabled={!editable} className="mx-auto min-w-0 max-w-[1500px]">
           <TabsContent value="details" className="mt-0 grid max-w-4xl gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="ticket-type-name">Name</Label>
@@ -483,7 +509,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
               }}
             />
           </TabsContent>
-        </div>
+        </fieldset>
       </div>
     </Tabs>
   )

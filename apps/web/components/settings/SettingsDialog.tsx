@@ -1502,13 +1502,15 @@ export function SettingsWorkspace({
   const profile = configured ? profileOf(me, session?.email) : null
   const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
   // The Tickets page's tab (#548 of #544): the one a link's pane names at first, then the last used, kept while the dialog stays open.
-  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => ticketsTabOf(initialPaneId))
+  // An address naming a ticket type opens the Types tab, whose page it is.
+  const [ticketsTab, setTicketsTab] = useState<TicketsTab>(() => (addressedTicketTypeId !== null ? "types" : ticketsTabOf(initialPaneId)))
   // The ticket type whose page the Types tab shows: opened at once on a click, and following the address when Back or Forward moves it.
   const [ticketTypeId, setTicketTypeId] = useState<string | null>(addressedTicketTypeId)
   const [ticketTypeAddressed, setTicketTypeAddressed] = useState<string | null>(addressedTicketTypeId)
   if (ticketTypeAddressed !== addressedTicketTypeId) {
     setTicketTypeAddressed(addressedTicketTypeId)
     setTicketTypeId(addressedTicketTypeId)
+    if (addressedTicketTypeId !== null) setTicketsTab("types")
   }
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
