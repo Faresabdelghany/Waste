@@ -427,22 +427,6 @@ function ProductsPane() {
       heading="Commercial"
       title="Products"
       description="The sellable catalogue — add and edit products here. Prices are managed in Price Engine with Add price."
-      action={
-        <>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/commercial">
-              Open in Price Engine
-              <ArrowSquareOut className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          {productSchema && (
-            <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-              <Plus className="h-4 w-4" weight="bold" />
-              New product
-            </Button>
-          )}
-        </>
-      }
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search products"
@@ -464,7 +448,26 @@ function ProductsPane() {
         />
       }
     >
-      <RecordsSection shown={filtered.length} total={productRecords.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={productRecords.length}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/commercial">
+                Open in Price Engine
+                <ArrowSquareOut className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            {productSchema && (
+              <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4" weight="bold" />
+                New product
+              </Button>
+            )}
+          </>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[1080px]">
             <TableHeader>

@@ -169,7 +169,7 @@ import type { TimelineTask } from "@/lib/data/project-details"
 import { awaitedRowsSentence, recordCountLabel } from "@/lib/table-copy"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
-import { PageActions, PageTopBar } from "@/components/page-layout"
+import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -4926,11 +4926,11 @@ export function BusinessWorkspace({
     )
   }
 
-  // A module's own actions sit in its table's header, never in the top bar,
-  // which is kept for the app-wide items (components/page-layout.tsx).
+  // A module's own actions sit in its table's header (TableCard), never in the
+  // top bar, which is kept for the app-wide items (components/page-layout.tsx).
   const moduleActions =
     isContainersAssetsView || showExportAction || primary !== null ? (
-      <PageActions>
+      <>
         {isContainersAssetsView && (
           <Button variant="outline" size="sm" asChild>
             <Link href="/settings?pane=asset-management&from=%2Fresources%3Fmodule%3Dcontainers">
@@ -5006,7 +5006,7 @@ export function BusinessWorkspace({
             </Button>
           )
         )}
-      </PageActions>
+      </>
     ) : null
 
   return (
@@ -5111,7 +5111,7 @@ export function BusinessWorkspace({
 
         {/* The map has no table to head, so its actions get a bar of their own under the top bar. */}
         {isMapPlanningView && moduleActions && (
-          <div className="flex justify-end border-b border-border/40 px-4 py-2">{moduleActions}</div>
+          <div className="flex justify-end border-b border-border/40 px-4 py-2"><PageActions>{moduleActions}</PageActions></div>
         )}
 
         {!isMapPlanningView && (
@@ -5323,14 +5323,10 @@ export function BusinessWorkspace({
               )}
           </section>
 
-          <section className="overflow-hidden rounded-xl border border-border/60">
-            <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-              <p className="text-xs text-muted-foreground">
-                {recordCountLabel(filteredRecords.length, visibleScopedRecords.length)}
-                {fixedScopeLabel ? ` · ${fixedScopeLabel}` : ""}
-              </p>
-              {moduleActions}
-            </div>
+          <TableCard
+            summary={`${recordCountLabel(filteredRecords.length, visibleScopedRecords.length)}${fixedScopeLabel ? ` · ${fixedScopeLabel}` : ""}`}
+            actions={moduleActions}
+          >
 
             {isFleetPlanningView ? (
               <div className="p-4">
@@ -5818,7 +5814,7 @@ export function BusinessWorkspace({
                 />
               </>
             )}
-          </section>
+          </TableCard>
 
         </div>
       </div>

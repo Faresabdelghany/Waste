@@ -32,7 +32,7 @@ import {
 import { toast } from "sonner"
 
 import { ChipOverflow } from "@/components/chip-overflow"
-import { PageActions } from "@/components/page-layout"
+import { PageActions, TableCard } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
@@ -157,18 +157,6 @@ function HolidayListStatusBadge({ status }: { status: HolidayListStatus }) {
 }
 
 /** The bordered table card with its count on the left and its actions on the right, as the Routes table's. */
-function TableCard({ summary, actions, children, testId }: { summary: ReactNode; actions?: ReactNode; children: ReactNode; testId?: string }) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60" data-testid={testId}>
-      <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-        <p className="text-xs text-muted-foreground">{summary}</p>
-        {actions}
-      </div>
-      {children}
-    </section>
-  )
-}
-
 /** "2 holiday lists", or "1 of 2 holiday lists" under a search or a filter. */
 function shownCount(shown: number, total: number, noun: string): string {
   return shown === total ? count(total, noun) : `${shown} of ${count(total, noun)}`
@@ -408,7 +396,7 @@ function HolidayListsIndex({
             testId="holiday-lists-table"
             summary={shownCount(shownRows.length, rows.length, "holiday list")}
             actions={
-              <PageActions>
+              <>
                 <Button variant="ghost" size="sm" onClick={exportRows} disabled={shownRows.length === 0}>
                   <DownloadSimple className="h-4 w-4" />
                   <span className="hidden sm:inline">Export</span>
@@ -417,7 +405,7 @@ function HolidayListsIndex({
                   <Plus className="h-4 w-4" weight="bold" />
                   Add country
                 </Button>
-              </PageActions>
+              </>
             }
           >
             <div className="overflow-x-auto">

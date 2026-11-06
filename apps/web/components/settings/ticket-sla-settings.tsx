@@ -107,19 +107,6 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
       tabs={tabs}
       title="Ticket SLA"
       description="How long a ticket has from opening to its due date, by priority, for every kind, one kind or one ticket type."
-      action={
-        <div className="flex items-center gap-2">
-          {editing && (
-            <Button variant="outline" size="sm" disabled={saving} onClick={() => setEdits(null)}>
-              Discard
-            </Button>
-          )}
-          <Button size="sm" disabled={!access.edit || !editing || saving} onClick={save}>
-            <FloppyDisk className="h-4 w-4" />
-            Save SLA
-          </Button>
-        </div>
-      }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="ticket-sla-project" className="text-sm text-muted-foreground">
@@ -154,7 +141,23 @@ export function TicketSlaSettings({ tabs, projectId, onProjectChange }: { tabs?:
         </div>
       }
     >
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection
+        shown={rows.length}
+        total={rows.length}
+        actions={
+          <>
+            {editing && (
+              <Button variant="outline" size="sm" disabled={saving} onClick={() => setEdits(null)}>
+                Discard
+              </Button>
+            )}
+            <Button size="sm" disabled={!access.edit || !editing || saving} onClick={save}>
+              <FloppyDisk className="h-4 w-4" />
+              Save SLA
+            </Button>
+          </>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[760px]">
             <TableHeader>

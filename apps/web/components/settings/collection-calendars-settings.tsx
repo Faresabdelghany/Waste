@@ -227,12 +227,6 @@ export function CollectionCalendarsSettings() {
       heading="Operations"
       title="Collection calendars"
       description={calendarsModule.description}
-      action={
-        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready || !organisation.ready}>
-          <Plus className="h-4 w-4" weight="bold" />
-          {calendarsModule.primaryAction}
-        </Button>
-      }
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search collection calendars"
@@ -254,7 +248,16 @@ export function CollectionCalendarsSettings() {
         />
       }
     >
-      <RecordsSection shown={filtered.length} total={calendarRecords.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={calendarRecords.length}
+        actions={
+          <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready || !organisation.ready}>
+            <Plus className="h-4 w-4" weight="bold" />
+            {calendarsModule.primaryAction}
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[880px]">
             <TableHeader>

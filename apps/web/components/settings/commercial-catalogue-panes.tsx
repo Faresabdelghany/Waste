@@ -112,20 +112,6 @@ export function ProductsOnApiPane() {
       heading="Commercial"
       title="Products"
       description="The sellable catalogue of each project, as the API holds it: what an invoice line calls a product, the code a ledger books it under, and its VAT rate. Prices are rows of a price list, added in Price Engine with Add price."
-      action={
-        <>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/commercial">
-              Open in Price Engine
-              <ArrowSquareOut className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          <Button size="sm" disabled={!answer.ready || saving || !pickers.readyFor(PRODUCT_FORM)} onClick={() => setEditing({ schema: PRODUCT_FORM, values: {}, record: null })}>
-            <Plus className="h-4 w-4" weight="bold" />
-            New product
-          </Button>
-        </>
-      }
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search products"
@@ -140,7 +126,24 @@ export function ProductsOnApiPane() {
         />
       }
     >
-      <RecordsSection shown={filtered.length} total={answer.records.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={answer.records.length}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/commercial">
+                Open in Price Engine
+                <ArrowSquareOut className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            <Button size="sm" disabled={!answer.ready || saving || !pickers.readyFor(PRODUCT_FORM)} onClick={() => setEditing({ schema: PRODUCT_FORM, values: {}, record: null })}>
+              <Plus className="h-4 w-4" weight="bold" />
+              New product
+            </Button>
+          </>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[960px]" data-testid="products-on-api">
             <TableHeader>
@@ -305,15 +308,18 @@ export function PriceListsPane() {
       heading="Commercial"
       title="Price lists"
       description="Each project's tariff and the named lists an agreement is priced under. A list's code and currency are set once, since its rows are quoted in them; a list ends on its last day in force. Price Engine's Add price puts a row in one."
-      action={
-        <Button size="sm" disabled={!answer.ready || saving || !pickers.readyFor(PRICE_LIST_FORM)} onClick={() => setEditing({ schema: PRICE_LIST_FORM, values: {}, record: null })}>
-          <Plus className="h-4 w-4" weight="bold" />
-          New price list
-        </Button>
-      }
       toolbar={<AssetToolbar searchPlaceholder="Search price lists" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} statusOptions={LIST_STATUS_OPTIONS} view={view} onViewChange={setView} />}
     >
-      <RecordsSection shown={filtered.length} total={lists.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={lists.length}
+        actions={
+          <Button size="sm" disabled={!answer.ready || saving || !pickers.readyFor(PRICE_LIST_FORM)} onClick={() => setEditing({ schema: PRICE_LIST_FORM, values: {}, record: null })}>
+            <Plus className="h-4 w-4" weight="bold" />
+            New price list
+          </Button>
+        }
+      >
         <div className="overflow-x-auto">
           <Table className="min-w-[880px]" data-testid="price-lists">
             <TableHeader>

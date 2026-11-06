@@ -64,6 +64,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { TableCard } from "@/components/page-layout"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -332,24 +333,22 @@ export function AssetToolbar({
   )
 }
 
+/** A Settings pane's list: `TableCard` counting its rows, the list's own actions (New …, Add …) in its header. */
 export function RecordsSection({
   shown,
   total,
+  actions,
   children,
 }: {
   shown: number
   total: number
+  actions?: ReactNode
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60">
-      <div className="border-b border-border px-4 py-2">
-        <p className="text-xs text-muted-foreground">
-          {recordCountLabel(shown, total)}
-        </p>
-      </div>
+    <TableCard summary={recordCountLabel(shown, total)} actions={actions}>
       {children}
-    </section>
+    </TableCard>
   )
 }
 
@@ -420,6 +419,7 @@ export function AssetPanelShell({
   /** The bar above the toolbar; null leaves it out, where the Settings page's own title already names the pane. */
   heading?: string | null
   tabs?: ReactNode
+  /** A pane with no list's own buttons (Save, Refresh). A list's actions go in its `RecordsSection`, as a workspace's do. */
   action?: ReactNode
   toolbar?: ReactNode
   /** The table's title and its ⓘ; left out, the content starts at once. */
@@ -571,11 +571,6 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
       tabs={tabs}
       title="Container types"
       description="Catalogue of container models available to projects — dimensions, emptying characteristics and lifecycle. Deactivated types stay on existing containers but leave the pickers."
-      action={
-        <Button size="sm" onClick={() => setEditing(blankContainerType())}>
-          <Plus className="h-4 w-4" weight="bold" /> New container type
-        </Button>
-      }
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search container types"
@@ -596,7 +591,15 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
         />
       }
     >
-      <RecordsSection shown={filtered.length} total={assets.containerTypes.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={assets.containerTypes.length}
+        actions={
+          <Button size="sm" onClick={() => setEditing(blankContainerType())}>
+            <Plus className="h-4 w-4" weight="bold" /> New container type
+          </Button>
+        }
+      >
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -930,10 +933,13 @@ function WasteFractionsPanel({ tabs }: { tabs: ReactNode }) {
       tabs={tabs}
       title="Waste fractions"
       description="The waste streams containers can hold, with compliance codes and recovery targets."
-      action={<Button size="sm" onClick={() => setEditing(blankWasteFraction())}><Plus className="h-4 w-4" weight="bold" /> New waste fraction</Button>}
       toolbar={<AssetToolbar searchPlaceholder="Search waste fractions" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
     >
-      <RecordsSection shown={filtered.length} total={assets.wasteFractions.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={assets.wasteFractions.length}
+        actions={<Button size="sm" onClick={() => setEditing(blankWasteFraction())}><Plus className="h-4 w-4" weight="bold" /> New waste fraction</Button>}
+      >
         <Table>
           <TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Compliance</TableHead><TableHead>Recovery</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
           <TableBody>
@@ -1050,10 +1056,13 @@ function SparePartsPanel({ tabs }: { tabs: ReactNode }) {
       tabs={tabs}
       title="Spare parts"
       description="Replacement parts kept for containers, with the container types each part fits and inventory identity."
-      action={<Button size="sm" onClick={() => setEditing(blankSparePart())}><Plus className="h-4 w-4" weight="bold" /> New spare part</Button>}
       toolbar={<AssetToolbar searchPlaceholder="Search spare parts" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} extraFilters={[{ label: "Part type", options: partTypeOptions, value: partTypeFilters, onChange: setPartTypeFilters }]} view={view} onViewChange={setView} />}
     >
-      <RecordsSection shown={filtered.length} total={assets.spareParts.length}>
+      <RecordsSection
+        shown={filtered.length}
+        total={assets.spareParts.length}
+        actions={<Button size="sm" onClick={() => setEditing(blankSparePart())}><Plus className="h-4 w-4" weight="bold" /> New spare part</Button>}
+      >
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -1148,9 +1157,8 @@ function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
     tabs={tabs}
     title="Part types"
     description="Groupings for spare parts used in pickers and reporting. Deactivated types stay on existing spare parts."
-    action={<div className="flex max-w-lg gap-2"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-8 w-48 text-sm" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></div>}
     toolbar={<AssetToolbar searchPlaceholder="Search part types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.partTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." narrowed={assets.partTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.partTypes.length} actions={<div className="flex max-w-lg gap-2"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-7 w-48 text-xs" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></div>}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." narrowed={assets.partTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
 }
 
 function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
@@ -1172,9 +1180,8 @@ function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
     tabs={tabs}
     title="Property equipment"
     description="Appliances that can be registered on a property alongside containers."
-    action={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, description: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New appliance</Button>}
     toolbar={<AssetToolbar searchPlaceholder="Search property equipment" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." narrowed={assets.propertyEquipment.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length} actions={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, description: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New appliance</Button>}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." narrowed={assets.propertyEquipment.length > 0} /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><ActiveBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
 }
 
 function SimpleEquipmentDialog({ value, onClose }: { value: PropertyEquipment | null; onClose: () => void }) {
@@ -1204,9 +1211,8 @@ function KeyTypesPanel({ tabs }: { tabs: ReactNode }) {
     tabs={tabs}
     title="Key types"
     description="Key classifications with deposits, fee products and cutting instructions."
-    action={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, chargeableByDefault: false, feeProduct: "", deposit: 0, instructions: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New key type</Button>}
     toolbar={<AssetToolbar searchPlaceholder="Search key types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.keyTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Chargeable</TableHead><TableHead>Fee product</TableHead><TableHead>Deposit</TableHead><TableHead>Instructions</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={7} message="No key types match this search." narrowed={assets.keyTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id} className={!item.active ? "opacity-60" : undefined}><TableCell><p className="font-medium">{item.name}</p>{!item.active && <p className="text-xs text-muted-foreground">Inactive</p>}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell>{item.chargeableByDefault ? "Yes" : "No"}</TableCell><TableCell>{item.feeProduct || "—"}</TableCell><TableCell>{item.deposit ? `${item.deposit.toLocaleString()} DKK` : "—"}</TableCell><TableCell className="max-w-60 truncate">{item.instructions || "—"}</TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><KeyTypeDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.keyTypes.length} actions={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, chargeableByDefault: false, feeProduct: "", deposit: 0, instructions: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New key type</Button>}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Chargeable</TableHead><TableHead>Fee product</TableHead><TableHead>Deposit</TableHead><TableHead>Instructions</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={7} message="No key types match this search." narrowed={assets.keyTypes.length > 0} /> : pageRows.map((item) => <TableRow key={item.id} className={!item.active ? "opacity-60" : undefined}><TableCell><p className="font-medium">{item.name}</p>{!item.active && <p className="text-xs text-muted-foreground">Inactive</p>}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell>{item.chargeableByDefault ? "Yes" : "No"}</TableCell><TableCell>{item.feeProduct || "—"}</TableCell><TableCell>{item.deposit ? `${item.deposit.toLocaleString()} DKK` : "—"}</TableCell><TableCell className="max-w-60 truncate">{item.instructions || "—"}</TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><KeyTypeDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
 }
 
 function KeyTypeDialog({ value, onClose }: { value: KeyType | null; onClose: () => void }) {
