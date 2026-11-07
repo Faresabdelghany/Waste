@@ -17,6 +17,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { migrateLegacyState } from "@/lib/data/legacy-ids"
 import type { ActiveRouteSummary } from "@/lib/data/sidebar"
 import { workspaceHref } from "@/lib/data/workspace-href"
+import { providerPagePath } from "@/lib/modules/provider-pages"
 import { persistedStore } from "@/lib/persisted-store"
 import { ACTIVE_ROUTES_STORAGE_KEY } from "@/lib/storage-keys"
 
@@ -156,7 +157,7 @@ export function useActiveRoutes(scope: ActiveRoutesScope): ActiveRoutesValue {
 /** Where a scope's routes are shown: the provider's own routes page, or Route Studio's. */
 const routesPageByScope: Record<ActiveRoutesScope, string | undefined> = {
   operator: undefined,
-  "service-provider": "/service-provider-workspace/routes",
+  "service-provider": providerPagePath("routes"),
 }
 
 const ROUTE_PIN_COLORS = [

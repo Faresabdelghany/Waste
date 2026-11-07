@@ -467,11 +467,10 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar, Coll
 // ---------------------------------------------------------------------------
 
 /** Settings → Areas & Zones, and the map's outlines: each carries the boundary version in force on the project's day (#232). */
-export const planningAreasModule: ServerModule = {
-  workspaceId: PLANNING_AREAS_MODULE.workspaceId,
-  moduleId: PLANNING_AREAS_MODULE.moduleId,
+export const planningAreasModule = {
+  ...PLANNING_AREAS_MODULE,
   resources: [planningAreaAdapter],
-}
+} satisfies ServerModule
 
 /**
  * Settings → Collection calendars and Holiday lists, and what the wizard and
@@ -479,10 +478,9 @@ export const planningAreasModule: ServerModule = {
  * company's Holiday Lists beside them (holiday-lists.ts), the grant both are
  * read under.
  */
-export const collectionCalendarsModule: ServerModule = {
-  workspaceId: COLLECTION_CALENDARS_MODULE.workspaceId,
-  moduleId: COLLECTION_CALENDARS_MODULE.moduleId,
+export const collectionCalendarsModule = {
+  ...COLLECTION_CALENDARS_MODULE,
   resources: [collectionCalendarAdapter, holidayListAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

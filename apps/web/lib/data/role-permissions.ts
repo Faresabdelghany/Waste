@@ -1,4 +1,4 @@
-import { ACTIONS, type Action } from "@waste/domain/access/modules"
+import { ACTIONS, WORKSPACE_KEYS, type Action } from "@waste/domain/access/modules"
 
 import { charterOf } from "@/lib/api/grants"
 import {
@@ -33,24 +33,11 @@ export type RolePermissionSection = {
   items: RolePermissionItem[]
 }
 
-// Every navigable surface, in sidebar order. The standalone Control Center
-// workspace is omitted because Configure already carries a Control Center
-// module — one row per surface, not one per route alias.
-const SECTION_ORDER: WorkspaceId[] = [
-  "operate",
-  "plan",
-  "route-studio",
-  "fleet",
-  "customers",
-  "resources",
-  "service-providers",
-  "commercial",
-  "improve",
-  "configure",
-]
-
+// Every module of every workspace, in the domain's order of workspaces and
+// each workspace's page order: one row per surface. Control Center's twin
+// workspace is no row, since Configure already carries its module.
 export const rolePermissionSections: RolePermissionSection[] =
-  SECTION_ORDER.map((workspaceId) => {
+  WORKSPACE_KEYS.map((workspaceId) => {
     const workspace = businessWorkspaces[workspaceId]
     return {
       id: workspace.id,

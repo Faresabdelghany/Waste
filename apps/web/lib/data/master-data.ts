@@ -46,10 +46,11 @@ import { WASTE_TREATMENTS, type WasteTreatment } from "@waste/domain/registry/vo
 import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/registry/waste-code"
 import { KEY_MAX, SLUG_PATTERN } from "@waste/domain/text"
 
+import { moduleAt } from "@/lib/modules/keys"
+
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
-import { settingsModuleDomains } from "./business-domain"
-import { type BusinessRecord, type ModuleLocation } from "./business-modules"
+import { type BusinessRecord } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
 
 export {
@@ -63,17 +64,11 @@ export {
   type MasterDataKindDetails,
 } from "./master-data-kinds"
 
-const masterDomain = settingsModuleDomains.find((module) => module.moduleId === "master")
-if (!masterDomain) throw new Error("business-domain lists no settings domain for configure.master")
-
 /** A record's typed values, as the registry keeps them. */
 type SubmittedValues = NonNullable<BusinessRecord["submittedValues"]>
 
 /** Where the master data lives — the one seam callers resolve the module through, never the pair spelled by hand. */
-export const MASTER_DATA_MODULE: ModuleLocation = {
-  workspaceId: masterDomain.workspaceId,
-  moduleId: masterDomain.moduleId,
-}
+export const MASTER_DATA_MODULE = moduleAt("configure.master")
 
 // ---------------------------------------------------------------------------
 // The rules a write is held to, spelled once

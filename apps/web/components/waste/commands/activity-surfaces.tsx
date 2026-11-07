@@ -14,6 +14,7 @@ import { useState } from "react"
 import { Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { Button } from "@/components/ui/button"
 import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
@@ -44,11 +45,11 @@ import type { ServiceProviderActivityKind } from "@waste/domain/service-provider
 import type { ActivitySide } from "@waste/domain/service-providers/activities"
 
 const { workspaceId, moduleId } = PROVIDER_ACTIVITIES_MODULE
-const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
-const VEHICLES_MODULE = { workspaceId: "fleet", moduleId: "vehicles" } as const
-const DRIVERS_MODULE = { workspaceId: "fleet", moduleId: "drivers" } as const
-const CONTAINERS_MODULE = { workspaceId: "resources", moduleId: "containers" } as const
-const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
+const SERVICE_AREAS_MODULE = moduleAt("service-providers.service-areas")
+const VEHICLES_MODULE = moduleAt("fleet.vehicles")
+const DRIVERS_MODULE = moduleAt("fleet.drivers")
+const CONTAINERS_MODULE = moduleAt("resources.containers")
+const MASTER_MODULE = moduleAt("configure.master")
 
 /**
  * What a vehicle change, a stop-set change and a waste-fraction change pick

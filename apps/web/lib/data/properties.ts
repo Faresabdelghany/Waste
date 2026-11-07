@@ -47,19 +47,20 @@ import {
   type SharedCollectionPointOperatingModel,
 } from "@waste/domain/registry/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { ofKind, statusLabel } from "@/lib/api/records/adapter"
 
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "./agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 
 /** Where each kind lives — the one seam callers resolve the modules through. */
-export const PROPERTIES_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "properties" }
-export const PROPERTY_GROUPS_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "groups" }
-export const SHARED_POINTS_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "shared" }
+export const PROPERTIES_MODULE = moduleAt("customers.properties")
+export const PROPERTY_GROUPS_MODULE = moduleAt("customers.groups")
+export const SHARED_POINTS_MODULE = moduleAt("customers.shared")
 /** Where the customers a party or a responsible customer names live (switched before these three). */
-export const CONTACTS_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "contacts" }
+export const CONTACTS_MODULE = moduleAt("customers.contacts")
 
 /** The id prefixes: the fixtures' own, so a fixture's id and the adapters' `<prefix>-<uuid>` read alike. */
 export { PROPERTY_PREFIX, SHARED_POINT_PREFIX }

@@ -20,7 +20,8 @@ import type { Alert } from "@waste/contracts/alerts"
 import { NAMES_A_SUBJECT } from "@waste/domain/resolution/alerts"
 import { ALERT_KINDS, ALERT_SEVERITIES } from "@waste/domain/resolution/vocabulary"
 
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { moduleAt } from "@/lib/modules/keys"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll } from "../client"
@@ -34,7 +35,7 @@ import { callsignOf, routeAdapter } from "./routes"
 import { isTicketRecord, TICKET_NUMBER_FACT, TICKET_PREFIX } from "./tickets"
 
 /** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
-export const ALERTS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "exceptions" }
+export const ALERTS_MODULE = moduleAt("operate.exceptions")
 
 export const ALERT_PREFIX = "alert"
 
@@ -189,8 +190,7 @@ export const alertAdapter: ResourceAdapter<Alert> = {
 }
 
 /** Operate › Exceptions & Alerts: the conditions the office raises by hand, acknowledges, resolves and hands to a ticket. */
-export const alertsModule: ServerModule = {
-  workspaceId: ALERTS_MODULE.workspaceId,
-  moduleId: ALERTS_MODULE.moduleId,
+export const alertsModule = {
+  ...ALERTS_MODULE,
   resources: [alertAdapter],
-}
+} satisfies ServerModule

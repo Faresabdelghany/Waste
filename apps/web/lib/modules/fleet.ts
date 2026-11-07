@@ -1,0 +1,63 @@
+import { workspaceSpec } from "./spec"
+
+export const FLEET = workspaceSpec("fleet", {
+  label: "Fleet",
+  description: "Manage vehicles, drivers, availability, compatibility, and planned allocation.",
+  path: "/fleet",
+  modules: {
+    vehicles: {
+      shown: "tab",
+      providerPage: "fleet",
+      // The rich view for its edit and delete paths: a service provider manager keeps its own fleet.
+      view: { seededFactColumns: ["Ownership", "Capacity", "Fractions", "Fuel"] },
+      label: "Vehicles",
+      title: "Vehicles and Fleet",
+      description: "Capacity, compatibility, ownership, live status, assignment, utilization, and history.",
+      entityLabel: "Vehicle",
+      contextLabel: "Type · depot",
+      valueLabel: "Current state",
+      primaryAction: "Register vehicle",
+      lifecycle: ["Active", "Unavailable", "Maintenance", "Retired"],
+      rules: [
+        "Compatibility includes fraction, capacity, compartment, dimensions, and route constraints.",
+        "Service provider ownership controls visibility and structural editing.",
+        "Current location exposes freshness and permitted access purpose.",
+      ],
+    },
+    drivers: {
+      shown: "tab",
+      providerPage: "fleet",
+      // The rich view for its edit and delete paths: a service provider manager keeps its own fleet.
+      view: { seededFactColumns: ["Licence", "AppAccess", "Employer"] },
+      label: "Drivers",
+      title: "Drivers and Workforce Capacity",
+      description: "Skills, licences, app access, availability, absence, actual assignment, and field performance.",
+      entityLabel: "Driver",
+      contextLabel: "Employer · skills",
+      valueLabel: "Availability",
+      primaryAction: "Add driver",
+      lifecycle: ["Invited", "Active", "Absent", "Suspended", "Inactive"],
+      rules: [
+        "Driver access is limited to assigned work and necessary customer information.",
+        "Skills and licences participate in route compatibility checks.",
+        "Location tracking follows configured lawful purpose, notice, and retention.",
+      ],
+    },
+    "vehicle-planning": {
+      shown: "tab",
+      label: "Vehicle Planning",
+      title: "Vehicle and Workforce Planning",
+      description: "Time-based allocation, capacity, compatibility, availability, and absence planning.",
+      entityLabel: "Allocation",
+      contextLabel: "Vehicle · driver",
+      valueLabel: "Capacity",
+      primaryAction: "Plan allocation",
+      lifecycle: ["Draft", "Allocated", "Confirmed", "Released"],
+      rules: [
+        "Compatibility checks include fraction, capacity, compartment, skills, and availability.",
+        "Planned allocation does not overwrite actual execution assignment.",
+        "Service provider-owned resources expose ownership and permitted visibility.",
+      ],
+    },
+  },
+})

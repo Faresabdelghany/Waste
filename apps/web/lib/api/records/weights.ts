@@ -247,4 +247,4 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
 }
 
 /** Route Studio › Weight Control: the unloads and their reviews. */
-export const weightsModule: ServerModule = { workspaceId: WEIGHTS_MODULE.workspaceId, moduleId: WEIGHTS_MODULE.moduleId, resources: [unloadAdapter] }
+export const weightsModule = { ...WEIGHTS_MODULE, resources: [unloadAdapter] } satisfies ServerModule

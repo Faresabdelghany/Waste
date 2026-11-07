@@ -14,13 +14,15 @@ import type { MaintenanceDueState, MaintenanceOrder, MaintenancePlan } from "@wa
 import { NAME_THE_ORDER, nextDueLine, planIssue } from "@waste/domain/resources/maintenance"
 import { isIsoDate } from "@waste/domain/days"
 
+import { moduleAt } from "@/lib/modules/keys"
+
 import { command, create, listAll, patch } from "../client"
 import { actionOf, said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 
-/** The module whose rows the plans and orders belong to; spelled here, since fleet.ts imports this module. */
-const VEHICLES = { workspaceId: "fleet", moduleId: "vehicles" } as const
+/** The module whose rows the plans and orders belong to. */
+const VEHICLES = moduleAt("fleet.vehicles")
 
 export const ADD_PLAN = "add-maintenance-plan"
 export const RETIRE_PLAN = "retire-maintenance-plan"

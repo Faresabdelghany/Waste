@@ -44,10 +44,11 @@ import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-stat
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek } from "@waste/domain/planning/frequency-reconciliation"
+import { moduleAt } from "@/lib/modules/keys"
 import { PROMISED_RATE_KEY } from "@/lib/prototype/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { OWNERSHIP_LABELS, SERVED_PUBLICLY } from "@/lib/data/containers"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isSharedPointRecord } from "@/lib/data/properties"
@@ -61,10 +62,10 @@ import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./pl
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
-export const CONTAINERS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "containers" }
+export const CONTAINERS_MODULE = moduleAt("resources.containers")
 
 /** The workspace module the ledger is the rows of: the movements the containers' commands append. */
-export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
+export const INVENTORY_MODULE = moduleAt("resources.inventory")
 
 /** A container as the adapter reads it: the resource, and every placement it has had. */
 export type ContainerResource = Container & { placements: ContainerServicePlacement[] }
@@ -467,11 +468,10 @@ export const containerAdapter: ResourceAdapter<ContainerResource, unknown, Conta
 }
 
 /** Resources › Containers: the registry's containers, each with where it serves. */
-export const containersModule: ServerModule = {
-  workspaceId: CONTAINERS_MODULE.workspaceId,
-  moduleId: CONTAINERS_MODULE.moduleId,
+export const containersModule = {
+  ...CONTAINERS_MODULE,
   resources: [containerAdapter],
-}
+} satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // The inventory: the ledger across containers
@@ -543,10 +543,9 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
 }
 
 /** Resources › Inventory: the ledger, after the containers its rows name. */
-export const inventoryModule: ServerModule = {
-  workspaceId: INVENTORY_MODULE.workspaceId,
-  moduleId: INVENTORY_MODULE.moduleId,
+export const inventoryModule = {
+  ...INVENTORY_MODULE,
   resources: [stockMovementAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

@@ -30,6 +30,7 @@
 // them to a new route of its day, and Merge route takes in every open stop of
 // another route and cancels it as merged; the other route is one
 // `routesToJoin` offers, and the API judges each stop where it goes.
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowSquareOut, ArrowUp, CaretDown, CaretRight, Funnel, MagnifyingGlass, MapTrifold, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
@@ -451,7 +452,7 @@ const DONE_SAYS: Readonly<Record<string, string>> = {
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] } | { kind: "stops"; mode: StopsMode }
 
 /** The grant a route's messages are written under (O24 of #290): the routes' own. */
-const ROUTE_MESSAGES_MODULE_KEY = "route-studio.routes"
+const ROUTE_MESSAGES_MODULE_KEY = "route-studio.routes" satisfies ModuleKey
 
 /** A route's details in the side panel: its facts above, these commands and reads under them. */
 export function RouteCommandsSurface({ record }: RowSurfaceProps) {

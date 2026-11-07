@@ -183,4 +183,4 @@ export const paymentAdapter: ResourceAdapter<PaymentResource, PaymentCreate> = {
 }
 
 /** Commercial › Payments: the payments, after the invoices they pay and the customers who pay them. */
-export const paymentsModule: ServerModule = { workspaceId: PAYMENTS_MODULE.workspaceId, moduleId: PAYMENTS_MODULE.moduleId, resources: [paymentAdapter] }
+export const paymentsModule = { ...PAYMENTS_MODULE, resources: [paymentAdapter] } satisfies ServerModule

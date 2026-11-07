@@ -50,6 +50,7 @@ import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { isIsoDate } from "@waste/domain/days"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
@@ -607,17 +608,15 @@ export const driverAdapter: ResourceAdapter<Driver> = {
 // ---------------------------------------------------------------------------
 
 /** Fleet → Vehicles, after the master data (its type), the providers and the depots (its base). */
-export const fleetVehiclesModule: ServerModule = {
-  workspaceId: "fleet",
-  moduleId: "vehicles",
+export const fleetVehiclesModule = {
+  ...moduleAt("fleet.vehicles"),
   resources: [vehicleAdapter],
-}
+} satisfies ServerModule
 
 /** Fleet → Drivers, after the access module (its login), the providers and the depots. */
-export const fleetDriversModule: ServerModule = {
-  workspaceId: "fleet",
-  moduleId: "drivers",
+export const fleetDriversModule = {
+  ...moduleAt("fleet.drivers"),
   resources: [driverAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

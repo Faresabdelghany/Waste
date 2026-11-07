@@ -441,10 +441,9 @@ export const decommissionReasonAdapter: ResourceAdapter<DecommissionReason> = {
 // ---------------------------------------------------------------------------
 
 /** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them, the fractions before the contaminant codes that name them, and the decommission reasons (O30 of #290). */
-export const masterDataModule: ServerModule = {
-  workspaceId: MASTER_DATA_MODULE.workspaceId,
-  moduleId: MASTER_DATA_MODULE.moduleId,
+export const masterDataModule = {
+  ...MASTER_DATA_MODULE,
   resources: [wasteFractionAdapter, containerTypeAdapter, serviceFrequencyAdapter, vehicleTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

@@ -18,15 +18,15 @@
 // module is switched (`commandSurfaceFor`): fixture mode never reaches it,
 // and the fixture forms and filters stand exactly as before. A later slice
 // adds its module here rather than another branch in business-workspace.tsx;
-// every key is a `SERVER_MODULES` key
-// (lib/api/__tests__/command-surfaces.test.ts).
+// every key is a switched module's (`SwitchedModuleKey`, its adapter's key in
+// lib/api/records/modules.ts).
 import type { ComponentType } from "react"
 
 import { AlertCommandsSurface, NewTicketSurface, RaiseAlertSurface } from "@/components/tickets/resolution-surfaces"
 import { mayTake, type Grants, type ModuleAction } from "@/lib/api/grants"
 import type { BusinessRecord, ModuleLocation, WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
-import { isServerBacked } from "@/lib/api/records/modules"
+import { isServerBacked, type SwitchedModuleKey } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"
 import { inspectionOpen } from "@/lib/data/inspections"
@@ -158,8 +158,13 @@ const TEAM_LIST: ModuleList = {
   initial: {},
 }
 
-/** The surfaces, by `workspace.module`. */
-export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
+/** The surfaces as given, each under a switched module's key: a surface for a module still on fixtures is a compile error. */
+function surfacesOf<Key extends SwitchedModuleKey>(surfaces: { readonly [K in Key]: CommandSurface }): { readonly [K in Key]: CommandSurface } {
+  return surfaces
+}
+
+/** The surfaces, by the switched module's key. */
+export const COMMAND_SURFACES = surfacesOf({
   // Slice 5b (#181): the identity by its own form, the lifecycle by command.
   "resources.containers": { primary: AddContainerSurface, rowActions: ContainerCommandsSurface },
   // The ledger is read-only on the wire: a movement is a container's command.
@@ -240,10 +245,12 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "operate.scale-house": { primary: ScaleHousePrimarySurface, rowActions: ScaleHouseRowSurface, list: SCALE_HOUSE_LIST },
   // #291 C24: a provider's team invited through its own dialog on a provider's role, a member switched off and on in its details; the module lists the accounts, never the roles it reads beside them.
   "service-providers.service-provider-workspace": { primary: InviteTeamMemberSurface, rowActions: TeamMemberCommandsSurface, list: TEAM_LIST },
-}
+})
+
+const surfaceByKey: ReadonlyMap<string, CommandSurface> = new Map(Object.entries(COMMAND_SURFACES))
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
 export function commandSurfaceFor(workspaceId: WorkspaceId, moduleId: string): CommandSurface | undefined {
   if (!isServerBacked(workspaceId, moduleId)) return undefined
-  return COMMAND_SURFACES[moduleKeyOf(workspaceId, moduleId)]
+  return surfaceByKey.get(moduleKeyOf(workspaceId, moduleId))
 }

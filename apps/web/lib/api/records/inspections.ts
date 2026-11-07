@@ -156,4 +156,4 @@ export async function addInspectionPhoto(client: ApiClient, serverId: string, ph
 export const inspectionPhotoLinks = (client: ApiClient, serverId: string): Promise<InspectionPhotoLinks> => get<InspectionPhotoLinks>(client, `/field-inspections/${serverId}/photo-objects`)
 
 /** Operate › Inspections: read after the containers and the properties its rows name. */
-export const inspectionsModule: ServerModule = { workspaceId: INSPECTIONS_MODULE.workspaceId, moduleId: INSPECTIONS_MODULE.moduleId, resources: [inspectionAdapter] }
+export const inspectionsModule = { ...INSPECTIONS_MODULE, resources: [inspectionAdapter] } satisfies ServerModule

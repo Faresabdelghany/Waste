@@ -7,6 +7,7 @@
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
 import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
+import { moduleAt } from "@/lib/modules/keys"
 import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditApplication, type SchemeEditQuestion } from "@/lib/prototype/route-schemes/edit"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { schemeGenerationRecorded } from "@/lib/prototype/route-schemes/lifecycle"
@@ -23,7 +24,7 @@ import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
-export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
+export const ROUTE_SCHEMES_MODULE = moduleAt("route-studio.schemes") satisfies ModuleLocation
 
 /** Where a scheme keeps how many days from tomorrow the nightly job plans it (O21 of #290): a whole number of days, as text. */
 export const PLAN_AHEAD_DAYS_KEY = "planAheadDays"

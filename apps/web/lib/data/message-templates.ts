@@ -7,13 +7,14 @@
 // templates of the fixtures' Tickets & communication onto the API. A draft
 // the API would refuse is refused here first, at its field, in the domain's
 // sentence (@waste/domain/messaging/template, which the contracts read too).
+import type { ModuleKey } from "@waste/domain/access/modules"
 import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
 import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
 import { allows, type Grants } from "../api/grants"
 
 /** The module the templates are granted under: Tickets & communication's. */
-export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates"
+export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates" satisfies ModuleKey
 
 export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email: "E-mail", sms: "Text message" }
 export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }

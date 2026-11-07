@@ -332,7 +332,7 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
 }
 
 /** Price Engine › Products: the catalogue, one adapter. */
-export const productsModule: ServerModule = { workspaceId: PRODUCTS_MODULE.workspaceId, moduleId: PRODUCTS_MODULE.moduleId, resources: [productAdapter] }
+export const productsModule = { ...PRODUCTS_MODULE, resources: [productAdapter] } satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // Price lists
@@ -602,7 +602,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow, RowWrite> = {
 }
 
 /** Price Engine › Price rows: the lists, then every list's rows, which name their list through the rows loaded just before them. */
-export const priceRowsModule: ServerModule = { workspaceId: PRICE_ROWS_MODULE.workspaceId, moduleId: PRICE_ROWS_MODULE.moduleId, resources: [priceListAdapter, priceRowAdapter] }
+export const priceRowsModule = { ...PRICE_ROWS_MODULE, resources: [priceListAdapter, priceRowAdapter] } satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // Explain price

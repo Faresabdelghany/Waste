@@ -17,7 +17,8 @@
 import type { FillReading, Sensor, SensorPairing } from "@waste/contracts/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { moduleAt } from "@/lib/modules/keys"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, listPage, patch, type ApiClient } from "../client"
@@ -28,7 +29,7 @@ import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referen
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
 /** The workspace module the sensors are the rows of. */
-export const SENSORS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "sensors" }
+export const SENSORS_MODULE = moduleAt("resources.sensors")
 
 export const SENSOR_PREFIX = "sensor"
 /** The containers' web prefix, which a pairing names a container by. */
@@ -215,8 +216,7 @@ export const sensorAdapter: ResourceAdapter<Sensor> = {
 export const sensorReadings = (client: ApiClient, serverId: string): Promise<FillReading[]> => listPage<FillReading>(client, `/sensors/${serverId}/readings`).then((page) => page.items)
 
 /** Resources › Sensors: the fill-level sensors, read after the containers so a pairing names its container by label. */
-export const sensorsModule: ServerModule = {
-  workspaceId: SENSORS_MODULE.workspaceId,
-  moduleId: SENSORS_MODULE.moduleId,
+export const sensorsModule = {
+  ...SENSORS_MODULE,
   resources: [sensorAdapter],
-}
+} satisfies ServerModule

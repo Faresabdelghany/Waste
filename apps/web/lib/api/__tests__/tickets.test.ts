@@ -226,7 +226,7 @@ describe("a ticket", () => {
     assert.equal(entityLabel, "Ticket")
     assert.ok(!(entityLabel in record.facts))
     assert.equal(record.facts[TICKET_NUMBER_FACT], "T-1001")
-    const seeded = defaultFactColumns(TICKETS_MODULE.moduleId, [])
+    const seeded = defaultFactColumns(getModuleDefinition(TICKETS_MODULE) ?? {}, [])
     for (const fact of [TICKET_NUMBER_FACT, "Route", "Container"]) assert.ok(seeded.includes(fact), `${fact} is a column the table opens with`)
     assert.ok(!seeded.includes(entityLabel))
   })

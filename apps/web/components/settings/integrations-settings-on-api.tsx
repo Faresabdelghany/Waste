@@ -9,6 +9,7 @@
 // connectors the deployment does not make — a GPS feed, an ERP, Digital Post,
 // regulatory reporting — are not shown: no API holds them.
 
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { useState } from "react"
 import Link from "next/link"
 import { ArrowClockwise, CheckCircle, Gear, Warning } from "@phosphor-icons/react/dist/ssr"
@@ -26,7 +27,7 @@ import { importRow, integrationRowsOf, type IntegrationRow, type IntegrationTone
 import { cn } from "@/lib/utils"
 
 /** The module whose `view` reads the deployment's connections. */
-const INTEGRATIONS_MODULE = "configure.integrations"
+const INTEGRATIONS_MODULE = "configure.integrations" satisfies ModuleKey
 
 export function IntegrationsSettingsOnApi() {
   const { me } = useApiSession()

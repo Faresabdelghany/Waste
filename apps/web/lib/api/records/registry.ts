@@ -30,6 +30,7 @@
 import type { Customer } from "@waste/contracts/customers"
 import { CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { paymentTermsLabel } from "@/lib/data/finance-settings"
 
@@ -165,8 +166,7 @@ export const customerAdapter: ResourceAdapter<Customer> = {
 }
 
 /** Customers → Contacts & Companies. */
-export const customersModule: ServerModule = {
-  workspaceId: "customers",
-  moduleId: "contacts",
+export const customersModule = {
+  ...moduleAt("customers.contacts"),
   resources: [customerAdapter],
-}
+} satisfies ServerModule
