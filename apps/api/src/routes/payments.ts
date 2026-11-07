@@ -39,7 +39,6 @@
 // which appends. No outbox event yet: `payment-recorded` waits for its first
 // consumer (C15). A payment's `reference` and `payer_text` are what the bank
 // said about a person, kept and erased with the customer's data (#381).
-import { INVOICE_NUMBER_PREFIX } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
 import {
   AllocationCreate,
@@ -60,7 +59,10 @@ import type { Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { billingRun, invoice, payment, paymentAllocation } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
+import type { Action } from "@waste/domain/access/modules"
 import { bankLineKey, bankLineLabels, bankLineReference, matchBankLine, minorDigitsOf, type OpenInvoice } from "@waste/domain/finance/payments"
+import { numberOf } from "@waste/domain/numbering"
+import { INT4_MAX } from "@waste/domain/requests"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, sum, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -299,7 +301,7 @@ async function statementOf(tx: Tx, principal: Principal, customerId: string, que
   return { customerId, currency: query.currency, from: query.from, to: query.to, openingBalanceMinor, lines, closingBalanceMinor: balance }
 }
 
-const problems = (action: "view" | "create", what = "payment") => ({
+const problems = (action: Action, what = "payment") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem(`No ${what} with that id in the projects this account works in.`),
@@ -580,9 +582,8 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
           ...new Set(
             body.lines.flatMap((line) =>
               bankLineLabels(line.text)
-                .filter((label) => label.startsWith(INVOICE_NUMBER_PREFIX))
-                .map((label) => Number(label.slice(INVOICE_NUMBER_PREFIX.length)))
-                .filter((number) => number <= 2_147_483_647),
+                .flatMap((label) => numberOf("invoice", label) ?? [])
+                .filter((number) => number <= INT4_MAX),
             ),
           ),
         ]

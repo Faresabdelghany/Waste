@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OCCURRED_WINDOW_ORDERED } from "../stock"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED, Unload, UnloadCreate, UnloadListQuery, unloadWeights, weightsAddUp, weightsPaired } from "../unloads"
+import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED, weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
+
+import { Unload, UnloadCreate, UnloadListQuery, unloadWeights } from "../unloads"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

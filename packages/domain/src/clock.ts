@@ -20,6 +20,9 @@
 // last instant inside the window, a millisecond before the end, the wire's
 // precision.
 
+/** What a window of instants whose end comes before its start is told. */
+export const OCCURRED_WINDOW_ORDERED = "to is the end of the window, so it comes on or after from"
+
 /** A wall clock's reading, every part a whole number. */
 export type WallClock = { year: number; month: number; day: number; hour: number; minute: number; second: number }
 

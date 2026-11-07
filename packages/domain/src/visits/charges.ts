@@ -38,6 +38,7 @@
 import type { AgreementStatus } from "../registry/vocabulary"
 import { addDays } from "../days"
 import { inForceOn } from "../periods"
+import { eachOnceSentence } from "../requests"
 import type { SiteVisitOutcome, SiteVisitRefusalReason, VisitChargeBasis } from "./vocabulary"
 
 /** Whom a visit was for: a household's Property with the Agreement it pays under, or a business's Customer and the Agreement its credential names. */
@@ -102,6 +103,28 @@ export function identifyVisit(identified: Identified, payingAgreementId: string 
   if (credential.blocked) return { outcome: "refused", refusalReason: "credential-blocked", credentialId: credential.id, holder }
   return { outcome: "admitted", refusalReason: null, credentialId: credential.id, holder }
 }
+
+/** A household's free visits per calendar year: at most one a day. */
+export const FREE_VISITS = { min: 0, max: 366 } as const
+
+/** The counted visits that flag a likely trade, and the days they are counted over. */
+export const TRADE_THRESHOLD = { min: 1, max: 1000 } as const
+export const TRADE_WINDOW_DAYS = { min: 1, max: 366 } as const
+
+/** The most products a rule's ladder steps through, the last repeating. */
+export const VISIT_LADDER_MAX = 10
+
+/** The most fractions a rule lets through uncounted. */
+export const FREE_FRACTIONS_MAX = 200
+
+/** What a rule's free fractions naming one twice is told. */
+export const EACH_FREE_FRACTION_ONCE = eachOnceSentence("free fraction")
+
+/** The likely-trade threshold and its window go together, or neither: the rule table's `trade_shape`. */
+export const tradeTogether = (rule: { tradeThreshold?: number | null; tradeWindowDays?: number | null }): boolean => (rule.tradeThreshold == null) === (rule.tradeWindowDays == null)
+
+/** What a threshold without its window, or a window without its threshold, is told. */
+export const TRADE_TOGETHER = "A likely trade is a threshold of visits in a window of days: give both, or neither"
 
 /** A project's Visit Rule, half-open in time (ADR-0005): `validTo` is the first day out of force. */
 export type VisitRuleFacts = {
@@ -201,3 +224,38 @@ export function likelyTrades(visits: readonly VisitFacts[], rule: VisitRuleFacts
 
 /** A plate's or a card's value as stored and matched: upper case, with no spaces and no hyphens, so `AB-12 345` and `ab12345` are one plate. */
 export const normaliseCredentialValue = (value: string): string => value.replace(/[\s-]+/g, "").toUpperCase()
+
+/** A stored credential's value, as a regular expression's source: letters and digits, upper case. */
+export const CREDENTIAL_VALUE_PATTERN = "^[A-Z0-9]+$"
+
+/** The longest plate or card number a credential holds, normalised. */
+export const CREDENTIAL_VALUE_MAX = 32
+
+/** The longest one as a person types it: spaces and hyphens may double it. */
+export const CREDENTIAL_TYPED_MAX = CREDENTIAL_VALUE_MAX * 2
+
+/** What a value that normalises to nothing usable is told. */
+export const CREDENTIAL_VALUE_SHAPE = "A plate or card number of letters and digits; spaces and hyphens are dropped and letters read upper case"
+
+/** Whether a plate or a card as typed normalises to a value a credential holds. */
+export function isCredentialValue(value: string): boolean {
+  const normalised = normaliseCredentialValue(value)
+  return new RegExp(CREDENTIAL_VALUE_PATTERN).test(normalised) && normalised.length <= CREDENTIAL_VALUE_MAX
+}
+
+/** A credential's holder is a business's Customer with its Agreement, or a household's Property: exactly one — the credential table's `holder_shape`. */
+export const oneHolder = (value: { customerId?: string | null; agreementId?: string | null; propertyId?: string | null }): boolean =>
+  value.propertyId != null ? value.customerId == null && value.agreementId == null : value.customerId != null && value.agreementId != null
+
+/** What a credential with no holder, half a business's, or both is told, at the Property. */
+export const ONE_HOLDER = "A credential is a business's — its customer and the agreement its visits are charged to — or a household's Property, exactly one"
+
+/** The most fractions one visit brings. */
+export const VISIT_FRACTIONS_MAX = 50
+
+/** What a check-in's fractions naming one twice is told. */
+export const EACH_VISIT_FRACTION_ONCE = eachOnceSentence("waste fraction", "a visit brings a fraction or it does not")
+
+/** How much of an address a check-in's search takes, trimmed, and the most Properties it answers. */
+export const VISIT_ADDRESS_QUERY = { min: 2, max: 100 } as const
+export const VISIT_ADDRESS_MAX = 20

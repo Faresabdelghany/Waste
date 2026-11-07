@@ -6,23 +6,9 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { SubscriptionCreate } from "@waste/contracts/agreements"
+import { ONE_PLACE } from "@waste/domain/registry/agreements"
 
-import {
-  agreementFormSchemaOnApi,
-  agreementPriceListOptions,
-  AGREEMENTS_MODULE,
-  isAgreementRecord,
-  isSubscriptionRecord,
-  ONE_PLACE,
-  PROJECT_DEFAULT_LIST,
-  referencedId,
-  SUBSCRIPTION_RECORD_KIND,
-  subscriptionEditSchema,
-  subscriptionFormSchema,
-  subscriptionFormSchemaFor,
-  subscriptionInitialValues,
-  subscriptionProductOptions,
-} from "../agreements"
+import { agreementFormSchemaOnApi, agreementPriceListOptions, AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, PROJECT_DEFAULT_LIST, referencedId, SUBSCRIPTION_RECORD_KIND, subscriptionEditSchema, subscriptionFormSchema, subscriptionFormSchemaFor, subscriptionInitialValues, subscriptionProductOptions } from "../agreements"
 import { getBusinessFormSchema } from "../business-form-schemas"
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
 import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "../commercial"

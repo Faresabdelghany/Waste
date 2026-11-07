@@ -16,6 +16,7 @@
 // `tank_inspection` is a ledger of what the office found when it inspected a
 // tank: the day, the outcome, the findings and when it is next to be
 // inspected, appended by the account that recorded it and never rewritten.
+import { TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import { TANK_INSPECTION_OUTCOMES, TANK_KINDS, TANK_OUTLETS } from "@waste/domain/registry/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, index, integer, text, uuid } from "drizzle-orm/pg-core"
@@ -30,9 +31,6 @@ import { company, project } from "./organisation"
 import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
-
-/** The longest interval a register takes between emptyings: ten years. */
-export const TANK_INTERVAL_MONTHS_MAX = 120
 
 export const tankInstallation = wms.table(
   "tank_installation",

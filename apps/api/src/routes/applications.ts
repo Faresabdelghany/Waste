@@ -23,14 +23,15 @@
 // most of all (statuses.ts records the exemption). What it names hangs
 // together instead (`subjectRefusal`): the customer a party of the property,
 // the subscription one of the customer's agreements at the place named.
-import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch, DecisionHistory, ONE_PLACE } from "@waste/contracts/applications"
+import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch, DecisionHistory } from "@waste/contracts/applications"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { propertyParty } from "@waste/db/schema/customers"
 import { company } from "@waste/db/schema/organisation"
-import { moveOf, moveRefusal, type ApplicationCommand } from "@waste/domain/registry/applications"
+import type { Action } from "@waste/domain/access/modules"
+import { moveOf, moveRefusal, ONE_PLACE, type ApplicationCommand } from "@waste/domain/registry/applications"
 import type { ApplicationStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, gt, max, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -120,7 +121,7 @@ async function subjectRefusal(tx: Tx, companyId: string, subject: Subject, check
 
 const SUBJECT_SENTENCES = { party: NOT_A_PARTY, customer: NOT_THE_CUSTOMERS, place: ANOTHER_PLACE } as const
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

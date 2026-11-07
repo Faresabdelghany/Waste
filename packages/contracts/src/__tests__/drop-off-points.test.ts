@@ -1,16 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  DropOffPoint,
-  DropOffPointCreate,
-  DropOffPointExceptionsSet,
-  DropOffPointFractionsSet,
-  DropOffPointHoursSet,
-  DropOffPointListQuery,
-  DropOffPointPatch,
-  EACH_FRACTION_ONCE,
-} from "../drop-off-points"
+
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+
+import { DropOffPoint, DropOffPointCreate, DropOffPointExceptionsSet, DropOffPointFractionsSet, DropOffPointHoursSet, DropOffPointListQuery, DropOffPointPatch } from "../drop-off-points"
 import { DropOffPointsQuery, PublicDropOffPoints } from "../public"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 

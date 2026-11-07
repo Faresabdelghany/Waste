@@ -9,8 +9,7 @@ import { customer, property, propertyParty, sharedCollectionPoint } from "@waste
 import { outboxEvent } from "@waste/db/schema/execution"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { type TicketCommand } from "@waste/domain/resolution/transitions"
-import { type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { type TicketCommand, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"

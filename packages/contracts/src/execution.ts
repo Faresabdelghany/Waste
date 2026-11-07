@@ -8,17 +8,12 @@
 // reasons — and a list spelled in one place is a list that cannot drift
 // between them.
 //
-// Two things beside the enums are the context's presentation on the wire.
-// The route's display number is `RC-1042`: the database stores `number:
-// 1042` from the company's counter, the prefix is presentation and spelled
-// once here as `ROUTE_NUMBER_PREFIX`, and `routeLabel` is the one way a
-// number becomes the label a `Route` carries and every sentence names. And a
-// photo's or a signature's Storage object lives under an agreed key,
-// `<companyId>/<routeId>/<commandId>.<ext>` (#104 §3): `ObjectKey` holds a
-// key to that shape here, where a wrong shape is a 400 naming the field,
-// and the applier holds it to the row's own ids
-// (@waste/domain/execution/commands, `objectKeyNames`), since only it knows
-// which company, route and command the key must name.
+// A photo's or a signature's Storage object lives under an agreed key,
+// `<companyId>/<routeId>/<commandId>.<ext>` (#104 §3,
+// @waste/domain/storage-objects): `ObjectKey` holds a key to that shape here,
+// where a wrong shape is a 400 naming the field, and the applier holds it to
+// the row's own ids (`objectKeyNames`), since only it knows which company,
+// route and command the key must name.
 import {
   COMMAND_OUTCOMES,
   DRIVER_COMMAND_KINDS,
@@ -37,6 +32,7 @@ import {
   ROUTE_CANCEL_REASON_CODES,
   ROUTE_STATUSES,
 } from "@waste/domain/execution/vocabulary"
+import { PROOF_KEY_PATTERN, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
 /** Where a dated Route stands. */
@@ -102,34 +98,6 @@ export type IdentificationMethod = z.infer<typeof IdentificationMethod>
 export const CommandOutcome = z.enum(COMMAND_OUTCOMES)
 export type CommandOutcome = z.infer<typeof CommandOutcome>
 
-/** The prefix a route's number is shown with: `RC-1042`. Presentation, spelled once. */
-export const ROUTE_NUMBER_PREFIX = "RC-"
-
-/** The label a route is named by, from the number the database stores. */
-export const routeLabel = (number: number): string => `${ROUTE_NUMBER_PREFIX}${number}`
-
-/** The image formats a proof's object may be, as the key's extension. */
-export const OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const
-
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-
-/**
- * The shape of a Storage object's key over the formats a bucket takes: three
- * lowercase UUIDs, a slash between each, and one of the formats after a dot —
- * `<companyId>/<routeId>/<commandId>.<ext>` for a proof's object and
- * `<companyId>/<ticketId>/<objectId>.<ext>` for a ticket's attachment
- * (`resolution.ts`). The path is spelled once here; the formats are each
- * bucket's, and are what keep a key of the one from parsing as a key of the
- * other.
- */
-export const objectKeyPattern = (extensions: readonly string[]): RegExp => new RegExp(`^${UUID}/${UUID}/${UUID}\\.(${extensions.join("|")})$`)
-
-/** The shape of a Storage object's key: `<companyId>/<routeId>/<commandId>.<ext>`, three lowercase UUIDs and one of the four formats. */
-export const OBJECT_KEY = objectKeyPattern(OBJECT_EXTENSIONS)
-
-/** What a key of another shape is told. */
-export const OBJECT_KEY_SHAPE = "An object key is <companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>"
-
-/** A Storage object's key, held to its shape; which ids it must name is the applier's rule. */
-export const ObjectKey = z.string().regex(OBJECT_KEY, OBJECT_KEY_SHAPE)
+/** A proof's Storage object key, held to its shape; which ids it must name is the applier's rule. */
+export const ObjectKey = z.string().regex(new RegExp(PROOF_KEY_PATTERN), PROOF_KEY_SHAPE)
 export type ObjectKey = z.infer<typeof ObjectKey>

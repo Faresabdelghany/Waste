@@ -69,24 +69,15 @@
 //
 // The grant is `fleet.vehicles` throughout: `view` to read, `create` to add,
 // `edit` to change and to replace the compartments.
-import {
-  A_POWERED_VEHICLE_HAS_A_COMPARTMENT,
-  poweredVehicleHasACompartment,
-  Vehicle,
-  VehicleCompartmentsSet,
-  VehicleCreate,
-  VehicleListQuery,
-  VehiclePatch,
-  type VehicleCompartment,
-  type VehicleCompartmentCreate,
-} from "@waste/contracts/fleet"
+import { Vehicle, VehicleCompartmentsSet, VehicleCreate, VehicleListQuery, VehiclePatch, type VehicleCompartment, type VehicleCompartmentCreate } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
-import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, poweredVehicleHasACompartment } from "@waste/domain/resources/fleet"
+import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import type { FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"

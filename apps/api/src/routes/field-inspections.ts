@@ -9,7 +9,7 @@
 // closed inspection changes no more (409).
 //
 // A photo's bytes live in the private `proofs` bucket under the inspection's
-// own prefix (`inspectionPhotoKeyOf`, @waste/domain/inspections/rules), as a
+// own prefix (`inspectionPhotoKeyOf`, @waste/domain/storage-objects), as a
 // driver's photos do under a command's: `POST /field-inspections/:id/uploads`
 // signs the upload of a photo id the API mints, the client puts the bytes
 // straight to Storage, and `POST /field-inspections/:id/photos` appends the
@@ -32,7 +32,6 @@ import {
   type FieldInspectionStatus,
   type InspectionFinding,
 } from "@waste/contracts/field-inspections"
-import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import type { Database, Tx } from "@waste/db/client"
 import { container } from "@waste/db/schema/containers"
 import { property } from "@waste/db/schema/customers"
@@ -40,7 +39,9 @@ import { fieldInspection, fieldInspectionPhoto } from "@waste/db/schema/inspecti
 import { loggable } from "@waste/db/sqlstate"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
-import { findingsIssue, inspectionPhotoKeyNames, inspectionPhotoKeyOf, photoIdOf } from "@waste/domain/inspections/rules"
+import type { Action } from "@waste/domain/access/modules"
+import { findingsIssue } from "@waste/domain/inspections/rules"
+import { inspectionPhotoKeyNames, inspectionPhotoKeyOf, NO_PROOF_STORAGE, photoIdOf } from "@waste/domain/storage-objects"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -169,7 +170,7 @@ async function openInspection(tx: Tx, principal: Principal, id: string): Promise
   return current
 }
 
-const problems = (action: "view" | "edit" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Address, ADDRESS_ATTRIBUTION, AddressMatch } from "@waste/contracts/addresses"
+import { Address, AddressMatch } from "@waste/contracts/addresses"
+import { ADDRESS_ATTRIBUTION } from "@waste/domain/registry/address"
 
 import { DataforsyningenRegister } from "../dataforsyningen"
 import { FAKE_ADDRESSES, FakeAddressRegister } from "../fake"

@@ -33,7 +33,10 @@
 // person knows them by, never by id. The limits are the domain's
 // (@waste/domain/imports/vocabulary), which the browser reads a file
 // against before it sends a row.
-import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_KINDS, IMPORT_ROW_NUMBER_MAX, IMPORT_ROW_OUTCOMES, IMPORT_ROWS_MAX, isCompanyImportKind } from "@waste/domain/imports/vocabulary"
+import { BOUNDARY_COLUMN } from "@waste/domain/imports/columns"
+import { cellTooLong, EACH_ROW_ONCE, projectIssue } from "@waste/domain/imports/rules"
+import { CSV_SEPARATORS, IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_CELL_MAX, IMPORT_FIRST_ROW, IMPORT_KINDS, IMPORT_ROW_NUMBER_MAX, IMPORT_ROW_OUTCOMES, IMPORT_ROWS_MAX, IMPORT_RUN_STATUSES } from "@waste/domain/imports/vocabulary"
+import { LABEL_MAX } from "@waste/domain/text"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -48,35 +51,16 @@ export type ImportKind = z.infer<typeof ImportKind>
 export const ImportRowOutcome = z.enum(IMPORT_ROW_OUTCOMES)
 export type ImportRowOutcome = z.infer<typeof ImportRowOutcome>
 
-/** The longest cell a row may hold: a paragraph's length. */
-export const IMPORT_CELL_MAX = 2000
-
-/** The kinds whose records are a project's, and so whose import names a project: every kind but the company's (@waste/domain/imports/vocabulary). */
-export const PROJECT_IMPORT_KINDS: readonly ImportKind[] = IMPORT_KINDS.filter((kind) => !isCompanyImportKind(kind))
-
-export const PROJECT_REQUIRED = "This kind of record is a project's: name the project the file is imported into"
-export const PROJECT_REFUSED = "These records are the company's, not a project's: an import of them names no project"
-
-/** A kind's import names a project exactly when its records are a project's: the sentence at `projectId` where it does not. */
-export function projectIssue(body: { kind: ImportKind; projectId?: string }): string | undefined {
-  const fits = PROJECT_IMPORT_KINDS.includes(body.kind) === (body.projectId !== undefined)
-  return fits ? undefined : body.projectId === undefined ? PROJECT_REQUIRED : PROJECT_REFUSED
-}
+/** A kind's import names a project exactly when its records are a project's (@waste/domain/imports/rules): the sentence at `projectId` where it does not. */
 const projectFits = (body: { kind: ImportKind; projectId?: string }, context: z.RefinementCtx) => {
   const message = projectIssue(body)
   if (message !== undefined) context.addIssue({ code: "custom", message, path: ["projectId"] })
 }
 
-/** The one column whose cell is longer than a paragraph: a planning area's boundary, its polygon's GeoJSON (O30 of #290). */
-export const BOUNDARY_COLUMN = "boundary"
-
-/** What a cell longer than its column takes is told. */
-export const cellTooLong = (max: number): string => `Too long: a cell holds at most ${max} characters`
-
 /** One row of a file: its spreadsheet row number (the header is row 1) and its non-empty cells by column header, each a paragraph's length at most, a boundary some thousands of vertices'. */
 export const ImportRowValues = z.strictObject({
-  row: z.int().min(2).max(IMPORT_ROW_NUMBER_MAX),
-  values: z.record(z.string().min(1).max(200), z.string().max(IMPORT_BOUNDARY_MAX)).superRefine((values, context) => {
+  row: z.int().min(IMPORT_FIRST_ROW).max(IMPORT_ROW_NUMBER_MAX),
+  values: z.record(z.string().min(1).max(LABEL_MAX), z.string().max(IMPORT_BOUNDARY_MAX)).superRefine((values, context) => {
     for (const [header, value] of Object.entries(values)) {
       if (header !== BOUNDARY_COLUMN && value.length > IMPORT_CELL_MAX) context.addIssue({ code: "custom", message: cellTooLong(IMPORT_CELL_MAX), path: [header] })
     }
@@ -86,7 +70,7 @@ export type ImportRowValues = z.infer<typeof ImportRowValues>
 
 /** Each row number once in one request. */
 const rowsOnce = (rows: readonly { row: number }[]) => new Set(rows.map((row) => row.row)).size === rows.length
-const rowsOnceIssue = { message: "Give each row once: a row number names one row of the file", path: ["rows"] }
+const rowsOnceIssue = { message: EACH_ROW_ONCE, path: ["rows"] }
 
 /** `POST /imports/preview`: what would become of one batch of rows. */
 export const ImportPreviewRequest = z
@@ -102,7 +86,7 @@ export type ImportPreviewRequest = z.infer<typeof ImportPreviewRequest>
 
 /** What became, or would become, of one row. */
 export const ImportRowResult = z.object({
-  row: z.int().min(2),
+  row: z.int().min(IMPORT_FIRST_ROW),
   outcome: ImportRowOutcome,
   /** What the row was matched on, as a person reads it: `registration number 12345678`, `address Parkvej 18`. */
   key: z.string().nullable(),
@@ -138,7 +122,7 @@ export const ImportRunCreate = z
 export type ImportRunCreate = z.infer<typeof ImportRunCreate>
 
 /** Where a run stands: still recording its rows, or every row recorded. A reading of its counts, never a column. */
-export const ImportRunStatus = z.enum(["running", "completed"])
+export const ImportRunStatus = z.enum(IMPORT_RUN_STATUSES)
 export type ImportRunStatus = z.infer<typeof ImportRunStatus>
 
 /** One import run. */
@@ -191,11 +175,8 @@ export type ImportRunRowListQuery = z.infer<typeof ImportRunRowListQuery>
 /** `GET /imports/templates/:kind`'s path. */
 export const ImportKindParam = z.object({ kind: ImportKind })
 
-/** The separators a template is written with: a comma, or a semicolon for a spreadsheet under a Danish locale, which opens a file of commas into one column. */
-export const IMPORT_TEMPLATE_SEPARATORS = ["comma", "semicolon"] as const
-
 /** `GET /imports/templates/:kind`'s query. */
 export const ImportTemplateQuery = z.object({
-  separator: z.enum(IMPORT_TEMPLATE_SEPARATORS).default("comma"),
+  separator: z.enum(CSV_SEPARATORS).default("comma"),
 })
 export type ImportTemplateQuery = z.infer<typeof ImportTemplateQuery>

@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { SMS_BODY_MAX } from "@waste/domain/messaging/template"
+import { SMS_BODY_MAX, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
-import { MessageCreate, MessageListQuery, MessageTemplateCreate, MessageTemplatePatch, unknownPlaceholderSentence } from "../messaging"
+import { MessageCreate, MessageListQuery, MessageTemplateCreate, MessageTemplatePatch } from "../messaging"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

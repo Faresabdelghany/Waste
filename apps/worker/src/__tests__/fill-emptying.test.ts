@@ -8,7 +8,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import { createDb, type Database } from "@waste/db/client"
 import { nextNumber } from "@waste/db/commands/shared"
 import { migrateDatabase } from "@waste/db/migrate"

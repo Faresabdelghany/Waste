@@ -29,6 +29,9 @@
 // A station's fractions — what it accepts — travel with the record and are
 // replaced whole through `PUT /unloading-stations/:id/fractions`; a create
 // may carry the set it starts with, a patch never does.
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape, providerShapeGiven } from "@waste/domain/resources/places"
 import * as z from "zod"
 
 import { IsoTime } from "./dates"
@@ -36,50 +39,21 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { DepotOwnership, DepotStatus, UnloadingStationOwnership, UnloadingStationStatus, WarehouseStatus } from "./resources"
 import { Label, Paragraph } from "./text"
-
-/** The most fractions a set body may name: a form's list, not an import. */
-const SET_MAX = 200
 
 /** A count of vehicles a yard holds; zero is not a capacity. */
 const VehicleCapacity = PositiveInt
 
-/** What a body whose ownership and provider disagree is told, at the provider. A driver's employment has a sentence of its own (`fleet.ts`). */
-export const PROVIDER_WITH_PROVIDER_OWNERSHIP = "Name the owning service provider with service-provider ownership and with nothing else"
+/** What a body whose ownership and provider disagree is told, at the provider. */
 export const providerWithProviderOwnership = { message: PROVIDER_WITH_PROVIDER_OWNERSHIP, path: ["serviceProviderId"] }
 
 /** What a body giving one opening time is told, at the closing time. */
-export const BOTH_HOURS_OR_NEITHER = "Give both opening and closing time or neither"
 const bothHoursOrNeither = { message: BOTH_HOURS_OR_NEITHER, path: ["closesAt"] }
 
-type Provided = { serviceProviderId?: string | null }
-
-/**
- * The owning provider is named exactly when `owner` says `service-provider`.
- * `owner` is the ownership of a depot or a station, the employment of a
- * driver. A half-seen pair — a patch giving one of the two — is not judged;
- * only the route, which has the stored row, can hold the two together.
- */
-export function providerShape(owner: string | undefined, body: Provided): boolean {
-  if (owner === undefined || body.serviceProviderId === undefined) return true
-  return (owner === "service-provider") === (body.serviceProviderId !== null)
-}
-
-/** The same rule as a create body sees it, `owner` being the body's ownership or employment: an absent provider is none. */
-export const providerShapeGiven = (owner: string, body: Provided): boolean => providerShape(owner, { serviceProviderId: body.serviceProviderId ?? null })
-
-type Hours = { opensAt?: string | null; closesAt?: string | null }
-
-/** Both times or neither. A half-seen pair is not judged, which is what a patch gives. */
-export function hoursShape(body: Hours): boolean {
-  if (body.opensAt === undefined || body.closesAt === undefined) return true
-  return (body.opensAt === null) === (body.closesAt === null)
-}
-
-/** The same rule as a create body sees it: an absent time is none. */
-const hoursShapeGiven = (body: Hours): boolean => hoursShape({ opensAt: body.opensAt ?? null, closesAt: body.closesAt ?? null })
+/** Both times or neither (@waste/domain/resources/places), as a create body sees it: an absent time is none. */
+const hoursShapeGiven = (body: { opensAt?: string | null; closesAt?: string | null }): boolean => hoursShape({ opensAt: body.opensAt ?? null, closesAt: body.closesAt ?? null })
 
 export const Warehouse = z.object({
   ...stamped,
@@ -184,7 +158,6 @@ export const DepotPatch = z
   .refine(hoursShape, bothHoursOrNeither)
 export type DepotPatch = z.infer<typeof DepotPatch>
 
-export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 const eachFractionOnce = { message: EACH_FRACTION_ONCE, path: ["wasteFractionIds"] }
 
 const WasteFractionIds = z.array(Id)

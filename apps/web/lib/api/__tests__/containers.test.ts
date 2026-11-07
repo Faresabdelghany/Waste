@@ -11,14 +11,15 @@ import { describe, test } from "node:test"
 import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
 import { ContainerCreate, ContainerPatch, ContainerServicePlacementCreate, ContainerServicePlacementPatch, type Container, type ContainerServicePlacement } from "@waste/contracts/containers"
 import type { Project } from "@waste/contracts/organisation"
-import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type DecommissionReason, type StockMovement } from "@waste/contracts/stock"
+import { Adjust, Decommission, Receive, Return, Transfer, type DecommissionReason, type StockMovement } from "@waste/contracts/stock"
+import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
 import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@waste/domain/service-frequencies"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
 import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
+import { containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter } from "../records/containers"
 import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -332,10 +333,6 @@ describe("the container's commands", () => {
     assert.deepEqual(Object.keys(containerAdapter.commands ?? {}).sort(), ["adjust", "decommission", "issue", "receive", "return", "transfer"])
   })
 
-  test("the adjustment's warehouse rule is refused in the contract's own words, quoted since the web imports no zod", () => {
-    assert.equal(LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE, WAREHOUSE_WITH_A_STOCK_PLACE)
-  })
-
   test("receive posts the warehouse to the container's command path, then the row is read back with the ledger's reading", async () => {
     const { fetch, calls } = scripted([() => json(movement, 201), () => json(received), () => pageOf([])])
     const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", { warehouseId: nordhavn.webId, reference: "DN-4471" }, options)
@@ -393,8 +390,8 @@ describe("the container's commands", () => {
     assert.deepEqual(bodyFor("transfer", { warehouseId: nordhavn.webId, toKind: "service" }), { path: "toKind", message: "It arrives in a warehouse or in maintenance at one" })
     assert.deepEqual(bodyFor("decommission", { reason: "Burnt out" }), { path: "decommissionReasonId", message: "Pick a decommission reason the API holds" })
     assert.deepEqual(bodyFor("decommission", { decommissionReasonId: organicWebId }), { path: "decommissionReasonId", message: "Pick a decommission reason the API holds" }, "a fraction is no reason")
-    assert.deepEqual(bodyFor("adjust", { toKind: "scrap", warehouseId: nordhavn.webId, reason: "x" }), { path: "warehouseId", message: "Name the warehouse with warehouse or maintenance and not with scrap" }, "the contract's own sentence")
-    assert.deepEqual(bodyFor("adjust", { toKind: "maintenance", reason: "x" }), { path: "warehouseId", message: "Name the warehouse with warehouse or maintenance and not with scrap" })
+    assert.deepEqual(bodyFor("adjust", { toKind: "scrap", warehouseId: nordhavn.webId, reason: "x" }), { path: "warehouseId", message: WAREHOUSE_WITH_A_STOCK_PLACE }, "the contract's own sentence")
+    assert.deepEqual(bodyFor("adjust", { toKind: "maintenance", reason: "x" }), { path: "warehouseId", message: WAREHOUSE_WITH_A_STOCK_PLACE })
     assert.deepEqual(bodyFor("issue", { wasteFractionId: organicWebId, validFrom: "2026-10-01" }), { path: "subscriptionId", message: "Give the subscription's id" })
     assert.deepEqual(bodyFor("issue", { subscriptionId, wasteFractionId: "organic", validFrom: "2026-10-01" }), { path: "wasteFractionId", message: "Pick a waste fraction the API holds" })
     assert.deepEqual(bodyFor("issue", { subscriptionId, wasteFractionId: organicWebId, validFrom: "1 Oct" }), { path: "validFrom", message: "Give the first day it serves" })

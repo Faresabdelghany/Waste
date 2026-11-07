@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CREDIT_LINES_MAX, CreditNoteCreate, EACH_LINE_ONCE, GROSS_IS_NET_PLUS_VAT, Invoice, InvoiceDetail, InvoiceLine, InvoiceListQuery, LABEL_IS_THE_NUMBER, labelMatches, ONE_SOURCE, oneSource, totalsAgree } from "../invoices"
-import { DAY_WINDOW_ORDERED } from "../queries"
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { CREDIT_LINES_MAX, EACH_LINE_ONCE, GROSS_IS_NET_PLUS_VAT, LABEL_IS_THE_NUMBER, ONE_SOURCE, oneSource, totalsAgree } from "@waste/domain/finance/invoices"
+
+import { CreditNoteCreate, Invoice, InvoiceDetail, InvoiceLine, InvoiceListQuery, labelMatches } from "../invoices"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
+import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 
-import { STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
+import { EACH_TYPE_ONCE, STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
 
-import { Adjust, AdjustmentTarget, AssetState, Decommission, DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch, EACH_TYPE_ONCE, OCCURRED_WINDOW_ORDERED, Receive, Return, StockBalance, StockBalanceQuery, StockMinimumsSet, StockMovement, StockMovementListQuery, StockPlace, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE } from "../stock"
+import { Adjust, AdjustmentTarget, AssetState, Decommission, DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch, Receive, Return, StockBalance, StockBalanceQuery, StockMinimumsSet, StockMovement, StockMovementListQuery, StockPlace, Transfer } from "../stock"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

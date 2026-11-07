@@ -55,20 +55,25 @@
 // — and does one of `TICKET_ACTION_KINDS`; a status it moves to is one of
 // `TICKET_ACTION_COMMANDS`, and a message it sends goes to one of
 // `TICKET_MESSAGE_RECIPIENTS`, the ticket's customer or a role at its
-// property, the Registry's party roles by the same tokens.
+// property, the Registry's party roles by the same tokens. Those three are
+// read off their parents — the statuses, the office's commands, the party
+// roles — so a value added there reaches them.
 //
-// Three values beside the lists, the way Execution's `CLOSING_REASONS` and
+// Four values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
 // `OPEN_TICKET_STATUSES` is what "open" means in a list filter and a count,
 // `CLOSED_TICKET_STATUSES` what every command but `reopen` and `comment`
-// refuses (resolution/transitions.ts), and `BILLABLE_RESOLUTIONS` the
+// refuses (resolution/transitions.ts), `BILLABLE_RESOLUTIONS` the
 // resolutions whose work Finance charges for (finance/from-event.ts), which a
-// completion may name its product with (#291 C3).
+// completion may name its product with (#291 C3), and `OFFICE_TICKET_SOURCES`
+// the sources a ticket the office opens may claim.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `RESOLUTION_VOCABULARIES`
 // names them all for the test that walks them.
+import { without } from "../lists"
+import { PROPERTY_PARTY_ROLES } from "../registry/vocabulary"
 
 /** Where a Ticket stands: the prototype's seven less `Created`, which is `created_at`. */
 export const TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
@@ -100,14 +105,16 @@ export const TICKET_TYPE_STATUSES = ["active", "inactive"] as const
 export const TICKET_FIELD_INPUTS = ["text", "paragraph", "number", "date", "yes-no", "choice"] as const
 /** When a custom field must be filled in: never, before the ticket is opened, or before it is completed. */
 export const TICKET_FIELD_REQUIREMENTS = ["optional", "to-open", "to-complete"] as const
-/** When a Ticket Type's actions run (#546 of #544): a ticket of it opened, or reaching one of the statuses a command leads to. */
-export const TICKET_ACTION_TRIGGERS = ["opened", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
+/** What moves a ticket: the office's six commands. `assign` moves the assignee and not the status, and a comment moves nothing, so neither is here. */
+export const TICKET_COMMANDS = ["start", "wait", "hold", "complete", "reject", "reopen"] as const
+/** When a Ticket Type's actions run (#546 of #544): a ticket of it opened, or reaching one of the statuses a command leads to — every status, `open` named for the event. */
+export const TICKET_ACTION_TRIGGERS: readonly ("opened" | Exclude<TicketStatus, "open">)[] = TICKET_STATUSES.map((status) => (status === "open" ? "opened" : status))
 /** What one of a type's actions does: hands the ticket to a team or a person, sets its priority, moves its status, sends a message from a template, or opens a follow-up ticket. */
 export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up", "plan-in-route"] as const
 /** The status commands an action may give: every one but reopening, which undoes a close an automation should not second-guess. */
-export const TICKET_ACTION_COMMANDS = ["start", "wait", "hold", "complete", "reject"] as const
+export const TICKET_ACTION_COMMANDS = without(TICKET_COMMANDS, "reopen")
 /** Who a message an action sends goes to: the customer the ticket names, or the customer in a role at its property. */
-export const TICKET_MESSAGE_RECIPIENTS = ["ticket-customer", "owner", "payer", "tenant", "administrator", "service-contact"] as const
+export const TICKET_MESSAGE_RECIPIENTS = ["ticket-customer", ...PROPERTY_PARTY_ROLES] as const
 /** The calendar period a Counting Rule counts over (#547 of #544): a month, a quarter or a year. */
 export const COUNTING_PERIODS = ["month", "quarter", "year"] as const
 /** Whether a Counting Rule counts (#547 of #544): an inactive rule counts nothing and opens no ticket, and may be simulated before it is switched on. */
@@ -131,6 +138,7 @@ export type TeamStatus = (typeof TEAM_STATUSES)[number]
 export type TicketTypeStatus = (typeof TICKET_TYPE_STATUSES)[number]
 export type TicketFieldInput = (typeof TICKET_FIELD_INPUTS)[number]
 export type TicketFieldRequirement = (typeof TICKET_FIELD_REQUIREMENTS)[number]
+export type TicketCommand = (typeof TICKET_COMMANDS)[number]
 export type TicketActionTrigger = (typeof TICKET_ACTION_TRIGGERS)[number]
 export type TicketActionKind = (typeof TICKET_ACTION_KINDS)[number]
 export type TicketActionCommand = (typeof TICKET_ACTION_COMMANDS)[number]
@@ -148,6 +156,12 @@ export type ClosedTicketStatus = (typeof CLOSED_TICKET_STATUSES)[number]
 
 /** Whether a Ticket in this status is closed: completed or rejected. */
 export const isClosedTicketStatus = (status: TicketStatus): status is ClosedTicketStatus => (CLOSED_TICKET_STATUSES as readonly TicketStatus[]).includes(status)
+
+/** The sources only their own door writes: the driver's device, the dispatcher's cancellation, a Service Provider's workspace, a counting rule's limit. */
+const DOOR_TICKET_SOURCES = ["driver-app", "dispatch", "service-provider", "counting-rule"] as const satisfies readonly TicketSource[]
+
+/** The sources a ticket the office opens may claim: every one but a door's own. A value of `TICKET_SOURCES`, not a vocabulary. */
+export const OFFICE_TICKET_SOURCES = without(TICKET_SOURCES, ...DOOR_TICKET_SOURCES)
 
 /** The resolutions whose completion is billable: a re-collection arranged, or the request fulfilled. A value of `TICKET_RESOLUTIONS`, not a vocabulary. */
 export const BILLABLE_RESOLUTIONS = ["recollected", "serviced"] as const satisfies readonly TicketResolution[]
@@ -173,10 +187,11 @@ export const RESOLUTION_VOCABULARIES = {
   TICKET_TYPE_STATUSES,
   TICKET_FIELD_INPUTS,
   TICKET_FIELD_REQUIREMENTS,
+  TICKET_COMMANDS,
   TICKET_ACTION_TRIGGERS,
   TICKET_ACTION_KINDS,
   TICKET_ACTION_COMMANDS,
   TICKET_MESSAGE_RECIPIENTS,
   COUNTING_PERIODS,
   COUNTING_RULE_STATUSES,
-} as const satisfies Record<string, readonly [string, ...string[]]>
+} as const satisfies Record<string, readonly string[]>

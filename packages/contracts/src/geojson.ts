@@ -3,18 +3,27 @@
 // Planning Area boundary. Positions are [longitude, latitude] in WGS 84,
 // optionally followed by an altitude and nothing else. The object schemas
 // strip unknown members, so foreign members such as `bbox` are dropped on
-// parse rather than stored.
-//
-// The prototype does not store this shape yet: service areas and saved
-// selections keep an unclosed `{ lng, lat }[]` in a JSON field and planning
-// areas carry no geometry at all. Where that list becomes a closed ring is
-// decided with the tables that store it (build-order step 3); neither this
-// package (zod only) nor @waste/domain (nothing) may import the other, so the
-// converter cannot live in either without a layering decision.
+// parse rather than stored. The positions, their ranges and a ring's rules
+// are the domain's (@waste/domain/geo); these schemas hold a body to them.
+import {
+  LATITUDE,
+  LINE_POSITIONS_MIN,
+  LINE_TOO_SHORT,
+  LONGITUDE,
+  POLYGON_WITHOUT_RING,
+  RING_OPEN,
+  RING_POSITIONS_MIN,
+  RING_TOO_SHORT,
+  RING_WITHOUT_AREA,
+  ringCloses,
+  ringEnclosesArea,
+  type LineString as DomainLineString,
+  type Position2D as DomainPosition2D,
+} from "@waste/domain/geo"
 import * as z from "zod"
 
-export const Longitude = z.number().min(-180).max(180)
-export const Latitude = z.number().min(-90).max(90)
+export const Longitude = z.number().min(LONGITUDE.min).max(LONGITUDE.max)
+export const Latitude = z.number().min(LATITUDE.min).max(LATITUDE.max)
 
 /** `[longitude, latitude]` or `[longitude, latitude, altitude]`. */
 export const Position = z.tuple([Longitude, Latitude, z.number().optional()])
@@ -26,39 +35,33 @@ export const Point = z.object({
 })
 export type Point = z.infer<typeof Point>
 
-const closes = (ring: readonly Position[]): boolean => {
-  const first = ring[0]
-  const last = ring[ring.length - 1]
-  return first.length === last.length && first.every((value, index) => value === last[index])
-}
-
-/** Three distinct positions besides the closing one, so the ring encloses an area at all. */
-const enclosesArea = (ring: readonly Position[]): boolean =>
-  new Set(ring.slice(0, -1).map((position) => position.join(","))).size >= 3
+/** A ring over positions of a shape: four or more, the last equal to the first, three of them distinct. */
+const ringOf = <P extends z.ZodType<readonly (number | undefined)[]>>(position: P) =>
+  z
+    .array(position)
+    .min(RING_POSITIONS_MIN, { error: RING_TOO_SHORT, abort: true })
+    .refine(ringCloses, { error: RING_OPEN })
+    .refine(ringEnclosesArea, { error: RING_WITHOUT_AREA })
 
 /**
  * Four or more positions, the last equal to the first, at least three of
  * them distinct. Geometric validity beyond that (no self-intersection,
  * winding order) is the database's job.
  */
-export const LinearRing = z
-  .array(Position)
-  .min(4, { error: "a linear ring has at least four positions", abort: true })
-  .refine(closes, { error: "a linear ring ends where it starts" })
-  .refine(enclosesArea, { error: "a linear ring has at least three distinct positions" })
+export const LinearRing = ringOf(Position)
 export type LinearRing = z.infer<typeof LinearRing>
 
 /** An outer ring followed by any number of holes. */
 export const Polygon = z.object({
   type: z.literal("Polygon"),
-  coordinates: z.array(LinearRing).min(1, { error: "a polygon has an outer ring" }),
+  coordinates: z.array(LinearRing).min(1, { error: POLYGON_WITHOUT_RING }),
 })
 export type Polygon = z.infer<typeof Polygon>
 
 /** Two or more positions: a routed leg's geometry (Issue #169, the first stored line string). */
 export const LineString = z.object({
   type: z.literal("LineString"),
-  coordinates: z.array(Position).min(2, { error: "a line string has at least two positions" }),
+  coordinates: z.array(Position).min(LINE_POSITIONS_MIN, { error: LINE_TOO_SHORT }),
 })
 export type LineString = z.infer<typeof LineString>
 
@@ -75,9 +78,9 @@ export type LineString = z.infer<typeof LineString>
 // never PostGIS's 22023. `Point` stays for a geometry no column holds, such as
 // a stop the map places from an address.
 
-/** `[longitude, latitude]` and nothing else: a position for a flat column. */
-export const Position2D = z.tuple([Longitude, Latitude])
-export type Position2D = z.infer<typeof Position2D>
+/** `[longitude, latitude]` and nothing else: the domain's position, for a flat column. */
+export const Position2D = z.tuple([Longitude, Latitude]) satisfies z.ZodType<DomainPosition2D>
+export type Position2D = DomainPosition2D
 
 /** `Point` over a flat position: what a `geometry(Point, 4326)` column takes without a 22023 on the way in. */
 export const FlatPoint = z.object({
@@ -87,23 +90,19 @@ export const FlatPoint = z.object({
 export type FlatPoint = z.infer<typeof FlatPoint>
 
 /** `LinearRing` over flat positions: four or more, closed, three distinct. */
-export const FlatLinearRing = z
-  .array(Position2D)
-  .min(4, { error: "a linear ring has at least four positions", abort: true })
-  .refine(closes, { error: "a linear ring ends where it starts" })
-  .refine(enclosesArea, { error: "a linear ring has at least three distinct positions" })
+export const FlatLinearRing = ringOf(Position2D)
 export type FlatLinearRing = z.infer<typeof FlatLinearRing>
 
 /** `Polygon` over flat rings: what a flat geometry column takes without a 22023 on the way in. */
 export const FlatPolygon = z.object({
   type: z.literal("Polygon"),
-  coordinates: z.array(FlatLinearRing).min(1, { error: "a polygon has an outer ring" }),
+  coordinates: z.array(FlatLinearRing).min(1, { error: POLYGON_WITHOUT_RING }),
 })
 export type FlatPolygon = z.infer<typeof FlatPolygon>
 
-/** `LineString` over flat positions: what a `geometry(LineString, 4326)` column takes without a 22023 on the way in. */
+/** `LineString` over flat positions, the domain's line: what a `geometry(LineString, 4326)` column takes without a 22023 on the way in. */
 export const FlatLineString = z.object({
   type: z.literal("LineString"),
-  coordinates: z.array(Position2D).min(2, { error: "a line string has at least two positions" }),
-})
-export type FlatLineString = z.infer<typeof FlatLineString>
+  coordinates: z.array(Position2D).min(LINE_POSITIONS_MIN, { error: LINE_TOO_SHORT }),
+}) satisfies z.ZodType<DomainLineString>
+export type FlatLineString = DomainLineString

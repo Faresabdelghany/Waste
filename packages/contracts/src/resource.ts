@@ -20,6 +20,7 @@
 // A ledger row (Issue #101: a Stock Movement, a Vehicle Allocation event)
 // spreads `recorded` instead: its id and the instant it was appended. It is
 // never updated, so it has no `updatedAt` to carry, and no patch takes it.
+import { INT4_MAX, INT4_MIN, SOMETHING_TO_CHANGE } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -41,23 +42,8 @@ export const recorded = {
   recordedAt: IsoDateTime,
 }
 
-/** What a refused empty patch says. */
-export const somethingToChange = { message: "Give at least one field to change" }
-
-/** A patch must change something. */
-export const changesSomething = (patch: object) => Object.keys(patch).length > 0
-
-/**
- * The bounds of Postgres's `integer`, the column every whole number a body
- * writes lands in. zod's `int` stops at JavaScript's safe integers, far past
- * them, and a number between the two would reach the database and come back
- * as 22003, a 500; held here, it is the 400 naming its field.
- */
-export const INT4_MAX = 2_147_483_647
-export const INT4_MIN = -2_147_483_648
-
-/** Whether a number a route computed from a body — a quantity times a price, an indexed fee — still fits an `integer` column. */
-export const fitsInt4 = (value: number): boolean => Number.isInteger(value) && value >= INT4_MIN && value <= INT4_MAX
+/** What a refused empty patch says (@waste/domain/requests, `changesSomething`). */
+export const somethingToChange = { message: SOMETHING_TO_CHANGE }
 
 /**
  * A whole number above zero: an order among siblings, a count, a payload, a
@@ -96,21 +82,3 @@ export const Int4 = z.int().min(INT4_MIN).max(INT4_MAX)
  */
 export const Minor = z.int()
 export const NonNegativeMinor = NonNegativeInt
-
-/**
- * Each entry of a set names its thing once, as the database's key insists:
- * the one rule behind every distinct-entries refine (a set of days, a rule's
- * fractions, a group's containers, a calendar's holidays by day, a vehicle
- * type's container types, a station's fractions). `key` says what identifies
- * an entry; the entry itself by default.
- */
-export const eachOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => unknown = (entry) => entry): boolean =>
-  new Set(entries.map(key)).size === entries.length
-
-/**
- * What a set with an entry twice is told, one shape for every module: "Name
- * each <subject> once: <reason>". A module spells its subject, and a reason
- * only where the rule has one of its own (a container has one place in a stop
- * order); otherwise the set either holds the thing or it does not.
- */
-export const eachOnceSentence = (subject: string, reason = "the set holds it or it does not"): string => `Name each ${subject} once: ${reason}`

@@ -49,8 +49,6 @@ import {
 import { create, get, listAll, patch, put } from "../client"
 import { NO_PRESENTATION, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "./adapter"
 
-export { ONE_CADENCE } from "@/lib/data/master-data"
-
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix

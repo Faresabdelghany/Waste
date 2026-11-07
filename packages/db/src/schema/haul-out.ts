@@ -26,7 +26,7 @@
 // A material adjustment is a ledger row (sql/append-only.ts): signed kilograms
 // of one fraction at one station for one project, never zero, with the count's
 // words. A wrong adjustment is answered by another.
-import { OUTBOUND_LOAD_STATUSES } from "@waste/domain/execution/vocabulary"
+import { OUTBOUND_LOAD_STATUSES, RECEIVED_LOAD_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
@@ -45,7 +45,7 @@ import { wms } from "./wms"
 const instant = () => timestamp({ withTimezone: true })
 
 /** The statuses that carry the receiving site's ticket, as SQL. */
-const RECEIVED = sql.raw(["received", "reconciled", "disputed"].map((status) => `'${status}'`).join(", "))
+const RECEIVED = sql.raw(RECEIVED_LOAD_STATUSES.map((status) => `'${status}'`).join(", "))
 
 export const outboundLoad = wms.table(
   "outbound_load",

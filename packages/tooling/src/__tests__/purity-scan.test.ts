@@ -7,13 +7,15 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, test } from "node:test"
 
-import { manifestProblems, type PackageManifest } from "../purity"
+import { importShippingModules } from "../program"
+import { manifestProblems, workspaceReach, type PackageManifest } from "../purity"
 import {
   findPurityViolations,
+  matches,
   packageNameOf,
   readSources,
   testDirectoriesOf,
-  type PurityAllowance,
+  valueImportsOf,
   type PurityScanOptions,
 } from "../purity-scan"
 
@@ -237,18 +239,90 @@ describe("findPurityViolations: reference directives and ambient declarations", 
   })
 })
 
-describe("findPurityViolations: allowances", () => {
-  const source = 'import { x } from "react"\nimport { y } from "../../apps/web/y"\n'
+describe("findPurityViolations: an allowed direction and its deny-list", () => {
+  const reach: Record<string, [string, string[]][]> = {
+    "@waste/domain/finance/vocabulary": [["@waste/domain/finance/vocabulary", ["@waste/domain/finance/vocabulary"]]],
+    "@waste/domain/route-schemes/groups": [
+      ["@waste/domain/route-schemes/groups", ["@waste/domain/route-schemes/groups"]],
+      ["@waste/domain/route-schemes/matching", ["@waste/domain/route-schemes/groups", "@waste/domain/route-schemes/matching"]],
+      ["@waste/domain/prototype-record", ["@waste/domain/route-schemes/groups", "@waste/domain/route-schemes/matching", "@waste/domain/prototype-record"]],
+    ],
+  }
+  const options: PurityScanOptions = {
+    allowedImports: ["zod", "@waste/domain/*"],
+    deniedImports: ["@waste/domain/fixtures/*", "@waste/domain/prototype-record"],
+    reachOf: (specifier) => new Map(reach[specifier] ?? [[specifier, [specifier]]]),
+  }
 
-  test("an allowance for a rule suppresses only that rule in that file", () => {
-    const allowances: PurityAllowance[] = [{ file: "x.ts", rule: "escapes-package", reason: "specimen" }]
-    assert.deepEqual(scan("x.ts", source, { allowances }).map((v) => v.rule), ["bare-import"])
+  test("a pattern's `/*` allows every subpath of its package and nothing beside it", () => {
+    assert.equal(matches("@waste/domain/*", "@waste/domain/finance/vocabulary"), true)
+    assert.equal(matches("@waste/domain/*", "@waste/domain"), false)
+    assert.equal(matches("@waste/domain/*", "@waste/domainx/a"), false)
+    assert.equal(matches("zod", "zod/v3"), false)
+    assert.deepEqual(scan("finance.ts", 'import { A } from "@waste/domain/finance/vocabulary"\n', options), [])
+    assert.deepEqual(scan("finance.ts", 'import { A } from "@waste/db/schema"\n', options).map((v) => v.rule), ["bare-import"])
   })
 
-  test("an allowance without a rule suppresses every rule in that file only", () => {
-    const allowances: PurityAllowance[] = [{ file: "x.ts", reason: "specimen" }]
-    assert.deepEqual(scan("x.ts", source, { allowances }), [])
-    assert.equal(scan("y.ts", source, { allowances }).length, 2)
+  test("a denied module is refused by name, and so is an allowed one that pulls it in, with the chain", () => {
+    const fixture = scan("x.ts", 'import { G } from "@waste/domain/fixtures/gazetteer"\n', options)
+    assert.deepEqual(fixture.map((v) => v.rule), ["denied-import"])
+    const groups = scan("x.ts", 'import { g } from "@waste/domain/route-schemes/groups"\n', options)
+    assert.deepEqual(groups.map((v) => [v.rule, v.line]), [["denied-import", 1]])
+    assert.match(groups[0].detail, /route-schemes\/groups → @waste\/domain\/route-schemes\/matching → @waste\/domain\/prototype-record/)
+  })
+
+  test("the deny-list holds in tests too, and leaves relative imports and built-ins alone", () => {
+    const source = 'import { g } from "@waste/domain/prototype-record"\nimport { readFileSync } from "node:fs"\nimport { x } from "../x"\n'
+    assert.deepEqual(scan("__tests__/x.test.ts", source, options).map((v) => v.rule), ["denied-import"])
+  })
+})
+
+describe("workspaceReach", () => {
+  const packageDir = path.resolve(import.meta.dirname, "../..")
+
+  test("walks a workspace module's relative imports, each named by its specifier with the chain that reaches it", () => {
+    const reached = workspaceReach(packageDir)("@waste/tooling/purity")
+    assert.deepEqual(reached.get("@waste/tooling/purity"), ["@waste/tooling/purity"])
+    assert.deepEqual(reached.get("@waste/tooling/purity-scan"), ["@waste/tooling/purity", "@waste/tooling/purity-scan"])
+  })
+
+  test("a type-only import pulls nothing in, and every other import does", () => {
+    const source = [
+      'import type { A } from "./a"',
+      'import { type B, type C } from "./b"',
+      'export type { D } from "./d"',
+      'export type E = import("./e").E',
+      'import { type F, g } from "./f"',
+      'import "./side-effect"',
+      'export { h } from "./h"',
+    ].join("\n")
+    assert.deepEqual(valueImportsOf(source), ["./f", "./side-effect", "./h"])
+  })
+
+  test("a package that ships no source by subpath, or none at all, reaches itself alone", () => {
+    assert.deepEqual([...workspaceReach(packageDir)("typescript").keys()], ["typescript"])
+    assert.deepEqual([...workspaceReach(packageDir)("@waste/nowhere/x").keys()], ["@waste/nowhere/x"])
+  })
+})
+
+describe("importShippingModules", () => {
+  test("imports every module of the shipping program by its path under src/, and no test", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "purity-program-"))
+    try {
+      const write = (file: string, text: string) => {
+        mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+        writeFileSync(path.join(root, file), text)
+      }
+      write("tsconfig.json", JSON.stringify({ include: ["src/**/*.ts"], exclude: ["src/**/__tests__/**"] }))
+      write("src/alpha.ts", "export const alpha = 1\n")
+      write("src/deep/beta.ts", 'export { alpha as beta } from "../alpha"\n')
+      write("src/__tests__/alpha.test.ts", 'throw new Error("a test is never imported")\n')
+      const modules = await importShippingModules(root)
+      assert.deepEqual(Object.keys(modules), ["alpha", "deep/beta"])
+      assert.equal(modules["deep/beta"]?.beta, 1)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

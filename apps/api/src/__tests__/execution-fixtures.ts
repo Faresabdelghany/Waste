@@ -64,7 +64,7 @@
 // Freja's and Sofie's to the licence rule's two refusals.
 import { randomUUID } from "node:crypto"
 
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Database, Tx } from "@waste/db/client"
 import { role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"

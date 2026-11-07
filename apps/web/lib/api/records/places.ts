@@ -33,6 +33,7 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Depot, UnloadingStation, Warehouse } from "@waste/contracts/places"
 import { splitList } from "@waste/domain/record-values"
+import { BOTH_HOURS_OR_NEITHER, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DEPOT_OWNERSHIPS, DEPOT_STATUSES, UNLOADING_STATION_OWNERSHIPS, UNLOADING_STATION_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
@@ -60,11 +61,6 @@ import {
 } from "./adapter"
 import { HAUL_OUT_ACTIONS } from "./haul-out"
 import { SET_STOCK_MINIMUMS, SET_STOCK_MINIMUMS_ACTION } from "./stock"
-
-/** What a body giving one opening time is told (`@waste/contracts/places`, `BOTH_HOURS_OR_NEITHER`); the test holds the two equal. */
-export const BOTH_HOURS_OR_NEITHER = "Give both opening and closing time or neither"
-/** What a body whose ownership and provider disagree is told (`@waste/contracts/places`, `PROVIDER_WITH_PROVIDER_OWNERSHIP`); the test holds the two equal. */
-export const PROVIDER_WITH_PROVIDER_OWNERSHIP = "Name the owning service provider with service-provider ownership and with nothing else"
 
 // ---------------------------------------------------------------------------
 // What the resources share

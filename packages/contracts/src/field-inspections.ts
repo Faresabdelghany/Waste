@@ -12,14 +12,16 @@
 // private `proofs` bucket under the inspection's prefix through a signed URL
 // (`POST /field-inspections/:id/uploads`, as the driver door's uploads are),
 // then appended by its key; the bytes never pass through the API.
-import { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, EACH_FINDING_ONCE, findingsIssue, INSPECTION_PHOTO_EXTENSIONS } from "@waste/domain/inspections/rules"
+import { findingsIssue, ONE_SUBJECT } from "@waste/domain/inspections/rules"
 import { FIELD_INSPECTION_OUTCOMES, FIELD_INSPECTION_STATUSES, INSPECTION_FINDINGS } from "@waste/domain/inspections/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
+import { IMAGE_EXTENSIONS, OBJECT_KEY_MAX } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Paragraph } from "./text"
 
 export const FieldInspectionOutcome = z.enum(FIELD_INSPECTION_OUTCOMES)
@@ -28,11 +30,6 @@ export const InspectionFinding = z.enum(INSPECTION_FINDINGS)
 export type InspectionFinding = z.infer<typeof InspectionFinding>
 export const FieldInspectionStatus = z.enum(FIELD_INSPECTION_STATUSES)
 export type FieldInspectionStatus = z.infer<typeof FieldInspectionStatus>
-
-export { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, EACH_FINDING_ONCE }
-
-/** What an inspection naming both a container and a property, or neither, is told. */
-export const ONE_SUBJECT = "An inspection is of a container or of a property, exactly one"
 
 /** A photo of an inspection, by its key in the proofs bucket. */
 export const InspectionPhoto = z.object({
@@ -103,7 +100,7 @@ export const FieldInspectionListQuery = ProjectScopedListQuery.extend({
 export type FieldInspectionListQuery = z.infer<typeof FieldInspectionListQuery>
 
 /** `POST /field-inspections/:id/uploads`: a photo's format; the API mints its id and names its key. */
-export const InspectionPhotoUploadRequest = z.strictObject({ extension: z.enum(INSPECTION_PHOTO_EXTENSIONS) })
+export const InspectionPhotoUploadRequest = z.strictObject({ extension: z.enum(IMAGE_EXTENSIONS) })
 export type InspectionPhotoUploadRequest = z.infer<typeof InspectionPhotoUploadRequest>
 
 /** Where to put the photo's bytes until `expiresAt`, under the key to append it by. */
@@ -111,7 +108,7 @@ export const InspectionPhotoUpload = z.strictObject({ objectKey: z.string(), upl
 export type InspectionPhotoUpload = z.infer<typeof InspectionPhotoUpload>
 
 /** `POST /field-inspections/:id/photos`: the key an upload named, once its bytes are put. */
-export const InspectionPhotoAppend = z.strictObject({ objectKey: z.string().min(1).max(256) })
+export const InspectionPhotoAppend = z.strictObject({ objectKey: z.string().min(1).max(OBJECT_KEY_MAX) })
 export type InspectionPhotoAppend = z.infer<typeof InspectionPhotoAppend>
 
 /** A read URL for one of an inspection's photos, until `expiresAt`; null where Storage holds none — never uploaded. */

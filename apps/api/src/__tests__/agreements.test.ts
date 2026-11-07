@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { Agreement, AgreementTerminated, CHANGE_NAMES_SOMETHING, Subscription } from "@waste/contracts/agreements"
+import { Agreement, AgreementTerminated, Subscription } from "@waste/contracts/agreements"
 import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
 import { ContainerServicePlacement } from "@waste/contracts/containers"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
@@ -10,6 +10,7 @@ import { Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
 import { StockMovement } from "@waste/contracts/stock"
 import { createDb, type Database } from "@waste/db/client"
+import { CHANGE_NAMES_SOMETHING } from "@waste/domain/registry/agreements"
 
 import { createApp } from "../app"
 import { CHANGES_NOTHING, INSIDE_AGREEMENT, INSIDE_SUBSCRIPTION, placementsBeginLater, subscriptionsBeginLater } from "../routes/agreements"

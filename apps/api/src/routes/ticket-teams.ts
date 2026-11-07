@@ -32,6 +32,7 @@ import { Page } from "@waste/contracts/pagination"
 import { Team, TeamCreate, TeamListQuery, TeamMembersSet, TeamPatch, TicketTeamDefaults, TicketTeamDefaultsSet, type TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { team, teamMember, ticketTeamDefault } from "@waste/db/schema/resolution"
+import type { Action } from "@waste/domain/access/modules"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { advisoryLock, refuseDuplicate } from "@waste/db/commands/shared"
@@ -125,7 +126,7 @@ const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind
     .map((row) => ({ kind: row.kind as TicketKind | null, ticketTypeId: row.ticketTypeId, teamId: row.teamId })),
 })
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(
     action === "view" ? `No active account here, or the caller's role allows \`view\` on neither \`${TICKETS}\` nor \`${MODULE}\`.` : `No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`,

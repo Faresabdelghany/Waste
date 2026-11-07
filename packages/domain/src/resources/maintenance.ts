@@ -77,6 +77,9 @@ export function maintenanceDue(plan: MaintenancePlanState, today: string, latest
   return { state, nextDueOn, nextDueKm, nextDueHours, odometerKm, engineHours }
 }
 
+/** What an order of no plan without a title is told. */
+export const NAME_THE_ORDER = "Say what the order is for, or name the plan it serves"
+
 /** What a plan without an interval is told. */
 export const AN_INTERVAL = "Give the plan at least one interval: days, kilometres or engine hours"
 /** What a distance interval without the odometer it counts from is told. */

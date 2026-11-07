@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DropOffPointsQuery, type PublicDropOffPoint } from "@waste/contracts/public"
+import type { PublicDropOffPoint } from "@waste/contracts/public"
+import { KEY_MAX } from "@waste/domain/text"
 
-import { boundsOf, dropOffHrefOf, FRACTION_KEY_MAX, fractionKeyOf, mapPointsOf, openingTextOf, pointsCollectionOf } from "../drop-off-points"
+import { boundsOf, dropOffHrefOf, fractionKeyOf, mapPointsOf, openingTextOf, pointsCollectionOf } from "../drop-off-points"
 
 const point = (id: string, coordinates: [number, number]): PublicDropOffPoint => ({
   id,
@@ -16,13 +17,6 @@ const point = (id: string, coordinates: [number, number]): PublicDropOffPoint =>
   week: [],
 })
 
-describe("the fraction key's bound", () => {
-  test("is the door's, spelled again: the web imports the contracts as types only", () => {
-    assert.equal(DropOffPointsQuery.safeParse({ fraction: "a".repeat(FRACTION_KEY_MAX) }).success, true)
-    assert.equal(DropOffPointsQuery.safeParse({ fraction: "a".repeat(FRACTION_KEY_MAX + 1) }).success, false)
-  })
-})
-
 describe("fractionKeyOf and dropOffHrefOf", () => {
   test("a fraction is asked by its key, a lowercase slug; anything else asks for every point", () => {
     assert.equal(fractionKeyOf("glass"), "glass")
@@ -31,7 +25,7 @@ describe("fractionKeyOf and dropOffHrefOf", () => {
     assert.equal(fractionKeyOf("Glass jars"), null)
     assert.equal(fractionKeyOf(undefined), null)
     assert.equal(fractionKeyOf(""), null)
-    assert.equal(fractionKeyOf("a".repeat(FRACTION_KEY_MAX + 1)), null, "a key the door would refuse asks for every point, never an outage")
+    assert.equal(fractionKeyOf("a".repeat(KEY_MAX + 1)), null, "a key the door would refuse asks for every point, never an outage")
   })
 
   test("the map's address, with the fraction where one is asked", () => {

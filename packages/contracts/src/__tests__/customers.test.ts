@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
+
 import {
   CONTACT_ROLES,
   CONTACT_STATUSES,
@@ -20,43 +22,7 @@ import {
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
 
-import {
-  ContactRole,
-  ContactStatus,
-  Customer,
-  CustomerContactCreate,
-  CustomerContactPatch,
-  CustomerCreate,
-  CustomerKind,
-  CustomerPatch,
-  CustomerStatus,
-  Property,
-  PropertyCreate,
-  PropertyGroup,
-  PropertyGroupCreate,
-  PropertyGroupMemberRole,
-  PropertyGroupMembersSet,
-  PropertyGroupPatch,
-  PropertyGroupPurpose,
-  PropertyGroupStatus,
-  PropertyKind,
-  PropertyPartiesSet,
-  PropertyPartyRole,
-  PropertyListQuery,
-  PropertyPatch,
-  REACHABLE_ON_A_CHANNEL,
-  PropertyStatus,
-  SharedCollectionPoint,
-  SharedCollectionPointAccessMode,
-  SharedCollectionPointBillingMode,
-  SharedCollectionPointCreate,
-  SharedCollectionPointKind,
-  SharedCollectionPointMemberRole,
-  SharedCollectionPointMembersSet,
-  SharedCollectionPointOperatingModel,
-  SharedCollectionPointPatch,
-  SharedCollectionPointStatus,
-} from "../customers"
+import { ContactRole, ContactStatus, Customer, CustomerContactCreate, CustomerContactPatch, CustomerCreate, CustomerKind, CustomerPatch, CustomerStatus, Property, PropertyCreate, PropertyGroup, PropertyGroupCreate, PropertyGroupMemberRole, PropertyGroupMembersSet, PropertyGroupPatch, PropertyGroupPurpose, PropertyGroupStatus, PropertyKind, PropertyPartiesSet, PropertyPartyRole, PropertyListQuery, PropertyPatch, PropertyStatus, SharedCollectionPoint, SharedCollectionPointAccessMode, SharedCollectionPointBillingMode, SharedCollectionPointCreate, SharedCollectionPointKind, SharedCollectionPointMemberRole, SharedCollectionPointMembersSet, SharedCollectionPointOperatingModel, SharedCollectionPointPatch, SharedCollectionPointStatus } from "../customers"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

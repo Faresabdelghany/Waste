@@ -4,7 +4,7 @@ import { describe, test } from "node:test"
 import { routeShift } from "../../execution/shift"
 import type { FitVehicle } from "../../resources/fleet-fit"
 import { BALANCE_MOVES_MAX, balanceDay, canTake, type BalanceRoute, type BalanceStop } from "../balance"
-import { UNLOAD_SECONDS } from "../reloads"
+import { UNLOAD_SECONDS } from "../../execution/workload"
 
 const GLASS = "glass"
 const PAPER = "paper"

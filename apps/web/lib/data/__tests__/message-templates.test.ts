@@ -5,9 +5,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { MessageTemplateCreate, MessageTemplatePatch, unknownPlaceholderSentence as contractsSentence, type MessageTemplate } from "@waste/contracts/messaging"
+import { MessageTemplateCreate, MessageTemplatePatch, type MessageTemplate } from "@waste/contracts/messaging"
+import { unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
-import { NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf, unknownPlaceholderSentence } from "../message-templates"
+import { NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf } from "../message-templates"
 import { settingsPane, settingsPaneDrawnWithoutApi } from "../settings-panes"
 
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
@@ -42,7 +43,6 @@ describe("a message template's draft (#291 C15)", () => {
     assert.deepEqual(templateCreateBody(PROJECT, { ...NEW_TEMPLATE, body: "x" }), { field: "name", message: "A template needs a name" })
     assert.deepEqual(templateCreateBody(PROJECT, { ...NEW_TEMPLATE, name: "N", body: "x" }), { field: "subject", message: "An e-mail template has a subject" })
     assert.deepEqual(templateCreateBody(PROJECT, { ...NEW_TEMPLATE, name: "N", subject: "S", body: "Invoice {{invoiceNumber}}" }), { field: "body", message: unknownPlaceholderSentence(["invoiceNumber"]) })
-    assert.equal(unknownPlaceholderSentence(["a", "b"]), contractsSentence(["a", "b"]))
   })
 
   test("is patched with the fields that moved alone, and nothing where none did", () => {

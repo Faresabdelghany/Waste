@@ -19,6 +19,7 @@
 // in its words. The grant is `route-studio.weights`, not the stations' own: a
 // role without it is told so where the stock would be.
 import type { MaterialStock, MaterialStockRow, OutboundLoad } from "@waste/contracts/haul-out"
+import { SAME_STATION, SAY_WHY } from "@waste/domain/execution/haul-out"
 
 import { minorOf } from "@/lib/commercial/money"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -78,7 +79,6 @@ export const PICK_A_DESTINATION = "Pick the station the load goes to"
 export const NAME_THE_CARRIER = "Pick our vehicle or give the plate"
 export const GIVE_THE_NET = "Give the net weight in whole kilograms"
 export const GIVE_A_DELTA = "Give the kilograms the count found more, or less with a minus; not zero"
-export const SAY_WHY = "Say why"
 
 export function adjustStockBody(input: CommandInput, _record: BusinessRecord, context: MappingContext) {
   const projectId = serverId(input, "projectId", context, PICK_A_PROJECT)
@@ -97,7 +97,7 @@ export function sendLoadBody(input: CommandInput, record: BusinessRecord, contex
   if (isRefusal(projectId)) return projectId
   const toStationId = serverId(input, "toStationId", context, PICK_A_DESTINATION)
   if (isRefusal(toStationId)) return toStationId
-  if (text(input, "toStationId") === record.id) return refusal("toStationId", "A load goes to another station than the one it leaves")
+  if (text(input, "toStationId") === record.id) return refusal("toStationId", SAME_STATION)
   const wasteFractionId = serverId(input, "wasteFractionId", context, PICK_A_FRACTION)
   if (isRefusal(wasteFractionId)) return wasteFractionId
   const vehicle = text(input, "vehicleId")

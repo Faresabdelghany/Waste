@@ -12,10 +12,11 @@ import { describe, test } from "node:test"
 import type { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
 import type { Container } from "@waste/contracts/containers"
 import type { Project } from "@waste/contracts/organisation"
-import { CODE_WITH_CONTAMINATION, PickupCorrection, PickupRemove, REASON_WITH_A_MISS, type Pickup, type PickupDetail } from "@waste/contracts/pickups"
+import { PickupCorrection, PickupRemove, type Pickup, type PickupDetail } from "@waste/contracts/pickups"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"
+import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { routesInWindow } from "@waste/domain/map-planning/routes"
 
 import type { BusinessRecord } from "../../data/business-modules"
@@ -28,7 +29,7 @@ import { containerAdapter } from "../records/containers"
 import { containerTypeAdapter, contaminantCodeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { CODE_WITH_CONTAMINATION as LOCAL_CODE_WITH_CONTAMINATION, CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REMOVE_PICKUP } from "../records/pickups"
 import { routeAdapter, routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -337,7 +338,6 @@ describe("the pickup's commands", () => {
     assert.deepEqual(correct?.toBody?.({ outcome: "planned", note: "x" }, record, context()), { path: "outcome", message: "Pick the outcome: completed, skipped or failed" })
     assert.deepEqual(correct?.toBody?.({ outcome: "skipped", reason: "lost", note: "x" }, record, context()), { path: "reason", message: "Pick a reason the API knows" })
     assert.deepEqual(correct?.toBody?.({ outcome: "completed", note: " " }, record, context()), { path: "note", message: "Say why the outcome is corrected" })
-    assert.equal(LOCAL_REASON_WITH_A_MISS, REASON_WITH_A_MISS, "the web quotes the contract's sentence, since it imports no zod at runtime")
   })
 
   test("a correction posts to correct-outcome and the stop's answer replaces the row", async () => {
@@ -404,7 +404,6 @@ describe("a stop's contaminant code (M5 of #293)", () => {
     assert.deepEqual(correct?.toBody?.({ outcome: "completed", note: "x" }, record, over()), { outcome: "completed", note: "x" }, "absent keeps the stop's")
     assert.deepEqual(correct?.toBody?.({ outcome: "failed", reason: "inaccessible", note: "x", contaminantCodeId: codeRecord.id }, record, over()), { path: "contaminantCodeId", message: CODE_WITH_CONTAMINATION })
     assert.deepEqual(correct?.toBody?.({ outcome: "failed", reason: "contamination", note: "x", contaminantCodeId: "contaminant-code-unknown" }, record, over()), { path: "contaminantCodeId", message: "Pick a contaminant code the API holds" })
-    assert.equal(LOCAL_CODE_WITH_CONTAMINATION, CODE_WITH_CONTAMINATION, "the web quotes the contract's sentence")
   })
 
   test("the picker offers the active codes for the stop's fraction after None, and the stop's own code whatever it is now", () => {

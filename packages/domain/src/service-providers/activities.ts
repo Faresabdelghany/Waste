@@ -49,6 +49,9 @@ const CREATE_SIDES: Readonly<Record<ServiceProviderActivityKind, readonly Activi
 
 export const OFFICE_RAISES_FOLLOW_UPS = "A compliance follow-up is the office's to raise"
 
+/** What a route-day change proposing no day is told. */
+export const AT_LEAST_ONE_DAY = "A group runs on one day at least"
+
 /** Why the side may not open an Activity of the kind, or null where it may. */
 export function createRefusal(kind: ServiceProviderActivityKind, side: ActivitySide): string | null {
   return CREATE_SIDES[kind].includes(side) ? null : OFFICE_RAISES_FOLLOW_UPS

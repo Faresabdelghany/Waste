@@ -52,7 +52,19 @@ export const POSITION_RULES = {
   batchMax: 60,
 } as const
 
+/** What a road vehicle and a compass can say of a fix: whole kilometres an hour, whole degrees from true north. A phone's nonsense past them is the command's refusal at its field. */
+export const FIX_BOUNDS = {
+  speedKmh: { min: 0, max: 300 },
+  headingDeg: { min: 0, max: 359 },
+} as const
+
+/** What a command's fixes are told when two are out of order or share an instant. */
+export const FIXES_IN_ORDER = "The fixes are in the order they were taken, one per instant"
+
 export const POSITION_RETENTION_DAYS = 30
+
+/** The most points one track answers: an eight-hour day at the Driver App's thirty seconds is under a thousand, so a track is thinned only when it is long. */
+export const TRACK_POINTS_MAX = 2000
 
 /** The great-circle distance between two points, in metres, near enough at a kerb's scale. */
 export const metresBetween = (a: FlatPoint, b: FlatPoint): number => haversineMetres(a.coordinates, b.coordinates)

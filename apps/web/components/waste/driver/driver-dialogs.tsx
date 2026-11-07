@@ -18,12 +18,14 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PhotoField } from "@/components/waste/driver/driver-proof-dialogs"
 import type { DriverMe } from "@waste/contracts/driver-commands"
+import { SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
 import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type FillLevel, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
-import { NOTE_MAX, wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
+import { wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
 import { LITRES_MAX, litresOf } from "@/lib/data/tank-words"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
 import { FILL_OPTIONS } from "@/lib/data/fill-levels"
-import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
+import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 
 const SELECT = "border-input dark:bg-input/30 h-11 w-full rounded-md border bg-transparent px-3 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
@@ -90,7 +92,7 @@ function ReasonForm({ confirm, noteRequired, takesPhoto, onConfirm, onClose }: O
       </NativeSelect>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${id}-note`}>{noteRequired ? "What happened" : "Note (optional)"}</Label>
-        <Textarea id={`${id}-note`} value={note} required={noteRequired} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
+        <Textarea id={`${id}-note`} value={note} required={noteRequired} maxLength={PARAGRAPH_MAX} onChange={(event) => setNote(event.target.value)} />
       </div>
       {takesPhoto && <PhotoField photo={photo} onPhoto={setPhoto} onPreparing={setPreparing} />}
       <DialogFooter>
@@ -202,7 +204,7 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-note`}>Note (optional)</Label>
-            <Textarea id={`${id}-note`} value={note} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
+            <Textarea id={`${id}-note`} value={note} maxLength={PARAGRAPH_MAX} onChange={(event) => setNote(event.target.value)} />
           </div>
           <label className="flex items-center gap-2 text-sm" htmlFor={`${id}-refused`}>
             <input id={`${id}-refused`} type="checkbox" className="h-5 w-5" checked={refused} onChange={(event) => setRefused(event.target.checked)} />
@@ -219,7 +221,7 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
               </NativeSelect>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`${id}-refusal-note`}>{reason === "other" ? "In the station's words" : "In the station's words (optional)"}</Label>
-                <Textarea id={`${id}-refusal-note`} value={refusalNote} maxLength={NOTE_MAX} required={reason === "other"} onChange={(event) => setRefusalNote(event.target.value)} />
+                <Textarea id={`${id}-refusal-note`} value={refusalNote} maxLength={PARAGRAPH_MAX} required={reason === "other"} onChange={(event) => setRefusalNote(event.target.value)} />
                 {wordless && <p className="text-sm text-destructive">{SAY_WHY_REFUSED}.</p>}
               </div>
             </>
@@ -260,7 +262,7 @@ export function NoteDialog({ open, onOpenChange, title, description, onConfirm }
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-note`}>Note</Label>
-            <Textarea id={`${id}-note`} value={note} required maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
+            <Textarea id={`${id}-note`} value={note} required maxLength={PARAGRAPH_MAX} onChange={(event) => setNote(event.target.value)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

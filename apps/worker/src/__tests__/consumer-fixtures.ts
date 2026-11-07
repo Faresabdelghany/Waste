@@ -22,7 +22,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"

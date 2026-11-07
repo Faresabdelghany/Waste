@@ -21,6 +21,7 @@ import {
   GENERATION_RUN_STATUSES,
   GENERATION_TRIGGERS,
   HOLIDAY_POLICIES,
+  EACH_DAY_ONCE,
   PLANNING_AREA_PURPOSES,
   RECURRENCE_FREQUENCIES,
   ROUTE_SCHEME_STATUSES,
@@ -31,12 +32,8 @@ import {
   STOP_SOURCES,
   WEEK_ROTATIONS,
 } from "@waste/domain/planning/vocabulary"
+import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
-
-import { eachOnce, eachOnceSentence } from "./resource"
-
-/** The one distinct-entries rule, spelled in resource.ts; re-exported here since Planning's modules read it from this one. */
-export { eachOnce }
 
 /** One of the seven weekdays. */
 export const ServiceDay = z.enum(SERVICE_DAYS)
@@ -85,9 +82,6 @@ export type GenerationTrigger = z.infer<typeof GenerationTrigger>
 /** Where a generation run stands (part B): queued until the worker takes it, running, then succeeded or failed. */
 export const GenerationRunStatus = z.enum(GENERATION_RUN_STATUSES)
 export type GenerationRunStatus = z.infer<typeof GenerationRunStatus>
-
-/** What a set of days with a day in it twice is told. */
-export const EACH_DAY_ONCE = eachOnceSentence("day", "a set of days holds each day at most once")
 
 /** A set of weekdays, each named at most once; may be empty. A scheme's service days add `.min(1)`, a project's weekend `.max(6)`. */
 export const ServiceDays = z.array(ServiceDay).refine((days) => eachOnce(days), { message: EACH_DAY_ONCE })

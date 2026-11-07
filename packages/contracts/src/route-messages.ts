@@ -5,6 +5,7 @@
 // an id their device mints, so a send tried again over a lost answer is the
 // message already written. A message is never edited or taken back. Plain
 // text, one line or a few: what a person says across a cab, not a letter.
+import { MESSAGE_TOO_LONG, ROUTE_MESSAGE_BODY_MAX, SAY_SOMETHING } from "@waste/domain/execution/route-messages"
 import { ROUTE_MESSAGE_AUTHORS } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
@@ -14,14 +15,7 @@ import { Id } from "./ids"
 export const RouteMessageAuthor = z.enum(ROUTE_MESSAGE_AUTHORS)
 export type RouteMessageAuthor = z.infer<typeof RouteMessageAuthor>
 
-/** The longest message: a few lines a driver reads at a stop. */
-export const ROUTE_MESSAGE_BODY_MAX = 1000
-
-const Body = z
-  .string()
-  .trim()
-  .min(1, "Say something")
-  .max(ROUTE_MESSAGE_BODY_MAX, `A message is at most ${ROUTE_MESSAGE_BODY_MAX} characters`)
+const Body = z.string().trim().min(1, SAY_SOMETHING).max(ROUTE_MESSAGE_BODY_MAX, MESSAGE_TOO_LONG)
 
 /** One message of a route's thread, oldest first in a list. */
 export const RouteMessage = z.object({

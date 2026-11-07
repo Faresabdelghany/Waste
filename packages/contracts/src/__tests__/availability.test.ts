@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
+
 import { DriverAbsence, DriverAbsenceCreate, DriverAbsenceListQuery, DriverAbsencePatch, VehicleUnavailability, VehicleUnavailabilityCreate, VehicleUnavailabilityPatch } from "../availability"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
 import { refusal, refusesAnEmptyPatch } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

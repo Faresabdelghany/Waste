@@ -9,12 +9,14 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Agreement } from "@waste/contracts/agreements"
-import { BillableEventCancel, BillableEventCreate, BillableEventHold, BillableEventReprice, OVERRIDE_WITH_A_REASON as WIRE_OVERRIDE_WITH_A_REASON, type BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRunCreate, PERIOD_ENDS_BY_TODAY as WIRE_PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED as WIRE_PERIOD_ORDERED, type BillingRun, type BillingRunDetail, type BillingRunPreview } from "@waste/contracts/billing"
+import { BillableEventCancel, BillableEventCreate, BillableEventHold, BillableEventReprice, type BillableEvent } from "@waste/contracts/billable-events"
+import { BillingRunCreate, type BillingRun, type BillingRunDetail, type BillingRunPreview } from "@waste/contracts/billing"
 import type { Product } from "@waste/contracts/catalogue"
 import type { Customer } from "@waste/contracts/customers"
 import { CreditNoteCreate, type Invoice, type InvoiceDetail, type InvoiceLine } from "@waste/contracts/invoices"
 import type { Project } from "@waste/contracts/organisation"
+import { OVERRIDE_WITH_A_REASON } from "@waste/domain/finance/billable-events"
+import { PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED } from "@waste/domain/finance/billing-runs"
 
 import { OFFICE_CANCEL_REASONS } from "../../data/commercial"
 import type { BusinessRecord } from "../../data/business-modules"
@@ -33,9 +35,6 @@ import {
   exclusionWords,
   invoiceAdapter,
   invoicesModule,
-  OVERRIDE_WITH_A_REASON,
-  PERIOD_ENDS_BY_TODAY,
-  PERIOD_ORDERED,
   previewBillingRun,
 } from "../records/billing"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -229,7 +228,6 @@ describe("the billable events module", () => {
   })
 
   test("refuses a manual event the API would: a price without its reason, a quantity of none, an agreement or a product it does not hold", () => {
-    assert.equal(OVERRIDE_WITH_A_REASON, WIRE_OVERRIDE_WITH_A_REASON, "the contract's sentence, spelled again since the web imports the contracts as types")
     const refusalOf = (values: Record<string, string>) => billableEventAdapter.toCreateBody!(made("events-billable-event-1", "Billable event", { agreementId: agreementWebId, productId: `product-${bulky.id}`, quantity: "1", serviceDate: "2026-09-29", ...values }), context())
     assert.deepEqual(refusalOf({ unitPrice: "300" }), { path: "overrideReason", message: OVERRIDE_WITH_A_REASON })
     assert.deepEqual(refusalOf({ overrideReason: "Phone" }), { path: "overrideReason", message: OVERRIDE_WITH_A_REASON })
@@ -407,8 +405,6 @@ describe("the billing runs module", () => {
   })
 
   test("makes one body for the preview and the run, and refuses a period that runs backwards in the contract's words", () => {
-    assert.equal(PERIOD_ORDERED, WIRE_PERIOD_ORDERED)
-    assert.equal(PERIOD_ENDS_BY_TODAY, WIRE_PERIOD_ENDS_BY_TODAY)
     const values = { projectId: COPENHAGEN, periodFrom: "2026-09-01", periodTo: "2026-09-30", note: "September" }
     const body = billingRunBody(values, resolverOver(state))
     assert.deepEqual(body, { projectId: copenhagen.id, periodFrom: "2026-09-01", periodTo: "2026-09-30", note: "September" })

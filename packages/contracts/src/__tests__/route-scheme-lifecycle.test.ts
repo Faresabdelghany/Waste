@@ -4,7 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PLAN_AHEAD_DAYS_BOUND, RouteSchemeArchive, RouteSchemeCreate, RouteSchemeListQuery, RouteSchemePatch, RouteSchemeSuccessorCreate } from "../route-schemes"
+import { PLAN_AHEAD_DAYS_BOUND } from "@waste/domain/planning/lifecycle"
+
+import { RouteSchemeArchive, RouteSchemeCreate, RouteSchemeListQuery, RouteSchemePatch, RouteSchemeSuccessorCreate } from "../route-schemes"
 import { refusal } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

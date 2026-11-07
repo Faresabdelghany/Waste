@@ -5,6 +5,7 @@ import {
   CaretDown,
   MagnifyingGlass,
 } from "@phosphor-icons/react/dist/ssr"
+import { ACTIONS, type Action } from "@waste/domain/access/modules"
 
 import { RecordPageHeader } from "@/components/page-layout"
 import { Button } from "@/components/ui/button"
@@ -24,17 +25,15 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  ROLE_PERMISSION_ACTIONS,
   ROLE_PERMISSION_ACTION_LABELS,
   rolePermissionCellCount,
   rolePermissionSections,
   type RoleAccessMap,
-  type RolePermissionAction,
   type RolePermissionSection,
 } from "@/lib/data/role-permissions"
 import { cn } from "@/lib/utils"
 
-type AccessDraft = Map<string, Set<RolePermissionAction>>
+type AccessDraft = Map<string, Set<Action>>
 
 function sectionDomId(sectionId: string) {
   return `role-permission-section-${sectionId}`
@@ -43,9 +42,9 @@ function sectionDomId(sectionId: string) {
 function grantInDraft(
   draft: AccessDraft,
   key: string,
-  action: RolePermissionAction,
+  action: Action,
 ) {
-  const actions = draft.get(key) ?? new Set<RolePermissionAction>()
+  const actions = draft.get(key) ?? new Set<Action>()
   actions.add(action)
   // Editing, creating, or deleting a record implies seeing it.
   if (action !== "view") actions.add("view")
@@ -55,7 +54,7 @@ function grantInDraft(
 function revokeInDraft(
   draft: AccessDraft,
   key: string,
-  action: RolePermissionAction,
+  action: Action,
 ) {
   const actions = draft.get(key)
   if (!actions) return
@@ -116,30 +115,30 @@ function PermissionSectionCard({
   visibleItems: RolePermissionSection["items"]
   open: boolean
   onOpenChange: (open: boolean) => void
-  hasAction: (key: string, action: RolePermissionAction) => boolean
+  hasAction: (key: string, action: Action) => boolean
   /** A read-only matrix: every box shown and none to tick. */
   disabled: boolean
   onToggleCell: (
     key: string,
-    action: RolePermissionAction,
+    action: Action,
     granted: boolean,
   ) => void
   onToggleColumn: (
     section: RolePermissionSection,
-    action: RolePermissionAction,
+    action: Action,
     granted: boolean,
   ) => void
   onToggleSection: (section: RolePermissionSection, granted: boolean) => void
 }) {
-  const totalCells = section.items.length * ROLE_PERMISSION_ACTIONS.length
+  const totalCells = section.items.length * ACTIONS.length
   const grantedCells = section.items.reduce(
     (sum, item) =>
       sum +
-      ROLE_PERMISSION_ACTIONS.filter((action) => hasAction(item.key, action))
+      ACTIONS.filter((action) => hasAction(item.key, action))
         .length,
     0,
   )
-  const columnGranted = (action: RolePermissionAction) =>
+  const columnGranted = (action: Action) =>
     section.items.filter((item) => hasAction(item.key, action)).length
 
   return (
@@ -181,7 +180,7 @@ function PermissionSectionCard({
                   <TableHead className="h-10 pl-4 text-xs">
                     Items / Actions
                   </TableHead>
-                  {ROLE_PERMISSION_ACTIONS.map((action) => (
+                  {ACTIONS.map((action) => (
                     <TableHead key={action} className="h-10 w-[132px]">
                       <label className={cn("flex w-fit items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground", !disabled && "cursor-pointer")}>
                         <Checkbox
@@ -206,7 +205,7 @@ function PermissionSectionCard({
                     <TableCell className="py-3 pl-4 text-foreground">
                       {item.label}
                     </TableCell>
-                    {ROLE_PERMISSION_ACTIONS.map((action) => (
+                    {ACTIONS.map((action) => (
                       <TableCell key={action}>
                         <Checkbox
                           checked={hasAction(item.key, action)}
@@ -346,7 +345,7 @@ export function RolePermissionsMatrix({
     )
   }
 
-  const hasAction = (key: string, action: RolePermissionAction) =>
+  const hasAction = (key: string, action: Action) =>
     access[key]?.includes(action) ?? false
 
   const applyAccess = (mutate: (draft: AccessDraft) => void) => {
@@ -358,7 +357,7 @@ export function RolePermissionsMatrix({
     const next: RoleAccessMap = {}
     for (const [key, actions] of draft) {
       if (actions.size > 0) {
-        next[key] = ROLE_PERMISSION_ACTIONS.filter((action) =>
+        next[key] = ACTIONS.filter((action) =>
           actions.has(action),
         )
       }
@@ -368,7 +367,7 @@ export function RolePermissionsMatrix({
 
   const toggleCell = (
     key: string,
-    action: RolePermissionAction,
+    action: Action,
     granted: boolean,
   ) =>
     applyAccess((draft) =>
@@ -377,7 +376,7 @@ export function RolePermissionsMatrix({
 
   const toggleColumn = (
     section: RolePermissionSection,
-    action: RolePermissionAction,
+    action: Action,
     granted: boolean,
   ) =>
     applyAccess((draft) => {
@@ -391,7 +390,7 @@ export function RolePermissionsMatrix({
     applyAccess((draft) => {
       for (const item of section.items) {
         if (granted) {
-          for (const action of ROLE_PERMISSION_ACTIONS) {
+          for (const action of ACTIONS) {
             grantInDraft(draft, item.key, action)
           }
         } else {
@@ -406,7 +405,7 @@ export function RolePermissionsMatrix({
       section.items.reduce(
         (itemSum, item) =>
           itemSum +
-          ROLE_PERMISSION_ACTIONS.filter((action) =>
+          ACTIONS.filter((action) =>
             hasAction(item.key, action),
           ).length,
         0,

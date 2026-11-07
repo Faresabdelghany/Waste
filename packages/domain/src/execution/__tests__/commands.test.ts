@@ -21,8 +21,6 @@ import {
   notInService,
   notTheStopsContainer,
   OBJECT_KEY_NAMES_ANOTHER,
-  objectKeyNames,
-  objectKeyOf,
   RECORDED_AFTER_IT_HAPPENED,
   recordedTooLate,
   ROUTE_CANCELLED_NOTHING_TO_END,
@@ -36,6 +34,7 @@ import {
   type SessionState,
   type VehicleState,
 } from "../commands"
+import { objectKeyNames, objectKeyOf } from "../../storage-objects"
 import { alreadyDecided, notActive, notDispatched, routeCancellation } from "../transitions"
 import type { PositionFix } from "../positions"
 import { DRIVER_COMMAND_KINDS, type RouteStatus } from "../vocabulary"

@@ -41,8 +41,10 @@
 // its project, so the edit forms hold those read-only; what a person may
 // change is what the wire patches.
 import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
+import { ONE_CADENCE, serviceFrequencyShape } from "@waste/domain/registry/catalogue"
 import { WASTE_TREATMENTS, type WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/registry/waste-code"
+import { KEY_MAX, SLUG_PATTERN } from "@waste/domain/text"
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
@@ -77,14 +79,9 @@ export const MASTER_DATA_MODULE: ModuleLocation = {
 // The rules a write is held to, spelled once
 // ---------------------------------------------------------------------------
 
-/** The contracts' key shape (`Slug`, text.ts): a lowercase slug of at most 50 characters. */
-export const KEY_SHAPE = /^[a-z0-9]+(-[a-z0-9]+)*$/
-export const KEY_MAX = 50
 export const KEY_REFUSAL = "A key is a lowercase slug of letters, digits and single hyphens, such as hard-plastic"
-export const isKey = (value: string | undefined): value is string => value !== undefined && value.length <= KEY_MAX && KEY_SHAPE.test(value)
-
-/** The contract's one cadence sentence (`@waste/contracts/catalogue`, `ONE_CADENCE`), quoted since the contracts reach the bundle as types alone; the tests hold the two equal. */
-export const ONE_CADENCE = "Give collectionsPerWeek with at most one of weeksBetween and daysBetween, or none of the three (on demand)"
+/** A key as the wire takes it (`@waste/domain/text`): a lowercase slug of at most `KEY_MAX` characters. */
+export const isKey = (value: string | undefined): value is string => value !== undefined && value.length <= KEY_MAX && new RegExp(SLUG_PATTERN).test(value)
 
 export const VOLUME_REFUSAL = "A volume is a whole number of litres"
 
@@ -105,11 +102,9 @@ export const keyMovedRefusal = (kind: MasterDataKind) => {
   return `The key is set once: a ${lower} that needs another key is another ${lower}`
 }
 
-/** The contract's own rule over the three numbers as stored (`serviceFrequencyShape`). */
-export function cadenceHolds({ collectionsPerWeek, weeksBetween, daysBetween }: Pick<MasterDataFields, "collectionsPerWeek" | "weeksBetween" | "daysBetween">): boolean {
-  if (weeksBetween != null && daysBetween != null) return false
-  return collectionsPerWeek != null || (weeksBetween == null && daysBetween == null)
-}
+/** The domain's cadence rule (`serviceFrequencyShape`) over the three numbers as stored, an absent one the null the row holds. */
+export const cadenceHolds = ({ collectionsPerWeek, weeksBetween, daysBetween }: Pick<MasterDataFields, "collectionsPerWeek" | "weeksBetween" | "daysBetween">): boolean =>
+  serviceFrequencyShape({ collectionsPerWeek: collectionsPerWeek ?? null, weeksBetween: weeksBetween ?? null, daysBetween: daysBetween ?? null })
 
 // ---------------------------------------------------------------------------
 // The fields of a row, typed

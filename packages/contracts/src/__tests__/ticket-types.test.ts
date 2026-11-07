@@ -2,9 +2,11 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PLAN_DAYS_AHEAD_MAX, TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
+import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE } from "@waste/domain/resolution/ticket-types"
+import { TYPE_OR_KIND } from "@waste/domain/resolution/tickets"
 
-import { AT_MOST_FIELDS, DEFAULT_TYPE_OFFERED, EACH_COMMAND_ONCE, EACH_ROLE_ONCE, TICKET_FIELD_KEY_SHAPE, TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
-import { Ticket, TicketCreate, TicketListQuery, TicketPatch, TYPE_OR_KIND } from "../tickets"
+import { TicketFieldValues, TicketFieldValuesPatch, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet } from "../ticket-types"
+import { Ticket, TicketCreate, TicketListQuery, TicketPatch } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

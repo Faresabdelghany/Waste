@@ -23,7 +23,10 @@
 // neither may put a container into service. Both lists are the vocabulary's,
 // which the domain's `MOVEMENT_SHAPES` is built from too, so what a command
 // may ask for and what the ledger allows cannot drift.
-import { STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
+import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
+import { EACH_TYPE_ONCE, STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
 import { ADJUSTMENT_TARGETS, DECOMMISSION_REASON_STATUSES, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
@@ -31,7 +34,7 @@ import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { AssetStatus, StockMovementKind, StockPlaceKind } from "./resources"
 import { Label, Paragraph, Slug } from "./text"
 
@@ -132,7 +135,6 @@ export const Decommission = z.strictObject({
 export type Decommission = z.infer<typeof Decommission>
 
 /** What an adjustment naming a warehouse for scrap, or none for a place in stock, is told. */
-export const WAREHOUSE_WITH_A_STOCK_PLACE = "Name the warehouse with warehouse or maintenance and not with scrap"
 const warehouseWithAStockPlace = { message: WAREHOUSE_WITH_A_STOCK_PLACE, path: ["warehouseId"] }
 
 /** `POST /containers/:id/adjust`: the correction door, never into or out of service. */
@@ -148,9 +150,6 @@ export const Adjust = z
   })
   .refine((body) => (body.toKind !== "scrap") === (body.warehouseId != null), warehouseWithAStockPlace)
 export type Adjust = z.infer<typeof Adjust>
-
-/** What a window whose end comes before its start is told. */
-export const OCCURRED_WINDOW_ORDERED = "to is the end of the window, so it comes on or after from"
 
 /** A page of movements across containers: one project's, one container's, through one warehouse on either side, of one kind, over a window of `occurredAt`. */
 export const StockMovementListQuery = ProjectScopedListQuery.extend({
@@ -236,9 +235,6 @@ export const StockMinimumEntry = z.strictObject({
   minimum: PositiveInt,
 })
 export type StockMinimumEntry = z.infer<typeof StockMinimumEntry>
-
-/** What a set naming a container type twice is told. */
-export const EACH_TYPE_ONCE = eachOnceSentence("container type", "a warehouse has one minimum per type")
 
 /** `PUT /warehouses/:id/stock-minimums`: the whole set, replacing what the warehouse had; an empty set clears it. */
 export const StockMinimumsSet = z.strictObject({

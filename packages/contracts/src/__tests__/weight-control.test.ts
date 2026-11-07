@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "@waste/domain/execution/unloads"
 import { WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
+import { CORRECTION_NAMES_ITS_UNLOAD, correctionShape } from "@waste/domain/finance/weight-reviews"
 
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, UnloadCreate } from "../unloads"
-import { CORRECTION_NAMES_ITS_UNLOAD, correctionShape, WeightApprove, WeightCorrect, WeightReject, WeightReview, WeightReviewListQuery, WeightReviewState } from "../weight-control"
+import { UnloadCreate } from "../unloads"
+import { WeightApprove, WeightCorrect, WeightReject, WeightReview, WeightReviewListQuery, WeightReviewState } from "../weight-control"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

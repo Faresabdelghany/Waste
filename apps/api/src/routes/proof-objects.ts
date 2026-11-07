@@ -28,14 +28,13 @@
 // typed `NO_PROOF_STORAGE` so a device tells it from an outage, and so does
 // one whose Storage refuses the call (no bucket, a key it does not take);
 // Storage's silence is a 502 the device asks again past.
-import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload, ProofUploadRequest } from "@waste/contracts/proof-objects"
 import type { Database } from "@waste/db/client"
 import { pickup, proofOfService } from "@waste/db/schema/execution"
 import { loggable } from "@waste/db/sqlstate"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
-import { objectKeyOf } from "@waste/domain/execution/commands"
+import { NO_PROOF_STORAGE, objectKeyOf } from "@waste/domain/storage-objects"
 import { notActive } from "@waste/domain/execution/transitions"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"

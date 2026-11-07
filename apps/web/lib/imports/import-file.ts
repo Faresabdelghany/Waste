@@ -13,9 +13,9 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { importRows, type ImportFile, type ImportRow } from "@waste/domain/imports/csv"
 import { planningAreaRows } from "@waste/domain/imports/geojson"
 import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 
 import { allows, type Grants } from "@/lib/api/grants"
-import { REASON_MAX } from "@/lib/data/action-decision"
 
 /** Each kind as the screen offers it: its label, the module its rows are written to, and whether a file of it is a project's. */
 export const IMPORT_KIND_OPTIONS = [
@@ -106,12 +106,7 @@ export function batchesOf<Row>(rows: readonly Row[], size: number = IMPORT_BATCH
  */
 export function importReason(fileName: string, typed?: string): string {
   const given = typed?.trim() ?? ""
-  return (given === "" ? `CSV import ${fileName}` : given).slice(0, REASON_MAX)
-}
-
-/** The separator a template is asked for: semicolons where the locale writes a decimal comma, as a spreadsheet there splits columns on them. */
-export function templateSeparatorFor(locale: string | undefined): "comma" | "semicolon" {
-  return new Intl.NumberFormat(locale).format(1.5).includes(",") ? "semicolon" : "comma"
+  return (given === "" ? `CSV import ${fileName}` : given).slice(0, PARAGRAPH_MAX)
 }
 
 /** How many rows came out each way. */

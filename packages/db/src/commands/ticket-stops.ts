@@ -20,8 +20,8 @@
 // (`bookTicket`): the office's Add stop (apps/api's routes/ticket-stops.ts)
 // and the system's plan in a route (#546 of #544,
 // commands/ticket-automation.ts) book through the one write.
-import { routeLabel } from "@waste/contracts/execution"
-import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/execution/ticket-stops"
+import { routeLabel } from "@waste/domain/numbering"
+import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/resolution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import type { TicketStatus } from "@waste/domain/resolution/vocabulary"

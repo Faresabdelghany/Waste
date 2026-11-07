@@ -18,6 +18,7 @@
 // (#411, decision c). Dismiss says why. A decided proposal is decided.
 import { Page } from "@waste/contracts/pagination"
 import { RightSizingApprove, RightSizingDismiss, RightSizingListQuery, RightSizingProposal, RightSizingRun, type RightSizingDirection, type RightSizingStatus } from "@waste/contracts/right-sizing"
+import type { Action } from "@waste/domain/access/modules"
 import type { FillLevel } from "@waste/domain/execution/vocabulary"
 import type { Tx } from "@waste/db/client"
 import { proposeRightSizing } from "@waste/db/commands/right-sizing"
@@ -117,7 +118,7 @@ async function openProposal(tx: Tx, principal: Principal, id: string): Promise<R
   return current
 }
 
-const problems = (action: "view" | "edit" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

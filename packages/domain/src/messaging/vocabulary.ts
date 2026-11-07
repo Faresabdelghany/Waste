@@ -1,6 +1,7 @@
 // Messaging's closed lists (#291 C15), spelled once for the database's CHECK
 // and the contracts' `z.enum`, as the Registry's are (registry/vocabulary.ts
 // says why one tuple serves both).
+import { without } from "../lists"
 
 /** How a message reaches its recipient: e-mail first, SMS second. A channel added here needs its provider's door in the worker. */
 export const MESSAGE_CHANNELS = ["email", "sms"] as const
@@ -16,8 +17,8 @@ export const MESSAGE_CHANNELS = ["email", "sms"] as const
  */
 export const MESSAGE_PURPOSES = ["service", "billing", "staff"] as const
 
-/** What a template is for: a customer's message only, service or billing. A staff message is rendered by the domain from its event (notifications/notices.ts), never from a template. */
-export const MESSAGE_TEMPLATE_PURPOSES = ["service", "billing"] as const
+/** What a template is for: a customer's message only, every purpose but staff's. A staff message is rendered by the domain from its event (notifications/notices.ts), never from a template. */
+export const MESSAGE_TEMPLATE_PURPOSES = without(MESSAGE_PURPOSES, "staff")
 
 /**
  * Where a message on the delivery log stands: queued for the worker; sent by
@@ -42,4 +43,4 @@ export const MESSAGING_VOCABULARIES = {
   MESSAGE_TEMPLATE_PURPOSES,
   MESSAGE_STATUSES,
   MESSAGE_TEMPLATE_STATUSES,
-} as const satisfies Record<string, readonly [string, ...string[]]>
+} as const satisfies Record<string, readonly string[]>

@@ -2,11 +2,12 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRunDetail, PERIOD_ENDS_BY_TODAY } from "@waste/contracts/billing"
+import { BillingRunDetail } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
 import { type Database, type Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { withCompany } from "@waste/db/tenant"
+import { PERIOD_ENDS_BY_TODAY } from "@waste/domain/finance/billing-runs"
 import { and, eq } from "drizzle-orm"
 
 import { pickupEvent, reversalEvent, type BillingFixtures } from "./billing-fixtures"

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
-import { DriverCommandReceipt, DriverMe, EACH_COMMAND_ONCE } from "@waste/contracts/driver-commands"
+import { DriverCommandReceipt, DriverMe } from "@waste/contracts/driver-commands"
 import { Route } from "@waste/contracts/routes"
 import { Session } from "@waste/contracts/sessions"
 import { type Database } from "@waste/db/client"
@@ -29,6 +29,7 @@ import {
   recordedTooLate,
   ROUTE_CANCELLED_NOTHING_TO_END,
 } from "@waste/domain/execution/commands"
+import { EACH_COMMAND_ONCE } from "@waste/domain/execution/command-batches"
 import { alreadyActive, doesNotChange, notActive, notDispatched } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"

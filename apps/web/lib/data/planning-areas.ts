@@ -10,6 +10,8 @@
  * record shape the Settings pane writes on create and edit.
  */
 
+import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
+
 import { slugify } from "@/lib/utils"
 
 import { settingsModuleDomains } from "./business-domain"
@@ -42,16 +44,7 @@ export const PLANNING_AREAS_MODULE: ModuleLocation = {
   moduleId: areasDomain.moduleId,
 }
 
-export type PlanningAreaPurpose =
-  | "route-planning"
-  | "service-operations"
-  | "notification"
-
-const PURPOSES: ReadonlySet<string> = new Set<PlanningAreaPurpose>([
-  "route-planning",
-  "service-operations",
-  "notification",
-])
+const PURPOSES: ReadonlySet<string> = new Set<PlanningAreaPurpose>(PLANNING_AREA_PURPOSES)
 
 /**
  * Fixture contexts read "<purpose display> · <project>" ("Planning area ·

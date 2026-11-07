@@ -99,7 +99,7 @@
 // their failures together — and each of the four queues has a loop of its
 // own, so events of one stop on two queues can meet: the key above is for
 // that.
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, BY_SLA, openTicket, ticketRefOf, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
 import { moveTicket } from "@waste/db/commands/ticket-automation"
@@ -114,7 +114,7 @@ import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { CLOSING_REASONS } from "@waste/domain/execution/vocabulary"
-import { stopMissed } from "@waste/domain/execution/ticket-stops"
+import { stopMissed } from "@waste/domain/resolution/ticket-stops"
 import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, type CaseRule, type ProblemAsFound, type Superseding } from "@waste/domain/resolution/cases"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { RESOLUTION_EVENT_KINDS, ticketFor, type EventFacts, type ResolutionEventKind, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"

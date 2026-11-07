@@ -81,7 +81,7 @@ describe("OUTBOX_PAYLOADS", () => {
     assert.deepEqual([route.heldAt, route.cancelReasonCode], [null, null], "a route cancelled before the hold and the codes reads as neither")
     assert.deepEqual(RouteEvent.parse(routeBefore209), route)
     assert.throws(() => outboxPayloadOf("route-cancelled", "route", { id: THIRD }))
-    assert.throws(() => outboxPayloadOf("pickup-problem-reported", "unload" as "route", routeBefore209), /never about a unload/)
+    assert.throws(() => outboxPayloadOf("pickup-problem-reported", "unload" as "route", routeBefore209), /is about pickup or route, never a unload/)
     assert.equal(outboxPayloadOf("pickup-problem-reported", "route", { ...routeBefore209, proofs: [] }).id, THIRD)
   })
 })

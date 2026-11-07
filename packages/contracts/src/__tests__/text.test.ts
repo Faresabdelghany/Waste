@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { LABEL_MAX, PARAGRAPH_MAX } from "@waste/domain/text"
+
 import { UserInvite } from "../access"
 import { Me } from "../me"
 import { ProjectCreate } from "../organisation"
-import { Label, LABEL_MAX, Paragraph, PARAGRAPH_MAX } from "../text"
+import { Label, Paragraph } from "../text"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const longer = "n".repeat(LABEL_MAX + 1)

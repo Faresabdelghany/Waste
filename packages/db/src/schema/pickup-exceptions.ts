@@ -25,6 +25,7 @@
 // is the rule's project's — an additional service sold per job, which the API
 // holds it to — priced by the Price Engine on the stop's service date like any
 // other; this slice charges nothing yet (M5b).
+import { PICKUP_EXCEPTION_WINDOW_DAYS } from "@waste/domain/execution/pickup-exceptions"
 import { CONTAMINANT_CODE_STATUSES, PICKUP_EXCEPTION_REASONS, PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text, unique, uuid } from "drizzle-orm/pg-core"
@@ -109,7 +110,7 @@ export const pickupExceptionRule = wms.table(
     check(tableObjectName(t.id.table, "reason_shape", "pickupExceptionRule"), sql`${t.outcome} <> 'completed' or ${t.reason} is null`),
     check(tableObjectName(t.id.table, "code_shape", "pickupExceptionRule"), sql`${t.contaminantCodeId} is null or ${t.reason} is null or ${t.reason} = 'contamination'`),
     check(tableObjectName(t.id.table, "free_count_not_negative", "pickupExceptionRule"), sql`${t.freeCount} >= 0`),
-    check(tableObjectName(t.id.table, "window_days_range", "pickupExceptionRule"), sql`${t.windowDays} between 1 and 3660`),
+    check(tableObjectName(t.id.table, "window_days_range", "pickupExceptionRule"), sql`${t.windowDays} between ${sql.raw(String(PICKUP_EXCEPTION_WINDOW_DAYS.min))} and ${sql.raw(String(PICKUP_EXCEPTION_WINDOW_DAYS.max))}`),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.contaminantCodeId),
   ],

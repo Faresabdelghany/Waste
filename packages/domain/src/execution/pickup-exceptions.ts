@@ -33,6 +33,28 @@ import { addDays } from "../days"
 import { inForceOn } from "../periods"
 import { PICKUP_EXCEPTION_REASONS, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "./vocabulary"
 
+/** How many matching exceptions a rule may let go free: 0 charges the first. */
+export const PICKUP_EXCEPTION_FREE_COUNT_MAX = 100
+
+/** The days before a stop's service date a rule counts over: a day to ten years. */
+export const PICKUP_EXCEPTION_WINDOW_DAYS = { min: 1, max: 3660 } as const
+
+/** The most products a rule's ladder steps through, the last repeating. */
+export const PICKUP_EXCEPTION_LADDER_MAX = 10
+
+/** The most exceptions one place's history answers; a place past it is told it was cut short. */
+export const PICKUP_EXCEPTION_HISTORY_MAX = 500
+
+/** The most fractions a contaminant code applies to: every fraction a company would keep. */
+export const CONTAMINANT_CODE_FRACTIONS_MAX = 200
+
+/** A tagged collection's rule names no reason; a code narrows contamination, any reason, or a tagged collection: the rule table's `reason_shape` and `code_shape`. */
+export const reasonAndCode = (rule: { outcome?: string; reason?: string | null; contaminantCodeId?: string | null }): boolean =>
+  (rule.outcome !== "completed" || rule.reason == null) && (rule.contaminantCodeId == null || rule.reason == null || rule.reason === "contamination")
+
+/** What a rule whose reason and code disagree with its outcome is told, at the reason. */
+export const REASON_AND_CODE = "A tagged collection's rule names no reason, and a code goes with contamination or any reason"
+
 /** A stop as an exception reads it; `place` is its Property's or its Shared Collection Point's id. */
 export type PickupExceptionStop = {
   id: string

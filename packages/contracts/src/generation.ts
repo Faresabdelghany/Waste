@@ -17,6 +17,8 @@
 // The route answers the run at once and never waits for it (#128's worker
 // shape), so a client reads it again, `GET /generation-runs/:id`, to watch it.
 // `GenerationRunListQuery` is a scheme's runs, newest first, by status.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { windowAtMostAYear } from "@waste/domain/planning/schemes"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
@@ -24,7 +26,7 @@ import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { GenerationRunStatus, GenerationTrigger } from "./planning"
 import { NonNegativeInt, stamped } from "./resource"
-import { windowAtMostAYear, windowAtMostAYearIssue, windowOrdered, windowOrderedIssue } from "./route-schemes"
+import { windowAtMostAYearIssue, windowOrderedIssue } from "./route-schemes"
 
 /** `POST /route-schemes/:id/generate`: the days to plan, both inclusive, `to` on or after `from`, at most 366 days. */
 export const GenerationRequest = z
@@ -32,7 +34,7 @@ export const GenerationRequest = z
     from: IsoDate,
     to: IsoDate,
   })
-  .refine(windowOrdered, windowOrderedIssue)
+  .refine(dayWindowOrdered, windowOrderedIssue)
   .refine(windowAtMostAYear, windowAtMostAYearIssue)
 export type GenerationRequest = z.infer<typeof GenerationRequest>
 

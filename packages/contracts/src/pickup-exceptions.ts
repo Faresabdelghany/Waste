@@ -12,7 +12,11 @@
 // window, the ladder and the end alone — end the rule and add another, as a
 // price row. A ladder names the project's products by charged occurrence,
 // the last repeating.
+import { CONTAMINANT_CODE_FRACTIONS_MAX, PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_HISTORY_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EXCEPTION_WINDOW_DAYS, REASON_AND_CODE, reasonAndCode } from "@waste/domain/execution/pickup-exceptions"
 import { CONTAMINANT_CODE_STATUSES, PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
+import { validityOrdered } from "@waste/domain/periods"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
@@ -20,9 +24,9 @@ import { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Slug } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const ContaminantCodeStatus = z.enum(CONTAMINANT_CODE_STATUSES)
@@ -32,11 +36,8 @@ export type ContaminantCodeStatus = z.infer<typeof ContaminantCodeStatus>
 export const PickupExceptionReason = z.enum(PICKUP_EXCEPTION_REASONS)
 export type PickupExceptionReason = z.infer<typeof PickupExceptionReason>
 
-/** What a code's fractions naming one twice is told. */
-export const EACH_CODE_FRACTION_ONCE = eachOnceSentence("waste fraction")
-
 /** The fractions a code applies to: each once, at most every fraction a company would keep. */
-const FractionIds = z.array(Id).max(200).refine((ids) => eachOnce(ids), { message: EACH_CODE_FRACTION_ONCE })
+const FractionIds = z.array(Id).max(CONTAMINANT_CODE_FRACTIONS_MAX).refine((ids) => eachOnce(ids), { message: EACH_FRACTION_ONCE })
 
 export const ContaminantCode = z.object({
   ...stamped,
@@ -76,13 +77,14 @@ export const ContaminantCodeListQuery = PageRequest.extend({ status: Contaminant
 export type ContaminantCodeListQuery = z.infer<typeof ContaminantCodeListQuery>
 
 /** A rule's ladder: the products charged by occurrence, the last repeating; a product may stand on two steps. */
-const Ladder = z.array(Id).min(1).max(10)
+const Ladder = z.array(Id).min(1).max(PICKUP_EXCEPTION_LADDER_MAX)
 
-/** A tagged collection's rule names no reason; a code narrows contamination, any reason, or a tagged collection. */
-const reasonAndCode = (rule: { outcome?: string; reason?: string | null; contaminantCodeId?: string | null }): boolean =>
-  (rule.outcome !== "completed" || rule.reason == null) && (rule.contaminantCodeId == null || rule.reason == null || rule.reason === "contamination")
-/** What a rule whose reason and code disagree with its outcome is told, at the reason. */
-export const REASON_AND_CODE = "A tagged collection's rule names no reason, and a code goes with contamination or any reason"
+/** How many matching exceptions in the window cost nothing: 0 charges the first. */
+const FreeCount = NonNegativeInt.max(PICKUP_EXCEPTION_FREE_COUNT_MAX)
+
+/** The days before a stop's service date its earlier exceptions are counted over. */
+const WindowDays = PositiveInt.max(PICKUP_EXCEPTION_WINDOW_DAYS.max)
+
 const reasonAndCodeAt = { message: REASON_AND_CODE, path: ["reason"] }
 
 export const PickupExceptionRule = z
@@ -94,10 +96,8 @@ export const PickupExceptionRule = z
     reason: PickupExceptionReason.nullable(),
     /** Null for any code, or none. */
     contaminantCodeId: Id.nullable(),
-    /** How many matching exceptions in the window cost nothing: 0 charges the first. */
-    freeCount: NonNegativeInt.max(100),
-    /** The days before a stop's service date its earlier exceptions are counted over. */
-    windowDays: PositiveInt.max(3660),
+    freeCount: FreeCount,
+    windowDays: WindowDays,
     /** The products charged by occurrence once the free count is spent, the last repeating. */
     ladder: Ladder,
     ...Validity.shape,
@@ -111,8 +111,8 @@ export const PickupExceptionRuleCreate = z
     outcome: PickupOutcome,
     reason: PickupExceptionReason.nullable().optional(),
     contaminantCodeId: Id.nullable().optional(),
-    freeCount: NonNegativeInt.max(100),
-    windowDays: PositiveInt.max(3660),
+    freeCount: FreeCount,
+    windowDays: WindowDays,
     ladder: Ladder,
     ...ValidityCreate,
   })
@@ -123,8 +123,8 @@ export type PickupExceptionRuleCreate = z.infer<typeof PickupExceptionRuleCreate
 /** The free count, the window, the ladder replaced whole, and the end; the outcome, reason and code are the rule's key and its start its period's — end it and add another. */
 export const PickupExceptionRulePatch = z
   .strictObject({
-    freeCount: NonNegativeInt.max(100).optional(),
-    windowDays: PositiveInt.max(3660).optional(),
+    freeCount: FreeCount.optional(),
+    windowDays: WindowDays.optional(),
     ladder: Ladder.optional(),
     /** Null reopens the rule; a day ends it. */
     validTo: IsoDate.nullable().optional(),
@@ -164,9 +164,6 @@ export const PickupException = z.object({
   judgement: PickupExceptionJudgement.nullable(),
 })
 export type PickupException = z.infer<typeof PickupException>
-
-/** The most exceptions one place's history answers; a place past it is told `truncated`. */
-export const PICKUP_EXCEPTION_HISTORY_MAX = 500
 
 /** A place's exception history: newest service date first, from `from` on, at most `PICKUP_EXCEPTION_HISTORY_MAX`, and whether more were left out. */
 export const PickupExceptionHistory = z.object({

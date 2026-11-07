@@ -44,7 +44,9 @@
 // a create under the form's default Invited says no status, so the API's
 // default stands.
 import type { Driver, Vehicle, VehicleCompartment } from "@waste/contracts/fleet"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import { displayLicenceClass, isLicenceClassToken } from "@waste/domain/resources/licence"
+import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { isIsoDate } from "@waste/domain/days"
 
@@ -67,7 +69,6 @@ import {
   projectServerIdOf,
   providerFitsOwner,
   providerServerIdOf,
-  PROVIDER_WITH_PROVIDER_OWNERSHIP,
   referenced,
   refusal,
   requiredText,
@@ -75,11 +76,6 @@ import {
   tokenOf,
   withStatus,
 } from "./places"
-
-/** What a powered vehicle without a compartment is told (`@waste/contracts/fleet`, `A_POWERED_VEHICLE_HAS_A_COMPARTMENT`); the test holds the two equal. */
-export const A_POWERED_VEHICLE_HAS_A_COMPARTMENT = "A powered vehicle has at least one compartment"
-/** What a driver body whose employment and provider disagree is told (`@waste/contracts/fleet`, `PROVIDER_WITH_PROVIDER_EMPLOYMENT`); the test holds the two equal. */
-export const PROVIDER_WITH_PROVIDER_EMPLOYMENT = "Name the employing service provider with service-provider employment, and none otherwise"
 
 /** The typed key the vehicle record keeps its compartments under, as the API listed them, for the patch to rebuild the whole list. */
 export const COMPARTMENTS_KEY = "compartmentSet"

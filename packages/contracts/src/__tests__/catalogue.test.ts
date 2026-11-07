@@ -4,25 +4,7 @@ import { describe, test } from "node:test"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 
-import {
-  ContainerType,
-  ContainerTypeCreate,
-  ContainerTypePatch,
-  Product,
-  ProductCreate,
-  ProductKind,
-  ProductPatch,
-  ProductStatus,
-  ProductUnit,
-  ServiceFrequency,
-  ServiceFrequencyCreate,
-  ServiceFrequencyPatch,
-  serviceFrequencyShape,
-  WasteFraction,
-  WasteFractionCreate,
-  WasteFractionPatch,
-  WasteTreatment,
-} from "../catalogue"
+import { ContainerType, ContainerTypeCreate, ContainerTypePatch, Product, ProductCreate, ProductKind, ProductPatch, ProductStatus, ProductUnit, ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFraction, WasteFractionCreate, WasteFractionPatch, WasteTreatment } from "../catalogue"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -170,27 +152,6 @@ describe("ContainerTypeCreate and ContainerTypePatch", () => {
   test("clear the volume with null, and refuse an empty patch", () => {
     assert.deepEqual(ContainerTypePatch.parse({ volumeLitres: null }), { volumeLitres: null })
     refusesAnEmptyPatch(ContainerTypePatch)
-  })
-})
-
-describe("serviceFrequencyShape", () => {
-  test("takes on demand, a rate on its own, and a rate with one interval", () => {
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: null, weeksBetween: null, daysBetween: null }), true)
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: 1, weeksBetween: null, daysBetween: null }), true)
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: 1, weeksBetween: 2, daysBetween: null }), true)
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: 3, weeksBetween: null, daysBetween: 2 }), true)
-  })
-
-  test("refuses an interval with no rate to belong to, and the two intervals at once", () => {
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: null, weeksBetween: 2, daysBetween: null }), false)
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: null, weeksBetween: null, daysBetween: 2 }), false)
-    assert.equal(serviceFrequencyShape({ collectionsPerWeek: 1, weeksBetween: 2, daysBetween: 3 }), false)
-  })
-
-  test("says nothing about a rate it was not given, which is what a patch that leaves it alone gives", () => {
-    assert.equal(serviceFrequencyShape({ weeksBetween: 2 }), true)
-    assert.equal(serviceFrequencyShape({ daysBetween: 2 }), true)
-    assert.equal(serviceFrequencyShape({ weeksBetween: 2, daysBetween: 3 }), false)
   })
 })
 

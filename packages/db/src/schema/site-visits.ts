@@ -25,6 +25,7 @@
 // (`visit_rule_no_overlap`, hand-written); `visit_rule_step` its ladder by
 // position from 1, the last repeating; `visit_rule_free_fraction` the
 // fractions whose visits are neither counted nor charged.
+import { CREDENTIAL_VALUE_PATTERN, FREE_VISITS, TRADE_THRESHOLD, TRADE_WINDOW_DAYS } from "@waste/domain/visits/charges"
 import { ACCESS_CREDENTIAL_KINDS, SITE_VISIT_IDENTIFICATIONS, SITE_VISIT_OUTCOMES, SITE_VISIT_REFUSAL_REASONS, SITE_VISIT_SOURCES, VISIT_CHARGE_BASES } from "@waste/domain/visits/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -74,7 +75,7 @@ export const accessCredential = wms.table(
     projectKey(t),
     validPeriod(t),
     oneOf(t.kind, ACCESS_CREDENTIAL_KINDS),
-    check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ '^[A-Z0-9]+$'`),
+    check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ ${sql.raw(`'${CREDENTIAL_VALUE_PATTERN}'`)}`),
     // A business's Customer with its Agreement, or a household's Property: exactly one holder.
     check(
       tableObjectName(t.id.table, "holder_shape", "accessCredential"),
@@ -222,10 +223,10 @@ export const visitRule = wms.table(
     projectReference(t, [t.annualAccessProductId], product),
     projectKey(t),
     validPeriod(t),
-    check(tableObjectName(t.id.table, "free_visits_range", "visitRule"), sql`${t.freeVisits} between 0 and 366`),
+    check(tableObjectName(t.id.table, "free_visits_range", "visitRule"), sql`${t.freeVisits} between ${sql.raw(String(FREE_VISITS.min))} and ${sql.raw(String(FREE_VISITS.max))}`),
     check(
       tableObjectName(t.id.table, "trade_shape", "visitRule"),
-      sql`(${t.tradeThreshold} is null) = (${t.tradeWindowDays} is null) and (${t.tradeThreshold} is null or ${t.tradeThreshold} between 1 and 1000) and (${t.tradeWindowDays} is null or ${t.tradeWindowDays} between 1 and 366)`,
+      sql`(${t.tradeThreshold} is null) = (${t.tradeWindowDays} is null) and (${t.tradeThreshold} is null or ${t.tradeThreshold} between ${sql.raw(String(TRADE_THRESHOLD.min))} and ${sql.raw(String(TRADE_THRESHOLD.max))}) and (${t.tradeWindowDays} is null or ${t.tradeWindowDays} between ${sql.raw(String(TRADE_WINDOW_DAYS.min))} and ${sql.raw(String(TRADE_WINDOW_DAYS.max))})`,
     ),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.businessVisitProductId),

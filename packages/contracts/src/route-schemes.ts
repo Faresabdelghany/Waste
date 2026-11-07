@@ -65,50 +65,48 @@
 // clearing them; a body's seasons are held to one name each and to no day
 // shared, which a list always shows whole, and a daily scheme carries none,
 // a pair a patch may see half of and the route holds against the stored row.
-import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
-import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
-import { MONTH_DAY_SOURCE, overlappingSeasons, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
-import { daysBetween } from "@waste/domain/days"
+import { DAY_WINDOW_ORDERED, dayWindowOrdered, ISO_WEEKS_MAX } from "@waste/domain/days"
+import { validityOrdered } from "@waste/domain/periods"
+import { PLAN_AHEAD_DAYS_BOUND, PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
+import {
+  AT_MOST_GROUPS,
+  AT_MOST_GROUPS_RESTATED,
+  CONTAINERS_MAX,
+  DAILY_HAS_NO_SEASONS,
+  DAILY_SERVES_EVERY_DAY,
+  dailyHasNoSeasons,
+  dailyServesEveryDay,
+  EACH_CONTAINER_ONCE,
+  EACH_CONTAINER_TYPE_ONCE,
+  EACH_FRACTION_ONCE,
+  EACH_GROUP_NAME_ONCE,
+  EACH_GROUP_ONCE,
+  GROUPS_MAX,
+  ONE_WAY_TO_FIND_STOPS,
+  OUTSIDE_SERVICE_DAYS,
+  WEEK_ROTATION_WITH_FORTNIGHTLY,
+  weekRotationShape,
+  WINDOW_AT_MOST_A_YEAR,
+  windowAtMostAYear,
+  withinServiceDays,
+} from "@waste/domain/planning/schemes"
+import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
 import { Id } from "./ids"
-import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, SeasonFrequency, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
+import { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, SeasonFrequency, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
-
-/**
- * The most a set of this module may carry — a group's containers, a rule's
- * fractions and container types: a form's list, not an import. A group's
- * container list is unbounded on the resource, since a set already stored has
- * to read back however long it grew; a rule's two sets are bounded on the
- * resource too, because the rule is one schema for the row and the body, and
- * two hundred fractions is more than any company's catalogue holds.
- */
-export const CONTAINERS_MAX = 200
-
-/**
- * The most collection groups a scheme may be created with. Each group may
- * pick two hundred containers, so a body of fifty is ten thousand rows across
- * one statement per set; a scheme with more groups than that is an import,
- * not a form, and a body past it would run into Postgres's bind-parameter
- * ceiling before it ran into anything of ours.
- */
-export const GROUPS_MAX = 50
-export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection groups`
-/** What a patch's list past the bound is told: the bound is the create's, and a scheme that has grown past it one group at a time is edited that way too. */
-export const AT_MOST_GROUPS_RESTATED = `An edit restates at most ${GROUPS_MAX} collection groups; a scheme with more is edited through its groups' own routes`
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** An order among siblings: whole and positive, since the first is number one, and no larger than `collection_group.position` holds — `PositiveInt`'s own bound, so a larger one is refused at its field rather than failing the write (22003). */
 const Ordinal = PositiveInt
 
-export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction", "a rule matches a fraction or it does not")
-export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type", "a rule is restricted to a type or it is not")
-export const EACH_CONTAINER_ONCE = eachOnceSentence("container", "a container has one place in the group's stop order")
-
-/** A distinct set of ids, bounded. */
+/** A distinct set of ids, bounded: a rule's two sets are bounded on the resource too, because the rule is one schema for the row and the body. */
 const idSet = (message: string) => z.array(Id).max(CONTAINERS_MAX).refine((ids) => eachOnce(ids), { message })
 
 /**
@@ -163,7 +161,6 @@ export const CollectionGroup = z.object({
 export type CollectionGroup = z.infer<typeof CollectionGroup>
 
 /** What a group whose source and stops disagree is told, at the field that says which it is. */
-export const ONE_WAY_TO_FIND_STOPS = "A collection group matches by rule or picks containers, never both"
 const oneWayToFindStops = { message: ONE_WAY_TO_FIND_STOPS, path: ["stopSource"] }
 
 type StopsGiven = { stopSource?: string; rule?: unknown; containerIds?: readonly unknown[] | null }
@@ -226,59 +223,18 @@ export const CollectionGroupPatch = z
   .refine(changesSomething, somethingToChange)
 export type CollectionGroupPatch = z.infer<typeof CollectionGroupPatch>
 
-type Recurrence = { frequency?: string; weekRotation?: string | null; serviceDays?: readonly string[] }
-
-/** What a rotation given with the wrong cadence, or missing with the right one, is told. */
-export const WEEK_ROTATION_WITH_FORTNIGHTLY = "Give weekRotation with every-2-weeks and with nothing else"
 const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, path: ["weekRotation"] }
-
-/**
- * The week rotation belongs to the fortnightly cadence and to no other. A
- * half-seen pair is not judged — that is a patch giving one of the two, and
- * only the route, which has the stored row, can hold the two together.
- */
-export function weekRotationShape(value: Recurrence): boolean {
-  const { frequency, weekRotation } = value
-  if (frequency === undefined || weekRotation === undefined) return true
-  return (frequency === "every-2-weeks") === (weekRotation !== null)
-}
-
-/** What a daily scheme that leaves a weekday out is told. */
-export const DAILY_SERVES_EVERY_DAY = "A daily scheme serves every weekday"
 const dailyServesEveryDayIssue = { message: DAILY_SERVES_EVERY_DAY, path: ["serviceDays"] }
 
-/** A daily scheme serves all seven days; any other cadence serves the days it names. A half-seen pair is not judged. */
-export function dailyServesEveryDay(value: Recurrence): boolean {
-  const { frequency, serviceDays } = value
-  if (frequency === undefined || serviceDays === undefined) return true
-  return frequency !== "daily" || SERVICE_DAYS.every((day) => serviceDays.includes(day))
-}
-
-/** What a group whose days the scheme does not serve is told, at that group's days. */
-export const OUTSIDE_SERVICE_DAYS = "Outside the scheme's service days"
-
-/** Every day a group runs on is a day the scheme serves. */
-export const withinServiceDays = (serviceDays: readonly string[], days: readonly string[]): boolean => days.every((day) => serviceDays.includes(day))
-
-/** What a create body naming two groups alike is told, at the list: the database's key (`collection_group_route_scheme_id_name_key`) would say the same as a 23505. */
-export const EACH_GROUP_NAME_ONCE = "A collection group name is used once in a scheme"
+/** What a create body naming two groups alike is told, at the list. */
 const eachGroupNameOnce = { message: EACH_GROUP_NAME_ONCE, path: ["collectionGroups"] }
 
 /** No two groups of a body share a name; a half-seen list is not judged. */
 const groupNamesOnce = (body: { collectionGroups?: unknown }): boolean =>
   !Array.isArray(body.collectionGroups) || eachOnce(body.collectionGroups, (group: { name?: unknown }) => group?.name)
 
-/** The most seasons a scheme may have, the domain's bound (@waste/domain/route-schemes/seasons). */
-export { SEASONS_MAX }
-export const AT_MOST_SEASONS = `A scheme has at most ${SEASONS_MAX} seasons`
-
-/** What a month-day that is not a day every year has is told. */
-export const MONTH_DAY_SHAPE = "A day of the year, mm-dd, that every year has (29 February is not one)"
 /** A day of every calendar year, `mm-dd`: the database's check reads the same pattern. */
 export const MonthDay = z.string().regex(new RegExp(MONTH_DAY_SOURCE), MONTH_DAY_SHAPE)
-
-/** What a season that ends where it starts is told: that is the whole year, the scheme's own cadence. */
-export const SEASON_PART_OF_YEAR = "A season ends on another day than it starts; a season of the whole year is the scheme's own cadence"
 
 /**
  * One season: a stretch of every year with its own cadence. The resource's
@@ -301,10 +257,6 @@ export const SchemeSeason = z
   .refine((season) => season.startsOn !== season.endsOn, { message: SEASON_PART_OF_YEAR, path: ["endsOn"] })
 export type SchemeSeason = z.infer<typeof SchemeSeason>
 
-export const EACH_SEASON_NAME_ONCE = "A season name is used once in a scheme"
-/** What a season sharing a day of the year with an earlier one is told, at the later. */
-export const SEASONS_KEEP_APART = "Seasons share no day: this one overlaps an earlier season"
-
 /** No two seasons share a name or a day; the later of an overlapping pair is the one refused. */
 const seasonsApart = (seasons: readonly SchemeSeason[], ctx: z.RefinementCtx) => {
   if (!eachOnce(seasons, (season) => season.name)) ctx.addIssue({ code: "custom", message: EACH_SEASON_NAME_ONCE })
@@ -315,16 +267,7 @@ const seasonsApart = (seasons: readonly SchemeSeason[], ctx: z.RefinementCtx) =>
 /** A scheme's seasons, whole. */
 export const SchemeSeasons = z.array(SchemeSeason).max(SEASONS_MAX, AT_MOST_SEASONS).superRefine(seasonsApart)
 
-/** What a daily scheme given seasons is told: it serves every day all year, so a season has nothing to change. */
-export const DAILY_HAS_NO_SEASONS = "A daily scheme serves every day all year and has no seasons"
 const dailyHasNoSeasonsIssue = { message: DAILY_HAS_NO_SEASONS, path: ["seasons"] }
-
-/** A daily scheme carries no season. A half-seen pair is not judged. */
-export function dailyHasNoSeasons(value: { frequency?: string; seasons?: readonly unknown[] }): boolean {
-  const { frequency, seasons } = value
-  if (frequency === undefined || seasons === undefined) return true
-  return frequency !== "daily" || seasons.length === 0
-}
 
 /** What one rule group matched as of a run's first day: the rule it matched under, compared whole, and the containers, sorted. */
 export const GenerationMatchStamp = z.object({
@@ -352,7 +295,6 @@ export const SchemeGeneration = z.object({
 export type SchemeGeneration = z.infer<typeof SchemeGeneration>
 
 /** What a patch naming one of the scheme's groups in two entries is told, at the list. */
-export const EACH_GROUP_ONCE = eachOnceSentence("collection group", "an entry is the whole group")
 const eachGroupOnce = { message: EACH_GROUP_ONCE, path: ["collectionGroups"] }
 
 /** No two entries of a patch name one group; an entry without an id is a new group, and a half-seen list is not judged. */
@@ -373,8 +315,6 @@ const groupsWithinServiceDays = (body: { serviceDays?: unknown; collectionGroups
     }
   })
 }
-
-export const PLAN_AHEAD_DAYS_BOUND = `The nightly job plans at most ${PLAN_AHEAD_DAYS_MAX} days ahead`
 
 /** How many days from tomorrow the nightly job keeps a scheme planned (O21 of #290): a whole number in 1..28. */
 export const PlanAheadDays = PositiveInt.max(PLAN_AHEAD_DAYS_MAX, PLAN_AHEAD_DAYS_BOUND)
@@ -559,21 +499,8 @@ export const RouteSchemeSuccession = z.object({
 })
 export type RouteSchemeSuccession = z.infer<typeof RouteSchemeSuccession>
 
-/** The longest window the occurrence read walks: a year, as the generation job's walk cap. */
-export const OCCURRENCE_WINDOW_MAX_DAYS = 366
-
-export const WINDOW_ORDERED = "to is the last day of the window, so it comes on or after from"
-export const WINDOW_AT_MOST_A_YEAR = `A window spans at most ${OCCURRENCE_WINDOW_MAX_DAYS} days`
-
-/** A window of calendar days, both ends inclusive: the occurrence read's, and the generation command's (generation.ts), which holds it to the same two rules. */
-type DayWindow = { from: string; to: string }
-
-/** The end comes on or after the start. */
-export const windowOrdered = (window: DayWindow): boolean => window.to >= window.from
-export const windowOrderedIssue = { message: WINDOW_ORDERED, path: ["to"] }
-
-/** The two days are fewer than 366 apart, so the window spans at most 366 days. */
-export const windowAtMostAYear = (window: DayWindow): boolean => daysBetween(window.from, window.to) < OCCURRENCE_WINDOW_MAX_DAYS
+/** A window of calendar days, both ends inclusive — the occurrence read's, and the generation command's (generation.ts), which holds it to the same two rules — refused at its end when it runs backward or spans more than a year (@waste/domain/planning/schemes). */
+export const windowOrderedIssue = { message: DAY_WINDOW_ORDERED, path: ["to"] }
 export const windowAtMostAYearIssue = { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] }
 
 /**
@@ -587,7 +514,7 @@ export const OccurrenceQuery = z
     from: IsoDate,
     to: IsoDate,
   })
-  .refine(windowOrdered, windowOrderedIssue)
+  .refine(dayWindowOrdered, windowOrderedIssue)
   .refine(windowAtMostAYear, windowAtMostAYearIssue)
 export type OccurrenceQuery = z.infer<typeof OccurrenceQuery>
 
@@ -604,7 +531,7 @@ export const Occurrence = z.object({
   /** The recurrence day the row stems from; differs from `date` when shifted. */
   plannedDate: IsoDate,
   /** The ISO week of `date`. */
-  week: z.int().min(1).max(53),
+  week: z.int().min(1).max(ISO_WEEKS_MAX),
   status: OccurrenceStatus,
   /** The holiday's name on a shifted, skipped or holiday row. */
   note: z.string().optional(),

@@ -35,6 +35,7 @@ import { addDays, formatShortDay, serviceDayOf } from "../days"
 import { inForceOn, type Period } from "../periods"
 import type { SchemeRecurrence } from "../route-schemes/recurrence"
 import { planRoutes, skippedHoliday, type ExistingRoute, type GenerationGroup, type GenerationWindow } from "./generation"
+import type { CollectionDayStatus } from "./public-days"
 
 /** A period, half-open: `validTo` the first day out of force, null while it runs. */
 
@@ -55,8 +56,6 @@ export type ServingScheme = {
   groups: readonly ServingGroup[]
   existingRoutes: readonly ExistingRoute[]
 }
-
-export type CollectionDayStatus = "collected" | "skipped"
 
 /** One collection of the property: the day the truck comes, what it takes, and why the day moved where it did. */
 export type CollectionDay = {

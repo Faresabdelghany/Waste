@@ -10,18 +10,12 @@
 // `weight-control.ts` the decision and the status — and a list spelled in one
 // place is a list that cannot drift between them.
 //
-// Two things beside the enums are the context's presentation on the wire,
-// the `execution.ts` and `resolution.ts` precedent. An invoice's display
-// number is `INV-26007188` and a credit note's `CN-26007189`: the database
-// stores `number` from the company's one counter, so the two kinds share a
-// series and the prefix is presentation, spelled once here, and
-// `invoiceLabel` is the one way a number and a kind become the `label` an
-// `Invoice` carries and every sentence names ("Invoice INV-26007188 is fully
-// credited"). And an Unload's review status travels beside every `Unload` as
+// An Unload's review status travels beside every `Unload` as
 // `WeightReviewState` — the reading, the latest review's id and the
 // correction it wrote, `captured` with two nulls where nobody has looked —
 // defined here rather than in weight-control.ts, which imports the unload's
 // weights rule from unloads.ts and could not be imported back by it.
+import { BIC_PATTERN, BIC_SHAPE, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, FIK_CREDITOR_SHAPE, IBAN_PATTERN, IBAN_SHAPE, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN, VAT_NUMBER_SHAPE } from "@waste/domain/finance/payment"
 import {
   BILLABLE_EVENT_KINDS,
   BILLABLE_EVENT_STATUSES,
@@ -39,7 +33,6 @@ import {
   WEIGHT_REVIEW_DECISIONS,
   WEIGHT_REVIEW_STATUSES,
 } from "@waste/domain/finance/vocabulary"
-import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
@@ -146,15 +139,6 @@ export const IndexResult = z.object({
 })
 export type IndexResult = z.infer<typeof IndexResult>
 
-/** The prefix an invoice's number is shown with: `INV-26007188`. Presentation, spelled once. */
-export const INVOICE_NUMBER_PREFIX = "INV-"
-
-/** The prefix a credit note's number is shown with: `CN-26007189`. The same series as an invoice's; the prefix says which kind of document the number is. */
-export const CREDIT_NOTE_NUMBER_PREFIX = "CN-"
-
-/** The label a document is named by, from the number the database stores and the kind the row carries. */
-export const invoiceLabel = (kind: InvoiceKind, number: number): string => `${kind === "invoice" ? INVOICE_NUMBER_PREFIX : CREDIT_NOTE_NUMBER_PREFIX}${number}`
-
 /** The reading an Unload carries: its review status, the latest review's id, and the new Unload a correction wrote — `captured` with two nulls where no review exists, and never null itself. */
 export const WeightReviewState = z.object({
   status: WeightReviewStatus,
@@ -175,10 +159,10 @@ export type WeightReviewState = z.infer<typeof WeightReviewState>
 export const PaymentTermsDays = z.int().min(0).max(PAYMENT_TERMS_MAX)
 export const PaymentReferenceScheme = z.enum(PAYMENT_REFERENCE_SCHEMES)
 export type PaymentReferenceScheme = z.infer<typeof PaymentReferenceScheme>
-export const VatNumber = z.string().regex(new RegExp(VAT_NUMBER_PATTERN), "a VAT registration: its country's two letters, then its number, such as DK12345678")
-export const Iban = z.string().regex(new RegExp(IBAN_PATTERN), "an IBAN without spaces, such as DK5000400440116243")
-export const Bic = z.string().regex(new RegExp(BIC_PATTERN), "a BIC of eight or eleven characters, such as DABADKKK")
-export const FikCreditorNumber = z.string().regex(new RegExp(FIK_CREDITOR_PATTERN), "a FIK creditor number: eight digits")
+export const VatNumber = z.string().regex(new RegExp(VAT_NUMBER_PATTERN), VAT_NUMBER_SHAPE)
+export const Iban = z.string().regex(new RegExp(IBAN_PATTERN), IBAN_SHAPE)
+export const Bic = z.string().regex(new RegExp(BIC_PATTERN), BIC_SHAPE)
+export const FikCreditorNumber = z.string().regex(new RegExp(FIK_CREDITOR_PATTERN), FIK_CREDITOR_SHAPE)
 /** A frozen payment reference: FIK 71's fifteen digits or FIK 75's sixteen. */
 export const PaymentReference = z.string().regex(new RegExp(PAYMENT_REFERENCE_PATTERN))
 

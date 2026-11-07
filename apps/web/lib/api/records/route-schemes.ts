@@ -78,8 +78,8 @@ import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
 import { parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
-import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
-import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
+import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
+import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
@@ -247,8 +247,8 @@ function placeOf(context: MappingContext, record: BusinessRecord, key: string, p
   return serverIdFor(context, prefix, webId) ?? refusal(key, `The API holds no ${what} ${webId}`)
 }
 
-/** What a window outside 1..28 is refused with before the API. */
-export const PLAN_AHEAD_DAYS_REFUSAL = "The nightly job plans 1 to 28 days ahead"
+/** What a window outside the domain's bounds is refused with before the API. */
+export const PLAN_AHEAD_DAYS_REFUSAL = `The nightly job plans 1 to ${PLAN_AHEAD_DAYS_MAX} days ahead`
 
 /** The record's Plan Ahead window in days, undefined where it says none, or a refusal. */
 function planAheadDaysOf(record: BusinessRecord): number | undefined | LocalRefusal {
@@ -521,7 +521,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
   prefix: SCHEME_PREFIX,
   auditTable: "route_scheme",
   owns: ofKind(SCHEME_PREFIX, ["Route Scheme"]),
-  statuses: ["draft", "validated"],
+  statuses: ROUTE_SCHEME_STATUSES,
   list: (client) => listAll<RouteScheme>(client, "/route-schemes"),
   toRecord: (scheme, context) => {
     const project = context.resolve.byServerId(scheme.projectId)

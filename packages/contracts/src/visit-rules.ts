@@ -9,34 +9,30 @@
 // apps/api/src/routes/visit-rules.ts, under `commercial.products` as the
 // ticket charges are; the rules are
 // @waste/domain/visits/charges.
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { EACH_FREE_FRACTION_ONCE, FREE_FRACTIONS_MAX, FREE_VISITS, TRADE_THRESHOLD, TRADE_TOGETHER, TRADE_WINDOW_DAYS, tradeTogether, VISIT_LADDER_MAX } from "@waste/domain/visits/charges"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** The ladder: the per-visit products charged once the free visits are spent, the last repeating; empty includes every visit. */
-const Ladder = z.array(Id).max(10)
-
-/** What a rule's free fractions naming one twice is told. */
-export const EACH_FREE_FRACTION_ONCE = eachOnceSentence("free fraction")
+const Ladder = z.array(Id).max(VISIT_LADDER_MAX)
 
 const FreeFractionIds = z
   .array(Id)
-  .max(200)
+  .max(FREE_FRACTIONS_MAX)
   .refine((ids) => eachOnce(ids), { message: EACH_FREE_FRACTION_ONCE })
 
-/** A household's free visits per calendar year: at most one a day. */
-const FreeVisits = NonNegativeInt.max(366)
-const TradeThreshold = PositiveInt.max(1000)
-const TradeWindowDays = PositiveInt.max(366)
+/** A household's free visits per calendar year. */
+const FreeVisits = NonNegativeInt.max(FREE_VISITS.max)
+const TradeThreshold = PositiveInt.max(TRADE_THRESHOLD.max)
+const TradeWindowDays = PositiveInt.max(TRADE_WINDOW_DAYS.max)
 
-/** The likely-trade threshold and its window go together, or neither. */
-const tradeTogether = (rule: { tradeThreshold?: number | null; tradeWindowDays?: number | null }): boolean => (rule.tradeThreshold == null) === (rule.tradeWindowDays == null)
-/** What a threshold without its window, or a window without its threshold, is told. */
-export const TRADE_TOGETHER = "A likely trade is a threshold of visits in a window of days: give both, or neither"
 const tradeTogetherAt = { message: TRADE_TOGETHER, path: ["tradeWindowDays"] }
 
 export const VisitRule = z

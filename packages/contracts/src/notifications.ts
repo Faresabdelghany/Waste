@@ -18,6 +18,7 @@
 // `/projects/:id/notification-rules`, holding each template to the project,
 // active and for service; the worker sends each notice through the provider
 // door, honouring the customer's consent.
+import { AREAS_ARE_A_BROADCASTS, EACH_AREA_ONCE, NOTICE_AREAS_MAX, ONE_RULE_PER_NOTICE } from "@waste/domain/notifications/rules"
 import { BROADCAST_NOTICES, CUSTOMER_NOTICE_EVENTS } from "@waste/domain/notifications/vocabulary"
 import * as z from "zod"
 
@@ -53,15 +54,6 @@ export type NotificationRule = z.infer<typeof NotificationRule>
 export const NotificationRules = z.object({ projectId: Id, rules: z.array(NotificationRule) })
 export type NotificationRules = z.infer<typeof NotificationRules>
 
-/** The sentence a set naming one notice twice earns. */
-export const ONE_RULE_PER_NOTICE = "A notice is sent from one template; name each notice once"
-
-/** The sentence a rule naming areas for a notice that is not a broadcast earns. */
-export const AREAS_ARE_A_BROADCASTS = "Only a route cancelled or late is narrowed to areas; this notice goes to its own customer"
-
-/** The most areas a broadcast names: a project's notification zones, a handful. */
-export const NOTICE_AREAS_MAX = 50
-
 /** The whole set, replaced: an empty list sends no notice. */
 export const NotificationRulesPut = z
   .strictObject({
@@ -83,7 +75,7 @@ export const NotificationRulesPut = z
       seen.add(rule.event)
       const areas = rule.planningAreaIds ?? []
       if (areas.length > 0 && !(BROADCAST_NOTICES as readonly string[]).includes(rule.event)) context.addIssue({ code: "custom", path: ["rules", index, "planningAreaIds"], message: AREAS_ARE_A_BROADCASTS })
-      if (new Set(areas).size !== areas.length) context.addIssue({ code: "custom", path: ["rules", index, "planningAreaIds"], message: "Name each area once" })
+      if (new Set(areas).size !== areas.length) context.addIssue({ code: "custom", path: ["rules", index, "planningAreaIds"], message: EACH_AREA_ONCE })
     })
   })
 export type NotificationRulesPut = z.infer<typeof NotificationRulesPut>

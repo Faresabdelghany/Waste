@@ -111,7 +111,8 @@
 // the next run, and the preview lists the lines it catches up and counts those
 // it leaves. The blocked and the held of earlier periods are no payer's
 // exclusion here: an exclusion is about the run's own period.
-import { PERIOD_ENDS_BY_TODAY, type BillingRunPreview } from "@waste/contracts/billing"
+import type { BillingRunPreview } from "@waste/contracts/billing"
+import { PERIOD_ENDS_BY_TODAY } from "@waste/domain/finance/billing-runs"
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
 import { catchUpFrom } from "@waste/domain/finance/periods"
 import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"

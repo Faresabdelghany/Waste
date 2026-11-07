@@ -7,9 +7,8 @@
 // App says a stop's tank in `tankSummary` and takes its litres through
 // `litresOf`.
 import type { TankEmptying, TankInspection, TankInspectionCreate, TankInstallation, TankInstallationCreate, TankInstallationPatch } from "@waste/contracts/tanks"
+import { TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import type { TankInspectionOutcome, TankKind, TankOutlet } from "@waste/domain/registry/vocabulary"
-
-import { TANK_INTERVAL_MONTHS_MAX } from "./tank-words"
 
 import { command, create, listAll, patch, type ApiClient } from "../api/client"
 import { allows, type Grants } from "../api/grants"
@@ -17,7 +16,7 @@ import type { LocalRefusal } from "../api/records/adapter"
 import type { BusinessRecord } from "./business-modules"
 import { thousands } from "./tank-words"
 
-export { LITRES_MAX, litresOf, TANK_INSPECTION_OUTCOME_LABELS, TANK_INTERVAL_MONTHS_MAX, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankSummary } from "./tank-words"
+export { LITRES_MAX, litresOf, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankSummary } from "./tank-words"
 
 /** When the next emptying is due, against the project's today. */
 export function dueSentence(tank: Pick<TankInstallation, "dueOn">, today: string): string {
@@ -51,7 +50,7 @@ export function tankBodyOf(typed: TankTyped, propertyServerId: string): TankInst
   const volumeLitres = wholeNumber(typed.volumeLitres)
   if (volumeLitres === undefined || volumeLitres < 1) return { path: "volumeLitres", message: "What the tank holds, in whole litres" }
   const months = wholeNumber(typed.emptyingIntervalMonths)
-  if (months === undefined || months < 1 || months > TANK_INTERVAL_MONTHS_MAX) return { path: "emptyingIntervalMonths", message: "Between 1 and 120 whole months" }
+  if (months === undefined || months < 1 || months > TANK_INTERVAL_MONTHS_MAX) return { path: "emptyingIntervalMonths", message: `Between 1 and ${TANK_INTERVAL_MONTHS_MAX} whole months` }
   if (typed.validFrom === "") return { path: "validFrom", message: "Pick the tank's first day in the register" }
   if (typed.lastEmptiedOn !== "" && typed.lastEmptiedOn > typed.validFrom) return { path: "lastEmptiedOn", message: "A last emptying before the platform comes before the tank's first day" }
   const notes = typed.notes.trim()

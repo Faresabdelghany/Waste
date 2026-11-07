@@ -11,7 +11,7 @@
 // `requireGrant`, then the handler; app.ts mounts it at the root. The guard
 // sits on the route and never on a wildcard, so an unknown path stays a 404.
 import { Me } from "@waste/contracts/me"
-import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 

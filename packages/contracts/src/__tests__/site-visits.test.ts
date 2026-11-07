@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AccessCredentialCreate, CREDENTIAL_VALUE_SHAPE, ONE_HOLDER, SiteVisitCheckIn, SiteVisitListQuery } from "../site-visits"
-import { TRADE_TOGETHER, VisitRuleCreate, VisitRulePatch } from "../visit-rules"
+import { CREDENTIAL_VALUE_SHAPE, ONE_HOLDER, TRADE_TOGETHER } from "@waste/domain/visits/charges"
+
+import { AccessCredentialCreate, SiteVisitCheckIn, SiteVisitListQuery } from "../site-visits"
+import { VisitRuleCreate, VisitRulePatch } from "../visit-rules"
 
 const ID = "01a0d2a4-a280-7001-8000-000000000001"
 const OTHER = "01a0d2a4-a280-7001-8000-000000000002"

@@ -1,3 +1,4 @@
+import { ACTIONS, type Action } from "@waste/domain/access/modules"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
 import {
@@ -5,17 +6,8 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 
-export const ROLE_PERMISSION_ACTIONS = [
-  "view",
-  "edit",
-  "create",
-  "delete",
-] as const
-
-export type RolePermissionAction = (typeof ROLE_PERMISSION_ACTIONS)[number]
-
 export const ROLE_PERMISSION_ACTION_LABELS: Record<
-  RolePermissionAction,
+  Action,
   string
 > = {
   view: "Can view",
@@ -28,7 +20,7 @@ export const ROLE_PERMISSION_ACTION_LABELS: Record<
  * Sparse map of granted permissions: `${workspaceId}.${moduleId}` → granted
  * actions. Items and actions absent from the map are not granted.
  */
-export type RoleAccessMap = Record<string, RolePermissionAction[]>
+export type RoleAccessMap = Record<string, Action[]>
 
 export type RolePermissionItem = {
   key: string
@@ -76,9 +68,9 @@ export const rolePermissionItemCount = rolePermissionSections.reduce(
 )
 
 export const rolePermissionCellCount =
-  rolePermissionItemCount * ROLE_PERMISSION_ACTIONS.length
+  rolePermissionItemCount * ACTIONS.length
 
-const ACTION_SET: ReadonlySet<string> = new Set(ROLE_PERMISSION_ACTIONS)
+const ACTION_SET: ReadonlySet<string> = new Set(ACTIONS)
 
 export function isRoleAccessMap(value: unknown): value is RoleAccessMap {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false

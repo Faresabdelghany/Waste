@@ -15,8 +15,9 @@
 // (`ScaleTicketVoid`). One of our own vehicles' tickets, matched to the route
 // it ran, is also written as that route's Unload: `routeId` and `unloadId`.
 import { WEIGHBRIDGE_UNMATCHED_REASONS } from "@waste/domain/execution/vocabulary"
-import { FOUR_DIGITS_PATTERN } from "@waste/domain/registry/address"
-import { SCALE_TICKET_LINES_MAX } from "@waste/domain/scale-house/rules"
+import { FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE } from "@waste/domain/registry/address"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { EACH_LINE_ONCE, lineKey, PARTY_SHAPE, partyShaped, SCALE_TICKET_LINES_MAX, VOID_SAYS_WHY, voidSaysWhy } from "@waste/domain/scale-house/rules"
 import { SCALE_TICKET_PARTIES, SCALE_TICKET_STATUSES, SCALE_TICKET_VOID_REASONS, TARE_SOURCES, VEHICLE_TARE_STATUSES } from "@waste/domain/scale-house/vocabulary"
 import * as z from "zod"
 
@@ -24,7 +25,7 @@ import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { BlockReason } from "./finance"
-import { changesSomething, eachOnce, Minor, PositiveInt, somethingToChange, stamped } from "./resource"
+import { Minor, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const ScaleTicketStatus = z.enum(SCALE_TICKET_STATUSES)
@@ -39,7 +40,7 @@ export const VehicleTareStatus = z.enum(VEHICLE_TARE_STATUSES)
 export type VehicleTareStatus = z.infer<typeof VehicleTareStatus>
 
 /** A municipality's code, the kommunekode, four digits as a Property spells it: `0101`. */
-export const MunicipalityCode = z.string().regex(new RegExp(FOUR_DIGITS_PATTERN), { error: "A municipality code is four digits" })
+export const MunicipalityCode = z.string().regex(new RegExp(FOUR_DIGITS_PATTERN), { error: MUNICIPALITY_CODE_SHAPE })
 
 /** A registered tare as the window reads it. */
 export const VehicleTare = z.object({
@@ -146,11 +147,6 @@ export const ScaleTicket = z.object({
 })
 export type ScaleTicket = z.infer<typeof ScaleTicket>
 
-/** An account ticket names its customer and agreement, a walk-in's neither. */
-export const partyShaped = (body: { party: ScaleTicketParty; customerId?: string | null; agreementId?: string | null }): boolean =>
-  body.party === "account" ? body.customerId != null && body.agreementId != null : body.customerId == null && body.agreementId == null
-export const PARTY_SHAPE = "An account ticket names its customer and the agreement it is charged under; a walk-in's names neither"
-
 /** `POST /scale-tickets`: the first pass, at the gross. */
 export const ScaleTicketCreate = z
   .strictObject({
@@ -192,7 +188,7 @@ export const ScaleTicketLineIn = z.strictObject({
 export type ScaleTicketLineIn = z.infer<typeof ScaleTicketLineIn>
 
 /** The tare: a second pass over the scale, or the vehicle's registered tare. */
-export const ScaleTicketTare = z.discriminatedUnion("source", [z.strictObject({ source: z.literal("weighed"), tareKg: PositiveInt }), z.strictObject({ source: z.literal("registered") })])
+export const ScaleTicketTare = z.discriminatedUnion("source", [z.strictObject({ source: z.literal(TareSource.enum.weighed), tareKg: PositiveInt }), z.strictObject({ source: z.literal(TareSource.enum.registered) })])
 export type ScaleTicketTare = z.infer<typeof ScaleTicketTare>
 
 /** `POST /scale-tickets/:id/complete`: the tare, and the load split into lines that sum to the net. */
@@ -203,16 +199,13 @@ export const ScaleTicketComplete = z
     weighedOutAt: IsoDateTime.optional(),
     lines: z.array(ScaleTicketLineIn).min(1).max(SCALE_TICKET_LINES_MAX),
   })
-  .refine((body) => eachOnce(body.lines, (line) => `${line.wasteFractionId} ${line.originMunicipality ?? ""}`), {
-    message: "Name each fraction and origin once: one line carries all of it",
-    path: ["lines"],
-  })
+  .refine((body) => eachOnce(body.lines, lineKey), { message: EACH_LINE_ONCE, path: ["lines"] })
 export type ScaleTicketComplete = z.infer<typeof ScaleTicketComplete>
 
 /** `POST /scale-tickets/:id/void`: why, the note saying more, and saying it where the reason is another. */
 export const ScaleTicketVoid = z
   .strictObject({ reason: ScaleTicketVoidReason, note: Paragraph.nullable().optional() })
-  .refine((body) => body.reason !== "other" || body.note != null, { message: "Say why in the note where the reason is another", path: ["note"] })
+  .refine(voidSaysWhy, { message: VOID_SAYS_WHY, path: ["note"] })
 export type ScaleTicketVoid = z.infer<typeof ScaleTicketVoid>
 
 /** A page of tickets: one project's, one site's, one standing's, one party's, one customer's. */

@@ -29,31 +29,20 @@
 // between projects.
 //
 // The cadence rule — an interval needs a rate to belong to, and `weeksBetween`
-// and `daysBetween` are two ways of saying the same thing — is the contracts'
+// and `daysBetween` are two ways of saying the same thing — is the domain's
 // `serviceFrequencyShape` and the table's `service_frequency_shape` check. A
 // create body carries the whole picture, so the schema settles it; a patch
 // carries a part of it, so only this route can, holding the patch against the
 // row it is patching before the update goes out, and refusing in the
-// contracts' own words (`ONE_CADENCE`), so one rule has one sentence. Without
+// domain's words (`ONE_CADENCE`), so one rule has one sentence. Without
 // that the check constraint would answer, and a rule a client can fix would
 // arrive as a 500.
-import {
-  ContainerType,
-  ContainerTypeCreate,
-  ContainerTypePatch,
-  ONE_CADENCE,
-  ServiceFrequency,
-  ServiceFrequencyCreate,
-  ServiceFrequencyPatch,
-  serviceFrequencyShape,
-  WasteFraction,
-  WasteFractionCreate,
-  WasteFractionPatch,
-} from "@waste/contracts/catalogue"
+import { ContainerType, ContainerTypeCreate, ContainerTypePatch, ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFraction, WasteFractionCreate, WasteFractionPatch } from "@waste/contracts/catalogue"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import { ONE_CADENCE, serviceFrequencyShape } from "@waste/domain/registry/catalogue"
 import type { WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { HAZARDOUS_CODE, hazardousOf, isHazardousCode } from "@waste/domain/registry/waste-code"
 import { and, asc, eq, gt } from "drizzle-orm"

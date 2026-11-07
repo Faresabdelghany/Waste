@@ -50,6 +50,7 @@ import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { team, ticket } from "@waste/db/schema/resolution"
+import { NOT_A_FRACTION, NOT_A_POWERED_VEHICLE, NOT_A_STATION, NOT_A_TRAILER } from "@waste/domain/execution/commands"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -114,7 +115,7 @@ export async function requireContainerType(tx: Tx, companyId: string, id: string
 /** A waste fraction a body or a query names: the company's, since a fraction is what the country sorts, not what a project does. A `query` target is a list filter's (`GET /unloading-stations?wasteFractionId=`, #101 round A), refused on the query string. */
 export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId", target: Target = "body"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" }, target)
+  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: NOT_A_FRACTION }, target)
 }
 
 /** A service frequency a body names: the project's, since a cadence belongs to one project (`project_id` leads its key). */
@@ -275,8 +276,6 @@ export async function requireWarehouse(
 /** What a body is told when it reaches for a depot of another project; the fence the composite key already holds it to. */
 export const NOT_A_DEPOT = "Not a depot of this project"
 
-/** What a body is told when it names an unloading station this company does not have. */
-export const NOT_AN_UNLOADING_STATION = "Not an unloading station of this company"
 
 /** A Depot a body names: the project's, since a route leaves from its project's yard. */
 export async function requireDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "depotId"): Promise<void> {
@@ -287,7 +286,7 @@ export async function requireDepot(tx: Tx, scope: Scope, id: string | null | und
 /** An Unloading Station a body names: the company's, since every project of the company unloads at the same plants. */
 export async function requireUnloadingStation(tx: Tx, companyId: string, id: string | null | undefined, path = "unloadingStationId"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, unloadingStation, inCompany(companyId, id), { path, message: NOT_AN_UNLOADING_STATION })
+  await requireRow(tx, unloadingStation, inCompany(companyId, id), { path, message: NOT_A_STATION })
 }
 
 // Resources, slice 4 (Issue #101): the fleet. A vehicle and a driver are the
@@ -313,8 +312,6 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 
 /** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
 export const NOT_A_VEHICLE = "Not a vehicle of this project"
-export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
-export const NOT_A_TRAILER = "Not a trailer of this project"
 
 /** The sentence for a vehicle held to a kind, or to none; routes/fleet-lookups.ts's `findVehicle` refuses with it too. */
 export const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind === "powered-vehicle" ? NOT_A_POWERED_VEHICLE : kind === "trailer" ? NOT_A_TRAILER : NOT_A_VEHICLE)

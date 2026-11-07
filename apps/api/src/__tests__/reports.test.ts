@@ -24,18 +24,7 @@ import { after, before, describe, test } from "node:test"
 import { BillableEvent } from "@waste/contracts/billable-events"
 import { BillingRunDetail } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
-import {
-  REPORT_WINDOW_TOO_LONG,
-  RevenueReport,
-  ServiceReport,
-  TicketReport,
-  TonnageReport,
-  WasteDataReport,
-  type PickupStandings,
-  type RouteCounts,
-  type WasteDataRow,
-  type WasteDataWarning,
-} from "@waste/contracts/reports"
+import { RevenueReport, ServiceReport, TicketReport, TonnageReport, WasteDataReport, type PickupStandings, type RouteCounts, type WasteDataRow, type WasteDataWarning } from "@waste/contracts/reports"
 import { Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
@@ -44,6 +33,7 @@ import { route } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
+import { REPORT_WINDOW_TOO_LONG } from "@waste/domain/insight/reports"
 import { WASTE_DATA_COLUMNS, wasteDataWarningSentence, type WasteDataRow as DomainRow, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
 import { csvRecords } from "@waste/domain/imports/csv"
 import type { TicketKind, TicketResolution, TicketStatus } from "@waste/domain/resolution/vocabulary"

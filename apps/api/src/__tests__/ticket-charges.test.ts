@@ -2,11 +2,12 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { TicketType } from "@waste/contracts/ticket-types"
-import { CHARGE_WITH_A_BILLABLE_RESOLUTION, KIND_CHARGED_ONCE, Ticket, TicketCharges } from "@waste/contracts/tickets"
+import { Ticket, TicketCharges } from "@waste/contracts/tickets"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
+import { CHARGE_WITH_A_BILLABLE_RESOLUTION, KIND_CHARGED_ONCE } from "@waste/domain/resolution/tickets"
 import { and, desc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"

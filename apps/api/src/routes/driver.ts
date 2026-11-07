@@ -151,7 +151,9 @@ import {
   type DriverIdentifiedStop,
   type DriverPickup,
 } from "@waste/contracts/driver-commands"
-import { RouteStatus, routeLabel } from "@waste/contracts/execution"
+import { RouteStatus } from "@waste/contracts/execution"
+import type { Action } from "@waste/domain/access/modules"
+import { routeLabel } from "@waste/domain/numbering"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
 import type { RouteProblem } from "@waste/contracts/outbox"
@@ -1085,7 +1087,7 @@ async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelop
 }
 
 /** What every route here describes the same way: no usable token, no grant, no driver profile. */
-const driverProblems = (action: "view" | "edit") => ({
+const driverProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, the caller's role does not allow \`${action}\` on \`operate.driver-app\`, or no active driver profile is bound to this login.`),
 })

@@ -9,14 +9,15 @@
 // API holds over the merged row. Completing an order of a plan is the service
 // done: its day and readings become the plan's baseline. A plan is retired,
 // never deleted, since its orders name it.
-import { MAINTENANCE_DUE_STATES, MAINTENANCE_INTERVAL_MAX, planIssue } from "@waste/domain/resources/maintenance"
+import { changesSomething } from "@waste/domain/requests"
+import { MAINTENANCE_DUE_STATES, MAINTENANCE_INTERVAL_MAX, NAME_THE_ORDER, planIssue } from "@waste/domain/resources/maintenance"
 import { MAINTENANCE_ORDER_STATUSES, MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const MaintenancePlanStatus = z.enum(MAINTENANCE_PLAN_STATUSES)
@@ -118,9 +119,6 @@ export const MaintenanceOrder = z.object({
   closedAt: IsoDateTime.nullable(),
 })
 export type MaintenanceOrder = z.infer<typeof MaintenanceOrder>
-
-/** What an order of no plan without a title is told. */
-export const NAME_THE_ORDER = "Say what the order is for, or name the plan it serves"
 
 export const MaintenanceOrderCreate = z
   .strictObject({

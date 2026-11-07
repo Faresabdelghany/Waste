@@ -16,24 +16,20 @@
 // exclusions, and the lines it catches up from earlier periods (#447) —
 // writing nothing. There is no patch: a run is a record of what
 // it did.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { PERIOD_ORDERED, periodOrdered } from "@waste/domain/finance/billing-runs"
+import * as z from "zod"
+
+import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { BillableEventKind, BillingRunStatus, ExclusionReason } from "./finance"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeInt, PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
-import * as z from "zod"
 
-/** What a period whose last day comes before its first is told, at the end, the bound a caller can move. */
-export const PERIOD_ORDERED = "periodTo is the last day of the period, so it comes on or after periodFrom"
+/** What a period whose last day comes before its first is refused with, at the end, the bound a caller can move. */
 export const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
-
-/** What a run or a preview whose period ends after its project's today is told, at `periodTo` (M14 of #293): a run is for a closed period. The project's clock is the server's to read, so the shared command judges it (`@waste/db/commands/billing-runs`). */
-export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"
-
-/** Both days inclusive, so one day is a period; comparing two `YYYY-MM-DD` strings compares the days. */
-export const periodOrdered = (period: { periodFrom: string; periodTo: string }): boolean => period.periodTo >= period.periodFrom
 
 /** A count of what a run did: zero or more. */
 const Count = NonNegativeInt

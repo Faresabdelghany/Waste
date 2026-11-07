@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PROJECT_IMPORT_KINDS } from "@waste/contracts/imports"
 import { NOT_A_FEATURE_COLLECTION } from "@waste/domain/imports/geojson"
+import { PROJECT_IMPORT_KINDS } from "@waste/domain/imports/rules"
 import { IMPORT_BATCH_MAX, IMPORT_KINDS, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import {
@@ -15,7 +15,6 @@ import {
   mayImport,
   mayView,
   readImportFile,
-  templateSeparatorFor,
   textOf,
 } from "../import-file"
 
@@ -123,13 +122,5 @@ describe("the commit", () => {
   test("counts the rows each way", () => {
     const result = (outcome: "created" | "updated" | "unchanged" | "refused") => ({ row: 2, outcome, key: null, resourceId: null, detail: null })
     assert.deepEqual(countsOf([result("created"), result("refused"), result("created")]), { created: 2, updated: 0, unchanged: 0, refused: 1 })
-  })
-})
-
-describe("the template", () => {
-  test("is asked for with semicolons where the locale writes a decimal comma", () => {
-    assert.equal(templateSeparatorFor("da-DK"), "semicolon")
-    assert.equal(templateSeparatorFor("de-DE"), "semicolon")
-    assert.equal(templateSeparatorFor("en-GB"), "comma")
   })
 })

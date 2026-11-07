@@ -13,15 +13,19 @@
 // project's and not on the create. Whether a price's period lies inside its
 // assignment's is the route's question. A Service Provider's manager reads
 // the prices of its own assignments through the list, bounded by the route.
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
+import { PROVIDER_OR_AWARD } from "@waste/domain/service-providers/service-areas"
+import * as z from "zod"
+
+import { Currency } from "./codes"
 import { IsoDate } from "./dates"
 import { IndexBase, indexBody } from "./finance"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, Int4, NonNegativeMinor, somethingToChange, stamped } from "./resource"
+import { Int4, NonNegativeMinor, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
-import * as z from "zod"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 export const ServiceProviderPrice = z
   .object({
@@ -111,7 +115,7 @@ export const ServiceProviderPriceBulkIndex = z
     ...indexBody,
   })
   .refine((body) => (body.serviceProviderId === undefined) !== (body.serviceAreaAssignmentId === undefined), {
-    message: "Name either a provider or an award",
+    message: PROVIDER_OR_AWARD,
     path: ["serviceProviderId"],
   })
 export type ServiceProviderPriceBulkIndex = z.infer<typeof ServiceProviderPriceBulkIndex>

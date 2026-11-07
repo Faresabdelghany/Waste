@@ -3,9 +3,9 @@ import { after, describe, test } from "node:test"
 
 import { Validator } from "@seriousme/openapi-schema-validator"
 import { HealthResponse, ReadinessResponse } from "@waste/contracts/health"
-import { REPORT_WINDOW_MAX_DAYS } from "@waste/contracts/reports"
 import { createDb } from "@waste/db/client"
 import { probePoolOptions } from "@waste/db/probe"
+import { REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import { REFUSED_URL } from "@waste/tooling/unreachable"
 
 import manifest from "../../package.json" with { type: "json" }

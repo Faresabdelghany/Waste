@@ -24,18 +24,16 @@
 // to give — a load the station refused, an unload a review corrected — and
 // the details say so instead (`transferNoteWithheld`).
 //
-// Two sentences of the contract's own rules are spelled again here (the web
-// imports the contracts as types only) and held equal by the test.
-//
 // Ids, rule (b) of #81's plan: `unload-<uuid>`; no fixture lends its id.
 import type { LoadReading, Unload } from "@waste/contracts/unloads"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
 import type { UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { weightReviewTransition } from "@waste/domain/finance/transitions"
 import { WEIGHT_REVIEW_STATUSES, type WeightReviewDecision, type WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } from "@/lib/data/provider-money"
-import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
+import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
 import { NO_PRESENTATION, said, stampFacts, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -46,12 +44,8 @@ import { routesWindowFrom } from "./routes"
 
 /** A review status as the desk reads it: `captured` is the queue. */
 export const REVIEW_LABELS: Readonly<Record<WeightReviewStatus, string>> = { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" }
-/** What a correction giving one of gross and tare is told (`@waste/contracts/unloads`, `BOTH_GROSS_AND_TARE`). */
-export const BOTH_GROSS_AND_TARE = "Give grossKg and tareKg together or neither"
-/** What a correction whose net is not gross less tare is told (`NET_IS_GROSS_LESS_TARE`). */
-export const NET_IS_GROSS_LESS_TARE = "netKg is grossKg less tareKg where both are given"
 const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
-export { REFUSAL_LABELS, SAY_WHY_REFUSED }
+export { REFUSAL_LABELS }
 
 /** What an unload's load on board reads as against the project's tolerance: the Tolerance filter's values. */
 export const TOLERANCE_LABELS = { within: "Within tolerance", above: "Above tolerance", unmeasured: "Not measured" } as const

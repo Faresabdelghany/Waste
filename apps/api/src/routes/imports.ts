@@ -67,14 +67,14 @@ import {
   type ImportRowValues,
 } from "@waste/contracts/imports"
 import { Page } from "@waste/contracts/pagination"
-import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import type { Tx } from "@waste/db/client"
 import { importRun, importRunRow } from "@waste/db/schema/imports"
 import { actAs } from "@waste/db/tenant"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
-import { importTemplate } from "@waste/domain/imports/csv"
+import { importTemplate, SEPARATOR_CHARACTERS } from "@waste/domain/imports/csv"
 import { IMPORT_KINDS } from "@waste/domain/imports/vocabulary"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, TransactionRollbackError, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -201,8 +201,6 @@ function contextFor(tx: Tx, principal: Principal, kind: ImportKind, projectId: s
   return { tx, principal, projectId, now, memo: {} }
 }
 
-const TEMPLATE_SEPARATORS = { comma: ",", semicolon: ";" } as const
-
 /** The reason an import's writes are recorded under when its request gives none, bounded as a reason is. */
 export const importReason = (fileName: string): string => `CSV import ${fileName}`.slice(0, PARAGRAPH_MAX)
 
@@ -230,7 +228,7 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       (c) => {
         const { kind } = c.req.valid("param")
         const { separator } = c.req.valid("query")
-        return c.body(importTemplate(kind, TEMPLATE_SEPARATORS[separator]), 200, {
+        return c.body(importTemplate(kind, SEPARATOR_CHARACTERS[separator]), 200, {
           "content-type": "text/csv; charset=utf-8",
           "content-disposition": `attachment; filename="${kind}-import-template.csv"`,
         })

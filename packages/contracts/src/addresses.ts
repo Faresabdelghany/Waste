@@ -13,7 +13,7 @@
 // address and point stay a Property's whole without the register.
 // `attribution` is what a surface that shows the register's data owes it
 // (CC BY 4.0, Klimadatastyrelsen named).
-import { FOUR_DIGITS_PATTERN } from "@waste/domain/registry/address"
+import { ADDRESS_QUERY_MAX, ADDRESS_QUERY_MIN, ADDRESS_QUERY_TOO_SHORT, ADDRESS_SEARCH_MAX, FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE, POSTCODE_SHAPE } from "@waste/domain/registry/address"
 import * as z from "zod"
 
 import { FlatPoint } from "./geojson"
@@ -23,16 +23,7 @@ import { Label, Paragraph } from "./text"
 export const AddressId = z.guid().toLowerCase()
 export type AddressId = z.infer<typeof AddressId>
 
-/** The most characters a search asks with, and the fewest. */
-export const ADDRESS_QUERY_MIN = 2
-export const ADDRESS_QUERY_MAX = 200
-/** The most addresses one search answers with. */
-export const ADDRESS_SEARCH_MAX = 10
-
-/** What the register's data is credited as, wherever a surface shows it. */
-export const ADDRESS_ATTRIBUTION = "Indeholder data fra Klimadatastyrelsen, CC BY 4.0"
-
-const FourDigits = (what: string) => z.string().regex(new RegExp(FOUR_DIGITS_PATTERN), { error: `${what} is four digits` })
+const FourDigits = (shape: string) => z.string().regex(new RegExp(FOUR_DIGITS_PATTERN), { error: shape })
 
 /** One address's parts as the register holds them (@waste/domain/registry/address). */
 export const AddressParts = z.object({
@@ -40,15 +31,15 @@ export const AddressParts = z.object({
   houseNumber: Label,
   floor: Label.nullable(),
   door: Label.nullable(),
-  postcode: FourDigits("A postcode"),
+  postcode: FourDigits(POSTCODE_SHAPE),
   postTown: Label,
-  municipalityCode: FourDigits("A municipality code"),
+  municipalityCode: FourDigits(MUNICIPALITY_CODE_SHAPE),
 })
 export type AddressParts = z.infer<typeof AddressParts>
 
 export const AddressSearchQuery = z.strictObject({
   /** The text a person has typed so far: the beginning of a street, a number, a postcode. */
-  q: z.string().trim().min(ADDRESS_QUERY_MIN, { error: `Type at least ${ADDRESS_QUERY_MIN} characters of the address` }).max(ADDRESS_QUERY_MAX),
+  q: z.string().trim().min(ADDRESS_QUERY_MIN, { error: ADDRESS_QUERY_TOO_SHORT }).max(ADDRESS_QUERY_MAX),
 })
 export type AddressSearchQuery = z.infer<typeof AddressSearchQuery>
 

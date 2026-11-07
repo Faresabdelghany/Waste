@@ -6,8 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { MaintenanceOrder, MaintenanceOrderComplete, MaintenanceOrderCreate, MaintenancePlan, MaintenancePlanCreate, NAME_THE_ORDER as CONTRACTS_NAME_THE_ORDER } from "@waste/contracts/maintenance"
-import { AN_INTERVAL, KM_NEEDS_A_READING } from "@waste/domain/resources/maintenance"
+import { MaintenanceOrder, MaintenanceOrderComplete, MaintenanceOrderCreate, MaintenancePlan, MaintenancePlanCreate } from "@waste/contracts/maintenance"
+import { AN_INTERVAL, KM_NEEDS_A_READING, NAME_THE_ORDER } from "@waste/domain/resources/maintenance"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { orderFormOf } from "../../data/maintenance"
@@ -17,7 +17,6 @@ import {
   ADD_PLAN,
   CANCEL_ORDER,
   COMPLETE_ORDER,
-  NAME_THE_ORDER,
   OPEN_ORDER,
   orderLine,
   planLine,
@@ -108,7 +107,6 @@ describe("the actions", () => {
   })
 
   test("an order opens of a plan or with a title, under the vehicle; one with neither is told so in the contracts' words", async () => {
-    assert.equal(NAME_THE_ORDER, CONTRACTS_NAME_THE_ORDER)
     const planId = "01a0d2a4-a280-7042-8000-000000000067"
     const body = action(OPEN_ORDER).toBody?.({ planId, title: "", dueOn: "2026-10-07", note: "" }, nr12, context)
     const { fetch, calls } = scripted([() => json(order("01a0d2a4-a280-7042-8000-000000000074", "open", { planId }), 201, { location: "/maintenance-orders/01a0d2a4-a280-7042-8000-000000000074" })])

@@ -9,10 +9,11 @@ import { describe, test } from "node:test"
 
 import { MaterialAdjustmentCreate, OutboundLoadCreate, OutboundLoadReason, OutboundLoadReceive, OutboundLoadReconcile, type OutboundLoad } from "@waste/contracts/haul-out"
 import type { UnloadingStation } from "@waste/contracts/places"
+import { SAY_WHY } from "@waste/domain/execution/haul-out"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
-import { ADJUST_STOCK, adjustStockBody, CANCEL_LOAD, GIVE_A_DELTA, HAUL_OUT_ACTIONS, loadLine, NAME_THE_CARRIER, RECEIVE_LOAD, RECONCILE_LOAD, SAY_WHY, SEND_LOAD, sendLoadBody, stockLine } from "../records/haul-out"
+import { ADJUST_STOCK, adjustStockBody, CANCEL_LOAD, GIVE_A_DELTA, HAUL_OUT_ACTIONS, loadLine, NAME_THE_CARRIER, RECEIVE_LOAD, RECONCILE_LOAD, SEND_LOAD, sendLoadBody, stockLine } from "../records/haul-out"
 import { unloadingStationAdapter } from "../records/places"
 
 const NOW = new Date("2026-10-29T09:00:00Z")

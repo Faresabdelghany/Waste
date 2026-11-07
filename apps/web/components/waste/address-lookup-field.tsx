@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react"
 import { MagnifyingGlass, MapPin, X } from "@phosphor-icons/react/dist/ssr"
 import type { Address, AddressSearch } from "@waste/contracts/addresses"
+import { ADDRESS_ATTRIBUTION, ADDRESS_QUERY_MIN } from "@waste/domain/registry/address"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,9 +22,8 @@ import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-
 import { get, withQuery } from "@/lib/api/client"
 import { ApiProblem } from "@/lib/api/problem"
 
-/** How long the typing rests before the register is asked, and the fewest characters it is asked with (`ADDRESS_QUERY_MIN`). */
+/** How long the typing rests before the register is asked. */
 const SEARCH_DELAY_MS = 250
-const QUERY_MIN = 2
 
 type Found = { kind: "idle" } | { kind: "searching" } | { kind: "found"; search: AddressSearch } | { kind: "failed"; sentence: string } | { kind: "off"; sentence: string }
 
@@ -55,7 +55,7 @@ export function AddressLookupField({
 
   const off = found.kind === "off"
   useEffect(() => {
-    if (client === null || off || query.length < QUERY_MIN) return
+    if (client === null || off || query.length < ADDRESS_QUERY_MIN) return
     let current = true
     const timer = setTimeout(() => {
       setFound({ kind: "searching" })
@@ -91,7 +91,7 @@ export function AddressLookupField({
       .finally(() => setPicking(false))
   }
 
-  const shown = query.length < QUERY_MIN && found.kind !== "failed" ? null : found
+  const shown = query.length < ADDRESS_QUERY_MIN && found.kind !== "failed" ? null : found
   return (
     <div className="grid gap-2" data-testid="address-lookup">
       {picked ? (
@@ -142,7 +142,7 @@ export function AddressLookupField({
           ))}
         </ul>
       )}
-      {(picked || shown?.kind === "found") && <p className="text-[11px] text-muted-foreground">{shown?.kind === "found" ? shown.search.attribution : "Indeholder data fra Klimadatastyrelsen, CC BY 4.0"}</p>}
+      {(picked || shown?.kind === "found") && <p className="text-[11px] text-muted-foreground">{shown?.kind === "found" ? shown.search.attribution : ADDRESS_ATTRIBUTION}</p>}
     </div>
   )
 }

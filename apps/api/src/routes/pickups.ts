@@ -75,6 +75,7 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
+import type { Action } from "@waste/domain/access/modules"
 import { bulkyBookingStatus, LIVE_STOP_STATUSES, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
@@ -96,7 +97,7 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import { labelOf, type RouteRow } from "@waste/db/shapes/routes"
 import { pickupColumns, pickupOf, type PickupRow } from "@waste/db/shapes/pickups"
 import { proofOf, proofsOfPickup } from "@waste/db/shapes/proofs"
@@ -498,7 +499,7 @@ export async function takeOffStop(tx: Tx, principal: Principal, id: string, note
   return detail
 }
 
-const commandProblems = (action: "view" | "edit") => ({
+const commandProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem(

@@ -7,8 +7,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
+import { PAGE_LIMIT_MAX } from "@waste/domain/requests"
 
-import { PAGE_LIMIT_MAX } from "../client"
 import { historyPage, historySubjectOf } from "../records/audit"
 import { serverModuleOf, SERVER_MODULES } from "../records/modules"
 import { json, scripted } from "./scripted-fetch"

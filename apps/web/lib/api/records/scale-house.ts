@@ -11,6 +11,9 @@
 // lib/data/scale-house.ts'.
 import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, VehicleTare, VehicleTareCreate } from "@waste/contracts/scale-house"
 import { LITRES_PER_M3 } from "@waste/domain/finance/window"
+import { scaleTicketLabel } from "@waste/domain/numbering"
+import { FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE } from "@waste/domain/registry/address"
+import { VOID_SAYS_WHY } from "@waste/domain/scale-house/rules"
 import { SCALE_TICKET_PARTIES, SCALE_TICKET_VOID_REASONS, TARE_SOURCES, type ScaleTicketParty, type ScaleTicketVoidReason, type TareSource } from "@waste/domain/scale-house/vocabulary"
 
 import { AGREEMENT_PREFIX, isAgreementRecord } from "@/lib/data/agreements"
@@ -50,9 +53,6 @@ export const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
 const KEPT = "What was weighed and for whom is what the ticket is: void it and weigh again"
 
 const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
-
-/** A ticket's number as the customer is handed it. */
-export const ticketLabel = (number: number): string => `ST-${number}`
 
 /** A whole number of kilograms a value says, NaN for one that is not, undefined for none. */
 function weightIn(value: string | undefined): number | undefined {
@@ -96,7 +96,7 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
   )
   return {
     id: webIdOf(SCALE_TICKET_PREFIX, ticket.id),
-    name: `${ticketLabel(ticket.number)} · ${ticket.vehiclePlate}`,
+    name: `${scaleTicketLabel(ticket.number)} · ${ticket.vehiclePlate}`,
     context: `${site} · ${party}`,
     status: SCALE_TICKET_STATUS_LABELS[ticket.status],
     ...NO_PRESENTATION,
@@ -111,7 +111,7 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
             ? `Written as ${route}'s unload.`
             : `Completed at ${kilograms(ticket.netKg ?? 0)}.`,
     facts: {
-      Ticket: ticketLabel(ticket.number),
+      Ticket: scaleTicketLabel(ticket.number),
       Site: site,
       Plate: ticket.vehiclePlate,
       ...(ticket.trailerPlate === null ? {} : { Trailer: ticket.trailerPlate }),
@@ -197,7 +197,7 @@ export function toCompleteBody(input: CommandInput, context: MappingContext): Sc
     const netKg = weightIn(net)
     if (netKg === undefined || Number.isNaN(netKg)) return refusal(`net${n}`, KILOGRAMS)
     const origin = said(input, `origin${n}`)
-    if (origin !== undefined && !/^[0-9]{4}$/.test(origin)) return refusal(`origin${n}`, "A municipality code is four digits")
+    if (origin !== undefined && !new RegExp(FOUR_DIGITS_PATTERN).test(origin)) return refusal(`origin${n}`, MUNICIPALITY_CODE_SHAPE)
     const productWebId = said(input, `product${n}`)
     const productId = productWebId === undefined ? undefined : referencedServerId(productWebId, PRODUCT_PREFIX, context, { owns: isProductRecord })
     if (productWebId !== undefined && productId === undefined) return refusal(`product${n}`, "Pick a product the API holds")
@@ -223,7 +223,7 @@ export const SCALE_TICKET_COMMANDS: Readonly<Record<string, RecordCommand<ScaleT
       const reason = said(input, "reason")
       if (!SCALE_TICKET_VOID_REASONS.includes(reason as ScaleTicketVoidReason)) return refusal("reason", "Pick why the ticket is voided")
       const note = said(input, "note")
-      if (reason === "other" && note === undefined) return refusal("note", "Say why in the note where the reason is another")
+      if (reason === "other" && note === undefined) return refusal("note", VOID_SAYS_WHY)
       return { reason, ...(note === undefined ? {} : { note }) }
     },
     run: (client, serverId, body) => command<ScaleTicket>(client, `/scale-tickets/${serverId}/void`, body),

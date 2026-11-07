@@ -17,6 +17,7 @@
 // then, and the ticket it is linked to by the ticket's label. The tickets
 // load first, so a linked ticket is named by its label from the start.
 import type { Alert } from "@waste/contracts/alerts"
+import { NAMES_A_SUBJECT } from "@waste/domain/resolution/alerts"
 import { ALERT_KINDS, ALERT_SEVERITIES } from "@waste/domain/resolution/vocabulary"
 
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
@@ -49,9 +50,6 @@ export const ALERT_SUBJECTS: ReadonlyArray<readonly ["routeId" | "vehicleId" | "
   ["driverId", "driver", "Driver", driverAdapter.owns],
   ["containerId", "asset", "Container", containerAdapter.owns],
 ]
-
-/** What an alert about nothing is told (`@waste/contracts/alerts`, `NAMES_A_SUBJECT`); the test holds the two equal. */
-export const NAMES_A_SUBJECT = "An alert names what it is about: a route, a vehicle, a driver or a container"
 
 const CHANGED_BY_COMMANDS = "An alert is raised, acknowledged, resolved and linked to a ticket; nothing else changes it"
 

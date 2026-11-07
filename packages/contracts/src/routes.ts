@@ -24,20 +24,25 @@
 // latest point a proof carried, when the device was last seen, whether it is
 // paused, and since O8 of #290 its newest position and its estimates — for
 // the dashboard, paged like every list.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { DISPATCH_MANY_MAX, EACH_PICKUP_ONCE, EACH_ROUTE_ONCE, LABEL_IS_THE_NUMBER, PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
 import type { RouteShift as DomainRouteShift } from "@waste/domain/execution/shift"
-import { BALANCE_MOVES_MAX } from "@waste/domain/routing/balance"
+import { EACH_STOP_MOVED_ONCE } from "@waste/domain/execution/stop-moves"
+import { routeLabel } from "@waste/domain/numbering"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { BALANCE_MOVES_MAX, BALANCE_TOKEN_MAX } from "@waste/domain/routing/balance"
 import type { RouteWorkload as DomainRouteWorkload } from "@waste/domain/execution/workload"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
-import { OfficeCancelReasonCode, RouteCancelReasonCode, routeLabel, RouteStatus } from "./execution"
+import { OfficeCancelReasonCode, RouteCancelReasonCode, RouteStatus } from "./execution"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
 import { ActivePlan } from "./plans"
 import { LiveEta, Position } from "./positions"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
 import { DriverShift } from "./shifts"
 import { Paragraph } from "./text"
@@ -65,8 +70,6 @@ export const RouteAssignment = z.object({
 })
 export type RouteAssignment = z.infer<typeof RouteAssignment>
 
-/** What a route whose label is not its number is told. */
-export const LABEL_IS_THE_NUMBER = "label is the number under the route prefix"
 export const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
 /** The label is the number's. */
@@ -264,11 +267,6 @@ export type RouteReschedule = z.infer<typeof RouteReschedule>
 export const RouteCancel = z.strictObject({ reasonCode: OfficeCancelReasonCode, reason: Paragraph })
 export type RouteCancel = z.infer<typeof RouteCancel>
 
-/** The most routes one bulk dispatch names: each is a savepoint of the request's transaction, so fifty, below the 64 subtransactions Postgres caches per transaction, as the CSV import's `IMPORT_BATCH_MAX`; a larger day goes in several. */
-export const DISPATCH_MANY_MAX = 50
-
-export const EACH_ROUTE_ONCE = eachOnceSentence("route", "a route is dispatched once")
-
 /** `POST /routes/dispatch` (O5 of #290): the routes of a day, or a selection of them, each dispatched as its own `POST /routes/:id/dispatch` would be. */
 export const RouteDispatchMany = z.strictObject({
   routeIds: z
@@ -294,11 +292,6 @@ export type RouteDispatchResults = z.infer<typeof RouteDispatchResults>
 export const RouteReleaseHold = z.strictObject({})
 export type RouteReleaseHold = z.infer<typeof RouteReleaseHold>
 
-/** The most pickups an order may name: a day's route has tens, a long one hundreds, and five hundred is room for any. */
-export const PICKUP_ORDER_MAX = 500
-
-export const EACH_PICKUP_ONCE = eachOnceSentence("pickup", "a stop has one place in the order")
-
 /** `PUT /routes/:id/pickup-order`: every open pickup of the route, once, in the order they will be visited. */
 export const PickupOrderSet = z.strictObject({
   pickupIds: z
@@ -308,8 +301,6 @@ export const PickupOrderSet = z.strictObject({
     .refine((ids) => eachOnce(ids), { message: EACH_PICKUP_ONCE }),
 })
 export type PickupOrderSet = z.infer<typeof PickupOrderSet>
-
-export const EACH_STOP_MOVED_ONCE = eachOnceSentence("pickup", "a stop moves once")
 
 /** The open stops a move or a split takes off the route, each once; as many as an order may name. */
 const MovedStops = z
@@ -368,18 +359,16 @@ export const RouteBalancePreview = z.object({
 })
 export type RouteBalancePreview = z.infer<typeof RouteBalancePreview>
 
-export const EACH_BALANCED_STOP_ONCE = eachOnceSentence("pickup", "a stop moves once")
-
 /** `POST /routes/balance` (O15 of #290): the moves of a preview the office accepts, all of them or some, with the preview's token; at most `BALANCE_MOVES_MAX`. */
 export const RouteBalanceApply = z.strictObject({
   projectId: Id,
   operatingDate: IsoDate,
-  token: z.string().min(1).max(128),
+  token: z.string().min(1).max(BALANCE_TOKEN_MAX),
   moves: z
     .array(z.strictObject({ pickupId: Id, toRouteId: Id }))
     .min(1)
     .max(BALANCE_MOVES_MAX)
-    .refine((moves) => eachOnce(moves.map((move) => move.pickupId)), { message: EACH_BALANCED_STOP_ONCE }),
+    .refine((moves) => eachOnce(moves.map((move) => move.pickupId)), { message: EACH_STOP_MOVED_ONCE }),
 })
 export type RouteBalanceApply = z.infer<typeof RouteBalanceApply>
 

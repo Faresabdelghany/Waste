@@ -43,9 +43,27 @@
 // `ticketEventShape` as a refine at `kind`
 // (@waste/domain/resolution/event-shapes, the `ProofOfService` precedent), so
 // a row that disagrees with its kind does not parse on the client either.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { ticketLabel } from "@waste/domain/numbering"
+import { changesSomething } from "@waste/domain/requests"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
-import { BILLABLE_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
+import {
+  CHARGE_WITH_A_BILLABLE_RESOLUTION,
+  chargeWithABillableResolution,
+  KIND_CHARGED_ONCE,
+  LABEL_IS_THE_NUMBER,
+  PICKUP_WITH_ITS_ROUTE,
+  pickupWithItsRoute,
+  pickupWithItsRouteOnPatch,
+  RECOLLECTION_ROUTE_WITH_RECOLLECTED,
+  RECOLLECTION_STOP_WITH_ITS_ROUTE,
+  recollectionRouteWithRecollected,
+  recollectionStopWithItsRoute,
+  REPLY_NOTE_MAX,
+  TYPE_OR_KIND,
+} from "@waste/domain/resolution/tickets"
+import { OFFICE_TICKET_SOURCES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { Alert } from "./alerts"
@@ -54,9 +72,9 @@ import { ExecutionSource, ObjectKey, PickupOutcome, PickupReason, PickupService,
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { ticketLabel, TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
-import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
+import { PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
@@ -86,8 +104,6 @@ export const TicketLinks = z.object({
 })
 export type TicketLinks = z.infer<typeof TicketLinks>
 
-/** What a ticket whose label is not its number is told. */
-export const LABEL_IS_THE_NUMBER = "label is the number under the ticket prefix"
 export const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
 /** The label is the number's. */
@@ -211,12 +227,7 @@ export const TicketDetail = z
   .refine(labelMatches, labelIsTheNumber)
 export type TicketDetail = z.infer<typeof TicketDetail>
 
-/** What a body naming a pickup without its route is told. */
-export const PICKUP_WITH_ITS_ROUTE = "Name the pickup's route with the pickup"
 const pickupWithItsRouteAt = { message: PICKUP_WITH_ITS_ROUTE, path: ["links", "pickupId"] }
-
-/** A pickup names its route: the table's `ticket_pickup_shape`, at the boundary, over a body that carries the whole picture. */
-export const pickupWithItsRoute = (links: { routeId?: string | null; pickupId?: string | null } | undefined): boolean => links === undefined || links.pickupId == null || links.routeId != null
 
 /** The links as a write body names them: each optional, null clearing one on a patch. */
 export const TicketLinksSet = z.strictObject({
@@ -232,9 +243,6 @@ export const TicketLinksSet = z.strictObject({
 })
 export type TicketLinksSet = z.infer<typeof TicketLinksSet>
 
-/** What a create naming neither a type nor a kind is told. */
-export const TYPE_OR_KIND = "Name the ticket's type, or its kind for the kind's default type"
-
 /** `POST /tickets`: the office opens a case. The number, the status, the stamps and the provenance are the server's; the source is one of the office's doors. */
 export const TicketCreate = z
   .strictObject({
@@ -249,7 +257,8 @@ export const TicketCreate = z
     fieldValues: TicketFieldValuesBody.default({}).describe("None when absent."),
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
     /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b), nor `counting-rule`, what the worker writes for a counting rule's ticket (#547 of #544). */
-    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider", "counting-rule"])
+    source: z
+      .enum(OFFICE_TICKET_SOURCES)
       .default("office")
       .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, service-provider is what the API writes for a ticket a Service Provider's account raises, and counting-rule the worker's for a counting rule's ticket."),
     /** When the issue or request happened; the request's clock when absent. */
@@ -275,9 +284,6 @@ export const TicketCreate = z
   .refine((body) => pickupWithItsRoute(body.links), pickupWithItsRouteAt)
   .refine((body) => body.kind !== undefined || body.ticketTypeId !== undefined, { message: TYPE_OR_KIND, path: ["ticketTypeId"] })
 export type TicketCreate = z.infer<typeof TicketCreate>
-
-/** The pickup rule on a patch, where only both halves in the body are judged: a body moving `pickupId` alone names the stored route, and the route holds it. */
-export const pickupWithItsRouteOnPatch = (links: { routeId?: string | null; pickupId?: string | null } | undefined): boolean => links === undefined || links.pickupId == null || links.routeId !== null
 
 /** `PATCH /tickets/:id`: the case's own fields — never the status, the assignee, the source, the project, the number, the resolution or the stamps. */
 export const TicketPatch = z
@@ -316,26 +322,9 @@ export type TicketWait = z.infer<typeof TicketWait>
 export const TicketHold = z.strictObject({ note: Paragraph })
 export type TicketHold = z.infer<typeof TicketHold>
 
-/** What a completion naming a re-collection route with another resolution is told. */
-export const RECOLLECTION_ROUTE_WITH_RECOLLECTED = "Name the re-collection's route with recollected and with nothing else"
 const recollectionRouteWithRecollectedAt = { message: RECOLLECTION_ROUTE_WITH_RECOLLECTED, path: ["recollectionRouteId"] }
-
-/** The re-collection's route goes with `recollected`: the table's `ticket_recollection_shape`, at the boundary. */
-export const recollectionRouteWithRecollected = (body: { resolution?: string; recollectionRouteId?: string }): boolean => body.recollectionRouteId === undefined || body.resolution === "recollected"
-
-/** What a completion naming a re-collection stop without its route is told. */
-export const RECOLLECTION_STOP_WITH_ITS_ROUTE = "Name the re-collection's stop with the route it is a stop of"
 const recollectionStopWithItsRouteAt = { message: RECOLLECTION_STOP_WITH_ITS_ROUTE, path: ["recollectionPickupId"] }
-
-/** The re-collection's stop goes with its route (#111): the table's `ticket_recollection_pickup_shape`, at the boundary. */
-export const recollectionStopWithItsRoute = (body: { recollectionRouteId?: string; recollectionPickupId?: string }): boolean => body.recollectionPickupId === undefined || body.recollectionRouteId !== undefined
-
-/** What a completion naming a product with a resolution nothing is charged for is told. */
-export const CHARGE_WITH_A_BILLABLE_RESOLUTION = "Only a re-collection or a service is charged; name a product with recollected or serviced"
 const chargeWithABillableResolutionAt = { message: CHARGE_WITH_A_BILLABLE_RESOLUTION, path: ["productId"] }
-
-/** The product goes with a resolution Finance charges for (#291 C3): the table's `ticket_charge_shape`, at the boundary. */
-export const chargeWithABillableResolution = (body: { resolution: string; productId?: string }): boolean => body.productId === undefined || (BILLABLE_RESOLUTIONS as readonly string[]).includes(body.resolution)
 
 /** `POST /tickets/:id/complete`: what the ticket ended in, the note, — with `recollected` — the route the re-collection rides on and the stop of it the re-collection is, and — with `recollected` or `serviced` — the product its work is charged at. */
 export const TicketComplete = z
@@ -362,9 +351,6 @@ export type TicketCharge = z.infer<typeof TicketCharge>
 /** `GET /ticket-charges`: a project's charges, a kind or a type at most once, in the kinds' order, then the types'. */
 export const TicketCharges = z.object({ projectId: Id, charges: z.array(TicketCharge) })
 export type TicketCharges = z.infer<typeof TicketCharges>
-
-/** What a set naming a kind or a type twice is told. */
-export const KIND_CHARGED_ONCE = "Each ticket kind or type is charged at one product; name each once"
 
 /** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards, a type left out at its kind's; each entry exactly one of a kind and a type, and each product an offered product of the project, not sold by the month, which only the route can judge. */
 export const TicketChargesSet = z
@@ -495,9 +481,6 @@ export const TicketEvidence = z.object({ stop: StopEvidence.nullable() })
 export type TicketEvidence = z.infer<typeof TicketEvidence>
 
 /** `POST /tickets/:id/reply-with-evidence`: one step — the reply quoting the stop's record, the office's note after it, and the case completed `answered` where asked. */
-/** The office's note after the record's reply: bounded so the two, a blank line between, fit a comment's `Paragraph`. */
-export const REPLY_NOTE_MAX = 1500
-
 export const TicketReplyWithEvidence = z.strictObject({
   note: Paragraph.max(REPLY_NOTE_MAX).optional(),
   complete: z.boolean().default(false).describe("Defaults to false: the reply alone; true completes the case `answered` in the same transaction."),

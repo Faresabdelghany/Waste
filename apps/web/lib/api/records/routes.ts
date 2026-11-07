@@ -53,6 +53,8 @@ import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
 import type { Route, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteBalanceResult, RouteDayLoad, RouteDetail, RouteDispatchResults, RouteShift, RouteWorkload } from "@waste/contracts/routes"
+import { A_WORK_ORDER_OF_A_CONTAINER } from "@waste/domain/execution/office-stops"
+import { DISPATCH_MANY_MAX } from "@waste/domain/execution/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
@@ -60,7 +62,6 @@ import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
-import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 import { formatDistance, formatDuration } from "@/lib/map-planning/format"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
@@ -488,7 +489,7 @@ export function addedStopBody(input: Record<string, unknown>, context: MappingCo
   // An emptying is the API's default, so a body says a service only where it is a work order (O3 of #290).
   const service = said(input, "service") ?? "empty"
   if (!isOfficeStopService(service)) return refusal("service", "Book an emptying or one of the work orders offered")
-  if (service !== "empty" && at !== STOP_AT_CONTAINER) return refusal("stopAt", A_WORK_ORDER_IS_OF_A_CONTAINER)
+  if (service !== "empty" && at !== STOP_AT_CONTAINER) return refusal("stopAt", A_WORK_ORDER_OF_A_CONTAINER)
   // The ticket the stop is booked to answer (O3c of #290), where Book a stop names one.
   const ticketWebId = said(input, "ticketId")
   const ticketId = ticketWebId === undefined ? undefined : referencedServerId(ticketWebId, "ticket", context, { owns: hasPrefix("ticket") })
@@ -595,19 +596,16 @@ export function planLine(plan: Pick<Plan, "id" | "createdAt" | "solver" | "statu
   return `${shownOn(plan.createdAt, timezone)} · ${SOLVER_LABELS[plan.solver]} · ${statusLabel(plan.status)}${measured}${failed}${plan.id === activePlanId ? " · Active" : ""}`
 }
 
-/** The most routes one bulk dispatch names: the contracts' `DISPATCH_MANY_MAX`, spelled again since the web imports the contracts as types only; routes.test.ts holds the two equal. */
-export const DISPATCH_BATCH = 50
-
 /**
  * A day's routes, or a selection, dispatched (O5 of #290): one request per
- * `DISPATCH_BATCH` of them, one after another, and one result per route in
+ * `DISPATCH_MANY_MAX` of them, one after another, and one result per route in
  * the order given, each dispatched or refused with its own dispatch's
  * sentence. Nothing to dispatch asks nothing.
  */
 export async function dispatchRoutes(client: Client, routeIds: readonly string[]): Promise<RouteDispatchResults> {
   const results: RouteDispatchResults["results"] = []
-  for (let start = 0; start < routeIds.length; start += DISPATCH_BATCH) {
-    const answered = await command<RouteDispatchResults>(client, "/routes/dispatch", { routeIds: routeIds.slice(start, start + DISPATCH_BATCH) })
+  for (let start = 0; start < routeIds.length; start += DISPATCH_MANY_MAX) {
+    const answered = await command<RouteDispatchResults>(client, "/routes/dispatch", { routeIds: routeIds.slice(start, start + DISPATCH_MANY_MAX) })
     results.push(...answered.results)
   }
   return { results }

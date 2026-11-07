@@ -24,6 +24,12 @@ export const HTTPS_ADDRESS_PATTERN = "^https://[^\\s/?#]+[^\\s]*$"
 /** The longest address taken: a browser's practical limit, far past any logo's or statement's. */
 export const HTTPS_ADDRESS_MAX = 2048
 
+/** What a colour of another shape is told. */
+export const BRAND_COLOR_SHAPE = "A colour is a hash and six hex digits, as #1f6f3f"
+
+/** What an address of another shape is told. */
+export const HTTPS_ADDRESS_SHAPE = "An address is https, as https://kk.dk/logo.svg"
+
 /** Whether a text is a colour as `#RRGGBB`. */
 export const isBrandColor = (text: string): boolean => new RegExp(BRAND_COLOR_PATTERN).test(text)
 

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Address, ADDRESS_QUERY_MAX, AddressSearch, AddressSearchQuery } from "../addresses"
+import { ADDRESS_QUERY_MAX } from "@waste/domain/registry/address"
+
+import { Address, AddressSearch, AddressSearchQuery } from "../addresses"
 
 const ID = "0a3f50a0-75ba-32b8-e044-0003ba298018"
 const PARTS = { streetName: "Parkvej", houseNumber: "18", floor: null, door: null, postcode: "2100", postTown: "København Ø", municipalityCode: "0101" }

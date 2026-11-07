@@ -42,6 +42,9 @@ export const WORK_ORDER_SERVICE_SECONDS = {
 /** A bulky collection's time at the stop (O11 of #290): items carried out by hand, whatever they are. */
 export const BULKY_SERVICE_SECONDS = 600
 
+/** An unload visit's time at the station (O15 of #290), weighing in and emptying: a typical figure, like a work order's. */
+export const UNLOAD_SECONDS = 900
+
 /** Its container's volume times its fraction's density, whole kilograms, or null where either is unknown. */
 export function expectedKg(stop: { volumeLitres: number | null; densityKgPerCubicMetre: number | null }): number | null {
   if (stop.volumeLitres === null || stop.densityKgPerCubicMetre === null) return null

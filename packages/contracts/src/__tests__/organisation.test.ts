@@ -1,24 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { A_WORKING_DAY, WEEKEND_MAX } from "@waste/domain/access/projects"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 
-import {
-  A_WORKING_DAY,
-  Company,
-  CompanyPatch,
-  CompanyStatus,
-  ProjectBranding,
-  ProjectBrandingReplace,
-  Project,
-  ProjectCreate,
-  ProjectPatch,
-  ProjectStatus,
-  ServiceProvider,
-  ServiceProviderCreate,
-  ServiceProviderPatch,
-  WEEKEND_MAX,
-} from "../organisation"
+import { Company, CompanyPatch, CompanyStatus, ProjectBranding, ProjectBrandingReplace, Project, ProjectCreate, ProjectPatch, ProjectStatus, ServiceProvider, ServiceProviderCreate, ServiceProviderPatch } from "../organisation"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }

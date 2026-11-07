@@ -22,7 +22,7 @@
 // day here is a service date, the day generation matches a container on, and
 // every statement is the containers' project's.
 import type { StopToRemove } from "@waste/contracts/agreements"
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { Tx } from "@waste/db/client"
 import type { JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"

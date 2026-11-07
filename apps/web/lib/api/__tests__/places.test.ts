@@ -10,20 +10,8 @@ import { describe, test } from "node:test"
 
 import type { WasteFraction } from "@waste/contracts/catalogue"
 import type { Project, ServiceProvider } from "@waste/contracts/organisation"
-import {
-  BOTH_HOURS_OR_NEITHER,
-  DepotCreate,
-  DepotPatch,
-  PROVIDER_WITH_PROVIDER_OWNERSHIP,
-  UnloadingStationCreate,
-  UnloadingStationFractionsSet,
-  UnloadingStationPatch,
-  WarehouseCreate,
-  WarehousePatch,
-  type Depot,
-  type UnloadingStation,
-  type Warehouse,
-} from "@waste/contracts/places"
+import { DepotCreate, DepotPatch, UnloadingStationCreate, UnloadingStationFractionsSet, UnloadingStationPatch, WarehouseCreate, WarehousePatch, type Depot, type UnloadingStation, type Warehouse } from "@waste/contracts/places"
+import { BOTH_HOURS_OR_NEITHER, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DEPOT_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import type { BusinessRecord } from "../../data/business-modules"
@@ -33,10 +21,8 @@ import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import {
-  BOTH_HOURS_OR_NEITHER as LOCAL_BOTH_HOURS_OR_NEITHER,
   depotAdapter,
   placesModule,
-  PROVIDER_WITH_PROVIDER_OWNERSHIP as LOCAL_PROVIDER_WITH_PROVIDER_OWNERSHIP,
   TWO_TIMES_OR_NOTHING,
   unloadingStationAdapter,
   warehouseAdapter,
@@ -126,11 +112,6 @@ describe("the places modules", () => {
     )
     assert.equal(result.records.length, 2, "no fixture lends its id: the fixture-id mapping retires here")
     assert.equal(result.serverIds.get(`station-${arc.id}`), arc.id)
-  })
-
-  test("the sentences quoted here are the contracts' own", () => {
-    assert.equal(LOCAL_BOTH_HOURS_OR_NEITHER, BOTH_HOURS_OR_NEITHER)
-    assert.equal(LOCAL_PROVIDER_WITH_PROVIDER_OWNERSHIP, PROVIDER_WITH_PROVIDER_OWNERSHIP)
   })
 })
 

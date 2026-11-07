@@ -39,11 +39,11 @@
 // shape rule and only ST_IsValid sees it. It is wired all the same, so a check
 // the API did not foresee is a sentence and not a 500 with a constraint name
 // in the log.
-import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import type { CheckRefusal } from "@waste/db/commands/shared"
 import { timeOf } from "@waste/db/shapes/times"
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 
 import { invalidRequest } from "../problem"
 import { serviceProviderIssue } from "./references"

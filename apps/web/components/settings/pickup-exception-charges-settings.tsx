@@ -28,13 +28,13 @@ import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/api/records/clock"
+import { PICKUP_EXCEPTION_LADDER_MAX } from "@waste/domain/execution/pickup-exceptions"
 import { lastDayIn } from "@waste/domain/periods"
 import {
   allowanceSentence,
   ANY,
   codeOffered,
   isRuleRefusal,
-  LADDER_MAX,
   ladderProductOptions,
   ladderSentence,
   newRuleForm,
@@ -301,7 +301,7 @@ function RuleDialogForm({
             </Button>
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" disabled={form.ladder.length >= LADDER_MAX} onClick={() => onChange({ ladder: [...form.ladder, ""] })}>
+        <Button type="button" variant="outline" size="sm" disabled={form.ladder.length >= PICKUP_EXCEPTION_LADDER_MAX} onClick={() => onChange({ ladder: [...form.ladder, ""] })}>
           <Plus className="h-4 w-4" weight="bold" />
           Add step
         </Button>

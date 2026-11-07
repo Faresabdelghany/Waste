@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
+
+import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX } from "@waste/domain/requests"
 import * as z from "zod"
 
-import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, Page, PageRequest } from "../pagination"
+import { Page, PageRequest } from "../pagination"
 
 describe("PageRequest", () => {
   test("defaults the limit and leaves the cursor absent", () => {

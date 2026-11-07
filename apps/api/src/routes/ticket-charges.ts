@@ -18,6 +18,7 @@ import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { ticketKindProduct } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
+import type { Action } from "@waste/domain/access/modules"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
@@ -75,7 +76,7 @@ async function chargesOf(tx: Tx, scope: Scope): Promise<TicketCharges> {
   return { projectId: scope.projectId, charges }
 }
 
-const problems = (action: "view" | "edit") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

@@ -19,8 +19,9 @@ import { PublicNav } from "@/components/public/public-nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ADDRESS_SEARCH } from "@waste/domain/planning/public-days"
+
 import {
-  ADDRESS_SEARCH,
   addressQueryOf,
   askable,
   calendarHrefOf,

@@ -5,25 +5,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DAY_WINDOW_ORDERED } from "../queries"
-import {
-  REPORT_DAY_TOO_EARLY,
-  REPORT_FIRST_DAY,
-  REPORT_WINDOW_MAX_DAYS,
-  REPORT_WINDOW_TOO_LONG,
-  reportWindowFits,
-  RevenueReport,
-  RevenueReportQuery,
-  ServiceReport,
-  ServiceReportQuery,
-  TicketReport,
-  TicketReportQuery,
-  TonnageReport,
-  TonnageReportQuery,
-  WasteDataFileQuery,
-  WasteDataReport,
-  WasteDataReportQuery,
-} from "../reports"
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG, reportWindowFits } from "@waste/domain/insight/reports"
+
+import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery } from "../reports"
 import { refusal } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

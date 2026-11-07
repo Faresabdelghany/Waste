@@ -19,6 +19,7 @@
 // does not move onto a route that empties the container already: the two
 // would be one collection told twice, and the office's would read as an extra
 // emptying (`extraEmptyings`, ./services.ts), which is charged.
+import { eachOnceSentence } from "../requests"
 import { count } from "../text"
 import { empties } from "./services"
 import type { PickupService, PickupStatus } from "./vocabulary"
@@ -31,6 +32,9 @@ export const movedTo = (route: string): string => `Moved to route ${route}`
 
 /** The free reason a merged route is cancelled with, beside the `merged` code. */
 export const mergedInto = (route: string): string => `Merged into route ${route}`
+
+/** What a move, a split or a balance naming a stop twice is told. */
+export const EACH_STOP_MOVED_ONCE = eachOnceSentence("pickup", "a stop moves once")
 
 /** What a move naming the route the stops are on is told, at `toRouteId` or `routeId`. */
 export const ANOTHER_ROUTE = "Name another route: the stops are on this one"

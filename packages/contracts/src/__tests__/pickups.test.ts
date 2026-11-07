@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { A_CONTAINER_OR_AN_ADDRESS, A_DELIVERY_AT_ITS_SUBSCRIPTION, A_SWAP_FOR_ANOTHER, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, BOOKED_BY_NO_OTHER, BOOKS, ONE_ADDRESS, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
-import { A_CONTAINER_OR_AN_ADDRESS, A_DELIVERY_AT_ITS_SUBSCRIPTION, A_SWAP_FOR_ANOTHER, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, BOOKED_BY_NO_OTHER, BOOKS, ONE_ADDRESS, Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "../pickups"
-import { DAY_WINDOW_ORDERED } from "../queries"
+import { PickupOutcome } from "../execution"
+import { Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "../pickups"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

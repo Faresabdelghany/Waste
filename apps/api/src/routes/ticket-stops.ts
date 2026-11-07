@@ -19,7 +19,7 @@
 import type { Tx } from "@waste/db/client"
 import { bookTicket as bookTicketStop, plannedStopAnswering } from "@waste/db/commands/ticket-stops"
 import { ticket } from "@waste/db/schema/resolution"
-import { answeredAlready, bookedFor, notAnsweredBy, onlyAnOpenTicket, servicesAnswering, stopMismatch } from "@waste/domain/execution/ticket-stops"
+import { answeredAlready, bookedFor, notAnsweredBy, onlyAnOpenTicket, servicesAnswering, stopMismatch } from "@waste/domain/resolution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"

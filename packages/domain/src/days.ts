@@ -69,6 +69,9 @@ export function serviceDayOf(day: string): ServiceDay {
 /** The Monday of the ISO week the day falls in. */
 export const mondayOf = (day: string): string => addDays(day, -SERVICE_DAYS.indexOf(serviceDayOf(day)))
 
+/** The weeks an ISO year has, at most. */
+export const ISO_WEEKS_MAX = 53
+
 export function isoWeek(day: string): number {
   const date = parseDay(day)
   date.setUTCDate(date.getUTCDate() + 3 - ((date.getUTCDay() + 6) % 7))
@@ -105,3 +108,9 @@ export const formatShortDay = (day: string): string => `${SERVICE_DAY_SHORT_LABE
 export type HolidayList = ReadonlyMap<string, string>
 
 export const NO_HOLIDAYS: HolidayList = new Map()
+
+/** Whether a window of days, both ends in, runs forward: its last day on or after its first. A half-given window is not judged. */
+export const dayWindowOrdered = (window: { from?: string; to?: string }): boolean => window.from === undefined || window.to === undefined || window.to >= window.from
+
+/** What a backward window of days is told, at its end. */
+export const DAY_WINDOW_ORDERED = "to is the last day of the window, so it comes on or after from"

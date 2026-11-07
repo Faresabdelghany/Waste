@@ -5,13 +5,7 @@
 // read them — `tickets.ts` the ticket's seven, `alerts.ts` the alert's four —
 // and a list spelled in one place is a list that cannot drift between them.
 //
-// Two things beside the enums are the context's presentation on the wire,
-// the `execution.ts` precedent. The ticket's display number is `T-8831`: the
-// database stores `number: 8831` from the company's counter, the prefix is
-// presentation and spelled once here as `TICKET_NUMBER_PREFIX`, and
-// `ticketLabel` is the one way a number becomes the label a `Ticket` carries
-// and every sentence names ("Ticket T-8831 is completed; reopen it first").
-// And a comment's attachment is a Storage object under an agreed key,
+// A comment's attachment is a Storage object under an agreed key,
 // `<companyId>/<ticketId>/<objectId>.<ext>` in the bucket `ticket-attachments`
 // (#109 §7.23, as corrected at integration): `<objectId>` is a UUID the
 // client mints for the object before uploading it — as specified, the key had
@@ -19,15 +13,14 @@
 // ever have posted a matching key — and `TicketObjectKey` holds a key to that
 // shape here, where a wrong shape is a 400 naming the field, while the API
 // holds the first two segments to the row's own company and ticket, since
-// only it knows which the key must name. It is `ObjectKey`'s path — `execution.ts`'s `objectKeyPattern`, the
-// one spelling of three UUIDs and a format — over one format more, `pdf`,
-// since a customer's letter is a document and not a photo, and a schema of
-// its own because a ticket's object is not a proof's: the two buckets have
-// two policies, and a key of the one must not parse as a key of the other.
+// only it knows which the key must name. It is a proof's path over one format
+// more, `pdf`, since a customer's letter is a document and not a photo
+// (@waste/domain/storage-objects), and a schema of its own because a ticket's
+// object is not a proof's: the two buckets have two policies, and a key of
+// the one must not parse as a key of the other.
 import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ATTACHMENT_KEY_PATTERN, ATTACHMENT_KEY_SHAPE } from "@waste/domain/storage-objects"
 import * as z from "zod"
-
-import { objectKeyPattern } from "./execution"
 
 /** Where a Ticket stands. */
 export const TicketStatus = z.enum(TICKET_STATUSES)
@@ -77,21 +70,6 @@ export type AlertStatus = z.infer<typeof AlertStatus>
 export const AlertRule = z.enum(ALERT_RULES)
 export type AlertRule = z.infer<typeof AlertRule>
 
-/** The prefix a ticket's number is shown with: `T-8831`. Presentation, spelled once. */
-export const TICKET_NUMBER_PREFIX = "T-"
-
-/** The label a ticket is named by, from the number the database stores. */
-export const ticketLabel = (number: number): string => `${TICKET_NUMBER_PREFIX}${number}`
-
-/** The formats a ticket's attachment may be: the four image formats a proof's object may be, and a document. */
-export const TICKET_OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "pdf"] as const
-
-/** The shape of an attachment's key: `<companyId>/<ticketId>/<objectId>.<ext>`, three lowercase UUIDs and one of the five formats — a proof's path over a ticket's formats. */
-export const TICKET_OBJECT_KEY = objectKeyPattern(TICKET_OBJECT_EXTENSIONS)
-
-/** What a key of another shape is told. */
-export const TICKET_OBJECT_KEY_SHAPE = "An attachment key is <companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>"
-
 /** An attachment's Storage key, held to its shape; which company and ticket it must name is the comment route's rule, and the object's id is the client's. */
-export const TicketObjectKey = z.string().regex(TICKET_OBJECT_KEY, TICKET_OBJECT_KEY_SHAPE)
+export const TicketObjectKey = z.string().regex(new RegExp(ATTACHMENT_KEY_PATTERN), ATTACHMENT_KEY_SHAPE)
 export type TicketObjectKey = z.infer<typeof TicketObjectKey>

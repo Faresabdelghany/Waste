@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { BOTH_ENDS_OF_THE_WINDOW, OVERLAPPING_WINDOW_ORDERED, VehicleAllocation, VehicleAllocationEvent, WINDOW_ENDS_AFTER_IT_STARTS } from "@waste/contracts/allocations"
+import { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
 import { WasteFraction } from "@waste/contracts/catalogue"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
@@ -9,6 +9,7 @@ import { createDb, type Database, type Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
+import { BOTH_ENDS_OF_THE_WINDOW, OVERLAPPING_WINDOW_ORDERED, WINDOW_ENDS_AFTER_IT_STARTS } from "@waste/domain/resources/allocations"
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"

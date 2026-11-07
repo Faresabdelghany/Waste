@@ -61,21 +61,12 @@
 // not touch it. Every statement carries the tenant and `inProjects`
 // (auth/projects.ts); the grant is `fleet.vehicle-planning` throughout,
 // `view` to read, `create` to allocate, `edit` for the three commands.
-import {
-  VehicleAllocation,
-  VehicleAllocationChange,
-  VehicleAllocationConfirm,
-  VehicleAllocationCreate,
-  VehicleAllocationEvent,
-  VehicleAllocationListQuery,
-  VehicleAllocationRelease,
-  WINDOW_ENDS_AFTER_IT_STARTS,
-  windowOrdered,
-} from "@waste/contracts/allocations"
+import { VehicleAllocation, VehicleAllocationChange, VehicleAllocationConfirm, VehicleAllocationCreate, VehicleAllocationEvent, VehicleAllocationListQuery, VehicleAllocationRelease } from "@waste/contracts/allocations"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
+import { WINDOW_ENDS_AFTER_IT_STARTS, windowOrdered } from "@waste/domain/resources/allocations"
 import { allocationOverPayload, carriesFraction, fractionsCarried, noCompartmentFor, payloadFor } from "@waste/domain/resources/fleet-fit"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import type { AllocationAction, AllocationStatus } from "@waste/domain/resources/vocabulary"

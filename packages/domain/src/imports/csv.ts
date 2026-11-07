@@ -18,7 +18,25 @@
 // header row as a file a spreadsheet opens, which the reader reads back.
 
 import { columnOf, headerIssues, IMPORT_COLUMNS } from "./columns"
-import type { ImportKind } from "./vocabulary"
+import type { CsvSeparator, ImportKind } from "./vocabulary"
+
+/** Each separator's character. */
+export const SEPARATOR_CHARACTERS = { comma: ",", semicolon: ";" } as const satisfies Record<CsvSeparator, string>
+
+/**
+ * The separator a spreadsheet under a locale opens a file with: semicolons
+ * where the locale writes a decimal comma (Danish, German), since its
+ * spreadsheet reads a comma as the decimal, and commas otherwise — a locale
+ * the runtime does not know among them.
+ */
+export function separatorForLocale(locale: string | undefined): CsvSeparator {
+  try {
+    const decimal = new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")?.value
+    return decimal === "," ? "semicolon" : "comma"
+  } catch {
+    return "comma"
+  }
+}
 
 /** One record of a file, by its spreadsheet row number. */
 export type CsvRecord = { row: number; fields: string[] }

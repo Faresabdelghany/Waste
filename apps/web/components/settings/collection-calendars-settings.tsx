@@ -63,6 +63,7 @@ import {
   updateCollectionCalendarRecord,
   type CollectionCalendarLookups,
 } from "@/lib/data/collection-calendars"
+import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS } from "@waste/domain/days"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { calendarRowSummary } from "@waste/domain/route-schemes/calendar-list"
@@ -330,22 +331,13 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
 
 /** "Mon–Fri" for a Saturday–Sunday weekend, via the shared formatter. */
 function workingDaysLabel(weekend: readonly string[]): string {
-  const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
-  const working = days.filter((day) => !weekend.includes(day))
-  const short: Record<(typeof days)[number], string> = {
-    monday: "Mon",
-    tuesday: "Tue",
-    wednesday: "Wed",
-    thursday: "Thu",
-    friday: "Fri",
-    saturday: "Sat",
-    sunday: "Sun",
-  }
+  const working = SERVICE_DAYS.filter((day) => !weekend.includes(day))
+  const short = SERVICE_DAY_SHORT_LABELS
   if (working.length === 0) return "—"
   // Consecutive runs read as ranges ("Mon–Fri"), gaps as lists.
   const first = working[0]
   const last = working[working.length - 1]
-  const contiguous = days.indexOf(last) - days.indexOf(first) === working.length - 1
+  const contiguous = SERVICE_DAYS.indexOf(last) - SERVICE_DAYS.indexOf(first) === working.length - 1
   return contiguous && working.length > 2
     ? `${short[first]}–${short[last]}`
     : working.map((day) => short[day]).join(", ")

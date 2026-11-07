@@ -14,14 +14,14 @@
 // that reads it, every n-th point and the last, and says so, so a long day
 // costs one bounded answer.
 //
-// The estimates are @waste/domain/execution/eta over what this module reads:
+// The estimates are @waste/domain/routing/eta over what this module reads:
 // the active Plan's stops and its legs' seconds, the route's stops as they
 // stand, and the optimiser's clock of the route (`routeTiming`, the read the
 // Plan was asked with: each stop's window and kerb time, the departure). The
 // times of the operating day become instants on the project's clock
 // (`instantOnDay`). The Live board reads the same estimates for each of its
 // routes (`liveEtaOf`).
-import { RouteEta, RouteTrack, RouteTrackQuery, TRACK_POINTS_MAX, type LiveEta, type Position } from "@waste/contracts/positions"
+import { RouteEta, RouteTrack, RouteTrackQuery, type LiveEta, type Position } from "@waste/contracts/positions"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { instantOnDay } from "@waste/domain/clock"
@@ -29,8 +29,8 @@ import { routeTiming } from "@waste/db/commands/stop-timing"
 import { pickup, session, sessionPosition } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { plan, planLeg } from "@waste/db/schema/routing"
-import { routeEta, type EtaStop } from "@waste/domain/execution/eta"
-import { POSITION_RETENTION_DAYS } from "@waste/domain/execution/positions"
+import { routeEta, type EtaStop } from "@waste/domain/routing/eta"
+import { POSITION_RETENTION_DAYS, TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { PlanTrip } from "@waste/domain/routing/vocabulary"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"

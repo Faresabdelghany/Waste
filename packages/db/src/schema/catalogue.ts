@@ -42,6 +42,7 @@
 // event, which is the actionable reason.
 import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { FREE_DAYS_MAX } from "@waste/domain/finance/hire"
+import { VAT_PERCENT } from "@waste/domain/registry/catalogue"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { sql } from "drizzle-orm"
@@ -199,7 +200,7 @@ export const product = wms.table(
     oneOf(t.status, PRODUCT_STATUSES),
     oneOf(t.unit, PRODUCT_UNITS),
     // A rate is a percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). No helper spells it, since no other table has it.
-    check(tableObjectName(t.id.table, "vat_percent_range", "product"), sql`${t.vatPercent} between 0 and 100`),
+    check(tableObjectName(t.id.table, "vat_percent_range", "product"), sql`${t.vatPercent} between ${sql.raw(String(VAT_PERCENT.min))} and ${sql.raw(String(VAT_PERCENT.max))}`),
     // A hire's free days, from none to a year (`FREE_DAYS_MAX`), on a product sold by the day and no other.
     check(tableObjectName(t.id.table, "free_days_shape", "product"), sql`${t.freeDays} is null or (${t.unit} = 'day' and ${t.freeDays} between 0 and ${sql.raw(String(FREE_DAYS_MAX))})`),
     tenantIndex(t, t.containerTypeId),
