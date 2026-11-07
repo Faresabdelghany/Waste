@@ -24,7 +24,7 @@
 // document, not the occurrence, and what should have been charged instead is
 // a new event. The credit note takes the next number of the company's
 // series, `issuedOn` today on the project's clock, `dueOn` the same day, and
-// `invoice-issued` is emitted with it (routes/invoice-writes.ts).
+// `invoice-issued` is emitted with it (@waste/db/commands/invoice-writes).
 //
 // The rule "at most what remains" is the API's, so it is held under a row
 // lock and read afterwards (routes/shared.ts). The invoice itself is a ledger
@@ -58,16 +58,16 @@ import { vatOf } from "@waste/domain/finance/money"
 import { and, asc, eq, gt, gte, inArray, lte, sum } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
+import { issueInvoice, type LineDraft } from "@waste/db/commands/invoice-writes"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findInvoice, invoiceColumns, invoiceDetailOf, invoiceOf, invoiceScope, labelOf, linesOf, noSuchInvoice, standingsOf, type InvoiceRow, type LineRow } from "./billing-shapes"
 import { projectToday } from "./fleet-lookups"
-import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"

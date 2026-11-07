@@ -208,6 +208,17 @@ export async function lockRows(tx: Tx, table: TenantTable, companyId: string, id
     .for("no key update")
 }
 
+/**
+ * Takes the transaction-scoped advisory lock on a key, for a rule over a set
+ * no one row stands for — a project's SLA targets, a crew member's day, a
+ * property's count: two transactions naming the same key take turns until
+ * the first ends. The key is the caller's, `<family>:<company>:<id>` by
+ * convention, so two families never share a lock.
+ */
+export async function advisoryLock(tx: Tx, key: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+}
+
 /** A company's document series: one of the counters its row declares (`COMPANY_COUNTERS`), which its audit trail ignores and the reset to the seed puts back. */
 export type Series = keyof typeof COMPANY_COUNTERS
 

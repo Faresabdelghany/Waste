@@ -35,9 +35,9 @@ import { fieldRequiredToOpen, fieldValuesIssues, mayGive, missingFields, needsBe
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketKind, TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
+import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
-import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
 import { refuseRetiredTicketType } from "./statuses"
 

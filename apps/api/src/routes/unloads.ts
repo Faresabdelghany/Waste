@@ -56,6 +56,7 @@ import { createHash } from "node:crypto"
 import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { reviewStatus } from "@waste/db/query/weight-review"
+import { notTaken, stationTakes } from "@waste/db/commands/unloads"
 import { route, unload } from "@waste/db/schema/execution"
 import { transferNoteOf } from "@waste/domain/execution/transfer-note"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
@@ -65,7 +66,6 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, validate } from "../problem"
 import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadAnswered, unloadScope, unloadsAnswered, unloadsFrom } from "./execution-shapes"
@@ -74,7 +74,7 @@ import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { noteRefusal, transferNoteInputOf } from "./transfer-notes"
-import { appendUnload, notTaken, stationTakes } from "./unload-writes"
+import { recordOfficeUnload } from "./unload-writes"
 
 const MODULE = "route-studio.weights"
 
@@ -242,7 +242,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const tipped = new Date(occurredAt)
         requireNotAhead(tipped, at)
         requireRan(current)
-        const row = await appendUnload(tx, principal.companyId, {
+        const answered = await recordOfficeUnload(tx, principal.companyId, {
           projectId: current.projectId,
           routeId: current.id,
           unloadingStationId,
@@ -257,8 +257,6 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           refusalReason: refusal?.reason ?? null,
           refusalNote: refusal?.note ?? null,
         })
-        const answered = await unloadAnswered(tx, principal.companyId, row)
-        await emit(tx, principal, { aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: tipped })
         return created(c, "/unloads", answered)
       },
     )

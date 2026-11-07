@@ -91,11 +91,11 @@ import type { FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStat
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"

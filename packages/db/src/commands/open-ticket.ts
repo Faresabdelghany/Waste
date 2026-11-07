@@ -113,6 +113,9 @@ export type OpenTicketInput = {
 /** The ticket the caller is appending to: the three ids every history row carries. */
 export type TicketRef = { companyId: string; projectId: string; id: string }
 
+/** The ticket a history row is appended to, off its row. */
+export const ticketRefOf = (companyId: string, row: { projectId: string; id: string }): TicketRef => ({ companyId, projectId: row.projectId, id: row.id })
+
 /** One history row as a command hands it in: the kind, the snapshot after the event, and what the kind carries. */
 export type TicketEventDraft = {
   kind: TicketEventKind

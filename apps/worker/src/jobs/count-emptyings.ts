@@ -37,11 +37,11 @@
 // news, though each is counted all the same by the next emptying at its
 // property, since a count reads the stops.
 import type { Pickup } from "@waste/contracts/pickups"
-import type { TicketLinks } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { countedAt } from "@waste/db/commands/counting-rules"
 import { queueStaffMessage } from "@waste/db/commands/messaging"
 import { BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
+import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
 import { projectAccess, userAccount } from "@waste/db/schema/access"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
@@ -53,6 +53,7 @@ import { withCompany } from "@waste/db/tenant"
 import { countingTicketNotice } from "@waste/domain/notifications/notices"
 import { countingTicketText, periodOf } from "@waste/domain/resolution/counting-rules"
 import type { CountingPeriod, TicketKind } from "@waste/domain/resolution/vocabulary"
+import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
@@ -60,8 +61,6 @@ import type { JobContext } from "./definition"
 
 /** What one stop's event came to: the tickets its count opened, by rule. */
 export type EmptyingCounted = { event: string; opened: { countingRuleId: string; ticketId: string }[] }
-
-const NO_LINKS: TicketLinks = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
 
 type Rule = typeof countingRule.$inferSelect
 
@@ -149,7 +148,7 @@ async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">,
       dueAt: BY_SLA,
       assigneeUserAccountId: null,
       ...(teamTakesTickets ? { teamId: rule.teamId } : {}),
-      links: { ...NO_LINKS, propertyId: stop.propertyId },
+      links: { ...NO_TICKET_LINKS, propertyId: stop.propertyId },
       alertId: null,
       countedBy: { countingRuleId: rule.id, periodFrom: period.from, periodTo: period.to, count },
     },
@@ -197,7 +196,7 @@ export async function countEmptying(event: RelayedEvent<"pickup-completed" | "pi
         )
         .orderBy(asc(countingRule.id))
       // The property's lock, before any rule is counted or any ticket numbered.
-      if (rules.length > 0) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`counting-property:${event.companyId}:${propertyId}`}, 0))`)
+      if (rules.length > 0) await advisoryLock(tx, `counting-property:${event.companyId}:${propertyId}`)
       for (const rule of rules) {
         const ticketId = await countFor(tx, { send, now }, event.companyId, { ...stop, propertyId }, onRoute.serviceDate, rule)
         if (ticketId !== undefined) opened.push({ countingRuleId: rule.id, ticketId })

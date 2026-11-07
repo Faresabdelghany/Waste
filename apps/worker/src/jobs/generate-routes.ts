@@ -99,7 +99,7 @@
 // the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
-import { cancelRoutesByGeneration, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
+import { cancelRoutesByGeneration, lockSchemeRoutes, openStopsOf, routesWithOfficeStops, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/contracts/execution"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
@@ -139,7 +139,7 @@ import type { HolidayPolicy, RecurrenceFrequency, SeasonFrequency, ServiceDay, S
 import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/days"
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
 import { planReshaped, type HorizonAsks, type ReshapedRoute } from "./routing-horizon"
@@ -277,25 +277,15 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
 
   // The routes of the scheme inside the walk, locked in id order: a dispatch racing the run takes its turn, and a bulk dispatch (O5 of #290), which locks its routes in the same order, never waits on the run's second row while the run waits on its first.
   const walk = walkWindow(window)
-  const existingRoutes = await tx
-    .select()
-    .from(route)
-    .where(and(eq(route.companyId, companyId), eq(route.routeSchemeId, scheme.id), gte(route.serviceDate, walk.from), lte(route.serviceDate, walk.to)))
-    .orderBy(asc(route.id))
-    .for("update")
+  const existingRoutes = await lockSchemeRoutes(tx, companyId, scheme.id, walk)
   // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it. Only a planned route is the run's to cancel, so only those are asked.
-  const plannedIds = existingRoutes.filter((row) => row.status === "planned").map((row) => row.id)
-  const officeStops =
-    plannedIds.length === 0
-      ? new Set<string>()
-      : new Set(
-          (
-            await tx
-              .selectDistinct({ routeId: pickup.routeId })
-              .from(pickup)
-              .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, plannedIds), eq(pickup.origin, "office"), eq(pickup.status, "planned")))
-          ).map((row) => row.routeId),
-        )
+  const officeStops = routesWithOfficeStops(
+    await openStopsOf(
+      tx,
+      companyId,
+      existingRoutes.filter((row) => row.status === "planned").map((row) => row.id),
+    ),
+  )
   const plan = planRoutes({
     recurrence,
     holidayPolicy: scheme.holidayPolicy as HolidayPolicy,

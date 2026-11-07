@@ -20,10 +20,10 @@ import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organ
 import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"

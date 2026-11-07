@@ -49,10 +49,10 @@ import { billableEvent } from "@waste/db/schema/finance"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import {
   createAgreement,

@@ -3,8 +3,8 @@
 // /route-schemes/:id/generate` writes the scheme's `generation_run` —
 // `queued`, `on-demand`, over the window the body names — and sends the
 // worker's `planning.generate-routes` job for it in the request's
-// transaction — `sendGenerateRoutes` (`@waste/db/jobs`), the spelling the
-// nightly sweep uses, over pg-boss's `send` for a process that runs no
+// transaction — `startGenerationRun` (`@waste/db/commands/generation`), the
+// start the nightly sweep shares, over pg-boss's `send` for a process that runs no
 // pg-boss: a sender app.ts builds once over the probe pool and never starts
 // (Issue #168) — so the run and its job commit together or not at all, and
 // answers at once: 202 with the run before generation has begun.
@@ -16,8 +16,8 @@
 // One run of a scheme is queued or in flight at a time. The queue is
 // `exclusive` and the send carries the scheme's id as `singletonKey`, so
 // while a job of the scheme is queued, active or waiting to retry, the send
-// answers null. The send therefore goes first, under an id minted for the
-// run, and the run is written only once pg-boss has taken its job: a null
+// answers null. The send goes first (`startGenerationRun`), under an id
+// minted for the run, and the run is written only once pg-boss has taken its job: a null
 // writes nothing — no row to roll back, no savepoint — and the answer is the
 // run whose job pg-boss still holds, 200, found by that job's state in
 // pg-boss's own table (`jobHeld`, `@waste/db/jobs`) and not by the scheme's
@@ -59,9 +59,9 @@
 import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "@waste/contracts/generation"
 import { Page } from "@waste/contracts/pagination"
 import type { GenerationRunStatus, GenerationTrigger } from "@waste/contracts/planning"
-import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
+import { GENERATE_ROUTES_QUEUE, startGenerationRun } from "@waste/db/commands/generation"
 import type { Tx } from "@waste/db/client"
-import { jobHeld, QueueMissing, sendGenerateRoutes, type JobSender, type Send } from "@waste/db/jobs"
+import { jobHeld, QueueMissing, type JobSender, type Send } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -70,7 +70,6 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
@@ -136,41 +135,23 @@ export type AskedRun = { kind: "started"; run: GenerationRun } | { kind: "held";
 
 /**
  * A run of the scheme over the window, asked of the worker in the caller's
- * transaction (the header's rule): the send first, under an id minted for
- * the run, and the run written only once pg-boss has taken its job; a send
- * the scheme's queued run absorbs answers that run. Throws `QueueMissing` for
- * a database no worker has started on, before anything is written in the
+ * transaction as every asker starts one (`startGenerationRun`); a send the
+ * scheme's queued run absorbs answers that run. Throws `QueueMissing` for a
+ * database no worker has started on, before anything is written in the
  * transaction. The office's Generate asks through it, and so does a route's
  * `release-hold` (routes/routes.ts, #226).
  */
 export async function askGeneration(tx: Tx, principal: Principal, send: Send, scheme: { id: string; projectId: string }, window: { from: string; to: string }): Promise<AskedRun> {
-  const runId = newId()
-  const jobId = await sendGenerateRoutes(send, tx, { generationRunId: runId, companyId: principal.companyId, routeSchemeId: scheme.id })
-  if (jobId === null) {
-    // A job of the scheme is queued, active or waiting to retry: the run that job is held for — the one whose job pg-boss's table still shows live — newest should there be more than one.
-    const [inFlight] = await tx
-      .select(runColumns)
-      .from(generationRun)
-      .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${generationRun.jobId}` })))
-      .orderBy(desc(generationRun.id))
-      .limit(1)
-    return inFlight === undefined ? { kind: "refused" } : { kind: "held", run: runOf(inFlight) }
-  }
-  const [row] = await tx
-    .insert(generationRun)
-    .values({
-      id: runId,
-      companyId: principal.companyId,
-      projectId: scheme.projectId,
-      routeSchemeId: scheme.id,
-      trigger: "on-demand",
-      windowFrom: window.from,
-      windowTo: window.to,
-      status: "queued",
-      jobId,
-    })
-    .returning(runColumns)
-  return { kind: "started", run: runOf(row) }
+  const started = await startGenerationRun(tx, send, { companyId: principal.companyId, projectId: scheme.projectId, routeSchemeId: scheme.id, trigger: "on-demand", window })
+  if (started !== null) return { kind: "started", run: runOf(started) }
+  // A job of the scheme is queued, active or waiting to retry: the run that job is held for — the one whose job pg-boss's table still shows live — newest should there be more than one.
+  const [inFlight] = await tx
+    .select(runColumns)
+    .from(generationRun)
+    .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${generationRun.jobId}` })))
+    .orderBy(desc(generationRun.id))
+    .limit(1)
+  return inFlight === undefined ? { kind: "refused" } : { kind: "held", run: runOf(inFlight) }
 }
 
 export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: GenerationOptions) {

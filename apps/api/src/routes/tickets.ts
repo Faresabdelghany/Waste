@@ -19,7 +19,7 @@
 // reopen it first"), 200 without a write on `stay` (starting a ticket already
 // in progress, reopening an open one, assigning the account already assigned
 // — the `confirm` precedent, #101), and on `move` writes the row and appends
-// the `ticket_event` through routes/ticket-writes.ts, the one place a write
+// the `ticket_event` through @waste/db/commands/ticket-moves, the one place a move
 // is followed by a history row. `PATCH` appends nothing — a field edit is the
 // audit log's (ADR-0005) — and `updatedAt` moves. A comment is appended and
 // touches the row not at all, on a closed ticket too: a note after the fact
@@ -36,7 +36,7 @@
 // re-collection route's, since that reference asks the route to run: 409
 // after the 400, the #79 shape. What Resolution publishes — `ticket-opened`,
 // `ticket-completed`, `ticket-rejected` — goes into the outbox in the
-// request's transaction with the `Ticket` as answered (outbox.ts); Finance
+// request's transaction with the `Ticket` as answered (@waste/db/commands/outbox); Finance
 // is their consumer.
 //
 // Every command and the patch carry the tenant and `inProjects`; the reads —
@@ -76,25 +76,25 @@ import {
   type TicketLinksSet,
 } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
-import { runTicketAutomation } from "@waste/db/commands/ticket-automation"
+import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
+import { assignTicket, moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-moves"
 import type { JobSender } from "@waste/db/jobs"
 import { propertyParty } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
-import { triggerOf } from "@waste/domain/resolution/automation"
 import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
+import { appendTicketEvent, BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findReachedRoute, labelOf as routeLabelOf } from "./execution-shapes"
@@ -122,7 +122,6 @@ import { refuseUnofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
 import { openingIssues, refuseRetiredType, requireFieldsToComplete, requireMayGive, rulesOfTicket, typeAfterPatch, typeToOpen, valueIssues } from "./ticket-type-rules"
-import { appendTicketEvent, BY_SLA, openTicket, type TicketEventDraft } from "./ticket-writes"
 
 const MODULE = "operate.tickets"
 
@@ -180,10 +179,7 @@ export const NOT_AN_EMPTYING = "A re-collection names a stop that empties its co
 /** What a comment's attachment key naming another company's or another ticket's prefix is told, at `objectKey`. */
 export const KEY_NAMES_ANOTHER = "The attachment key names another company or another ticket"
 
-/** The nine links a body may name, each null where the body cleared or never named it. */
-const NO_LINKS: TicketLinks = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
-
-const LINK_KEYS = Object.keys(NO_LINKS) as (keyof TicketLinks)[]
+const LINK_KEYS = Object.keys(NO_TICKET_LINKS) as (keyof TicketLinks)[]
 
 /** The links a write leaves behind: the body's where given (null clearing), the stored ones where not. */
 function linksAfter(current: TicketLinks, set: TicketLinksSet | undefined): TicketLinks {
@@ -299,11 +295,6 @@ const visibleTo = (tx: Tx, companyId: string, customerId: string, now: Date) =>
     ),
   )
 
-/** The columns a machine command writes beside the status. */
-type Closing = { resolution: string | null; recollectionRouteId: string | null; recollectionPickupId: string | null; chargeProductId: string | null; closedAt: Date | null }
-
-const OPEN_AGAIN: Closing = { resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null }
-
 const commandProblems = (action: "view" | "edit" | "create") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
@@ -342,8 +333,8 @@ function overdueAt(overdue: boolean, at: Date): SQL | undefined {
 export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
   /**
    * One machine command: the lock, the read, the transition, and on a move
-   * the row written with what the command carries beside the status and one
-   * `status-changed` event with the note. `stay` answers the row as it stands
+   * the move every door writes (`moveTicket`), with what the command carries
+   * beside the status and the note, closed at `at`. `stay` answers the row as it stands
    * without a write; `refuse` is the 409 in the machine's words. `beyond`
    * holds the command's own 400s and 409s, after the machine and before the
    * write, and answers what the row is set to beside the status. A person's
@@ -358,8 +349,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     id: string,
     command: TicketCommand,
     note: string | null,
-    beyond: (current: TicketRow) => Promise<Partial<Closing>> = async () => ({}),
-    { asPerson = true }: { asPerson?: boolean } = {},
+    beyond: (current: TicketRow) => Promise<TicketMoveColumns> = async () => ({}),
+    { asPerson = true, at = now() }: { asPerson?: boolean; at?: Date } = {},
   ): Promise<{ row: TicketRow; wrote: boolean }> {
     const current = await lockedTicket(tx, principal, id)
     const transition = ticketTransition(current.status as TicketStatus, command, labelOf(current))
@@ -371,33 +362,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       if (command === "complete") requireFieldsToComplete(rules, { label: labelOf(current), fieldValues: current.fieldValues })
     }
     const beside = await beyond(current)
-    const [row] = await tx
-      .update(ticket)
-      .set({ status: transition.to, ...beside })
-      .where(and(ticketScope(principal), eq(ticket.id, id)))
-      .returning(ticketColumns)
-    if (row === undefined) throw noSuchTicket(id)
-    const event: TicketEventDraft = {
-      kind: "status-changed",
-      status: transition.to,
-      assigneeUserAccountId: row.assigneeUserAccountId,
-      resolution: transition.to === "completed" ? (row.resolution as TicketEventDraft["resolution"]) : null,
-      body: note,
-      visibility: "internal",
-      objectKey: null,
-      recordedBy: principal.user.id,
-      sourceEventId: null,
-    }
-    await appendTicketEvent(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, event)
-    // The news of a close, then the type's actions on the status reached (#546 of #544); the ticket is answered as they leave it.
-    if (transition.to === "completed" || transition.to === "rejected") {
-      await emit(tx, principal, { aggregateId: row.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(row), projectId: row.projectId, occurredAt: row.closedAt ?? now() })
-    }
-    const reached = triggerOf(transition.to)
-    if (reached === undefined) return { row, wrote: true }
-    await runTicketAutomation(tx, { send: jobs.send, by: principal.user.id, companyId: principal.companyId, newId, now }, row.id, reached)
-    const after = await findTicket(tx, principal, row.id)
-    return { row: after ?? row, wrote: true }
+    const row = await moveTicket(tx, { send: jobs.send, by: principal.user.id, companyId: principal.companyId, newId, now }, current, { to: transition.to, set: beside, note, recordedBy: principal.user.id, at })
+    return { row, wrote: true }
   }
 
   return new Hono<AuthEnv>()
@@ -487,13 +453,13 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         const at = now()
         const occurredAt = body.occurredAt === undefined ? at : new Date(body.occurredAt)
-        // The 400s in body order: the type and its fields' values, the clock, the assignee, the links; then the team's 400 and its 409, then the type's 409; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
+        // The 400s in body order: the type and its fields' values, the clock, the assignee, the links; then the team's 400 and its 409, then the type's 409; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (@waste/db/commands/alert-links), which spells them once for both doors, so nothing is checked here that it checks again.
         const type = await typeToOpen(tx, principal.companyId, body)
         const fieldIssues = [...valueIssues(type.rules, body.fieldValues), ...openingIssues(type.rules, body.fieldValues)]
         if (fieldIssues.length > 0) throw invalidRequest("body", fieldIssues)
         requireNotAhead(occurredAt, at)
         await requireAccountInProject(tx, scope, body.assigneeUserAccountId)
-        const links = linksAfter(NO_LINKS, body.links)
+        const links = linksAfter(NO_TICKET_LINKS, body.links)
         await requireLinks(tx, scope, links, namedIn(body.links))
         if (body.teamId != null) await requireTeam(tx, principal.companyId, body.teamId)
         // The type's 409 after the team's 400.
@@ -532,7 +498,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await recordCustomerReply(tx, { companyId: principal.companyId, projectId: opened.projectId, id: opened.id }, { status: opened.status as TicketStatus, assigneeUserAccountId: opened.assigneeUserAccountId }, evidence.reply, principal.user.id)
         // The type's opening actions may have closed it already: the reply stands, and the case is not closed twice.
         if (isClosedTicketStatus(opened.status as TicketStatus)) return created(c, "/tickets", ticketOf(opened))
-        const { row } = await moved(tx, principal, opened.id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }), { asPerson: false })
+        const { row } = await moved(tx, principal, opened.id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null }), { asPerson: false, at })
         return created(c, "/tickets", ticketOf(row))
       },
     )
@@ -651,19 +617,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         requireOpen(current)
         if (current.assigneeUserAccountId === assigneeUserAccountId) return c.json(ticketOf(current))
         await requireAccountInProject(tx, { companyId: principal.companyId, projectId: current.projectId }, assigneeUserAccountId)
-        const [row] = await tx
-          .update(ticket)
-          .set({ assigneeUserAccountId })
-          .where(and(ticketScope(principal), eq(ticket.id, id)))
-          .returning(ticketColumns)
-        if (row === undefined) throw noSuchTicket(id)
-        await appendTicketEvent(
-          tx,
-          { companyId: principal.companyId, projectId: row.projectId, id: row.id },
-          { kind: "assigned", status: row.status as TicketStatus, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: note ?? null, visibility: "internal", objectKey: null, recordedBy: principal.user.id, sourceEventId: null },
-        )
+        const row = await assignTicket(tx, { companyId: principal.companyId, newId, now }, current, assigneeUserAccountId, { note: note ?? null, recordedBy: principal.user.id })
         const answered = ticketOf(row)
-        if (row.assigneeUserAccountId !== null) await emit(tx, principal, { aggregateId: row.id, kind: "ticket-assigned", payload: answered, projectId: row.projectId, occurredAt: now() })
         return c.json(answered)
       },
     )
@@ -781,8 +736,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           const productStatus = productId === undefined ? undefined : await requireTicketWorkProduct(tx, scope, productId)
           if (recollectionRouteId !== undefined) await requireRouteNotEnded(tx, scope, recollectionRouteId, recollectionPickupId)
           refuseUnofferedProduct(productStatus)
-          return { resolution, recollectionRouteId: recollectionRouteId ?? null, recollectionPickupId: recollectionPickupId ?? null, chargeProductId: productId ?? null, closedAt: at }
-        })
+          return { resolution, recollectionRouteId: recollectionRouteId ?? null, recollectionPickupId: recollectionPickupId ?? null, chargeProductId: productId ?? null }
+        }, { at })
         return c.json(ticketOf(row))
       },
     )
@@ -815,7 +770,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const tx = c.get("tx")
         const principal = c.get("principal")
         const at = now()
-        const { row } = await moved(tx, principal, id, "reject", reason, async () => ({ closedAt: at }))
+        const { row } = await moved(tx, principal, id, "reject", reason, undefined, { at })
         return c.json(ticketOf(row))
       },
     )
@@ -840,7 +795,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
-        const { row } = await moved(c.get("tx"), c.get("principal"), id, "reopen", note, async () => OPEN_AGAIN)
+        const { row } = await moved(c.get("tx"), c.get("principal"), id, "reopen", note)
         return c.json(ticketOf(row))
       },
     )
@@ -901,7 +856,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         if (evidence === null) throw problem(409, { detail: NO_STOP })
         // A completion the machine refuses is a 409, which discards the request's transaction and the reply with it (the guard, auth/principal.ts).
         await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
-        const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }))).row : current
+        const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null }), { at })).row : current
         return c.json(await detailOf(tx, principal, row), 201)
       },
     )

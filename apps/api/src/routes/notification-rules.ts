@@ -30,14 +30,15 @@ import { templateInactive } from "@waste/db/commands/messaging"
 import { messageTemplate } from "@waste/db/schema/messaging"
 import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { CUSTOMER_NOTICE_EVENTS } from "@waste/domain/notifications/vocabulary"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { advisoryLock } from "@waste/db/commands/shared"
+import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { describeJson, IdParam } from "./shared"
 
@@ -191,7 +192,7 @@ export function notificationRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireOwnProject(principal, id)
         await requireTemplates(tx, principal.companyId, id, rules)
         await requireAreas(tx, principal.companyId, id, rules)
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`notification-rules:${principal.companyId}:${id}`}, 0))`)
+        await advisoryLock(tx, `notification-rules:${principal.companyId}:${id}`)
         const current = new Map((await rulesIn(tx, principal.companyId, id)).map((row) => [row.event, row]))
         const kept = new Set<string>(rules.map((rule) => rule.event))
         const gone = [...current.values()].filter((row) => !kept.has(row.event)).map((row) => row.id)

@@ -19,6 +19,7 @@
 // (`bookTicket`): the office's Add stop (apps/api's routes/ticket-stops.ts)
 // and the system's plan in a route (#546 of #544,
 // commands/ticket-automation.ts) book through the one write.
+import { routeLabel } from "@waste/contracts/execution"
 import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/execution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
@@ -27,11 +28,12 @@ import { and, eq, inArray, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId, type IdMinter } from "../ids"
+import { pickup, route } from "../schema/execution"
 import { ticket, ticketBooking } from "../schema/resolution"
-import { appendTicketEvent } from "./open-ticket"
-import { runTicketAutomation, type AutomationCause } from "./ticket-automation"
-import { emit } from "./outbox"
-import { labelOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
+import { appendTicketEvent, ticketRefOf } from "./open-ticket"
+import type { AutomationCause } from "./ticket-automation"
+import { labelOf, ticketColumns, type TicketRow } from "./resolution-rows"
+import { moveTicket } from "./ticket-moves"
 
 /** The stop as a ticket's words name it: its position on its route, the route's label, its service; and its route, which a ticket it services names with it. */
 export type BookedStop = { pickupId: string; routeId: string; position: number; routeLabel: string; service: PickupService }
@@ -80,13 +82,23 @@ export function bookedTicket(tx: Tx, companyId: string, pickupId: string): SQL {
   return and(eq(ticket.companyId, companyId), inArray(ticket.id, booking)) as SQL
 }
 
+/** The stop still planned that answers the ticket — the one it is booked for, where that is still planned — as a ticket's words name it; undefined where none does, and a new booking may answer it. */
+export async function plannedStopAnswering(tx: Tx, companyId: string, booking: Pick<TicketRow, "bookedPickupId">): Promise<StopRef | undefined> {
+  if (booking.bookedPickupId === null) return undefined
+  const [booked] = await tx
+    .select({ status: pickup.status, position: pickup.position, number: route.number })
+    .from(pickup)
+    .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+    .where(and(eq(pickup.companyId, companyId), eq(pickup.id, booking.bookedPickupId)))
+    .limit(1)
+  return booked?.status === "planned" ? { position: booked.position, route: routeLabel(booked.number) } : undefined
+}
+
 /** The ticket that booked this stop, under its row lock; undefined for a stop booked for none, almost every stop, for which this one read of the ledger's key is all. */
 export async function bookingTicket(tx: Tx, companyId: string, pickupId: string): Promise<TicketRow | undefined> {
   const [row] = await tx.select(ticketColumns).from(ticket).where(bookedTicket(tx, companyId, pickupId)).for("update").limit(1)
   return row
 }
-
-const refOf = (companyId: string, row: TicketRow) => ({ companyId, projectId: row.projectId, id: row.id })
 
 /** A comment of the office's eyes alone, recorded by the actor, the ticket's status and assignee as they stand. */
 const comment = (row: TicketRow, body: string, actor: Actor) => ({
@@ -111,23 +123,17 @@ const comment = (row: TicketRow, body: string, actor: Actor) => ({
  */
 export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop, at: Date, automation: AutomationCause, stillBooked?: StopRef, mint: IdMinter = newId): Promise<void> {
   if (ticketTransition(current.status as TicketStatus, "complete", labelOf(current)).kind !== "move") {
-    await appendTicketEvent(tx, refOf(actor.companyId, current), comment(current, servedAfterClose({ position: stop.position, route: stop.routeLabel, service: stop.service }), actor), mint)
+    await appendTicketEvent(tx, ticketRefOf(actor.companyId, current), comment(current, servedAfterClose({ position: stop.position, route: stop.routeLabel, service: stop.service }), actor), mint)
     return
   }
-  const [row] = await tx
-    .update(ticket)
-    .set({ status: "completed", resolution: "serviced", closedAt: at, bookedRouteId: stop.routeId, bookedPickupId: stop.pickupId })
-    .where(and(eq(ticket.companyId, actor.companyId), eq(ticket.id, current.id)))
-    .returning(ticketColumns)
-  await appendTicketEvent(
-    tx,
-    refOf(actor.companyId, row),
-    { kind: "status-changed", status: "completed", assigneeUserAccountId: row.assigneeUserAccountId, resolution: "serviced", body: servicedBy({ position: stop.position, route: stop.routeLabel }, stillBooked), visibility: "internal", objectKey: null, recordedBy: actor.userAccountId, sourceEventId: null },
-    mint,
-  )
-  await emit(tx, { companyId: actor.companyId }, { aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
-  // Its type's actions on completion (#546 of #544): the stop's completion is the change that sets them going.
-  await runTicketAutomation(tx, { ...automation, companyId: actor.companyId, newId: mint, now: () => at }, row.id, "completed")
+  // The stop's completion is the change that sets its type's completion actions going (#546 of #544).
+  await moveTicket(tx, { ...automation, companyId: actor.companyId, newId: mint, now: () => at }, current, {
+    to: "completed",
+    set: { resolution: "serviced", bookedRouteId: stop.routeId, bookedPickupId: stop.pickupId },
+    note: servicedBy({ position: stop.position, route: stop.routeLabel }, stillBooked),
+    recordedBy: actor.userAccountId,
+    at,
+  })
 }
 
 /**
@@ -141,5 +147,5 @@ export async function bookedStopUncompleted(tx: Tx, actor: Actor, current: Ticke
   const where = { position: stop.position, route: stop.routeLabel }
   const serviced = current.status === "completed" && current.resolution === "serviced" && current.bookedPickupId === stop.pickupId
   const body = serviced ? correctedAway({ ...where, service: stop.service, outcome: stop.outcome, note: stop.note }) : stopCorrected({ ...where, outcome: stop.outcome, note: stop.note })
-  await appendTicketEvent(tx, refOf(actor.companyId, current), comment(current, body, actor), mint)
+  await appendTicketEvent(tx, ticketRefOf(actor.companyId, current), comment(current, body, actor), mint)
 }

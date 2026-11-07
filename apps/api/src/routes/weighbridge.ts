@@ -42,6 +42,7 @@ import {
   type WeighbridgeTicketOutcome,
 } from "@waste/contracts/weighbridge"
 import type { Tx } from "@waste/db/client"
+import { notTaken, stationTakes } from "@waste/db/commands/unloads"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { route, session } from "@waste/db/schema/execution"
 import { vehicle } from "@waste/db/schema/fleet"
@@ -55,21 +56,20 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
 import { dayInTimezone } from "@waste/domain/clock"
+import { newId } from "@waste/db/ids"
 
 import { Allowance } from "../auth/public-door"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { findRoute, noSuchRoute, unloadAnswered } from "./execution-shapes"
+import { findRoute, noSuchRoute } from "./execution-shapes"
 import { requireRoute, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, stampsOf } from "./shared"
-import { appendUnload, notTaken, stationTakes } from "./unload-writes"
+import { writeUnload } from "./unload-writes"
 
 const MODULE = "route-studio.weighbridge"
 
@@ -215,32 +215,6 @@ export async function routesOf(tx: Tx, companyId: string, truck: { id: string; p
       ),
   ])
   return { sessionRouteIds: sessions.map((row) => row.routeId), dayRouteIds: days.map((row) => row.id) }
-}
-
-/** Writes a matched ticket's Unload on its route under the route's lock, and emits `unload-recorded` with it; answers the Unload's id. */
-export async function writeUnload(tx: Tx, principal: Principal, ticket: { routeId: string; wasteFractionId: string; unloadingStationId: string; weighedAt: Date; grossKg: number | null; tareKg: number | null; netKg: number; ticketNumber: string }): Promise<{ unloadId: string; projectId: string }> {
-  await lockRow(tx, route, { companyId: principal.companyId, id: ticket.routeId })
-  const [ran] = await tx.select({ projectId: route.projectId }).from(route).where(and(eq(route.companyId, principal.companyId), eq(route.id, ticket.routeId)))
-  if (ran === undefined) throw new Error(`route ${ticket.routeId} vanished under its lock`)
-  const row = await appendUnload(tx, principal.companyId, {
-    projectId: ran.projectId,
-    routeId: ticket.routeId,
-    unloadingStationId: ticket.unloadingStationId,
-    wasteFractionId: ticket.wasteFractionId,
-    occurredAt: ticket.weighedAt,
-    recordedBy: principal.user.id,
-    grossKg: ticket.grossKg,
-    tareKg: ticket.tareKg,
-    netKg: ticket.netKg,
-    weighbridgeTicket: ticket.ticketNumber,
-    note: null,
-    refusalReason: null,
-    refusalNote: null,
-    source: "integration",
-  })
-  const answered = await unloadAnswered(tx, principal.companyId, row)
-  await emit(tx, principal, { aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: ticket.weighedAt })
-  return { unloadId: row.id, projectId: row.projectId }
 }
 
 /** One ticket of a batch, judged and kept in its own savepoint. */
