@@ -19,7 +19,7 @@ import { isIsoDate } from "@waste/domain/days"
 import { firstDayOut } from "@waste/domain/periods"
 
 import { create, listAll, remove } from "../client"
-import { said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
+import { actionOf, said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 
@@ -60,8 +60,6 @@ function removalBody(input: CommandInput): { periodId: string } | LocalRefusal {
   return periodId === undefined ? refusal("periodId", "Name the period to remove") : { periodId }
 }
 
-const periodIdOf = (body: unknown): string => (body as { periodId: string }).periodId
-
 /** The periods earliest first: the order a person reads days in. */
 const byFirstDay = <P extends AwayPeriod>(periods: P[]): P[] => [...periods].sort((a, b) => a.validFrom.localeCompare(b.validFrom) || a.id.localeCompare(b.id))
 
@@ -77,30 +75,30 @@ export function vehicleUnavailability(client: Client, serverId: string): Promise
 
 /** A driver's two actions: record an absence, which answers it, and remove one, which answers nothing. */
 export const DRIVER_AVAILABILITY_ACTIONS: Readonly<Record<string, RecordAction<unknown>>> = {
-  [RECORD_ABSENCE]: {
-    toBody: (input) => periodBody(input, DRIVER_ABSENCE_REASONS),
-    run: (client, serverId, body) => create<DriverAbsence>(client, "/driver-absences", { ...(body as object), driverId: serverId }).then((created) => created.body),
+  [RECORD_ABSENCE]: actionOf({
+    toBody: (input: CommandInput) => periodBody(input, DRIVER_ABSENCE_REASONS),
+    run: (client, serverId, body) => create<DriverAbsence>(client, "/driver-absences", { ...body, driverId: serverId }).then((created) => created.body),
     refused: (record) => `The absence of ${record.name} was not recorded`,
-  },
-  [REMOVE_ABSENCE]: {
+  }),
+  [REMOVE_ABSENCE]: actionOf({
     toBody: removalBody,
-    run: (client, _serverId, body) => remove(client, `/driver-absences/${periodIdOf(body)}`).then(() => null),
+    run: (client, _serverId, body) => remove(client, `/driver-absences/${body.periodId}`).then(() => null),
     refused: (record) => `The absence of ${record.name} was not removed`,
-  },
+  }),
 }
 
 /** A vehicle's two actions, as a driver's. */
 export const VEHICLE_AVAILABILITY_ACTIONS: Readonly<Record<string, RecordAction<unknown>>> = {
-  [RECORD_UNAVAILABILITY]: {
-    toBody: (input) => periodBody(input, VEHICLE_UNAVAILABILITY_REASONS),
-    run: (client, serverId, body) => create<VehicleUnavailability>(client, "/vehicle-unavailability", { ...(body as object), vehicleId: serverId }).then((created) => created.body),
+  [RECORD_UNAVAILABILITY]: actionOf({
+    toBody: (input: CommandInput) => periodBody(input, VEHICLE_UNAVAILABILITY_REASONS),
+    run: (client, serverId, body) => create<VehicleUnavailability>(client, "/vehicle-unavailability", { ...body, vehicleId: serverId }).then((created) => created.body),
     refused: (record) => `The time ${record.name} is out of use was not recorded`,
-  },
-  [REMOVE_UNAVAILABILITY]: {
+  }),
+  [REMOVE_UNAVAILABILITY]: actionOf({
     toBody: removalBody,
-    run: (client, _serverId, body) => remove(client, `/vehicle-unavailability/${periodIdOf(body)}`).then(() => null),
+    run: (client, _serverId, body) => remove(client, `/vehicle-unavailability/${body.periodId}`).then(() => null),
     refused: (record) => `The time ${record.name} is out of use was not removed`,
-  },
+  }),
 }
 
 /** Records a driver's absence through the store's `sendAction`; the driver's row stays as it is. */

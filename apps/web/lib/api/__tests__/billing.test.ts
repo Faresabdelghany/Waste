@@ -21,7 +21,7 @@ import { PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED } from "@waste/domain/finance/bill
 import { OFFICE_CANCEL_REASONS } from "../../data/commercial"
 import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
 import { agreementAdapter } from "../records/agreements"
 import {
   billableEventAdapter,
@@ -41,7 +41,7 @@ import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { productAdapter } from "../records/pricing"
 import { customerAdapter } from "../records/registry"
-import { commandRecord, loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -98,18 +98,18 @@ const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-00000000
 const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000003", kind: "manual", productId: bulky.id, quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatMinor: 15000, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }, sourceEventId: null, createdBy: ADMIN, overrideReason: "Agreed on the phone", note: "Two sofas" }
 
 const NO_CONTEXT: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT)
-const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT)
-const [kabRecord, kommuneRecord] = [kab, kommune].map((customer) => customerAdapter.toRecord(customer, NO_CONTEXT))
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, NO_CONTEXT)
+const osterbroRecord = recordFrom(customerAdapter, osterbro, NO_CONTEXT)
+const [kabRecord, kommuneRecord] = [kab, kommune].map((customer) => recordFrom(customerAdapter, customer, NO_CONTEXT))
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const base: ServerRecordsState = new Map([
   ["configure.organization", moduleOf([copenhagenRecord], [copenhagen.id])],
   ["configure.access", moduleOf([{ ...copenhagenRecord, id: `user-${ADMIN}`, name: "Fares Abdelghany", recordKind: "User" }], [ADMIN])],
   ["customers.contacts", moduleOf([osterbroRecord, kabRecord, kommuneRecord], [osterbro.id, kab.id, kommune.id])],
 ])
-const agreementRecords = [agr2408, agr2607].map((agreement) => agreementAdapter.toRecord(agreement, { ...NO_CONTEXT, resolve: resolverOver(base) }))
+const agreementRecords = [agr2408, agr2607].map((agreement) => recordFrom(agreementAdapter, agreement, { ...NO_CONTEXT, resolve: resolverOver(base) }))
 const withAgreement = new Map([...base, ["customers.agreements", moduleOf(agreementRecords, [agr2408.id, agr2607.id])]])
-const productRecords = [res240, bulky].map((product) => productAdapter.toRecord(product, { ...NO_CONTEXT, resolve: resolverOver(withAgreement) }))
+const productRecords = [res240, bulky].map((product) => recordFrom(productAdapter, product, { ...NO_CONTEXT, resolve: resolverOver(withAgreement) }))
 const routeRecord: BusinessRecord = { ...copenhagenRecord, id: `route-${ROUTE}`, name: "RC-1042 · 2026-09-29", recordKind: "Route" }
 const state: ServerRecordsState = new Map([
   ...withAgreement,
@@ -132,7 +132,7 @@ describe("the billable events module", () => {
   })
 
   test("shows a priced event with its agreement, customer, payer, product and route by name, its money in its own currency", () => {
-    const record = billableEventAdapter.toRecord(ready, context())
+    const record = recordFrom(billableEventAdapter, ready, context())
     assert.equal(record.id, `event-${ready.id}`)
     assert.equal(record.name, "Pickup · Residual waste · 240L bin")
     assert.equal(record.context, "Østerbro Housing · 2026-09-29")
@@ -165,7 +165,7 @@ describe("the billable events module", () => {
   })
 
   test("names the agreement's customer and its payer each by their own fact, the customer leading the row (#256)", () => {
-    const record = billableEventAdapter.toRecord({ ...ready, agreementId: agr2607.id }, context())
+    const record = recordFrom(billableEventAdapter, { ...ready, agreementId: agr2607.id }, context())
     assert.equal(record.facts.Agreement, "AGR-2607")
     assert.equal(record.facts.Customer, "KAB Bolig")
     assert.equal(record.facts.Payer, "Københavns Kommune", "invoiced to the payer, and said so under its own name")
@@ -175,16 +175,16 @@ describe("the billable events module", () => {
   })
 
   test("shows a blocked event by what blocks it, and a manual one with the person's price and reason", () => {
-    const stuck = billableEventAdapter.toRecord(blocked, context())
+    const stuck = recordFrom(billableEventAdapter, blocked, context())
     assert.equal(stuck.status, "Blocked")
     assert.equal(stuck.name, "Ticket · no product")
     assert.equal(stuck.value, "No product")
     assert.equal(stuck.facts["Block reason"], "No product")
     assert.equal(stuck.facts.Ticket, `ticket-${TICKET}`)
-    const dropped = billableEventAdapter.toRecord({ ...blocked, status: "cancelled", cancelledAt: "2026-09-30T10:00:00.000Z", cancelledBy: ADMIN, cancelReason: "duplicate" }, context())
+    const dropped = recordFrom(billableEventAdapter, { ...blocked, status: "cancelled", cancelledAt: "2026-09-30T10:00:00.000Z", cancelledBy: ADMIN, cancelReason: "duplicate" }, context())
     assert.equal(dropped.value, "", "a cancelled event is blocked by nothing any more")
     assert.equal(dropped.facts.Cancelled, "2026-09-30 12:00 · Duplicate")
-    const entered = billableEventAdapter.toRecord(manual, context())
+    const entered = recordFrom(billableEventAdapter, manual, context())
     assert.equal(entered.value, "DKK 600.00")
     assert.equal(entered.facts["Override reason"], "Agreed on the phone")
     assert.equal(entered.facts.Origin, "Entered by Fares Abdelghany")
@@ -192,27 +192,27 @@ describe("the billable events module", () => {
 
   test("shows a recurring charge by its charge period's first and last days and the days it charged, a run's and nobody's (#291 C2)", () => {
     const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
-    const record = billableEventAdapter.toRecord(charge, context())
+    const record = recordFrom(billableEventAdapter, charge, context())
     assert.equal(record.name, "Recurring charge · Residual waste · 240L bin")
     assert.equal(record.facts.Kind, "Recurring charge")
     assert.equal(record.facts["Charge period"], "2026-11-01 – 2026-11-30", "the last day in, where the wire's end is the first day out")
     assert.equal(record.facts["Days charged"], "15 of 30")
     assert.equal(record.facts.Origin, "Charged by a billing run")
-    assert.equal(billableEventAdapter.toRecord(ready, context()).facts["Charge period"], undefined, "a pickup's event charges no period")
-    const tooMuch = billableEventAdapter.toRecord({ ...charge, status: "blocked", unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "amount-too-large" }, context())
+    assert.equal(recordFrom(billableEventAdapter, ready, context()).facts["Charge period"], undefined, "a pickup's event charges no period")
+    const tooMuch = recordFrom(billableEventAdapter, { ...charge, status: "blocked", unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "amount-too-large" }, context())
     assert.equal(tooMuch.facts["Block reason"], "Amount too large")
   })
 
   test("shows a weight charge by its share's kilograms, its Unload and its origin, the unit price the weighed load's amount (O28 of #290)", () => {
     const UNLOAD = "01a0d2a4-a280-7032-8000-000000000001"
     const weighed: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000005", kind: "weight", weightKg: 8240, unitPriceMinor: 422_300, netMinor: 422_300, vatMinor: 105_575, links: { ...ready.links, unloadId: UNLOAD, scaleTicketLineId: null } }
-    const record = billableEventAdapter.toRecord(weighed, context())
+    const record = recordFrom(billableEventAdapter, weighed, context())
     assert.equal(record.facts.Kind, "Weight charge")
     assert.equal(record.facts.Weight, "8,240 kg")
     assert.equal(record.facts.Unload, `unload-${UNLOAD}`, "named by its id where the weights are not read")
     assert.equal(record.facts.Origin, "Reviewed weight charged by the tonne")
     assert.equal(record.facts["Unit price"], "DKK 4,223.00")
-    assert.equal(billableEventAdapter.toRecord(ready, context()).facts.Weight, undefined, "a pickup's event weighs nothing")
+    assert.equal(recordFrom(billableEventAdapter, ready, context()).facts.Weight, undefined, "a pickup's event weighs nothing")
     assert.equal(OFFICE_CANCEL_REASONS.includes("weight-revised" as never), false, "the consumer's reason is never the office's")
   })
 
@@ -238,23 +238,23 @@ describe("the billable events module", () => {
   })
 
   test("moves by its two commands alone: no status on a patch, no edit", () => {
-    const record = billableEventAdapter.toRecord(ready, context())
+    const record = recordFrom(billableEventAdapter, ready, context())
     for (const status of ["Ready", "Blocked", "Cancelled", "Invoiced"]) assert.ok(!spellsStatus(eventsModule, record, status), status)
-    assert.deepEqual(billableEventAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }, context()), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
+    assert.deepEqual(keptRefusal(billableEventAdapter, record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
   })
 
   test("offers a command only where the API moves the event by it: reprice a blocked one, hold a ready one, release a held one, cancel any of them, never a reversal (#281, M14 of #293)", () => {
-    const offered = (event: BillableEvent) => eventCommandsOffered(billableEventAdapter.toRecord(event, context()))
+    const offered = (event: BillableEvent) => eventCommandsOffered(recordFrom(billableEventAdapter, event, context()))
     assert.deepEqual(offered(blocked), ["reprice", "cancel"])
     assert.deepEqual(offered(ready), ["hold", "cancel"], "a priced event is not repriced")
     assert.deepEqual(offered({ ...ready, status: "held", hold: { at: "2026-09-10T08:00:00.000Z", by: null, reason: "Checked with the customer" } }), ["release", "cancel"])
     for (const status of ["invoiced", "cancelled", "reversed"] as const) assert.deepEqual(offered({ ...ready, status }), [], `${status}: a credit note corrects it, or there is nothing left to do`)
     assert.deepEqual(offered({ ...ready, kind: "reversal" }), [], "a reversal is the correction, never cancelled")
-    assert.deepEqual(eventCommandsOffered({ ...billableEventAdapter.toRecord(ready, context()), submittedValues: {} }), [], "a record that does not say its status is offered nothing")
+    assert.deepEqual(eventCommandsOffered({ ...recordFrom(billableEventAdapter, ready, context()), submittedValues: {} }), [], "a record that does not say its status is offered nothing")
   })
 
   test("reprices a blocked ticket's event with the product the office picked, and cancels one with the office's reason", async () => {
-    const record = billableEventAdapter.toRecord(blocked, context())
+    const record = recordFrom(billableEventAdapter, blocked, context())
     const current = moduleOf([record], [blocked.id])
     const repriced: BillableEvent = { ...blocked, status: "ready", productId: bulky.id, unitPriceMinor: 4500, netMinor: 4500, vatPercent: 25, vatMinor: 1125, currency: "DKK", blockReason: null }
     // The API names the event by its id; the office is told the row by the name it reads (#281).
@@ -283,7 +283,7 @@ describe("the billable events module", () => {
   })
 
   test("holds a ready event for review with the office's reason, and releases a held one with no body (M14 of #293)", async () => {
-    const record = billableEventAdapter.toRecord(ready, context())
+    const record = recordFrom(billableEventAdapter, ready, context())
     const current = moduleOf([record], [ready.id])
     const held: BillableEvent = { ...ready, status: "held", hold: { at: "2026-09-30T12:00:00.000Z", by: ADMIN, reason: "Checked with the customer" } }
     const { fetch, calls } = scripted([() => json(held), () => json(ready)])
@@ -296,7 +296,7 @@ describe("the billable events module", () => {
     assert.deepEqual(bodyOf(calls[0]), { reason: "Checked with the customer" })
     assert.ok(BillableEventHold.safeParse(bodyOf(calls[0])).success)
     if (done.kind === "done") assert.equal(done.record.facts?.["Held for review"], "2026-09-30 14:00 · Checked with the customer")
-    const released = await commandRecord(clientOver(fetch), eventsModule, current, billableEventAdapter.toRecord(held, context()), "release", {}, options)
+    const released = await commandRecord(clientOver(fetch), eventsModule, current, recordFrom(billableEventAdapter, held, context()), "release", {}, options)
     assert.equal(released.kind, "done")
     assert.equal(calls[1].url, `http://api.test/billable-events/${ready.id}/release`)
     assert.equal(calls.length, 2)
@@ -322,8 +322,8 @@ describe("Explain price on a billable event's own question (#259)", () => {
     const isList = (row: BusinessRecord) => row.id.startsWith("price-list-")
     return resolverOver(new Map([["held", held(rows.filter((row) => !isList(row)))], ["commercial.price-rows", held(rows.filter(isList))]]))
   }
-  const pricedEvent = billableEventAdapter.toRecord(ready, context())
-  const manualEvent = billableEventAdapter.toRecord({ ...manual, overrideReason: null }, context())
+  const pricedEvent = recordFrom(billableEventAdapter, ready, context())
+  const manualEvent = recordFrom(billableEventAdapter, { ...manual, overrideReason: null }, context())
 
   test("a priced pickup's: the list its row won in, its product and service date, its agreement's customer and kind, its route's zone and its pickup's fraction and container type", () => {
     assert.deepEqual(eventQuestion(pricedEvent, holding(everything)), {
@@ -360,7 +360,7 @@ describe("Explain price on a billable event's own question (#259)", () => {
     const otherProjects = { ...ownList, id: "price-list-01a0d2a4-a280-7028-8000-000000000003", name: "PL-Østerbro-2026", projectIds: ["project-harbor"] }
     assert.equal(eventQuestion(manualEvent, holding([named, otherProjects, { ...ownList, name: "PL-Østerbro-2026" }, defaultList])).priceListId, ownList.id, "or by its name, among its project's lists")
     assert.equal(eventQuestion(manualEvent, holding([ownList, defaultList])).priceListId, undefined, "the agreement not read: no list guessed")
-    const ticketEvent = billableEventAdapter.toRecord(blocked, context())
+    const ticketEvent = recordFrom(billableEventAdapter, blocked, context())
     assert.equal(eventQuestion(ticketEvent, holding(everything)).productId, undefined)
   })
 
@@ -370,10 +370,10 @@ describe("Explain price on a billable event's own question (#259)", () => {
 
   test("is offered where the event's price is a list's: priced or blocked, never a person's own price nor a reversal's copy", () => {
     assert.ok(eventPricedByList(pricedEvent))
-    assert.ok(eventPricedByList(billableEventAdapter.toRecord(blocked, context())))
+    assert.ok(eventPricedByList(recordFrom(billableEventAdapter, blocked, context())))
     assert.ok(eventPricedByList(manualEvent), "a manual event the list priced")
-    assert.ok(!eventPricedByList(billableEventAdapter.toRecord(manual, context())), "a manual event at a price of the person's own, with its reason")
-    assert.ok(!eventPricedByList(billableEventAdapter.toRecord({ ...ready, kind: "reversal", priceListRowId: null }, context())))
+    assert.ok(!eventPricedByList(recordFrom(billableEventAdapter, manual, context())), "a manual event at a price of the person's own, with its reason")
+    assert.ok(!eventPricedByList(recordFrom(billableEventAdapter, { ...ready, kind: "reversal", priceListRowId: null }, context())))
   })
 })
 
@@ -387,7 +387,7 @@ describe("the billing runs module", () => {
   })
 
   test("shows a run by its period, its counts and who asked for it", () => {
-    const record = billingRunAdapter.toRecord(run, context())
+    const record = recordFrom(billingRunAdapter, run, context())
     assert.equal(record.id, `billing-run-${run.id}`)
     assert.equal(record.name, "Billing run 2026-09-01 – 2026-09-30")
     assert.equal(record.status, "Completed")
@@ -396,11 +396,11 @@ describe("the billing runs module", () => {
     assert.equal(record.facts["Excluded customers"], "1")
     assert.equal(record.facts["Requested by"], "Fares Abdelghany")
     assert.equal(record.facts.Net, "DKK 666.50")
-    assert.deepEqual(billingRunAdapter.toRecord({ ...run, requestedBy: null, invoiceCount: 2 }, context()).facts["Requested by"], "The monthly schedule")
+    assert.deepEqual(recordFrom(billingRunAdapter, { ...run, requestedBy: null, invoiceCount: 2 }, context()).facts["Requested by"], "The monthly schedule")
   })
 
   test("shows no total where it cannot say the project's currency: the run's details read its invoices' totals per currency", () => {
-    const unknown = billingRunAdapter.toRecord(run, { ...context(), resolve: resolverOver(new Map()) })
+    const unknown = recordFrom(billingRunAdapter, run, { ...context(), resolve: resolverOver(new Map()) })
     assert.equal(unknown.facts.Net, undefined)
     assert.equal(unknown.facts.VAT, undefined)
     assert.equal(unknown.value, "1 invoice")
@@ -443,9 +443,9 @@ describe("the billing runs module", () => {
   })
 
   test("is a record of what it did: no status move, no edit", () => {
-    const record = billingRunAdapter.toRecord(run, context())
+    const record = recordFrom(billingRunAdapter, run, context())
     assert.ok(!spellsStatus(billingModule, record, "Failed"))
-    assert.deepEqual(billingRunAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, note: "Moved" } }, context()), { path: "note", message: "A billing run is a record of what it did: nothing on it changes" })
+    assert.deepEqual(keptRefusal(billingRunAdapter, record, { ...record, submittedValues: { ...record.submittedValues, note: "Moved" } }), { path: "note", message: "A billing run is a record of what it did: nothing on it changes" })
   })
 })
 
@@ -478,13 +478,13 @@ describe("the invoices module", () => {
     assert.equal(credit.facts["Credit reason"], "Quantity correction")
     assert.equal(credit.value, "-DKK 375.00")
     const asRead = (document: Invoice) => ({ ...document, createdAt: document.recordedAt, updatedAt: document.recordedAt })
-    const whole = invoiceAdapter.toRecord({ ...asRead(invoice), creditedGrossMinor: -83313, creditNoteCount: 2 }, context())
+    const whole = recordFrom(invoiceAdapter, { ...asRead(invoice), creditedGrossMinor: -83313, creditNoteCount: 2 }, context())
     assert.equal(whole.status, "Credited")
-    assert.equal(invoiceAdapter.toRecord({ ...asRead(invoice), creditedGrossMinor: 0, creditNoteCount: 0 }, context()).status, "Issued")
+    assert.equal(recordFrom(invoiceAdapter, { ...asRead(invoice), creditedGrossMinor: 0, creditNoteCount: 0 }, context()).status, "Issued")
   })
 
   test("issues a credit note as a create under the invoice it corrects: every line, or the named lines by quantity", async () => {
-    const shown = invoiceAdapter.toRecord({ ...invoice, createdAt: invoice.recordedAt, updatedAt: invoice.recordedAt, creditedGrossMinor: 0, creditNoteCount: 0 }, context())
+    const shown = recordFrom(invoiceAdapter, { ...invoice, createdAt: invoice.recordedAt, updatedAt: invoice.recordedAt, creditedGrossMinor: 0, creditNoteCount: 0 }, context())
     const current = moduleOf([shown], [invoice.id])
     const withInvoice = new Map([...state, ["commercial.invoices", current]])
     const all = invoiceAdapter.toCreateBody!(made("invoices-credit-note-1", "Credit note", { creditsInvoiceId: shown.id, reason: "service-not-delivered", note: "", scope: "all" }, "Issued"), context(withInvoice))
@@ -509,10 +509,10 @@ describe("the invoices module", () => {
   })
 
   test("refuses a credit note against a credit note, and every edit of an issued document", () => {
-    const credit = invoiceAdapter.toRecord({ ...creditNote, createdAt: creditNote.recordedAt, updatedAt: creditNote.recordedAt }, context())
+    const credit = recordFrom(invoiceAdapter, { ...creditNote, createdAt: creditNote.recordedAt, updatedAt: creditNote.recordedAt }, context())
     const withCredit = new Map([...state, ["commercial.invoices", moduleOf([credit], [creditNote.id])]])
     assert.deepEqual(invoiceAdapter.toCreateBody!(made("invoices-credit-note-1", "Credit note", { creditsInvoiceId: credit.id, reason: "duplicate", scope: "all" }, "Issued"), context(withCredit)), { path: "creditsInvoiceId", message: "Pick an invoice the API holds: a credit note is not credited" })
-    assert.deepEqual(invoiceAdapter.toPatchBody(credit, { ...credit, name: "CN-1" }, context()), { path: "status", message: "An issued document never changes: correct an invoice with a credit note" })
+    assert.deepEqual(keptRefusal(invoiceAdapter, credit, { ...credit, name: "CN-1" }), { path: "status", message: "An issued document never changes: correct an invoice with a credit note" })
     assert.ok(!spellsStatus(invoicesModule, credit, "Credited"))
   })
 })

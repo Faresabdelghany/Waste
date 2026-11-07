@@ -18,8 +18,8 @@ import { COMMAND_SURFACES, genericEditOffered } from "@/components/waste/command
 
 import { applicationCommandsOffered, decideBodyOf, decisionLetterHref, decisionLetterOf, LAST_DAY_SENTENCE, letterOffered, NOT_A_DAY, recordedDecisionOf } from "../../data/applications"
 import { type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
-import { applicationAdapter, toApplicationCreateBody, toApplicationPatchBody, toApplicationRecord } from "../records/applications"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { applicationAdapter, toApplicationCreateBody, toApplicationPatchBody } from "../records/applications"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { customerAdapter } from "../records/registry"
@@ -62,8 +62,8 @@ const grant: Decision = {
 const decided: Application = { ...received, status: "decided", decision: grant }
 const refusal: Decision = { ...grant, id: "01a0d2a4-a280-7041-8000-000000000002", outcome: "refused", conditions: "Your garden is too small.", validFrom: null, validTo: null, appealText: "Write to the municipality within four weeks." }
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
-const customerRecord = customerAdapter.toRecord(anna, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const customerRecord = recordFrom(customerAdapter, anna, { resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: [customerRecord], serverIds: new Map([[customerRecord.id, anna.id]]) }, 1)],
@@ -75,7 +75,7 @@ const withValues = (record: BusinessRecord, values: Record<string, string>): Bus
 describe("an Application as a record", () => {
   test("is the module's on the API, `application-<uuid>`, named by its number and kind", () => {
     assert.ok(isServerBacked("customers", "applications"))
-    const record = toApplicationRecord(received, context)
+    const record = recordFrom(applicationAdapter, received, context)
     assert.equal(record.id, `application-${received.id}`)
     assert.equal(record.name, "Application 12 · Home composting")
     assert.equal(record.status, "Received")
@@ -90,39 +90,39 @@ describe("an Application as a record", () => {
 
   test("is corrected by the generic Edit while undecided alone, as the API's patch takes it", () => {
     const surface = COMMAND_SURFACES["customers.applications"]
-    const offered = (application: Application) => genericEditOffered(surface, toApplicationRecord(application, context))
+    const offered = (application: Application) => genericEditOffered(surface, recordFrom(applicationAdapter, application, context))
     assert.deepEqual([offered(received), offered({ ...received, status: "in-review" }), offered(decided), offered({ ...received, status: "withdrawn" })], [true, true, false, false])
     assert.equal(genericEditOffered(surface, null), false, "no row, no Edit")
   })
 
   test("reads its latest Decision on the project's day, the period by its last day in force", () => {
-    const record = toApplicationRecord(decided, context)
+    const record = recordFrom(applicationAdapter, decided, context)
     assert.deepEqual(
       [record.value, record.facts?.Outcome, record.facts?.["In force"], record.facts?.Conditions, record.facts?.Decided],
       ["Granted · in force", "Granted", "2026-11-09 to 2026-12-31", "The compost bin stays covered.", "2026-11-05"],
     )
-    assert.equal(toApplicationRecord(decided, { ...context, now: new Date("2027-01-02T12:00:00Z") }).value, "Granted · expired 2026-12-31", "expired is a reading")
+    assert.equal(recordFrom(applicationAdapter, decided, { ...context, now: new Date("2027-01-02T12:00:00Z") }).value, "Granted · expired 2026-12-31", "expired is a reading")
   })
 
   test("carries its server id and its latest Decision, structured, for its commands and its letter", () => {
-    const record = toApplicationRecord(decided, context)
+    const record = recordFrom(applicationAdapter, decided, context)
     assert.equal(record.submittedValues?.applicationId, received.id)
     assert.deepEqual(recordedDecisionOf(record), { id: grant.id, outcome: "granted", conditions: "The compost bin stays covered.", validFrom: "2026-11-09", validTo: "2027-01-01", appealText: null, decidedOn: "2026-11-05" })
-    assert.equal(recordedDecisionOf(toApplicationRecord(received, context)), null)
+    assert.equal(recordedDecisionOf(recordFrom(applicationAdapter, received, context)), null)
     assert.equal(recordedDecisionOf(withValues(record, { latestDecision: "not json" })), null, "a value this file did not write")
   })
 
   test("offers the commands its status moves it by, each told in its own words", () => {
-    assert.deepEqual(applicationCommandsOffered(toApplicationRecord(received, context)).map((offer) => offer.command), ["review", "decide", "withdraw"])
-    assert.deepEqual(applicationCommandsOffered(toApplicationRecord({ ...received, status: "in-review" }, context)).map((offer) => offer.label), ["Decide", "Withdraw"])
-    assert.deepEqual(applicationCommandsOffered(toApplicationRecord(decided, context)).map((offer) => offer.label), ["Reopen on appeal"])
-    assert.deepEqual(applicationCommandsOffered(toApplicationRecord({ ...decided, status: "in-review" }, context)).map((offer) => [offer.label, offer.done]), [["Decide", "Decision recorded"], ["Withdraw appeal", "Appeal withdrawn; the decision stands"]], "an appeal under review")
-    assert.deepEqual(applicationCommandsOffered(toApplicationRecord({ ...received, status: "withdrawn" }, context)), [])
+    assert.deepEqual(applicationCommandsOffered(recordFrom(applicationAdapter, received, context)).map((offer) => offer.command), ["review", "decide", "withdraw"])
+    assert.deepEqual(applicationCommandsOffered(recordFrom(applicationAdapter, { ...received, status: "in-review" }, context)).map((offer) => offer.label), ["Decide", "Withdraw"])
+    assert.deepEqual(applicationCommandsOffered(recordFrom(applicationAdapter, decided, context)).map((offer) => offer.label), ["Reopen on appeal"])
+    assert.deepEqual(applicationCommandsOffered(recordFrom(applicationAdapter, { ...decided, status: "in-review" }, context)).map((offer) => [offer.label, offer.done]), [["Decide", "Decision recorded"], ["Withdraw appeal", "Appeal withdrawn; the decision stands"]], "an appeal under review")
+    assert.deepEqual(applicationCommandsOffered(recordFrom(applicationAdapter, { ...received, status: "withdrawn" }, context)), [])
   })
 })
 
 describe("the bodies", () => {
-  const record = toApplicationRecord(received, context)
+  const record = recordFrom(applicationAdapter, received, context)
 
   test("a create is the contracts' create, its customer by server id", () => {
     const body = toApplicationCreateBody(record, context)
@@ -169,12 +169,12 @@ describe("the decision letter", () => {
 
   test("prints at the Application's server id, only while it stands decided", () => {
     assert.equal(decisionLetterHref(received.id), `/applications/${received.id}/letter`)
-    assert.equal(decisionLetterOf(toApplicationRecord(received, context), parties), null)
-    assert.deepEqual([letterOffered(toApplicationRecord(decided, context)), letterOffered(toApplicationRecord({ ...decided, status: "in-review" }, context)), letterOffered(toApplicationRecord(received, context))], [true, false, false], "never while an appeal reconsiders it")
+    assert.equal(decisionLetterOf(recordFrom(applicationAdapter, received, context), parties), null)
+    assert.deepEqual([letterOffered(recordFrom(applicationAdapter, decided, context)), letterOffered(recordFrom(applicationAdapter, { ...decided, status: "in-review" }, context)), letterOffered(recordFrom(applicationAdapter, received, context))], [true, false, false], "never while an appeal reconsiders it")
   })
 
   test("tells a grant, its period by the last day in force, and what it holds the customer to", () => {
-    const letter = decisionLetterOf(toApplicationRecord(decided, context), parties)
+    const letter = decisionLetterOf(recordFrom(applicationAdapter, decided, context), parties)
     assert.deepEqual(letter, {
       sender: "Kystbyen Renovation",
       recipient: "Anna Andersen",
@@ -188,7 +188,7 @@ describe("the decision letter", () => {
   })
 
   test("tells a refusal its reasons and how to appeal it, with no period", () => {
-    const letter = decisionLetterOf(toApplicationRecord({ ...decided, decision: refusal }, context), parties)
+    const letter = decisionLetterOf(recordFrom(applicationAdapter, { ...decided, decision: refusal }, context), parties)
     assert.deepEqual([letter?.paragraphs, letter?.conditions, letter?.appeal], [["We received your application for home composting on 2026-11-02.", "Your application is refused."], { heading: "Reasons", text: "Your garden is too small." }, "Write to the municipality within four weeks."])
   })
 })

@@ -21,8 +21,8 @@
 // context's resolver, which the store composes over what it has loaded, so
 // the access module lists its roles before its users and the organisation
 // and service-provider modules are loaded first (records/modules.ts).
-import type { Role, User } from "@waste/contracts/access"
-import type { Company, Project, ServiceProvider } from "@waste/contracts/organisation"
+import type { Role, User, UserInvite, UserPatch } from "@waste/contracts/access"
+import type { Company, CompanyPatch, Project, ServiceProvider, ServiceProviderCreate, ServiceProviderPatch } from "@waste/contracts/organisation"
 import { PROJECT_STATUSES } from "@waste/domain/access/vocabulary"
 import { SERVICE_DAYS } from "@waste/domain/days"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
@@ -41,9 +41,7 @@ import {
   isLocalRefusal,
   ofKind,
   languageName,
-  NO_PRESENTATION,
   patchOf,
-  stampFacts,
   statusLabel,
   statusToken,
   typed,
@@ -78,14 +76,14 @@ export const daysOrNoneOf = (terms: ReturnType<typeof typedPaymentTerms>): numbe
 // ---------------------------------------------------------------------------
 
 /** The company is one row with no collection: read at `/company`, changed there, created by nobody here. */
-export const companyAdapter: ResourceAdapter<Company> = {
+export const companyAdapter: ResourceAdapter<Company, unknown, CompanyPatch> = {
   prefix: "company",
   auditTable: "company",
   owns: hasPrefix("company"),
   // `CompanyPatch` (`@waste/contracts/organisation`) has no status member: the API states the company's status, so every move is refused by the store and the workspace offers none.
   statuses: undefined,
   list: async (client) => [await get<Company>(client, "/company")],
-  toRecord: (company, context) => {
+  toRecord: (company) => {
     // The invoice identity (#291 C4): a fact and a typed value each where it is set, none where it is not.
     const identityFacts: Record<string, string> = {}
     const identityValues: Record<string, string> = {}
@@ -101,12 +99,9 @@ export const companyAdapter: ResourceAdapter<Company> = {
       identityValues.postalAddress = company.postalAddress
     }
     return {
-      id: webIdOf("company", company.id),
       name: company.legalName,
       context: "Company · tenant",
       status: statusLabel(company.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(company, context.now),
       facts: {
         Name: company.name,
         CVR: company.registrationNumber,
@@ -159,7 +154,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
   owns: ofKind("project", ["Project"]),
   statuses: PROJECT_STATUSES,
   list: (client) => listAll<Project>(client, "/projects"),
-  toRecord: (project, context) => {
+  toRecord: (project) => {
     const id = projectWebIdOf(project)
     const facts: Record<string, string> = {
       Language: languageName(project.language),
@@ -197,8 +192,6 @@ export const projectAdapter: ResourceAdapter<Project> = {
       name: project.name,
       context: projectContext(project.kind),
       status: statusLabel(project.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(project, context.now),
       facts,
       // A project record scopes itself: the one project it is.
       projectIds: [id],
@@ -319,7 +312,7 @@ function kindOfContext(context: string): string {
 
 const PROVIDER_CHILD_PREFIXES = ["service-provider-access-", "service-provider-activity-", "service-provider-price-", "service-provider-workspace-"]
 
-export const serviceProviderAdapter: ResourceAdapter<ServiceProvider> = {
+export const serviceProviderAdapter: ResourceAdapter<ServiceProvider, ServiceProviderCreate, ServiceProviderPatch> = {
   prefix: "service-provider",
   auditTable: "service_provider",
   // Other modules' records carry the prefix too (`service-provider-access-…`); here the prefix is the provider row's own, and a new row is the form's `recordKind`.
@@ -327,15 +320,13 @@ export const serviceProviderAdapter: ResourceAdapter<ServiceProvider> = {
   // A provider has no status on the wire; the record's is the fixture's and moves nowhere.
   statuses: undefined,
   list: (client) => listAll<ServiceProvider>(client, "/service-providers"),
-  toRecord: (provider, context) => {
+  toRecord: (provider) => {
     const id = webIdOf("service-provider", provider.id)
     return {
       id,
       name: provider.legalName,
       context: `${countryName(provider.country)} · ${provider.registrationNumber}`,
       status: "Active",
-      ...NO_PRESENTATION,
-      ...stampFacts(provider, context.now),
       facts: {
         CVR: provider.registrationNumber,
         Country: countryName(provider.country),
@@ -421,15 +412,13 @@ export const roleAdapter: ResourceAdapter<Role> = {
   // A role has no status on the wire.
   statuses: undefined,
   list: (client) => listAll<Role>(client, "/roles"),
-  toRecord: (role, context) => {
+  toRecord: (role) => {
     const grantCount = role.grants.reduce((total, grant) => total + grant.actions.length, 0)
     return {
       id: roleWebIdOf(role),
       name: role.name,
       context: `Role · ${role.scope.toLowerCase()} scope`,
       status: "Active",
-      ...NO_PRESENTATION,
-      ...stampFacts(role, context.now),
       value: `${grantCount} permissions`,
       description: role.description,
       facts: {
@@ -498,7 +487,7 @@ function projectAccessLabel(user: User, projectName: (projectId: string) => stri
 export const DEACTIVATE_USER = "deactivate"
 export const REACTIVATE_USER = "reactivate"
 
-export const userAdapter: ResourceAdapter<User> = {
+export const userAdapter: ResourceAdapter<User, UserInvite, UserPatch> = {
   prefix: "user",
   auditTable: "user_account",
   owns: ofKind("user", ["User", "Service provider user"]),
@@ -513,12 +502,9 @@ export const userAdapter: ResourceAdapter<User> = {
     const provider = user.serviceProviderId === null ? undefined : context.resolve.byServerId(user.serviceProviderId)
     const projectWebIds = user.projectIds.map((projectId) => context.resolve.byServerId(projectId)?.id ?? projectId)
     return {
-      id: webIdOf("user", user.id),
       name: user.fullName,
       context: `${provider?.name ?? "Company"} · ${access.toLowerCase()}`,
       status: statusLabel(user.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(user, context.now),
       facts: {
         Identity: user.status === "invited" ? "Invitation pending" : "Login bound",
         Email: user.email,

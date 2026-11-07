@@ -32,14 +32,14 @@ import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execu
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { FILL_LABELS } from "@/lib/data/fill-levels"
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type ModuleLocation } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 import { NO_ONE } from "@/lib/data/properties"
 import { workspaceHref } from "@/lib/data/workspace-href"
 
 import { command, get, listAll } from "../client"
-import { NO_PRESENTATION, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf, ofKind, said, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, wallClockIn } from "./clock"
 import { LIVE_MODULE } from "./live"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
@@ -77,7 +77,7 @@ function placeOf(pickup: Pickup, context: MappingContext): { key: "propertyId" |
   return undefined
 }
 
-export function toPickupRecord(pickup: Pickup, context: MappingContext): BusinessRecord {
+export function toPickupRecord(pickup: Pickup, context: MappingContext): RecordFields {
   const project = referenced(context, "project", pickup.projectId)
   const projectRecord = context.resolve.byServerId(pickup.projectId)
   const timezone = projectRecord === undefined ? undefined : typed(projectRecord, "timezone")
@@ -129,12 +129,9 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
     return value === undefined ? {} : { [key]: value }
   }
   return {
-    id: webIdOf(PICKUP_PREFIX, pickup.id),
     name: `Stop ${stop} · ${container === undefined ? (place?.name ?? fraction.name ?? fraction.webId) : (label ?? container.webId)}`,
     context: [route?.name ?? routeWebId, fraction.name ?? fraction.webId].join(" · "),
     status,
-    ...NO_PRESENTATION,
-    ...stampFacts(pickup, context.now),
     value: pickup.status === "planned" || pickup.outcomeAt === null ? status : `${clockOn(pickup.outcomeAt, timezone)} · ${status}`,
     description: byTheOffice
       ? `A stop the office added to its route${container === undefined ? ", at an address with no container" : ""}: generation never moves or skips it, the driver decides it, the dispatcher may remove it or correct its outcome.`
@@ -239,8 +236,7 @@ export const pickupAdapter: ResourceAdapter<Pickup> = {
   // The routes' window (routes.ts): a stop is read with its route.
   list: (client) => listAll<Pickup>(client, "/pickups", { from: routesWindowFrom() }),
   toRecord: toPickupRecord,
-  toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
-  update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),
+  kept: { path: "", message: CHANGED_BY_COMMANDS },
   commands: PICKUP_COMMANDS,
 }
 

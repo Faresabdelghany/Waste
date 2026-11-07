@@ -27,7 +27,7 @@ import {
   type Invite,
 } from "../../data/users-roles"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { accessModule, companyAdapter, projectAdapter, REPLACE_ROLE_GRANTS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
 import { commandRecord, IDLE, loaded, loadFailed, loading, notGranted, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -50,13 +50,13 @@ const lars: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000002", emai
 const mads: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000003", email: "mads.jensen@kystbyen.example", fullName: "Mads Jensen", status: "deactivated", roleId: dispatcher.id, allProjects: false, projectIds: [copenhagen.id], primaryAdministrator: false, deactivatedAt: "2026-09-25T10:00:00.000Z" }
 
 // The store's state once the organisation, the providers and the access module have loaded, in that order.
-const companyRecord = companyAdapter.toRecord(company, context())
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, context())
-const harborRecord = projectAdapter.toRecord(harbor, context())
-const nordrenRecord = serviceProviderAdapter.toRecord(nordren, context())
-const administratorRecord = roleAdapter.toRecord(administrator, context())
-const dispatcherRecord = roleAdapter.toRecord(dispatcher, context())
-const nightShiftRecord = roleAdapter.toRecord(nightShift, context())
+const companyRecord = recordFrom(companyAdapter, company, context())
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, context())
+const harborRecord = recordFrom(projectAdapter, harbor, context())
+const nordrenRecord = recordFrom(serviceProviderAdapter, nordren, context())
+const administratorRecord = recordFrom(roleAdapter, administrator, context())
+const dispatcherRecord = recordFrom(roleAdapter, dispatcher, context())
+const nightShiftRecord = recordFrom(roleAdapter, nightShift, context())
 const earlier: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [companyRecord, copenhagenRecord, harborRecord], serverIds: new Map([[companyRecord.id, company.id], [copenhagenRecord.id, copenhagen.id], [harborRecord.id, harbor.id]]) }, 1)],
   ["service-providers.service-providers", loaded({ records: [nordrenRecord], serverIds: new Map([[nordrenRecord.id, nordren.id]]) }, 1)],
@@ -64,9 +64,9 @@ const earlier: ServerRecordsState = new Map([
 const roleIds = new Map([[administratorRecord.id, administrator.id], [dispatcherRecord.id, dispatcher.id], [nightShiftRecord.id, nightShift.id]])
 const byServerId = new Map([[administrator.id, administratorRecord], [dispatcher.id, dispatcherRecord], [nightShift.id, nightShiftRecord]])
 const resolve = resolverOver(earlier, { records: [administratorRecord, dispatcherRecord, nightShiftRecord], serverIds: roleIds, byServerId })
-const oliviaRecord = userAdapter.toRecord(olivia, context(resolve))
-const larsRecord = userAdapter.toRecord(lars, context(resolve))
-const madsRecord = userAdapter.toRecord(mads, context(resolve))
+const oliviaRecord = recordFrom(userAdapter, olivia, context(resolve))
+const larsRecord = recordFrom(userAdapter, lars, context(resolve))
+const madsRecord = recordFrom(userAdapter, mads, context(resolve))
 const access = loaded(
   {
     records: [administratorRecord, dispatcherRecord, nightShiftRecord, oliviaRecord, larsRecord, madsRecord],
@@ -267,7 +267,7 @@ describe("what the pane says while it has no rows on the Pilot", () => {
 describe("a provider user whose provider the store could not resolve", () => {
   test("is listed under \"Service provider\", never under the company", () => {
     const withoutProviders = resolverOver(new Map([["configure.access", loaded({ records: [nightShiftRecord], serverIds: new Map([[nightShiftRecord.id, nightShift.id]]) }, 1)]]))
-    const unresolved = userAdapter.toRecord(lars, context(withoutProviders))
+    const unresolved = recordFrom(userAdapter, lars, context(withoutProviders))
     assert.equal(unresolved.facts["Service provider"], undefined)
     assert.equal(unresolved.facts.Projects, SERVICE_PROVIDER_ACCESS)
     const rows = userRowsOf(loaded({ records: [unresolved], serverIds: new Map([[unresolved.id, lars.id]]) }, 1), "Kystbyen Renovation")
@@ -281,16 +281,16 @@ describe("the role that covers every project", () => {
     assert.equal(COMPANY_ADMINISTRATOR_ROLE_ID, roleWebIdOf(administrator))
     assert.ok(coversEveryProject(administratorRecord.id))
     const renamed: Role = { ...administrator, name: "Tenant Owner" }
-    assert.ok(coversEveryProject(roleAdapter.toRecord(renamed, context()).id), "a renamed seeded role keeps its key")
+    assert.ok(coversEveryProject(recordFrom(roleAdapter, renamed, context()).id), "a renamed seeded role keeps its key")
     assert.ok(!coversEveryProject(dispatcherRecord.id))
     const impostor: Role = { ...nightShift, name: "Company Administrator" }
-    assert.ok(!coversEveryProject(roleAdapter.toRecord(impostor, context()).id), "a custom role with the name is not it")
+    assert.ok(!coversEveryProject(recordFrom(roleAdapter, impostor, context()).id), "a custom role with the name is not it")
   })
 })
 
 describe("a new role on the Pilot (#291)", () => {
   const ticketDesk: Role = { ...nightShift, grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }] }
-  const ticketDeskRecord = roleAdapter.toRecord(ticketDesk, context())
+  const ticketDeskRecord = recordFrom(roleAdapter, ticketDesk, context())
 
   test("is a RoleCreate of its name, its scope and its description, trimmed, starting from no permission at all", () => {
     const record = newRoleRecord({ name: " Depot Supervisor ", scope: "Assigned projects", description: " Depots and their stock " }, "access-role-1")
@@ -327,7 +327,7 @@ describe("a new role on the Pilot (#291)", () => {
 
 describe("a role's permissions on the Pilot (#291)", () => {
   const ticketDesk: Role = { ...nightShift, grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }, { moduleKey: "customers.contacts", actions: ["view"] }] }
-  const ticketDeskRecord = roleAdapter.toRecord(ticketDesk, context())
+  const ticketDeskRecord = recordFrom(roleAdapter, ticketDesk, context())
   const current = loaded({ records: [ticketDeskRecord, dispatcherRecord], serverIds: new Map([[ticketDeskRecord.id, ticketDesk.id], [dispatcherRecord.id, dispatcher.id]]) }, 1)
 
   test("a custom role's matrix is its grants as the panel reads them, to change; a system role's is read-only in the sentence the API refuses with", () => {
@@ -336,7 +336,7 @@ describe("a role's permissions on the Pilot (#291)", () => {
       access: { "operate.tickets": ["view", "edit"], "customers.contacts": ["view"] },
       readOnlyBecause: null,
     })
-    const system = roleMatrixOf(roleAdapter.toRecord({ ...dispatcher, name: "Disponent", grants: [{ moduleKey: "route-studio.live", actions: ["view"] }] }, context()))
+    const system = roleMatrixOf(recordFrom(roleAdapter, { ...dispatcher, name: "Disponent", grants: [{ moduleKey: "route-studio.live", actions: ["view"] }] }, context()))
     assert.deepEqual(system.access, { "route-studio.live": ["view"] })
     assert.equal(system.readOnlyBecause, systemRoleKept("Disponent"), "named as the tenant calls it")
   })

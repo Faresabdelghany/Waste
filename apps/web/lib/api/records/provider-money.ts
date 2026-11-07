@@ -29,7 +29,7 @@
 //
 // Ids, rule (b) of #81's plan closing with this slice: `provider-price-<uuid>`
 // and `settlement-<uuid>`; no fixture lends its id.
-import type { ServiceProviderPrice } from "@waste/contracts/service-provider-prices"
+import type { ServiceProviderPrice, ServiceProviderPriceCreate, ServiceProviderPriceIndex } from "@waste/contracts/service-provider-prices"
 import type { Settlement, SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
 import { priceEnded, priceEndedBy, SETTLEMENT_COMMANDS, settlementTransition, type SettlementCommand, type SettlementState } from "@waste/domain/finance/transitions"
 import { INDEX_BASES, SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
@@ -55,7 +55,7 @@ import {
 } from "@/lib/data/provider-money"
 
 import { command, create, get, listAll, patch } from "../client"
-import { NO_PRESENTATION, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, said, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"
@@ -123,9 +123,10 @@ export function providerPriceIndexHeldBack(record: Pick<BusinessRecord, "submitt
 }
 
 /** What Apply index's create carries: the row it indexes, and the body the contract accepts; a chain's first row is its body alone. */
-type IndexWrite = { indexes: string; body: unknown }
+/** Apply index: the next row of the chain, posted under the row it indexes. */
+type IndexWrite = { indexes: string; body: ServiceProviderPriceIndex }
 
-export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
+export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice, IndexWrite | ServiceProviderPriceCreate> = {
   prefix: PROVIDER_PRICE_PREFIX,
   auditTable: "service_provider_price",
   owns: isProviderPriceRecord,
@@ -147,12 +148,9 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
     const money = (minor: number) => formatMinor(minor, price.currency)
     const index = price.indexLabel === null || price.indexBasisPoints === null ? undefined : `${price.indexLabel} ${percentLabel(price.indexBasisPoints)} on the ${price.indexBase === "current-fee" ? "current fee" : "bid"}`
     return {
-      id: webIdOf(PROVIDER_PRICE_PREFIX, price.id),
       name: `${productName} · ${assignment.provider}`,
       context: assignment.name,
       status: periodReading(price.validFrom, price.validTo, projectDay(price.projectId, context)),
-      ...NO_PRESENTATION,
-      ...stampFacts(price, context.now),
       value: `${money(price.unitPriceMinor)}${unit === undefined ? "" : UNIT_SUFFIX[unit]}`,
       description: `What ${assignment.provider} is paid per ${unit ?? "unit"} of ${productName} under ${assignment.name}.`,
       facts: {
@@ -243,10 +241,9 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
       return { notes: typed(record, "notes") ?? null, validTo: lastDay === undefined ? null : firstDayOut(lastDay) }
     })
   },
-  create: (client, body) => {
-    const write = body as Partial<IndexWrite>
-    if (write.indexes !== undefined) return create<ServiceProviderPrice>(client, `/service-provider-prices/${write.indexes}/index`, write.body).then((created) => created.body)
-    return create<ServiceProviderPrice>(client, "/service-provider-prices", body).then((created) => created.body)
+  create: (client, write) => {
+    if ("indexes" in write) return create<ServiceProviderPrice>(client, `/service-provider-prices/${write.indexes}/index`, write.body).then((created) => created.body)
+    return create<ServiceProviderPrice>(client, "/service-provider-prices", write).then((created) => created.body)
   },
   update: (client, serverId, body) => patch<ServiceProviderPrice>(client, `/service-provider-prices/${serverId}`, body),
 }
@@ -332,12 +329,9 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
     const unpriced = "lines" in settlement ? settlement.lines.filter((line) => line.serviceProviderPriceId === null).length : 0
     const money = (minor: number) => formatMinor(minor, settlement.currency)
     return {
-      id: webIdOf(SETTLEMENT_PREFIX, settlement.id),
       name: `${assignment.provider} · ${period}`,
       context: assignment.name,
       status: statusLabel(settlement.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(settlement, context.now),
       value: money(settlement.netMinor),
       description: `What ${assignment.provider} is paid for ${assignment.name} over ${period}.`,
       facts: {
@@ -367,10 +361,8 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
     if (lastDay === undefined) return refusal("validTo", "A settlement settles a period: give its last day")
     return { serviceAreaAssignmentId: assignment.serverId, validFrom, validTo: firstDayOut(lastDay) }
   },
-  toPatchBody: () => refusal("status", SETTLEMENT_MOVES_BY_COMMAND),
+  kept: { path: "status", message: SETTLEMENT_MOVES_BY_COMMAND },
   create: (client, body) => create<SettlementDetail>(client, "/settlements", body).then((created) => created.body),
-  // Never reached: every patch is refused above, since the wire has no patch route for a settlement.
-  update: () => Promise.reject(new Error("A settlement has no patch route")),
   commands: Object.fromEntries(
     SETTLEMENT_COMMANDS.map((name) => [
       name,

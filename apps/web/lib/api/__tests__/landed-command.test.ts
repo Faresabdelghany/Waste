@@ -5,12 +5,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { rowAgain, type BusinessRecordStores } from "@/components/waste/business-record-store"
-
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { get } from "../client"
 import type { Resource, ResourceAdapter, ServerModule } from "../records/adapter"
+import { rowAgain, type RecordStoreContext } from "../records/record-store"
 import { loaded, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, problem, scripted } from "./scripted-fetch"
 
@@ -30,9 +29,9 @@ const things: ResourceAdapter<Thing> = {
 const module: ServerModule = { workspaceId: "resources", moduleId: "containers", resources: [things] }
 const KEY = "resources.containers"
 
-/** The two stores the read again touches; the rest of the provider's are not asked for on this path. */
+/** The two stores the read again touches; the rest of the controller's are not asked for on this path. */
 const storesOver = (state: ServerRecordsState) =>
-  ({ server: createExternalStore<ServerRecordsState>(state), generation: createExternalStore(0) }) as unknown as BusinessRecordStores
+  ({ server: createExternalStore<ServerRecordsState>(state), generation: createExternalStore(0) }) as unknown as RecordStoreContext
 
 describe("a command that landed unread", () => {
   const held = () => new Map([[KEY, loaded({ records: [row], serverIds: new Map([["t-1", "1"]]) }, 1)]])

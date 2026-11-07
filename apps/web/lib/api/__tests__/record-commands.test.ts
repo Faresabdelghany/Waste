@@ -15,7 +15,7 @@ import type { Role, User } from "@waste/contracts/access"
 import { type BusinessRecord } from "../../data/business-modules"
 import { command } from "../client"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import { accessModule, DEACTIVATE_USER, REACTIVATE_USER, REPLACE_ROLE_GRANTS, roleAdapter, userAdapter } from "../records/organisation"
 import { commandRecord, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -49,11 +49,11 @@ const olivia: User = {
 }
 const viewer: User = { ...olivia, id: "019995e0-0000-7000-8000-0000000000bb", email: "viewer@kystbyen.example", fullName: "Viewer Person", primaryAdministrator: false }
 
-const administratorRecord = roleAdapter.toRecord(administrator, context())
+const administratorRecord = recordFrom(roleAdapter, administrator, context())
 const roleState: ServerRecordsState = new Map([["configure.access", loaded({ records: [administratorRecord], serverIds: new Map([[administratorRecord.id, administrator.id]]) }, 1)]])
 const resolve = resolverOver(roleState)
-const oliviaRecord = userAdapter.toRecord(olivia, context(resolve))
-const viewerRecord = userAdapter.toRecord(viewer, context(resolve))
+const oliviaRecord = recordFrom(userAdapter, olivia, context(resolve))
+const viewerRecord = recordFrom(userAdapter, viewer, context(resolve))
 
 const current = loaded(
   {
@@ -199,7 +199,7 @@ describe("a command that says something", () => {
     },
   }
   const thingModule: ServerModule = { workspaceId: "configure", moduleId: "things", resources: [thingAdapter] }
-  const thingRecord = thingAdapter.toRecord(thing, context())
+  const thingRecord = recordFrom(thingAdapter, thing, context())
   const held = loaded({ records: [thingRecord], serverIds: new Map([[thingRecord.id, thing.id]]) }, 1)
   const withUsers = { state: new Map([["configure.access", current], ["configure.things", held]]), now: NOW }
 

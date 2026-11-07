@@ -67,7 +67,7 @@ import { formatDistance, formatDuration } from "@/lib/map-planning/format"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
-import { hasPrefix, NO_PRESENTATION, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, moduleKeyOf, ofKind, said, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
@@ -160,7 +160,7 @@ const HOLD_RELEASED_BY = "Release hold; an edit of its scheme's start, depot or 
 /** Whether the office holds the route (#209): `release-hold` hands it back (#226). */
 export const isHeldRoute = (record: Pick<BusinessRecord, "submittedValues">): boolean => typeof record.submittedValues?.heldAt === "string" && record.submittedValues.heldAt !== ""
 
-export function toRouteRecord(route: RouteRead, context: MappingContext): BusinessRecord {
+export function toRouteRecord(route: RouteRead, context: MappingContext): RecordFields {
   const project = projectOf(route, context)
   const at = (instant: string | null) => (instant === null ? undefined : shownOn(instant, project.timezone))
   const vehicle = route.planned.vehicleId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.planned.vehicleId))
@@ -218,12 +218,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (actual !== undefined) facts["Actual assignment"] = actual
   const reference = (prefix: string, serverId: string | null) => (serverId === null ? "" : webIdVia(context, prefix, serverId))
   return {
-    id: webIdOf(ROUTE_PREFIX, route.id),
     name: route.label,
     context: [project.name ?? project.webId, area].filter(Boolean).join(" · "),
     status: statusLabel(route.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
     description: `${route.routeSchemeId === null ? "The office's own route, with no scheme," : `Generated from ${scheme?.name ?? "its route scheme"}`} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
@@ -667,8 +664,7 @@ export const routeAdapter: ResourceAdapter<Route> = {
     return { ...body, ...(note === undefined ? {} : { note }), ...(sameDay ? { acceptSameDay: true } : {}) }
   },
   create: async (client, body) => (await create<RouteDetail>(client, "/routes", body)).body,
-  toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
-  update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),
+  kept: { path: "", message: CHANGED_BY_COMMANDS },
   commands: ROUTE_COMMANDS,
 }
 

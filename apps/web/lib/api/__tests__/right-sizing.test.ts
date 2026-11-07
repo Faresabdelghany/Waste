@@ -13,9 +13,9 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { RIGHT_SIZING_MODULE } from "../../data/right-sizing"
-import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
-import { APPROVE_PROPOSAL, DISMISS_PROPOSAL, proposalCommandsOffered, rightSizingAdapter, runRightSizing, toProposalRecord } from "../records/right-sizing"
+import { APPROVE_PROPOSAL, DISMISS_PROPOSAL, proposalCommandsOffered, rightSizingAdapter, runRightSizing } from "../records/right-sizing"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2027-03-04T12:00:00Z")
@@ -51,11 +51,11 @@ const smaller: RightSizingProposal = {
 describe("a right-sizing proposal as a record", () => {
   test("is the module's on the API, by its subscription and what it proposes", () => {
     assert.ok(isServerBacked(RIGHT_SIZING_MODULE.workspaceId, RIGHT_SIZING_MODULE.moduleId))
-    const record = toProposalRecord(smaller, context)
+    const record = recordFrom(rightSizingAdapter, smaller, context)
     assert.equal(record.id, `right-sizing-proposal-${smaller.id}`)
     assert.deepEqual([record.name, record.context, record.status, record.value], [`subscription-${id(3)} · a size down`, `product-${id(4)} → product-${id(5)}`, "Open", "a quarter full, half full, empty, a quarter full"])
     assert.deepEqual(proposalCommandsOffered(record), [APPROVE_PROPOSAL, DISMISS_PROPOSAL])
-    assert.deepEqual(proposalCommandsOffered(toProposalRecord({ ...smaller, status: "dismissed", decidedAt: NOW.toISOString(), decidedBy: id(9), dismissNote: "No" }, context)), [])
+    assert.deepEqual(proposalCommandsOffered(recordFrom(rightSizingAdapter, { ...smaller, status: "dismissed", decidedAt: NOW.toISOString(), decidedBy: id(9), dismissNote: "No" }, context)), [])
     assert.ok(rightSizingAdapter.owns(record))
     const surface = COMMAND_SURFACES["customers.right-sizing"]
     assert.ok(typeof surface.primary === "function" && surface.rowActions !== undefined, "Propose now, and Approve and Dismiss in the details")
@@ -63,11 +63,11 @@ describe("a right-sizing proposal as a record", () => {
 
   test("a size's approve takes the day and the product by the server's ids; a frequency's nothing; a dismissal why", () => {
     const approve = rightSizingAdapter.commands![APPROVE_PROPOSAL]
-    const record = toProposalRecord(smaller, context)
+    const record = recordFrom(rightSizingAdapter, smaller, context)
     assert.deepEqual(RightSizingApprove.parse(approve.toBody!({ on: "2027-04-01", productId: `product-${id(5)}` }, record, context)), { on: "2027-04-01", productId: id(5) })
     const noDay = approve.toBody!({ productId: `product-${id(5)}` }, record, context)
     assert.ok(isLocalRefusal(noDay) && noDay.path === "on")
-    const frequency = toProposalRecord({ ...smaller, direction: "more-frequent", suggestedProductId: null }, context)
+    const frequency = recordFrom(rightSizingAdapter, { ...smaller, direction: "more-frequent", suggestedProductId: null }, context)
     assert.deepEqual(approve.toBody!({}, frequency, context), {})
     const dismiss = rightSizingAdapter.commands![DISMISS_PROPOSAL]
     assert.ok(isLocalRefusal(dismiss.toBody!({}, record, context)))

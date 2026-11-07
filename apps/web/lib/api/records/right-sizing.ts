@@ -10,11 +10,10 @@ import type { RightSizingProposal, RightSizingRun } from "@waste/contracts/right
 import { changesTheProduct } from "@waste/domain/inspections/right-sizing"
 
 import { AGREEMENTS_MODULE, PRODUCT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
-import { type BusinessRecord } from "@/lib/data/business-modules"
 import { DIRECTION_LABELS, evidenceSentence, RIGHT_SIZING_MODULE, RIGHT_SIZING_PREFIX, RIGHT_SIZING_RECORD_KIND, STATUS_LABELS } from "@/lib/data/right-sizing"
 
 import { command, get, listAll, post, type ApiClient } from "../client"
-import { NO_PRESENTATION, said, stampFacts, webIdOf, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, shownOn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
@@ -34,7 +33,7 @@ export const approveChangesTheProduct = (record: { submittedValues?: Record<stri
   return direction === "smaller" || direction === "bigger"
 }
 
-export function toProposalRecord(proposal: RightSizingProposal, context: MappingContext): BusinessRecord {
+export function toProposalRecord(proposal: RightSizingProposal, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(proposal.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", proposal.projectId)
   const timezone = projectTimezoneOf({ projectIds: [projectWebId] }, context)
@@ -43,12 +42,9 @@ export function toProposalRecord(proposal: RightSizingProposal, context: Mapping
   const suggested = proposal.suggestedProductId === null ? undefined : nameVia(context, PRODUCT_PREFIX, proposal.suggestedProductId)
   const direction = DIRECTION_LABELS[proposal.direction]
   return {
-    id: webIdOf(RIGHT_SIZING_PREFIX, proposal.id),
     name: `${subscription} · ${direction.toLowerCase()}`,
     context: suggested === undefined ? direction : `${product} → ${suggested}`,
     status: STATUS_LABELS[proposal.status],
-    ...NO_PRESENTATION,
-    ...stampFacts(proposal, context.now),
     value: evidenceSentence(proposal.evidence),
     description:
       proposal.status === "dismissed"
@@ -91,9 +87,7 @@ export const rightSizingAdapter: ResourceAdapter<RightSizingProposal> = {
   list: (client) => listAll<RightSizingProposal>(client, "/right-sizing-proposals"),
   read: (client, serverId) => get<RightSizingProposal>(client, `/right-sizing-proposals/${serverId}`),
   toRecord: toProposalRecord,
-  toPatchBody: () => refusal("status", "A proposal is the run's: approve it or dismiss it"),
-  // Never reached: every patch is refused above, since the wire has no patch route for a proposal.
-  update: () => Promise.reject(new Error("A right-sizing proposal has no patch route")),
+  kept: { path: "status", message: "A proposal is the run's: approve it or dismiss it" },
   commands: {
     [APPROVE_PROPOSAL]: {
       toBody: (input, record, context) => {

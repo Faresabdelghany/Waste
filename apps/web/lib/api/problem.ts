@@ -92,6 +92,12 @@ export class ApiProblem extends Error {
   }
 }
 
+/** The problem an unknown failure is reported as; a thrown `ApiProblem` is reported as itself. */
+export function problemOfError(error: unknown): Problem {
+  if (error instanceof ApiProblem) return error.problem
+  return genericProblem(0, error instanceof Error ? error.message : "The request failed")
+}
+
 /** True for what the client throws; a type guard a catch block can lean on. */
 export function isApiProblem(error: unknown): error is ApiProblem {
   return error instanceof ApiProblem

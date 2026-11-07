@@ -14,8 +14,8 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
 import { BULKY_ITEMS_KEY, bookingMoves, bookingRecordOf } from "../../data/bulky"
 import { type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
-import { BULKY_BOOKING_COMMANDS, bulkyBookingAdapter, itemsOfRecord, ROUTE_BOOKING, toBulkyBookingCreateBody, toBulkyBookingPatchBody, toBulkyBookingRecord } from "../records/bulky-bookings"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { BULKY_BOOKING_COMMANDS, bulkyBookingAdapter, itemsOfRecord, ROUTE_BOOKING, toBulkyBookingCreateBody, toBulkyBookingPatchBody } from "../records/bulky-bookings"
 import { isServerBacked } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { clientOver, json, scripted } from "./scripted-fetch"
@@ -65,7 +65,7 @@ describe("a bulky booking as a record", () => {
 
   test("is the module's on the API, `bulky-booking-<uuid>`, named by its place and day, its items in one line", () => {
     assert.ok(isServerBacked("operate", "bulky-bookings"))
-    const record = toBulkyBookingRecord(booked, context)
+    const record = recordFrom(bulkyBookingAdapter, booked, context)
     assert.equal(record.id, `bulky-booking-${booked.id}`)
     assert.equal(record.name, `Bulky collection · property-${id(5)} · Tue 9 Mar`)
     assert.deepEqual([record.status, record.value, record.description], ["Booked", "2027-03-09", "Sofa · 2 × Chair"])
@@ -73,7 +73,7 @@ describe("a bulky booking as a record", () => {
     assert.ok(bulkyBookingAdapter.owns(record))
     assert.ok(bulkyBookingAdapter.owns({ ...record, id: "bulky-bookings-bulky-booking-1793088183182" }), "a row the dialog has just made, by its recordKind")
     assert.ok(bookingMoves(record))
-    const routedRecord = toBulkyBookingRecord(routed, context)
+    const routedRecord = recordFrom(bulkyBookingAdapter, routed, context)
     assert.deepEqual([routedRecord.status, routedRecord.facts?.Route, bookingMoves(routedRecord)], ["Routed", `route-${id(12)}`, false])
     const surface = COMMAND_SURFACES["operate.bulky-bookings"]
     assert.ok(typeof surface.primary === "function" && surface.rowActions !== undefined, "its own dialog, moved by its commands")
@@ -113,7 +113,7 @@ describe("the row the booking dialog makes", () => {
 })
 
 describe("a booking changed", () => {
-  const record = toBulkyBookingRecord(booked, context)
+  const record = recordFrom(bulkyBookingAdapter, booked, context)
   const after = (values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 
   test("patches the day, the items and the note that moved, and nothing where none did", () => {

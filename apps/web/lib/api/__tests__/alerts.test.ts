@@ -14,7 +14,7 @@ import { NAMES_A_SUBJECT } from "@waste/domain/resolution/alerts"
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { ACKNOWLEDGE_ALERT, alertAdapter, ALERTS_MODULE, alertsModule, LINK_ALERT_TICKET, RESOLVE_ALERT } from "../records/alerts"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, rereadRecord, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -25,7 +25,7 @@ const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const vehicleId = "01a0d2a4-a280-7013-8000-000000000001"
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
@@ -71,7 +71,7 @@ const stale: Alert = {
   resolutionNote: null,
   rule: null,
 }
-const record = alertAdapter.toRecord(stale, context())
+const record = recordFrom(alertAdapter, stale, context())
 const current = loaded({ records: [record], serverIds: new Map([[record.id, stale.id]]) }, 1)
 
 describe("the alerts module", () => {
@@ -115,7 +115,7 @@ describe("an alert", () => {
   })
 
   test("one a worker's rule raised names its rule, and one about a ticket alone is about that ticket; the worker's resolve names nobody (O4 of #290)", () => {
-    const overdue = alertAdapter.toRecord(
+    const overdue = recordFrom(alertAdapter, 
       { ...stale, source: "rule", rule: "ticket-overdue", kind: "service-risk", title: "T-1001 is overdue", vehicleId: null, ticketId, raisedBy: null, status: "resolved", resolvedAt: "2026-10-01T08:00:00.000Z", resolutionNote: "Cleared: the ticket was closed, or given a later due date." },
       context(),
     )
@@ -127,7 +127,7 @@ describe("an alert", () => {
   })
 
   test("once acknowledged, resolved and linked, says by whom and when, and names its ticket by label", () => {
-    const done = alertAdapter.toRecord({ ...stale, status: "resolved", ticketId, acknowledgedAt: "2026-10-01T08:00:00.000Z", acknowledgedBy: oliviaId, resolvedAt: "2026-10-01T09:00:00.000Z", resolvedBy: oliviaId, resolutionNote: "Modem restarted" }, context())
+    const done = recordFrom(alertAdapter, { ...stale, status: "resolved", ticketId, acknowledgedAt: "2026-10-01T08:00:00.000Z", acknowledgedBy: oliviaId, resolvedAt: "2026-10-01T09:00:00.000Z", resolvedBy: oliviaId, resolutionNote: "Modem restarted" }, context())
     assert.equal(done.status, "Resolved")
     assert.equal(done.owner, "Olivia Larsen")
     assert.equal(done.facts.Ticket, "T-1001")
@@ -135,7 +135,7 @@ describe("an alert", () => {
     assert.equal(done.facts.Resolved, "2026-10-01 11:00 · Olivia Larsen")
     assert.equal(done.facts["Resolution note"], "Modem restarted")
     assert.equal(done.submittedValues?.ticketId, t1001.id)
-    const unloaded = alertAdapter.toRecord({ ...stale, ticketId }, context(NOTHING_RESOLVED))
+    const unloaded = recordFrom(alertAdapter, { ...stale, ticketId }, context(NOTHING_RESOLVED))
     assert.equal(unloaded.facts.Ticket, `ticket-${ticketId}`, "an id chip until the tickets load")
   })
 

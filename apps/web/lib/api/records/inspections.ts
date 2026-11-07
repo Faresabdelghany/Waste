@@ -12,13 +12,12 @@ import type { ImageExtension } from "@waste/domain/storage-objects"
 
 import { PROPERTY_PREFIX } from "@/lib/data/agreements"
 import { splitMultiValue } from "@/lib/data/business-form-records"
-import { type BusinessRecord } from "@/lib/data/business-modules"
 import { FINDING_LABELS, INSPECTION_PREFIX, INSPECTION_RECORD_KIND, INSPECTIONS_MODULE, OUTCOME_LABELS, STATUS_LABELS } from "@/lib/data/inspections"
 import { isPropertyRecord } from "@/lib/data/properties"
 import { putObject } from "@/lib/driver/reads"
 
 import { command, create, get, listAll, patch, post, type ApiClient } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, typed, type LocalRefusal, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, shownOn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -40,7 +39,7 @@ function findingsOf(record: Parameters<typeof typed>[0]): InspectionFinding[] | 
   return off === undefined ? (picked as InspectionFinding[]) : refusal("findings", `${off} is not a finding`)
 }
 
-export function toInspectionRecord(inspection: FieldInspection, context: MappingContext): BusinessRecord {
+export function toInspectionRecord(inspection: FieldInspection, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(inspection.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", inspection.projectId)
   const timezone = projectTimezoneOf({ projectIds: [projectWebId] }, context)
@@ -50,12 +49,9 @@ export function toInspectionRecord(inspection: FieldInspection, context: Mapping
   const findings = inspection.findings.map((finding) => FINDING_LABELS[finding])
   const inspected = shownOn(inspection.inspectedAt, timezone)
   return {
-    id: webIdOf(INSPECTION_PREFIX, inspection.id),
     name: `${subject} · ${inspected.slice(0, 10)}`,
     context: OUTCOME_LABELS[inspection.outcome],
     status: STATUS_LABELS[inspection.status],
-    ...NO_PRESENTATION,
-    ...stampFacts(inspection, context.now),
     value: findings.length === 0 ? "Nothing found" : findings.join(" · "),
     description: inspection.note ?? (findings.length === 0 ? "Nothing was found." : `Found: ${findings.join(", ").toLowerCase()}.`),
     facts: {
@@ -118,7 +114,7 @@ export function toInspectionPatchBody(before: Parameters<typeof typed>[0], after
   return Object.keys(body).length === 0 ? null : body
 }
 
-export const inspectionAdapter: ResourceAdapter<FieldInspection> = {
+export const inspectionAdapter: ResourceAdapter<FieldInspection, FieldInspectionCreate, FieldInspectionPatch> = {
   prefix: INSPECTION_PREFIX,
   auditTable: "field_inspection",
   // A row the dialog has just made is `inspections-<clock>` until the server answers: owned by its recordKind.

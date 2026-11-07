@@ -103,12 +103,14 @@ export class PartialWrite<R extends Resource = Resource> extends Error {
  * (server-records.ts). A command that says something — a warehouse, a reason
  * (Issue #181) — maps the dialog's input to its body in `toBody`, web ids to
  * server ids through the resolver, or refuses it naming the field before
- * the API sees it; a command without `toBody` runs with no body.
+ * the API sees it; a command without `toBody` runs with no body, its
+ * `Body` what `run` is handed. Its members are methods, so a module's map of
+ * commands holds each under its own body.
  */
-export type RecordCommand<R extends Resource> = {
-  toBody?: (input: CommandInput, record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
-  run: (client: Client, serverId: string, body: unknown) => Promise<R>
-  refused: (record: Pick<BusinessRecord, "name">) => string
+export type RecordCommand<R extends Resource, Body = unknown> = {
+  toBody?(input: CommandInput, record: BusinessRecord, context: MappingContext): Body | LocalRefusal
+  run(client: Client, serverId: string, body: Body): Promise<R>
+  refused(record: Pick<BusinessRecord, "name">): string
   /**
    * The other switched modules, by key, whose rows the command changes
    * beside its own row's — a container's movement appended to the ledger,
@@ -128,19 +130,41 @@ export type RecordCommand<R extends Resource> = {
  * is and hands the answer to the caller (`actOnRecord`, server-records.ts).
  * A page asks for one through its adapter's typed wrapper, never by name.
  */
-export type RecordAction<Answer> = {
-  toBody?: (input: CommandInput, record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
-  run: (client: Client, serverId: string, body: unknown) => Promise<Answer>
-  refused: (record: Pick<BusinessRecord, "name">) => string
+export type RecordAction<Answer, Body = unknown> = {
+  toBody?(input: CommandInput, record: BusinessRecord, context: MappingContext): Body | LocalRefusal
+  run(client: Client, serverId: string, body: Body): Promise<Answer>
+  refused(record: Pick<BusinessRecord, "name">): string
 }
 
-export type ResourceAdapter<R extends Resource> = {
+/** A command whose body is what its `toBody` answers, so its `run` reads that body as it is typed: one entry of a module's map. */
+export const commandOf = <R extends Resource, Body>(command: RecordCommand<R, Body>): RecordCommand<R, Body> => command
+
+/** An action whose body is what its `toBody` answers, as `commandOf`'s. */
+export const actionOf = <Answer, Body>(action: RecordAction<Answer, Body>): RecordAction<Answer, Body> => action
+
+/** What every row shares, which the store fills from the resource and its adapter (`recordFrom`): its web id, its stamps, and what the wire does not carry. */
+type Envelope = "id" | "updated" | "freshness" | "source" | "owner" | "value" | "description" | "related"
+
+/** What a mapping says of a resource: the module's own fields, and any of the envelope's it says otherwise (a credit note's id, a row's value). */
+export type RecordFields = Omit<BusinessRecord, Envelope> & Partial<Pick<BusinessRecord, Envelope>>
+
+/**
+ * One wire resource as a module's rows: `R` the resource the API answers,
+ * `Create` and `Patch` the bodies its writes send — the contracts' types, or
+ * the adapter's own where a write is several requests (a patch, then a set).
+ * The members a kind does without are absent: a kind the API does not create
+ * has no `toCreateBody`/`create`, one it never patches no `update` — its
+ * `toPatchBody`, where it has one, refuses in its own words — and the store
+ * refuses what it is not given. Its members are methods, so a module holds
+ * adapters of different resources and bodies side by side.
+ */
+export type ResourceAdapter<R extends Resource, Create = unknown, Patch = unknown> = {
   /** The id prefix a record of this kind carries: `project`, `customer`, … */
   prefix: string
   /** The table the API's audit log names a row of this kind by (#291), absent for a kind whose table keeps no history (a ledger, execution, the money the work makes). */
   auditTable?: AuditedTable
   /** Whether a record of the module is one of this kind; the composed module asks each adapter in turn. */
-  owns: (record: BusinessRecord) => boolean
+  owns(record: BusinessRecord): boolean
   /**
    * The wire's status tokens a patch may carry (`active`, `inactive`). A
    * record moved to a status not listed is refused by the store before the
@@ -151,18 +175,24 @@ export type ResourceAdapter<R extends Resource> = {
   statuses?: readonly string[]
   /** Every row the caller reaches, whole; null for a kind the module lists through another adapter. */
   list: ((client: Client) => Promise<R[]>) | null
-  /** The resource as the prototype shows it. */
-  toRecord: (resource: R, context: MappingContext) => BusinessRecord
+  /** The resource as the prototype shows it: its own fields, over the envelope the store fills (`recordFrom`). */
+  toRecord(resource: R, context: MappingContext): RecordFields
   /** The body of `POST`, or a refusal naming the field the form left wrong; absent for a kind the API does not create (the company). */
-  toCreateBody?: (record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
-  /** The body of `PATCH` for what moved between the two, or null when nothing the wire carries did; a refusal names a field. */
-  toPatchBody: (before: BusinessRecord, after: BusinessRecord, context: MappingContext) => unknown | null | LocalRefusal
+  toCreateBody?(record: BusinessRecord, context: MappingContext): Create | LocalRefusal
+  /** The body of `PATCH` for what moved between the two, or null when nothing the wire carries did; a refusal names a field. Absent for a kind the API never patches (`kept`). */
+  toPatchBody?(before: BusinessRecord, after: BusinessRecord, context: MappingContext): Patch | null | LocalRefusal
+  /**
+   * Why a kind the API never patches — a ledger row, a row that moves by its
+   * commands — refuses an edit: the sentence, at the field it names, else at
+   * the first field the edit moved (`keptRefusal`, server-records.ts).
+   */
+  kept?: { message: string; path?: string }
   /** The collection the resource is created in; `Location` is read there. */
-  create?: (client: Client, body: unknown) => Promise<R>
-  /** The row's own patch route. */
-  update: (client: Client, serverId: string, body: unknown) => Promise<R>
+  create?(client: Client, body: Create): Promise<R>
+  /** The row's own patch route; absent for a kind that moves by its commands alone. */
+  update?(client: Client, serverId: string, body: Patch): Promise<R>
   /** The row's own read, for a row the server changed on its own account and the store reads back (`rereadRecord`); absent for a kind nothing reads back. */
-  read?: (client: Client, serverId: string) => Promise<R>
+  read?(client: Client, serverId: string): Promise<R>
   /** The row's commands, by name; absent for a kind the API commands nothing of. */
   commands?: Readonly<Record<string, RecordCommand<R>>>
   /** The row's actions, by name: requests about the row that answer another resource; absent for a kind with none. */
@@ -173,8 +203,7 @@ export type ResourceAdapter<R extends Resource> = {
 export type ServerModule = {
   workspaceId: WorkspaceId
   moduleId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a module composes adapters of different resources; each is typed on its own
-  resources: ResourceAdapter<any>[]
+  resources: readonly ResourceAdapter<Resource>[]
   /**
    * Whether it is read for a Service Provider's account alone (#291 C24): a
    * module whose routes the API opens to an office account under another
@@ -187,6 +216,15 @@ export type ServerModule = {
    * without keeping them (#545 of #544). A write is still its own grant's.
    */
   alsoViewedUnder?: readonly ModuleKey[]
+}
+
+/**
+ * A resource as the prototype shows it: the envelope every row shares — the
+ * web id its kind's prefix gives it, nothing for what the wire does not
+ * carry, the stamps — under the fields its adapter says.
+ */
+export function recordFrom<R extends Resource>(adapter: Pick<ResourceAdapter<R>, "prefix" | "toRecord">, resource: R, context: MappingContext): BusinessRecord {
+  return { id: webIdOf(adapter.prefix, resource.id), ...NO_PRESENTATION, ...stampFacts(resource, context.now), ...adapter.toRecord(resource, context) }
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */
@@ -218,7 +256,7 @@ export const ofKind = (prefix: string, recordKinds: readonly string[]) => (recor
   hasPrefix(prefix)(record) || (record.recordKind !== undefined && recordKinds.includes(record.recordKind))
 
 /** What the wire does not carry, the same for every resource: nothing here is read back into a write body. */
-export const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
+const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
 
 /** `active` → `Active`, `service-contact` → `Service contact`: a wire token as a status or a fact reads. */
 export function statusLabel(token: string): string {
@@ -257,7 +295,7 @@ export function relativeDay(iso: string, now = new Date()): string {
 }
 
 /** The stamps every server record shows the same way. */
-export function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updated" | "freshness" | "source"> {
+function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updated" | "freshness" | "source"> {
   const updated = relativeDay(resource.updatedAt, now)
   return { updated, freshness: updated, source: "Waste API" }
 }

@@ -18,7 +18,7 @@ import { ONE_PLACE } from "@waste/domain/registry/agreements"
 import { PROJECT_DEFAULT_LIST, SUBSCRIPTION_RECORD_KIND } from "../../data/agreements"
 import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { AGREEMENT_STATUSES, agreementAdapter, agreementsModule, INITIAL_SUBSCRIPTION_REFUSAL, subscriptionAdapter } from "../records/agreements"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -50,8 +50,8 @@ const COPENHAGEN = webIdOf("project", copenhagen.id)
 const OSTERBRO = webIdOf("company", osterbro.id)
 
 // The organisation and the customers as the store has them when the agreements load.
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
-const customerRecords = [mikkel, osterbro, kab].map((customer) => customerAdapter.toRecord(customer, { resolve: NOTHING_RESOLVED, now: NOW }))
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const customerRecords = [mikkel, osterbro, kab].map((customer) => recordFrom(customerAdapter, customer, { resolve: NOTHING_RESOLVED, now: NOW }))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: customerRecords, serverIds: new Map(customerRecords.map((record, index) => [record.id, [mikkel, osterbro, kab][index].id])) }, 1)],
@@ -61,7 +61,7 @@ const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: re
 
 /** The agreements module as the store holds it once loaded, for the subscriptions that name an agreement and for a write's context. */
 function withAgreements(agreements: readonly Agreement[], base: ServerRecordsState = state): ServerRecordsState {
-  const records = agreements.map((agreement) => agreementAdapter.toRecord(agreement, context()))
+  const records = agreements.map((agreement) => recordFrom(agreementAdapter, agreement, context()))
   return new Map([...base, ["customers.agreements", loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, agreements[index].id])) }, 1)]])
 }
 const loadedState = withAgreements([agr2408, agr2188, agrDraft])
@@ -153,7 +153,7 @@ describe("the agreements module", () => {
 
 describe("an agreement", () => {
   test("is the wire's fields alone, scoped to its project", () => {
-    const record = agreementAdapter.toRecord(agr2408, context())
+    const record = recordFrom(agreementAdapter, agr2408, context())
     assert.equal(record.id, `agreement-${agr2408.id}`)
     assert.equal(record.name, "AGR-2408 · Østerbro Housing")
     assert.equal(record.context, "Østerbro Housing · same payer")
@@ -195,7 +195,7 @@ describe("an agreement", () => {
   })
 
   test("another agreement: its payer is named when another customer pays, and its period runs open", () => {
-    const record = agreementAdapter.toRecord(agr2188, context())
+    const record = recordFrom(agreementAdapter, agr2188, context())
     assert.equal(record.id, `agreement-${agr2188.id}`)
     assert.equal(record.name, "AGR-2188 · Mikkel Sørensen")
     assert.equal(record.context, "Mikkel Sørensen · payer KAB Bolig")
@@ -210,17 +210,17 @@ describe("an agreement", () => {
   })
 
   test("a draft offers Active and Cancelled, an active one Cancelled, a cancelled one nothing; the notes and the price list travel as facts", () => {
-    const draft = agreementAdapter.toRecord(agrDraft, context())
+    const draft = recordFrom(agreementAdapter, agrDraft, context())
     assert.equal(draft.status, "Draft")
     assert.deepEqual(draft.allowedTransitions, ["Active", "Cancelled"])
     assert.equal(draft.facts.Notes, "Payer to be confirmed")
     assert.equal(draft.submittedValues?.internalNotes, "Payer to be confirmed")
     assert.equal(draft.facts["Price list"], `price-list-${agrDraft.priceListId}`, "an id chip while the store holds no price lists")
     assert.equal(draft.submittedValues?.priceListId, `price-list-${agrDraft.priceListId}`, "the list's web id, which the form's picker offers")
-    const priced = agreementAdapter.toRecord(agrDraft, context(resolverOver(withPriceLists)))
+    const priced = recordFrom(agreementAdapter, agrDraft, context(resolverOver(withPriceLists)))
     assert.equal(priced.facts["Price list"], "Copenhagen tariff 2026", "named by the list the store holds")
     assert.equal(priced.submittedValues?.priceListId, PRICE_LIST_WEB_ID)
-    const cancelled = agreementAdapter.toRecord(agrCancelled, context())
+    const cancelled = recordFrom(agreementAdapter, agrCancelled, context())
     assert.equal(cancelled.status, "Cancelled")
     assert.deepEqual(cancelled.allowedTransitions, [])
   })
@@ -228,7 +228,7 @@ describe("an agreement", () => {
   test("says exactly the wire's three statuses, so the store spells Cancelled and refuses Expired and Terminated before the API", () => {
     assert.deepEqual(AGREEMENT_STATUSES, ["draft", "active", "cancelled"])
     assert.deepEqual(agreementAdapter.statuses, AGREEMENT_STATUSES)
-    const record = agreementAdapter.toRecord(agr2408, context())
+    const record = recordFrom(agreementAdapter, agr2408, context())
     assert.ok(spellsStatus(agreementsModule, record, "Cancelled"))
     assert.ok(spellsStatus(agreementsModule, record, "Draft"))
     assert.ok(!spellsStatus(agreementsModule, record, "Expired"))
@@ -277,10 +277,10 @@ describe("an agreement", () => {
     assert.equal("serviceWindow" in (agreementAdapter.toCreateBody?.(madeAgreement(AGREEMENT_FORM), context()) as Record<string, unknown>), false, "absent is any time of the day")
     assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, serviceWindowStart: "06:00" }), context()), { path: "serviceWindowEnd", message: "Give both ends of the window, or neither" })
     assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, serviceWindowStart: "10:00", serviceWindowEnd: "06:00" }), context()), { path: "serviceWindowEnd", message: "A window closes after it opens, on the same day" })
-    const read = agreementAdapter.toRecord({ ...agr2408, serviceWindow: { from: "06:00", to: "10:00" } }, context())
+    const read = recordFrom(agreementAdapter, { ...agr2408, serviceWindow: { from: "06:00", to: "10:00" } }, context())
     assert.equal(read.facts?.["Service window"], "06:00–10:00")
-    assert.deepEqual(agreementAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowEnd: "09:00" } }, context()), { serviceWindow: { from: "06:00", to: "09:00" } })
-    assert.deepEqual(agreementAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { serviceWindow: null })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowEnd: "09:00" } }, context()), { serviceWindow: { from: "06:00", to: "09:00" } })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { serviceWindow: null })
   })
 
   test("the price list picked goes out by its server id, the project's default list as no list at all; one the store does not hold is refused at the field", () => {
@@ -291,14 +291,14 @@ describe("an agreement", () => {
     assert.equal("priceListId" in byDefault, false, "absent is the project's default list")
     assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, priceListId: "price-list-copenhagen-2026" }), context()), { path: "priceListId", message: "Pick a price list the API holds" })
 
-    const running = agreementAdapter.toRecord(agr2408, context(resolverOver(withPriceLists)))
+    const running = recordFrom(agreementAdapter, agr2408, context(resolverOver(withPriceLists)))
     const moved: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, priceListId: PRICE_LIST_WEB_ID } }
-    const onto = agreementAdapter.toPatchBody(running, moved, context(resolverOver(withPriceLists)))
+    const onto = agreementAdapter.toPatchBody?.(running, moved, context(resolverOver(withPriceLists)))
     assert.deepEqual(onto, { priceListId: PRICE_LIST })
     assert.ok(AgreementPatch.safeParse(onto).success)
-    assert.deepEqual(agreementAdapter.toPatchBody(moved, running, context(resolverOver(withPriceLists))), { priceListId: null }, "back to the project's default list")
+    assert.deepEqual(agreementAdapter.toPatchBody?.(moved, running, context(resolverOver(withPriceLists))), { priceListId: null }, "back to the project's default list")
     const lost: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, priceListId: "price-list-nowhere" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(running, lost, context()), { path: "priceListId", message: "Pick a price list the API holds" })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(running, lost, context()), { path: "priceListId", message: "Pick a price list the API holds" })
   })
 
   test("a product named on the agreement form is refused: a subscription is its own row, added once the agreement is saved", () => {
@@ -307,33 +307,33 @@ describe("an agreement", () => {
   })
 
   test("a patch says what moved — a status, a cleared end as null, another payer by server id, emptied notes — and the contract accepts it", () => {
-    const record = agreementAdapter.toRecord(agrDraft, context())
+    const record = recordFrom(agreementAdapter, agrDraft, context())
     const activated: BusinessRecord = { ...record, status: "Active" }
-    assert.deepEqual(agreementAdapter.toPatchBody(record, activated, context()), { status: "active" })
-    const running = agreementAdapter.toRecord(agr2408, context())
+    assert.deepEqual(agreementAdapter.toPatchBody?.(record, activated, context()), { status: "active" })
+    const running = recordFrom(agreementAdapter, agr2408, context())
     const reopened: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, effectiveTo: "" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(running, reopened, context()), { validTo: null })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(running, reopened, context()), { validTo: null })
     const repaid: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, payerId: `company-${kab.id}`, internalNotes: "" } }
-    const body = agreementAdapter.toPatchBody(running, repaid, context())
+    const body = agreementAdapter.toPatchBody?.(running, repaid, context())
     assert.deepEqual(body, { payerCustomerId: kab.id })
     assert.ok(AgreementPatch.safeParse(body).success)
     const noted: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, internalNotes: "" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(record, noted, context()), { notes: null })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(record, noted, context()), { notes: null })
     const ended: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, effectiveTo: "2026-12-31", agreementNumber: "AGR-2700-B" } }
-    const both = agreementAdapter.toPatchBody(record, ended, context())
+    const both = agreementAdapter.toPatchBody?.(record, ended, context())
     assert.deepEqual(both, { number: "AGR-2700-B", validTo: "2027-01-01" })
     assert.ok(AgreementPatch.safeParse(both).success)
-    assert.equal(agreementAdapter.toPatchBody(record, record, context()), null)
+    assert.equal(agreementAdapter.toPatchBody?.(record, record, context()), null)
   })
 
   test("a patch is refused for a project moved, a customer the store does not hold, or a product named on the agreement form", () => {
-    const record = agreementAdapter.toRecord(agr2408, context())
+    const record = recordFrom(agreementAdapter, agr2408, context())
     const moved: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, projectId: "project-harbor" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(record, moved, context()), { path: "projectId", message: "An agreement stays in its project" })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(record, moved, context()), { path: "projectId", message: "An agreement stays in its project" })
     const lost: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, customerId: "company-nowhere" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(record, lost, context()), { path: "customerId", message: "Pick a customer the API holds" })
+    assert.deepEqual(agreementAdapter.toPatchBody?.(record, lost, context()), { path: "customerId", message: "Pick a customer the API holds" })
     const subscribed: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, productId: "product-res-240" } }
-    assert.deepEqual(agreementAdapter.toPatchBody(record, subscribed, context()), { path: "productId", message: INITIAL_SUBSCRIPTION_REFUSAL }, "the same rule on the edit as on the create")
+    assert.deepEqual(agreementAdapter.toPatchBody?.(record, subscribed, context()), { path: "productId", message: INITIAL_SUBSCRIPTION_REFUSAL }, "the same rule on the edit as on the create")
   })
 
   test("through the store's write, a create posts and the API's 409 for an inactive customer comes back as its sentence", async () => {
@@ -360,7 +360,7 @@ describe("an agreement", () => {
 
   test("the update patches the row's own route", async () => {
     const { fetch, calls } = scripted([() => json({ ...agrDraft, status: "active" })])
-    const answer = await agreementAdapter.update(clientOver(fetch), agrDraft.id, { status: "active" })
+    const answer = await agreementAdapter.update!(clientOver(fetch), agrDraft.id, { status: "active" })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/agreements/${agrDraft.id}`])
     assert.deepEqual(bodyOf(calls[0]), { status: "active" })
     assert.equal(answer.status, "active")
@@ -369,7 +369,7 @@ describe("an agreement", () => {
 
 describe("a subscription", () => {
   test("is a row under its agreement's web id, its product and its place as id chips, its status a reading of its period on the project's day", () => {
-    const record = subscriptionAdapter.toRecord(sub1, context(resolveLoaded))
+    const record = recordFrom(subscriptionAdapter, sub1, context(resolveLoaded))
     assert.equal(record.id, `subscription-${sub1.id}`)
     assert.equal(record.name, `AGR-2408 · product-${PRODUCT}`)
     assert.equal(record.context, "Østerbro Housing · same payer", "the agreement's customer and payer, the column the module shows")
@@ -407,7 +407,7 @@ describe("a subscription", () => {
   })
 
   test("at a shared collection point it names the point; one not yet in force is Pending and one that ended is Expired", () => {
-    const pending = subscriptionAdapter.toRecord(sub2, context(resolveLoaded))
+    const pending = recordFrom(subscriptionAdapter, sub2, context(resolveLoaded))
     assert.equal(pending.status, "Pending")
     assert.equal(pending.value, "2026-11-01 – open")
     assert.equal(pending.facts.Property, undefined)
@@ -419,18 +419,18 @@ describe("a subscription", () => {
     assert.equal(pending.submittedValues?.propertyName, undefined)
     assert.equal(pending.submittedValues?.placeKind, "shared-point", "the edit form shows the point's field")
     assert.equal(pending.submittedValues?.validTo, undefined)
-    assert.equal(subscriptionAdapter.toRecord(subEnded, context(resolveLoaded)).status, "Expired")
+    assert.equal(recordFrom(subscriptionAdapter, subEnded, context(resolveLoaded)).status, "Expired")
   })
 
   test("names its product by the row the store knows once the products module is switched, and its agreement by id when the agreements are not loaded", () => {
     const productRecord = { ...customerRecords[0], id: "product-res-240", name: "Residual waste · 240L bin" }
     const withProducts: ServerRecordsState = new Map([...loadedState, ["commercial.products", loaded({ records: [productRecord], serverIds: new Map([[productRecord.id, PRODUCT]]) }, 1)]])
-    const record = subscriptionAdapter.toRecord(sub1, context(resolverOver(withProducts)))
+    const record = recordFrom(subscriptionAdapter, sub1, context(resolverOver(withProducts)))
     assert.equal(record.name, "AGR-2408 · Residual waste · 240L bin")
     assert.equal(record.facts.Product, "Residual waste · 240L bin")
     assert.equal(record.submittedValues?.productId, "product-res-240")
     assert.equal(record.submittedValues?.productName, "Residual waste · 240L bin", "the edit shows the product by its name")
-    const orphan = subscriptionAdapter.toRecord(sub1, context())
+    const orphan = recordFrom(subscriptionAdapter, sub1, context())
     assert.equal(orphan.submittedValues?.agreementId, `agreement-${agr2408.id}`)
     assert.equal(orphan.facts.Agreement, `agreement-${agr2408.id}`)
     assert.equal(orphan.name, `agreement-${agr2408.id} · product-${PRODUCT}`)
@@ -473,37 +473,37 @@ describe("a subscription", () => {
   })
 
   test("a patch carries the quantity and the period alone — a cleared end as null — and the product, the place and the agreement do not move", () => {
-    const record = subscriptionAdapter.toRecord(sub1, context(resolveLoaded))
+    const record = recordFrom(subscriptionAdapter, sub1, context(resolveLoaded))
     const more: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }
-    const body = subscriptionAdapter.toPatchBody(record, more, context(resolveLoaded))
+    const body = subscriptionAdapter.toPatchBody?.(record, more, context(resolveLoaded))
     assert.deepEqual(body, { quantity: 3 })
     assert.ok(SubscriptionPatch.safeParse(body).success)
     const reopened: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, validTo: "", validFrom: "2026-02-01" } }
-    const period = subscriptionAdapter.toPatchBody(record, reopened, context(resolveLoaded))
+    const period = subscriptionAdapter.toPatchBody?.(record, reopened, context(resolveLoaded))
     assert.deepEqual(period, { validFrom: "2026-02-01", validTo: null })
     assert.ok(SubscriptionPatch.safeParse(period).success)
-    assert.equal(subscriptionAdapter.toPatchBody(record, record, context(resolveLoaded)), null)
+    assert.equal(subscriptionAdapter.toPatchBody?.(record, record, context(resolveLoaded)), null)
     const miscounted: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, quantity: "0" } }
-    assert.deepEqual(subscriptionAdapter.toPatchBody(record, miscounted, context(resolveLoaded)), { path: "quantity", message: "A quantity is a whole number, 1 or more" })
+    assert.deepEqual(subscriptionAdapter.toPatchBody?.(record, miscounted, context(resolveLoaded)), { path: "quantity", message: "A quantity is a whole number, 1 or more" })
     const resold: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, productId: `product-${POINT}` } }
-    assert.deepEqual(subscriptionAdapter.toPatchBody(record, resold, context(resolveLoaded)), { path: "productId", message: "A subscription keeps its product: end this one and add another" })
+    assert.deepEqual(subscriptionAdapter.toPatchBody?.(record, resold, context(resolveLoaded)), { path: "productId", message: "A subscription keeps its product: end this one and add another" })
     const relocated: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, propertyId: "", sharedPointId: `shared-point-${POINT}` } }
-    assert.deepEqual(subscriptionAdapter.toPatchBody(record, relocated, context(resolveLoaded)), { path: "propertyId", message: "A subscription keeps its place: end this one and add another" })
+    assert.deepEqual(subscriptionAdapter.toPatchBody?.(record, relocated, context(resolveLoaded)), { path: "propertyId", message: "A subscription keeps its place: end this one and add another" })
     const reassigned: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, agreementId: `agreement-${agr2188.id}` } }
-    assert.deepEqual(subscriptionAdapter.toPatchBody(record, reassigned, context(resolveLoaded)), { path: "agreementId", message: "A subscription stays under its agreement" })
+    assert.deepEqual(subscriptionAdapter.toPatchBody?.(record, reassigned, context(resolveLoaded)), { path: "agreementId", message: "A subscription stays under its agreement" })
   })
 
   test("an edit of the row the workspace minted — its product and place the bare ids the form took — moves nothing but what changed", () => {
     // The store's row, as the API answered it, and the optimistic row the
     // sheet still holds, whose typed values are the form's own: the same
     // product and place, spelled as a bare id rather than a chip.
-    const stored = subscriptionAdapter.toRecord({ ...sub1, quantity: 2, validFrom: "2026-10-01" }, context(resolveLoaded))
+    const stored = recordFrom(subscriptionAdapter, { ...sub1, quantity: 2, validFrom: "2026-10-01" }, context(resolveLoaded))
     const typedBare = { ...SUBSCRIPTION_FORM, productId: PRODUCT, propertyId: PROPERTY.toUpperCase() }
     const minted: BusinessRecord = { ...stored, id: "agreements-subscription-1700000000000", submittedValues: { ...typedBare, quantity: "3" } }
-    const body = subscriptionAdapter.toPatchBody(stored, minted, context(resolveLoaded))
+    const body = subscriptionAdapter.toPatchBody?.(stored, minted, context(resolveLoaded))
     assert.deepEqual(body, { quantity: 3 })
     const relocated: BusinessRecord = { ...minted, submittedValues: { ...typedBare, propertyId: "", sharedPointId: POINT } }
-    assert.deepEqual(subscriptionAdapter.toPatchBody(stored, relocated, context(resolveLoaded)), { path: "propertyId", message: "A subscription keeps its place: end this one and add another" })
+    assert.deepEqual(subscriptionAdapter.toPatchBody?.(stored, relocated, context(resolveLoaded)), { path: "propertyId", message: "A subscription keeps its place: end this one and add another" })
   })
 
   test("through the store's write, a create posts under the agreement and a change patches the subscription's own route", async () => {
@@ -529,7 +529,7 @@ describe("a subscription", () => {
     assert.equal(problemSentence(answer.problem), "The product is draft; only an active product can be subscribed to")
 
     const patched = scripted([() => json({ ...sub1, quantity: 3 })])
-    const answer2 = await subscriptionAdapter.update(clientOver(patched.fetch), sub1.id, { quantity: 3 })
+    const answer2 = await subscriptionAdapter.update!(clientOver(patched.fetch), sub1.id, { quantity: 3 })
     assert.deepEqual(patched.calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/subscriptions/${sub1.id}`])
     assert.equal(answer2.quantity, 3)
   })

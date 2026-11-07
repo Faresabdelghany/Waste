@@ -22,11 +22,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { useServerModuleState } from "@/components/waste/business-record-store"
 import { useProjectRecords, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
-import { problemSentence } from "@/lib/api/problem"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, typed } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { dayIn } from "@/lib/api/records/clock"
-import { problemOfError } from "@/lib/api/records/server-records"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import {
   containersAtProperty,

@@ -19,7 +19,7 @@ import { GenerationRequest, GenerationRun as GenerationRunSchema, type Generatio
 import type { RouteScheme } from "@waste/contracts/route-schemes"
 
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
 import { generationRunOf, modulesAfterRun, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun, type RunTimer } from "../records/generation"
 import { PICKUPS_MODULE } from "../records/pickups"
 import { ROUTES_MODULE } from "../records/routes"
@@ -89,7 +89,7 @@ const runOf = (over: Partial<GenerationRun> = {}): GenerationRun =>
 const succeeded = runOf({ status: "succeeded", startedAt: "2026-09-30T12:00:20.000Z", finishedAt: "2026-09-30T12:00:22.000Z", routesCreated: 5, pickupsWritten: 39 })
 const failed = runOf({ status: "failed", startedAt: "2026-09-30T12:00:20.000Z", finishedAt: "2026-09-30T12:00:21.000Z", error: "Error: the scheme has no planning area to match inside" })
 
-const record = routeSchemeAdapter.toRecord(central, { resolve: NOTHING_RESOLVED, now: NOW })
+const record = recordFrom(routeSchemeAdapter, central, { resolve: NOTHING_RESOLVED, now: NOW })
 const onApi: ModuleState = loaded({ records: [record], serverIds: new Map([[record.id, CENTRAL_ID]]) }, 1)
 const options = { state: new Map([["route-studio.schemes", onApi]]), now: NOW }
 const WINDOW = { from: "2026-10-01", to: "2026-10-07" }
@@ -405,7 +405,7 @@ describe("the scheme after its run", () => {
     const { fetch, calls } = scripted([])
     const unsaved = loaded({ records: [record], serverIds: new Map() }, 1)
     assert.equal((await rereadRecord(clientOver(fetch), routeSchemesModule, unsaved, record, options)).kind, "refused")
-    const project = projectAdapter.toRecord(
+    const project = recordFrom(projectAdapter, 
       { id: PROJECT_ID, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
       { resolve: NOTHING_RESOLVED, now: NOW },
     )

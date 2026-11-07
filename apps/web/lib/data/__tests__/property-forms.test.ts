@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 import { PropertyCreate, PropertyGroupCreate, SharedCollectionPointCreate, type Customer, type Property } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { projectAdapter } from "../../api/records/organisation"
 import { propertyAdapter, propertyGroupAdapter, sharedPointAdapter } from "../../api/records/properties"
 import { customerAdapter } from "../../api/records/registry"
@@ -37,13 +37,13 @@ const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAM
 const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", addressId: null, addressParts: null, registryId: null, kind: "residential", location: null, notes: null, driverInstructions: null, serviceWindow: null, status: "active", parties: [{ customerId: osterbro.id, role: "owner", validFrom: "2026-01-01", validTo: null }] }
 
 const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const projectRecord = projectAdapter.toRecord(copenhagen, { ...bare})
-const osterbroRecord = customerAdapter.toRecord(osterbro, { ...bare})
+const projectRecord = recordFrom(projectAdapter, copenhagen, { ...bare})
+const osterbroRecord = recordFrom(customerAdapter, osterbro, { ...bare})
 const base: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: [osterbroRecord], serverIds: new Map([[osterbroRecord.id, osterbro.id]]) }, 1)],
 ])
-const parkvejRecord = propertyAdapter.toRecord(parkvej, { ...bare, resolve: resolverOver(base) })
+const parkvejRecord = recordFrom(propertyAdapter, parkvej, { ...bare, resolve: resolverOver(base) })
 const state: ServerRecordsState = new Map([...base, ["customers.properties", loaded({ records: [parkvejRecord], serverIds: new Map([[parkvejRecord.id, parkvej.id]]) }, 1)]])
 const context: MappingContext = { ...bare, resolve: resolverOver(state) }
 
@@ -78,7 +78,7 @@ describe("the property form on the Pilot", () => {
     const edited = updatedRecord(parkvejRecord, { ...values, displayName: "Parkvej 18A", tenantIds: osterbroRecord.id }, PROPERTY_EDIT_FORM.nameField ?? "displayName")
     assert.equal(edited.id, parkvejRecord.id)
     assert.equal(edited.name, "Parkvej 18A")
-    assert.deepEqual(propertyAdapter.toPatchBody(parkvejRecord, edited, context), {
+    assert.deepEqual(propertyAdapter.toPatchBody?.(parkvejRecord, edited, context), {
       property: { name: "Parkvej 18A" },
       parties: [
         { customerId: osterbro.id, role: "owner" },

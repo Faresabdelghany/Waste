@@ -10,7 +10,7 @@ import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-ca
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { createHolidayListRecord, nextYearEntries, withHolidayListDraft, withHolidayListEntries } from "../../data/holiday-lists"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { holidayListAdapter } from "../records/holiday-lists"
 import { collectionCalendarsModule } from "../records/planning"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
@@ -34,7 +34,7 @@ const danish: HolidayList = {
 describe("a holiday list read", () => {
   test("is the calendars module's second kind, its days spelled as a calendar's, named by the list or by its country's known list", () => {
     assert.ok(collectionCalendarsModule.resources.includes(holidayListAdapter))
-    const record = holidayListAdapter.toRecord(danish, context)
+    const record = recordFrom(holidayListAdapter, danish, context)
     assert.equal(record.id, `holiday-list-${danish.id}`)
     assert.ok(isHolidayListRecord(record))
     assert.deepEqual([record.name, record.facts.Country, record.facts.Projects], ["Danish public holidays", "DK", "1"])
@@ -45,7 +45,7 @@ describe("a holiday list read", () => {
   })
 
   test("is what a project resting on it reads its holidays from", () => {
-    const list = holidayListAdapter.toRecord(danish, context)
+    const list = recordFrom(holidayListAdapter, danish, context)
     const project = { id: "project-copenhagen", name: "Copenhagen Central", submittedValues: { holidayList: "Danish public holidays" } } as unknown as BusinessRecord
     const calendar = resolveProjectCalendar("project-copenhagen", { projects: [project], calendars: [list] })
     assert.deepEqual([...(calendar.list?.dates.entries() ?? [])], [
@@ -64,15 +64,16 @@ describe("a holiday list written", () => {
   })
 
   test("a rename and the days are two requests, the list first; nothing moved is no request", async () => {
-    const before = holidayListAdapter.toRecord(danish, context)
-    assert.equal(holidayListAdapter.toPatchBody(before, before, context), null)
+    const before = recordFrom(holidayListAdapter, danish, context)
+    assert.equal(holidayListAdapter.toPatchBody?.(before, before, context), null)
     const renamed = withHolidayListDraft(before, { country: "DK", name: "Danske helligdage" })
     const after = withHolidayListEntries(renamed, [...holidayListEntries(renamed), { date: "2026-12-24", name: "Juleaftensdag" }])
-    const body = holidayListAdapter.toPatchBody(before, after, context) as { list: unknown; holidays: unknown }
+    const body = holidayListAdapter.toPatchBody?.(before, after, context)
+    assert.ok(body != null && !isLocalRefusal(body))
     assert.deepEqual(HolidayListPatch.parse(body.list), { name: "Danske helligdage" })
     HolidayListHolidaysSet.parse({ holidays: body.holidays })
     const { fetch, calls } = scripted([() => json({ ...danish, name: "Danske helligdage" }), () => json({ ...danish, name: "Danske helligdage" })])
-    await holidayListAdapter.update(clientOver(fetch), danish.id, body)
+    await holidayListAdapter.update!(clientOver(fetch), danish.id, body)
     assert.deepEqual(
       calls.map((call) => [call.init.method, call.url]),
       [
@@ -90,7 +91,7 @@ describe("a holiday list written", () => {
   })
 
   test("next year's holidays from this year's: a fixed day keeps its day, a moveable feast lands on its day, a day already held is left out", () => {
-    const list = holidayListAdapter.toRecord(
+    const list = recordFrom(holidayListAdapter, 
       {
         ...danish,
         holidays: [

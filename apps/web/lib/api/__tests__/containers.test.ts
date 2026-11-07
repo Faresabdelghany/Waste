@@ -18,12 +18,12 @@ import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@/lib/prototy
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
-import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { moduleKeyOf, NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter } from "../records/containers"
 import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -80,15 +80,15 @@ const inStock: Container = {
 const retiredPlacement: ContainerServicePlacement = { ...placed, id: "01a0d2a4-a280-7015-8000-000000000099", containerId: inStock.id, validFrom: "2026-01-01", validTo: "2026-09-01" }
 
 // What the store has loaded when containers load: the organisation, then master data.
-const projectRecords = [copenhagen, harbor].map((project) => projectAdapter.toRecord(project, { resolve: NOTHING_RESOLVED, now: NOW }))
+const projectRecords = [copenhagen, harbor].map((project) => recordFrom(projectAdapter, project, { resolve: NOTHING_RESOLVED, now: NOW }))
 const masterContext: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const masterRecords = [
-  wasteFractionAdapter.toRecord(residual, masterContext),
-  wasteFractionAdapter.toRecord(organic, masterContext),
-  containerTypeAdapter.toRecord(bin240, masterContext),
-  containerTypeAdapter.toRecord(bin660, masterContext),
+  recordFrom(wasteFractionAdapter, residual, masterContext),
+  recordFrom(wasteFractionAdapter, organic, masterContext),
+  recordFrom(containerTypeAdapter, bin240, masterContext),
+  recordFrom(containerTypeAdapter, bin660, masterContext),
   // Why a container is scrapped (O30 of #290).
-  decommissionReasonAdapter.toRecord(wornOut, masterContext),
+  recordFrom(decommissionReasonAdapter, wornOut, masterContext),
 ]
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
@@ -149,8 +149,8 @@ describe("the containers module", () => {
 
 describe("a container", () => {
   const withPlacements = (container: Container, placements: ContainerServicePlacement[]) => ({ ...container, placements })
-  const record = containerAdapter.toRecord(withPlacements(bin91007, [placed]), context())
-  const stocked = containerAdapter.toRecord(withPlacements(inStock, [retiredPlacement]), context())
+  const record = recordFrom(containerAdapter, withPlacements(bin91007, [placed]), context())
+  const stocked = recordFrom(containerAdapter, withPlacements(inStock, [retiredPlacement]), context())
 
   test("is its label, its type and project by name, and the ledger's reading as its status", () => {
     assert.equal(record.name, "BIN-91007")
@@ -223,25 +223,25 @@ describe("a container", () => {
 
   test("an edit patches what moved of the identity; the project is set once", () => {
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, containerId: "BIN-91007A", rfid: "E2091007", containerType: bin660WebId, barcode: "", description: "Relabelled" } }
-    const body = containerAdapter.toPatchBody(record, edited, context())
+    const body = containerAdapter.toPatchBody?.(record, edited, context())
     assert.deepEqual(body, { container: { label: "BIN-91007A", containerTypeId: bin660.id, barcode: null, rfid: "E2091007", notes: "Relabelled" } })
     assert.ok(ContainerPatch.safeParse((body as { container: unknown }).container).success)
-    assert.equal(containerAdapter.toPatchBody(record, record, context()), null)
+    assert.equal(containerAdapter.toPatchBody?.(record, record, context()), null)
     const moved: BusinessRecord = { ...record, projectIds: [projectRecords[1].id], submittedValues: { ...record.submittedValues, projectId: projectRecords[1].id } }
-    assert.deepEqual(containerAdapter.toPatchBody(record, moved, context()), { path: "projectId", message: "A container stays in its project" })
+    assert.deepEqual(containerAdapter.toPatchBody?.(record, moved, context()), { path: "projectId", message: "A container stays in its project" })
   })
 
   test("an edit corrects the placement's fraction, its cadence and an end the ledger has set; it never ends an open one", () => {
     const refractioned: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, wasteFraction: organicWebId } }
-    const body = containerAdapter.toPatchBody(record, refractioned, context())
+    const body = containerAdapter.toPatchBody?.(record, refractioned, context())
     assert.deepEqual(body, { placement: { id: placed.id, patch: { wasteFractionId: organic.id } } })
     assert.ok(ContainerServicePlacementPatch.safeParse((body as { placement: { patch: unknown } }).placement.patch).success)
 
     const corrected: BusinessRecord = { ...stocked, submittedValues: { ...stocked.submittedValues, placementTo: "2026-09-14" } }
-    assert.deepEqual(containerAdapter.toPatchBody(stocked, corrected, context()), { placement: { id: retiredPlacement.id, patch: { validTo: "2026-09-15" } } }, "the form's last day in is the wire's first day out")
+    assert.deepEqual(containerAdapter.toPatchBody?.(stocked, corrected, context()), { placement: { id: retiredPlacement.id, patch: { validTo: "2026-09-15" } } }, "the form's last day in is the wire's first day out")
 
     const ended: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, placementTo: "2026-10-31" } }
-    assert.deepEqual(containerAdapter.toPatchBody(record, ended, context()), { path: "placementTo", message: "A placement ends when its container is returned or decommissioned" })
+    assert.deepEqual(containerAdapter.toPatchBody?.(record, ended, context()), { path: "placementTo", message: "A placement ends when its container is returned or decommissioned" })
   })
 
   test("a move of the asset state through an edit is refused before the API: it is the ledger's", async () => {
@@ -271,7 +271,7 @@ describe("writing a container", () => {
   })
 
   test("an edit of the identity and the placement is two patches, then the row read back", async () => {
-    const record = containerAdapter.toRecord({ ...bin91007, placements: [placed] }, context())
+    const record = recordFrom(containerAdapter, { ...bin91007, placements: [placed] }, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, rfid: "E2091007", wasteFraction: organicWebId } }
     const { fetch, calls } = scripted([
       () => json({ ...bin91007, rfid: "E2091007" }),
@@ -294,7 +294,7 @@ describe("writing a container", () => {
   })
 
   test("an edit whose patch the API took but whose row could not be read back has landed: saved, never a refusal that invites sending it again (#263)", async () => {
-    const record = containerAdapter.toRecord({ ...bin91007, placements: [placed] }, context())
+    const record = recordFrom(containerAdapter, { ...bin91007, placements: [placed] }, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, rfid: "E2091007" } }
     const { fetch, calls } = scripted([() => json({ ...bin91007, rfid: "E2091007" }), () => problem(503, "The API is unavailable")])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, bin91007.id]]) }, 1)
@@ -316,8 +316,8 @@ describe("writing a container", () => {
 
 describe("the container's commands", () => {
   const nordhavn = { id: warehouseId, webId: `warehouse-${warehouseId}` }
-  const record = containerAdapter.toRecord({ ...bin91007, placements: [] }, context())
-  const stocked = containerAdapter.toRecord({ ...inStock, placements: [retiredPlacement] }, context())
+  const record = recordFrom(containerAdapter, { ...bin91007, placements: [] }, context())
+  const stocked = recordFrom(containerAdapter, { ...inStock, placements: [retiredPlacement] }, context())
   const current = loaded({ records: [record, stocked], serverIds: new Map([[record.id, bin91007.id], [stocked.id, inStock.id]]) }, 1)
   const options = { state, now: NOW }
   const movement = { id: "01a0d2a4-a280-7022-8000-000000000002", recordedAt: "2026-09-30T11:59:00.000Z", projectId: copenhagen.id, containerId: bin91007.id, kind: "receipt", fromKind: "supplier", fromWarehouseId: null, toKind: "warehouse", toWarehouseId: warehouseId, placementId: null, occurredAt: "2026-09-30T11:59:00.000Z", recordedBy: "01a0d2a4-a280-7005-8000-000000000001", reason: null, reference: null, correctsMovementId: null }
@@ -465,7 +465,7 @@ describe("the inventory module", () => {
     correctsMovementId: null,
   }
   const toMaintenance: StockMovement = { ...receipt, id: "01a0d2a4-a280-7022-8000-000000000011", kind: "transfer", fromKind: "warehouse", fromWarehouseId: warehouseId, toKind: "maintenance", reference: null, reason: "Cracked lid" }
-  const containerRecord = containerAdapter.toRecord({ ...inStock, placements: [] }, context())
+  const containerRecord = recordFrom(containerAdapter, { ...inStock, placements: [] }, context())
   const withContainers: ServerRecordsState = new Map([...state, ["resources.containers", loaded({ records: [containerRecord], serverIds: new Map([[containerRecord.id, inStock.id]]) }, 1)]])
 
   test("is switched", () => {
@@ -512,9 +512,9 @@ describe("the inventory module", () => {
   })
 
   test("is append-only: nothing is created or edited here, and a correction is the container's adjustment", async () => {
-    const movement = stockMovementAdapter.toRecord(ledgerRow(receipt), context(resolverOver(withContainers)))
+    const movement = recordFrom(stockMovementAdapter, ledgerRow(receipt), context(resolverOver(withContainers)))
     assert.equal(stockMovementAdapter.toCreateBody, undefined)
-    assert.deepEqual(stockMovementAdapter.toPatchBody(movement, { ...movement, name: "Edited" }, context()), { path: "kind", message: "The ledger is append-only: a wrong movement is corrected by adjusting its container" })
+    assert.deepEqual(keptRefusal(stockMovementAdapter, movement, { ...movement, name: "Edited" }), { path: "kind", message: "The ledger is append-only: a wrong movement is corrected by adjusting its container" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [movement], serverIds: new Map([[movement.id, receipt.id]]) }, 1)
     const outcome = await writeRecord(clientOver(fetch), inventoryModule, current, { ...movement, id: "resources-stock-movement-1", recordKind: "Stock movement" }, { state, now: NOW })
@@ -526,13 +526,13 @@ describe("the inventory module", () => {
 describe("a placed container's promised service frequency (O22 of #290)", () => {
   const twiceWeekly: ServiceFrequency = { id: "01a0d2a4-a280-7009-8000-000000000099", ...STAMPS, projectId: copenhagen.id, name: "Twice a week", description: null, collectionsPerWeek: 2, weeksBetween: null, daysBetween: 3 }
   const onDemand: ServiceFrequency = { ...twiceWeekly, id: "01a0d2a4-a280-7009-8000-000000000098", name: "On demand", collectionsPerWeek: null, daysBetween: null }
-  const frequencies = [twiceWeekly, onDemand].map((frequency) => serviceFrequencyAdapter.toRecord(frequency, masterContext))
+  const frequencies = [twiceWeekly, onDemand].map((frequency) => recordFrom(serviceFrequencyAdapter, frequency, masterContext))
   const withFrequencies: ServerRecordsState = new Map([
     ...state,
     ["configure.master", loaded({ records: [...masterRecords, ...frequencies], serverIds: serverIdsOf([...masterRecords, ...frequencies], [residual.id, organic.id, bin240.id, bin660.id, wornOut.id, twiceWeekly.id, onDemand.id]) }, 1)],
   ])
   const read = (placement: ContainerServicePlacement | undefined) =>
-    containerAdapter.toRecord({ ...bin91007, placements: placement === undefined ? [] : [placement] }, context(resolverOver(withFrequencies)))
+    recordFrom(containerAdapter, { ...bin91007, placements: placement === undefined ? [] : [placement] }, context(resolverOver(withFrequencies)))
 
   test("is the API's interval as collections per week, which the scheme preview reconciles against rather than the fixture catalog", () => {
     const record = read({ ...placed, effectiveServiceFrequencyId: twiceWeekly.id })

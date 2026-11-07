@@ -23,12 +23,11 @@ import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { LiveRoute } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
-import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
+import type { ModuleLocation } from "@/lib/data/business-modules"
 
 import { get, listAll } from "../client"
-import { ofKind, typed, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, typed, type Client, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, timeOn } from "./clock"
-import { refusal } from "./places"
 import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */
@@ -59,7 +58,7 @@ function freshnessOf(instant: string, now: Date): string {
   return `${hours} hour${hours === 1 ? "" : "s"} ago`
 }
 
-export function toLiveRecord(live: LiveRoute, context: MappingContext): BusinessRecord {
+export function toLiveRecord(live: LiveRoute, context: MappingContext): RecordFields {
   const route = toRouteRecord(live, context)
   const project = context.resolve.byServerId(live.projectId)
   const timezone = project === undefined ? undefined : typed(project, "timezone")
@@ -150,8 +149,7 @@ export const liveRouteAdapter: ResourceAdapter<LiveRoute> = {
   statuses: undefined,
   list: (client) => listAll<LiveRoute>(client, "/routes/live"),
   toRecord: toLiveRecord,
-  toPatchBody: () => refusal("", READ_ONLY),
-  update: () => Promise.reject(new Error(READ_ONLY)),
+  kept: { path: "", message: READ_ONLY },
 }
 
 /** Route Studio › Live Operations: the routes running or due today, after the routes whose rows they are. */

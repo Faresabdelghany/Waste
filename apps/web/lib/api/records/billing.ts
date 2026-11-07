@@ -41,7 +41,7 @@
 // Ids, rule (b) of #81's plan: `event-<uuid>`, `billing-run-<uuid>`, and
 // `invoice-<uuid>` or `credit-note-<uuid>` by the document's kind; no fixture
 // lends its id.
-import type { BillableEvent } from "@waste/contracts/billable-events"
+import type { BillableEvent, BillableEventCreate } from "@waste/contracts/billable-events"
 import type { BillingRunCreate, BillingRunDetail, BillingRun, BillingRunPreview } from "@waste/contracts/billing"
 import type { Invoice, InvoiceDetail } from "@waste/contracts/invoices"
 import { OVERRIDE_WITH_A_REASON } from "@waste/domain/finance/billable-events"
@@ -83,7 +83,7 @@ import {
 } from "@/lib/data/commercial"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { moduleKeyOf, NO_PRESENTATION, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf, NOTHING_RESOLVED, said, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -97,13 +97,6 @@ export const EVENT_MOVES_BY_COMMAND = "A billable event moves by its commands: r
 export const RUN_NEVER_CHANGES = "A billing run is a record of what it did: nothing on it changes"
 /** What an edit of an invoice or a credit note is told. */
 export const DOCUMENT_NEVER_CHANGES = "An issued document never changes: correct an invoice with a credit note"
-
-/** The key of the first typed value an edit moved — the field a refusal names — or `status` for a move of the status alone. */
-export function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
-  const was = before.submittedValues ?? {}
-  const is = after.submittedValues ?? {}
-  return Object.keys({ ...was, ...is }).find((key) => JSON.stringify(was[key]) !== JSON.stringify(is[key])) ?? "status"
-}
 
 /** A form's count: the number for a whole one of 1 or more, NaN for anything else. */
 function countOf(value: string | undefined): number {
@@ -247,7 +240,7 @@ export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValu
   ]
 }
 
-export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
+export const billableEventAdapter: ResourceAdapter<BillableEvent, BillableEventCreate> = {
   prefix: EVENT_PREFIX,
   owns: isEventRecord,
   // A reading, answered on every read and taken on no write: every status move is refused, and the event moves by command.
@@ -273,12 +266,9 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
     const block = event.blockReason === null ? undefined : BLOCK_REASON_LABELS[event.blockReason]
     const timezone = project.timezone
     return {
-      id: webIdOf(EVENT_PREFIX, event.id),
       name: `${EVENT_KIND_LABELS[event.kind]} · ${product?.name ?? "no product"}`,
       context: `${customerName ?? agreementNumber ?? "No agreement"} · ${event.serviceDate}`,
       status: statusLabel(event.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(event, context.now),
       value: net ?? (event.status === "blocked" ? block : undefined) ?? "",
       description: block === undefined ? `A ${EVENT_KIND_LABELS[event.kind].toLowerCase()} event of ${event.serviceDate}.` : `Blocked: ${block}. ${event.status === "blocked" ? "Reprice it once what blocks it is put right, or cancel it." : ""}`.trim(),
       facts: {
@@ -370,10 +360,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
       ...(unitPriceMinor === undefined ? {} : { unitPriceMinor, overrideReason }),
     }
   },
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), EVENT_MOVES_BY_COMMAND),
+  kept: { message: EVENT_MOVES_BY_COMMAND },
   create: (client, body) => create<BillableEvent>(client, "/billable-events", body).then((created) => created.body),
-  // Never reached: every patch is refused above, since the wire has no patch route for an event.
-  update: () => Promise.reject(new Error("A billable event has no patch route")),
   commands: {
     reprice: {
       // A ticket's event takes the product the office picked; any other kind is repriced as it stands, the API refusing a product it does not take.
@@ -463,7 +451,7 @@ export function billingRunInvoices(client: Client, serverId: string): Promise<In
   return listAll<Invoice>(client, "/invoices", { billingRunId: serverId })
 }
 
-export const billingRunAdapter: ResourceAdapter<BillingRun> = {
+export const billingRunAdapter: ResourceAdapter<BillingRun, BillingRunCreate> = {
   prefix: BILLING_RUN_PREFIX,
   owns: isBillingRunRecord,
   statuses: undefined,
@@ -475,12 +463,9 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
     // The totals as completed, over every currency the run touched, shown in the project's — the Pilot's one currency — and not at all where the store cannot say it: the run's details read its invoices for a figure per currency.
     const totals: Record<string, string> = project.currency === undefined ? {} : { Net: formatMinor(run.netMinor, project.currency), VAT: formatMinor(run.vatMinor, project.currency) }
     return {
-      id: webIdOf(BILLING_RUN_PREFIX, run.id),
       name: `Billing run ${period}`,
       context: `${project.name} · ${run.eventCount} event${run.eventCount === 1 ? "" : "s"}`,
       status: statusLabel(run.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(run, context.now),
       value: `${run.invoiceCount} invoice${run.invoiceCount === 1 ? "" : "s"}`,
       description: `The ready events of ${project.name} with service dates ${period}, bundled per payer.`,
       facts: {
@@ -501,9 +486,8 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
     }
   },
   toCreateBody: (record, context) => billingRunBody(record.submittedValues ?? {}, context.resolve),
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), RUN_NEVER_CHANGES),
+  kept: { message: RUN_NEVER_CHANGES },
   create: (client, body) => create<BillingRunDetail>(client, "/billing-runs", body).then((created) => created.body),
-  update: () => Promise.reject(new Error("A billing run has no patch route")),
 }
 
 /** Price Engine › Billing Runs. */
@@ -546,7 +530,7 @@ export function invoiceDocument(client: Client, serverId: string): Promise<ApiFi
   return getFile(client, `/invoices/${serverId}/document`, "application/pdf")
 }
 
-export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
+export const invoiceAdapter: ResourceAdapter<InvoiceResource, CreditNoteWrite> = {
   prefix: INVOICE_PREFIX,
   owns: isInvoiceDocument,
   statuses: undefined,
@@ -576,8 +560,6 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
       name: document.label,
       context: `${customer.name} · ${isInvoice ? (period ?? document.issuedOn) : `credits ${credits?.name ?? "an invoice"}`}`,
       status: isInvoice ? standing.status : "Credit note",
-      ...NO_PRESENTATION,
-      ...stampFacts(document, context.now),
       value: money(document.grossMinor),
       description: isInvoice ? `Issued to ${customer.name} on ${document.issuedOn}, due ${document.dueOn}.` : `Credits ${credits?.name ?? "an invoice"} of ${customer.name}.`,
       facts: {
@@ -640,12 +622,10 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
     const write: CreditNoteWrite = { invoiceId, body: { reason, ...(note === undefined ? {} : { note }), lines } }
     return write
   },
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), DOCUMENT_NEVER_CHANGES),
-  create: (client, body) => {
-    const write = body as CreditNoteWrite
+  kept: { message: DOCUMENT_NEVER_CHANGES },
+  create: (client, write) => {
     return create<InvoiceDetail>(client, `/invoices/${write.invoiceId}/credit-notes`, write.body).then((created) => stamped(created.body))
   },
-  update: () => Promise.reject(new Error("An issued document has no patch route")),
 }
 
 /** Price Engine › Invoices and Credit Notes: one resource, two kinds of document. */

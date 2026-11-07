@@ -15,7 +15,7 @@ import { NAME_THE_ORDER, nextDueLine, planIssue } from "@waste/domain/resources/
 import { isIsoDate } from "@waste/domain/days"
 
 import { command, create, listAll, patch } from "../client"
-import { said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
+import { actionOf, said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 
@@ -118,35 +118,33 @@ function retireBody(input: CommandInput): { planId: string } | LocalRefusal {
   return planId === undefined ? refusal("planId", "Name the plan to retire") : { planId }
 }
 
-type Addressed = { orderId: string; body: object }
-
 /** A vehicle's five maintenance actions: add a plan and retire one, which answer the plan; open, complete and cancel an order, which answer the order. */
 export const VEHICLE_MAINTENANCE_ACTIONS: Readonly<Record<string, RecordAction<unknown>>> = {
-  [ADD_PLAN]: {
+  [ADD_PLAN]: actionOf({
     toBody: planBody,
-    run: (client, serverId, body) => create<MaintenancePlan>(client, "/maintenance-plans", { ...(body as object), vehicleId: serverId }).then((created) => created.body),
+    run: (client, serverId, body) => create<MaintenancePlan>(client, "/maintenance-plans", { ...body, vehicleId: serverId }).then((created) => created.body),
     refused: (record) => `The maintenance plan of ${record.name} was not added`,
-  },
-  [RETIRE_PLAN]: {
+  }),
+  [RETIRE_PLAN]: actionOf({
     toBody: retireBody,
-    run: (client, _serverId, body) => patch<MaintenancePlan>(client, `/maintenance-plans/${(body as { planId: string }).planId}`, { status: "retired" }),
+    run: (client, _serverId, body) => patch<MaintenancePlan>(client, `/maintenance-plans/${body.planId}`, { status: "retired" }),
     refused: (record) => `The maintenance plan of ${record.name} was not retired`,
-  },
-  [OPEN_ORDER]: {
+  }),
+  [OPEN_ORDER]: actionOf({
     toBody: orderBody,
-    run: (client, serverId, body) => create<MaintenanceOrder>(client, "/maintenance-orders", { ...(body as object), vehicleId: serverId }).then((created) => created.body),
+    run: (client, serverId, body) => create<MaintenanceOrder>(client, "/maintenance-orders", { ...body, vehicleId: serverId }).then((created) => created.body),
     refused: (record) => `The maintenance order of ${record.name} was not opened`,
-  },
-  [COMPLETE_ORDER]: {
+  }),
+  [COMPLETE_ORDER]: actionOf({
     toBody: completeBody,
-    run: (client, _serverId, body) => command<MaintenanceOrder>(client, `/maintenance-orders/${(body as Addressed).orderId}/complete`, (body as Addressed).body),
+    run: (client, _serverId, body) => command<MaintenanceOrder>(client, `/maintenance-orders/${body.orderId}/complete`, body.body),
     refused: (record) => `The maintenance order of ${record.name} was not completed`,
-  },
-  [CANCEL_ORDER]: {
+  }),
+  [CANCEL_ORDER]: actionOf({
     toBody: cancelBody,
-    run: (client, _serverId, body) => command<MaintenanceOrder>(client, `/maintenance-orders/${(body as Addressed).orderId}/cancel`, (body as Addressed).body),
+    run: (client, _serverId, body) => command<MaintenanceOrder>(client, `/maintenance-orders/${body.orderId}/cancel`, body.body),
     refused: (record) => `The maintenance order of ${record.name} was not cancelled`,
-  },
+  }),
 }
 
 const send = <T>(sendAction: SendAction, recordId: string, name: string, input: CommandInput) => sendAction(VEHICLES.workspaceId, VEHICLES.moduleId, recordId, name, input) as Promise<ActionOutcome<T>>

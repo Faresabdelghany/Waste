@@ -57,7 +57,7 @@
 // the calendar's name and period alone and an edit is one request.
 //
 // Ids. An area is `area-<uuid>` and a calendar `calendar-<uuid>`.
-import type { CollectionCalendar } from "@waste/contracts/collection-calendars"
+import type { CollectionCalendar, CollectionCalendarCreate, CollectionCalendarPatch } from "@waste/contracts/collection-calendars"
 import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
 import { PLANNING_AREA_GEOMETRY_KEY } from "@/lib/prototype/map-planning/areas"
@@ -71,10 +71,8 @@ import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/pl
 import { create, get, listAll, patch } from "../client"
 import { holidayListAdapter } from "./holiday-lists"
 import {
-  NO_PRESENTATION,
   ofKind,
   patchOf,
-  stampFacts,
   typed,
   webIdOf,
   type Client,
@@ -261,7 +259,7 @@ function successorWriteOf(before: BusinessRecord, after: BusinessRecord): NonNul
   return { successor: { endId: ending, create: { boundary: drawn.polygon, validFrom: from } } }
 }
 
-export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
+export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource, unknown, PlanningAreaWrite> = {
   prefix: "area",
   auditTable: "planning_area",
   owns: ofKind("area", ["Operational Planning Area version"]),
@@ -279,12 +277,9 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     const purpose = purposeLabel(area.purpose)
     const effectiveTo = version === null || version.validTo === null ? undefined : lastDayIn(version.validTo)
     return {
-      id: webIdOf("area", area.id),
       name: area.name,
       context: `${purpose} · ${project?.name ?? "Project"}`,
       status,
-      ...NO_PRESENTATION,
-      ...stampFacts(area, context.now),
       // Nothing measures coverage.
       value: "—",
       facts: {
@@ -389,8 +384,7 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
   // area patch the API refuses stays written, and the store says it was saved
   // only in part, in the API's sentence, keeps the row as typed and reads the
   // module again (#263), so a second save sends the rename alone.
-  update: async (client, serverId, body) => {
-    const write = body as PlanningAreaWrite
+  update: async (client, serverId, write) => {
     if (write.boundary !== undefined && "patch" in write.boundary) {
       await patch<PlanningAreaBoundary>(client, `/planning-area-boundaries/${write.boundary.id}`, write.boundary.patch)
     }
@@ -413,7 +407,7 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
 // Collection calendars
 // ---------------------------------------------------------------------------
 
-export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
+export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar, CollectionCalendarCreate, CollectionCalendarPatch> = {
   prefix: "calendar",
   auditTable: "collection_calendar",
   owns: ofKind("calendar", ["Collection Calendar"]),
@@ -427,12 +421,9 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
     const validity = `${calendar.validFrom} – ${lastDay ?? "open"}`
     const projectName = project?.name ?? "Project"
     return {
-      id: webIdOf("calendar", calendar.id),
       name: calendar.name,
       context: `${projectName} · ${validity}`,
       status: "Active",
-      ...NO_PRESENTATION,
-      ...stampFacts(calendar, context.now),
       value: "—",
       facts: { Project: projectName, Validity: validity },
       projectIds: [projectWebId],

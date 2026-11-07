@@ -65,7 +65,7 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { command, create, listAll, patch, post } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, patchOf, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
 import { todayIn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
@@ -165,7 +165,7 @@ const pauseAction: RecordAction<SubscriptionPaused> = {
 type PauseWrite = { pauseId: string; values: SubscriptionPausePatch }
 
 /** A pause's end moved — to today, to resume it now: `resumeOn` is the day collections resume, the wire's `validTo`. */
-const movePauseAction: RecordAction<SubscriptionPaused> = {
+const movePauseAction: RecordAction<SubscriptionPaused, PauseWrite> = {
   toBody: (input) => {
     const pauseId = textOf(input.pauseId)
     if (pauseId === undefined) return refusal("pauseId", "Pick a pause")
@@ -173,20 +173,17 @@ const movePauseAction: RecordAction<SubscriptionPaused> = {
     if (resumeOn === undefined) return refusal("resumeOn", "Pick the day collections resume")
     return { pauseId, values: { validTo: resumeOn } } satisfies PauseWrite
   },
-  run: (client, _serverId, body) => {
-    const write = body as PauseWrite
-    return patch<SubscriptionPaused>(client, `/subscription-pauses/${write.pauseId}`, write.values)
-  },
+  run: (client, _serverId, write) => patch<SubscriptionPaused>(client, `/subscription-pauses/${write.pauseId}`, write.values),
   refused: (record) => `${record.name}'s pause was not moved`,
 }
 
 /** A pause that has not begun, cancelled. */
-const cancelPauseAction: RecordAction<SubscriptionPause> = {
+const cancelPauseAction: RecordAction<SubscriptionPause, { pauseId: string }> = {
   toBody: (input) => {
     const pauseId = textOf(input.pauseId)
     return pauseId === undefined ? refusal("pauseId", "Pick a pause") : { pauseId }
   },
-  run: (client, _serverId, body) => command<SubscriptionPause>(client, `/subscription-pauses/${(body as { pauseId: string }).pauseId}/cancel`, {}),
+  run: (client, _serverId, body) => command<SubscriptionPause>(client, `/subscription-pauses/${body.pauseId}/cancel`, {}),
   refused: (record) => `${record.name}'s pause was not cancelled`,
 }
 
@@ -271,12 +268,9 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     const lastDay = agreement.validTo === null ? undefined : lastDayIn(agreement.validTo)
     const priceList = agreement.priceListId === null ? undefined : referenced(context, agreement.priceListId, PRICE_LIST_PREFIX)
     return {
-      id: webIdOf(AGREEMENT_PREFIX, agreement.id),
       name: `${agreement.number} · ${customer.name}`,
       context: `${customer.name} · ${samePayer ? "same payer" : `payer ${payer.name}`}`,
       status: statusLabel(agreement.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(agreement, context.now),
       value: period,
       description: `Agreement of ${customer.name}${samePayer ? "" : `, billed to ${payer.name}`}.`,
       facts: {
@@ -371,7 +365,7 @@ type SubscriptionWrite = { agreementId: string; body: unknown }
 /** The subscription's status as a reading of its period on the project's day. */
 const SUBSCRIPTION_STATUS: Record<PeriodStanding, "Pending" | "Active" | "Expired"> = { upcoming: "Pending", "in-force": "Active", ended: "Expired" }
 
-export const subscriptionAdapter: ResourceAdapter<Subscription> = {
+export const subscriptionAdapter: ResourceAdapter<Subscription, SubscriptionWrite> = {
   prefix: SUBSCRIPTION_PREFIX,
   auditTable: "subscription",
   owns: isSubscriptionRecord,
@@ -395,12 +389,9 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
     const day = todayIn(context, project === undefined ? undefined : typed(project, "timezone"))
     const lastDay = subscription.validTo === null ? undefined : lastDayIn(subscription.validTo)
     return {
-      id: webIdOf(SUBSCRIPTION_PREFIX, subscription.id),
       name: `${number} · ${product.name}`,
       context: agreement?.context ?? number,
       status: SUBSCRIPTION_STATUS[periodOn(subscription, day)],
-      ...NO_PRESENTATION,
-      ...stampFacts(subscription, context.now),
       value: periodLabel(subscription.validFrom, subscription.validTo),
       description: `One product delivered at one place under ${number}.`,
       facts: {
@@ -490,8 +481,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
       }
     })
   },
-  create: (client, body) => {
-    const write = body as SubscriptionWrite
+  create: (client, write) => {
     return create<Subscription>(client, `/agreements/${write.agreementId}/subscriptions`, write.body).then((created) => created.body)
   },
   update: (client, serverId, body) => patch<Subscription>(client, `/subscriptions/${serverId}`, body),

@@ -22,8 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { get, listPage, put } from "@/lib/api/client"
-import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { ALERT_THRESHOLD_OPTIONS, alertsWithheldBecause, alertThresholdOf, noticeRowOf, preferencesBodyOf, type NO_ALERTS } from "@/lib/data/notification-preferences"
 
 /** How many of the newest notices the pane shows. */

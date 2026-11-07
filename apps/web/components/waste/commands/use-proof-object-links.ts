@@ -8,9 +8,8 @@
 import { useEffect, useState } from "react"
 
 import { useApiClient } from "@/components/waste/api-session-store"
-import { problemSentence } from "@/lib/api/problem"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { pickupProofObjects } from "@/lib/api/records/pickups"
-import { problemOfError } from "@/lib/api/records/server-records"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 
 /** How long before its read URLs lapse a stop's objects are read again. */

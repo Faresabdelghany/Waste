@@ -12,7 +12,7 @@ import type { UnloadingStation } from "@waste/contracts/places"
 import { SAY_WHY } from "@waste/domain/execution/haul-out"
 
 import { type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type CommandInput, type MappingContext } from "../records/adapter"
 import { ADJUST_STOCK, adjustStockBody, CANCEL_LOAD, GIVE_A_DELTA, HAUL_OUT_ACTIONS, loadLine, NAME_THE_CARRIER, RECEIVE_LOAD, RECONCILE_LOAD, SEND_LOAD, sendLoadBody, stockLine } from "../records/haul-out"
 import { unloadingStationAdapter } from "../records/places"
 
@@ -45,7 +45,7 @@ const omlast: UnloadingStation = {
   notes: null,
   wasteFractionIds: [],
 }
-const station = (): BusinessRecord => unloadingStationAdapter.toRecord(omlast, context)
+const station = (): BusinessRecord => recordFrom(unloadingStationAdapter, omlast, context)
 
 const send = (input: CommandInput) => sendLoadBody(input, station(), context)
 const load = { projectId: WEB.project, toStationId: WEB.plant, wasteFractionId: WEB.fraction, vehicleRegistration: "AB 12 345", departedAt: "2026-10-29T08:30", timezone: "Europe/Copenhagen", netKg: "18400", currency: "DKK" }
@@ -55,7 +55,7 @@ describe("a transfer station on the adapter", () => {
     const record = station()
     assert.equal(record.facts["Transfer station"], "Yes")
     assert.equal(record.submittedValues?.transferStation, true)
-    assert.equal(unloadingStationAdapter.toRecord({ ...omlast, transfer: false }, context).facts["Transfer station"], undefined)
+    assert.equal(recordFrom(unloadingStationAdapter, { ...omlast, transfer: false }, context).facts["Transfer station"], undefined)
     assert.ok(unloadingStationAdapter.actions?.[SEND_LOAD] !== undefined && unloadingStationAdapter.actions[ADJUST_STOCK] !== undefined)
   })
 })

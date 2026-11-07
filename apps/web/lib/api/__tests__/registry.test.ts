@@ -8,7 +8,7 @@ import { CustomerCreate, CustomerPatch, type Customer } from "@waste/contracts/c
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope } from "../../data/project-scope"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
 import { CUSTOMER_PREFIXES, customerAdapter, customerKindOf, customersModule } from "../records/registry"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
@@ -23,7 +23,7 @@ const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004",
 
 describe("a customer on the prototype's record", () => {
   test("a seeded person is a contact- record under its server id, with the wire's fields as its facts", () => {
-    const record = customerAdapter.toRecord(mikkel, context)
+    const record = recordFrom(customerAdapter, mikkel, context)
     assert.equal(record.id, webIdOf("contact", mikkel.id))
     assert.equal(record.name, "Mikkel Sørensen")
     assert.equal(record.context, "Person · customer")
@@ -39,7 +39,7 @@ describe("a customer on the prototype's record", () => {
   })
 
   test("a seeded organisation is a company- record under its server id", () => {
-    const record = customerAdapter.toRecord(osterbro, context)
+    const record = recordFrom(customerAdapter, osterbro, context)
     assert.equal(record.id, webIdOf("company", osterbro.id))
     assert.equal(record.facts.CVR, "38112009")
     assert.equal(record.facts.Kind, "Organisation")
@@ -48,7 +48,7 @@ describe("a customer on the prototype's record", () => {
   })
 
   test("a customer takes its kind's prefix, and no owner or project of its own", () => {
-    const record = customerAdapter.toRecord(kab, context)
+    const record = recordFrom(customerAdapter, kab, context)
     assert.equal(record.id, `${CUSTOMER_PREFIXES.organisation}-${kab.id}`)
     assert.equal(record.status, "Inactive")
     assert.equal(record.owner, "")
@@ -68,7 +68,7 @@ describe("a customer on the prototype's record", () => {
 
   test("the form's record becomes a CustomerCreate the contracts accept, saying only what the form gave", () => {
     const record: BusinessRecord = {
-      ...customerAdapter.toRecord(kab, context),
+      ...recordFrom(customerAdapter, kab, context),
       id: "contacts-contact-or-customer-organization-1700000000000",
       name: "Nørrebro Boligselskab",
       status: "Active",
@@ -81,39 +81,39 @@ describe("a customer on the prototype's record", () => {
   })
 
   test("a create without a kind or a name is refused here, naming the field", () => {
-    const record = { ...customerAdapter.toRecord(kab, context), id: "contacts-x", submittedValues: { displayName: "Someone" } }
+    const record = { ...recordFrom(customerAdapter, kab, context), id: "contacts-x", submittedValues: { displayName: "Someone" } }
     assert.deepEqual(customerAdapter.toCreateBody?.(record, context), { path: "partyType", message: "Say whether this is a person or an organisation" })
   })
 
   test("a patch says what moved, an emptied nullable field as null, and the contracts accept it", () => {
-    const before = customerAdapter.toRecord(mikkel, context)
+    const before = recordFrom(customerAdapter, mikkel, context)
     const after = { ...before, status: "Inactive", submittedValues: { ...before.submittedValues, phone: "", email: "mikkel@example.dk" } }
-    const body = customerAdapter.toPatchBody(before, after, context)
+    const body = customerAdapter.toPatchBody?.(before, after, context)
     assert.deepEqual(body, { email: "mikkel@example.dk", phone: null, status: "inactive" })
     const parsed = CustomerPatch.safeParse(body)
     assert.ok(parsed.success, JSON.stringify(parsed.error))
-    assert.equal(customerAdapter.toPatchBody(before, before, context), null)
+    assert.equal(customerAdapter.toPatchBody?.(before, before, context), null)
   })
 
   test("a customer's own payment terms (#291 C4) read back as a fact, a patch sets them, and a blank gives the project's back", () => {
-    const before = customerAdapter.toRecord(osterbro, context)
+    const before = recordFrom(customerAdapter, osterbro, context)
     assert.equal(before.facts["Payment terms"], undefined, "no terms of its own, no fact")
     assert.equal(before.submittedValues?.paymentTermsDays, "")
     const set = { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: "8" } }
-    const body = customerAdapter.toPatchBody(before, set, context)
+    const body = customerAdapter.toPatchBody?.(before, set, context)
     assert.deepEqual(body, { paymentTermsDays: 8 })
     assert.ok(CustomerPatch.safeParse(body).success)
-    const read = customerAdapter.toRecord({ ...osterbro, paymentTermsDays: 8 }, context)
+    const read = recordFrom(customerAdapter, { ...osterbro, paymentTermsDays: 8 }, context)
     assert.equal(read.facts["Payment terms"], "8 days")
     assert.equal(read.submittedValues?.paymentTermsDays, "8")
     const cleared = { ...read, submittedValues: { ...read.submittedValues, paymentTermsDays: "" } }
-    assert.deepEqual(customerAdapter.toPatchBody(read, cleared, context), { paymentTermsDays: null })
+    assert.deepEqual(customerAdapter.toPatchBody?.(read, cleared, context), { paymentTermsDays: null })
     const refused = { ...read, submittedValues: { ...read.submittedValues, paymentTermsDays: "400" } }
-    assert.deepEqual(customerAdapter.toPatchBody(read, refused, context), { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" })
+    assert.deepEqual(customerAdapter.toPatchBody?.(read, refused, context), { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" })
   })
 
   test("a create says the customer's terms only where the form gave them", () => {
-    const made = { ...customerAdapter.toRecord(kab, context), id: "contacts-x", status: "Active", submittedValues: { partyType: "company", displayName: "Nørrebro Boligselskab", paymentTermsDays: "14" } }
+    const made = { ...recordFrom(customerAdapter, kab, context), id: "contacts-x", status: "Active", submittedValues: { partyType: "company", displayName: "Nørrebro Boligselskab", paymentTermsDays: "14" } }
     const body = customerAdapter.toCreateBody?.(made, context)
     assert.deepEqual(body, { kind: "organisation", name: "Nørrebro Boligselskab", paymentTermsDays: 14 })
     assert.ok(CustomerCreate.safeParse(body).success)

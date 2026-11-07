@@ -19,7 +19,7 @@ import { PriceListCreate, PriceListPatch, PriceListRowCreate, PriceListRowPatch,
 import type { BusinessRecord } from "../../data/business-modules"
 import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "../../data/commercial"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -69,13 +69,13 @@ const rowArea: PriceListRow = { ...rowDefault, id: "01a0d2a4-a280-7029-8000-0000
 
 // What the store holds when the commercial modules load: the organisation, the master data, the customers and the planning areas.
 const NO_CONTEXT: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT)
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, NO_CONTEXT)
 const masterRecords = [
-  wasteFractionAdapter.toRecord(residual, NO_CONTEXT),
-  containerTypeAdapter.toRecord(bin240, NO_CONTEXT),
-  serviceFrequencyAdapter.toRecord(fortnightly, NO_CONTEXT),
+  recordFrom(wasteFractionAdapter, residual, NO_CONTEXT),
+  recordFrom(containerTypeAdapter, bin240, NO_CONTEXT),
+  recordFrom(serviceFrequencyAdapter, fortnightly, NO_CONTEXT),
 ]
-const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT)
+const osterbroRecord = recordFrom(customerAdapter, osterbro, NO_CONTEXT)
 const areaRecord: BusinessRecord = { ...copenhagenRecord, id: `area-${AREA}`, name: "Østerbro", recordKind: "Planning area", submittedValues: {} }
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const state: ServerRecordsState = new Map([
@@ -88,16 +88,16 @@ const context = (at: ServerRecordsState = state): MappingContext => ({ resolve: 
 
 /** The state once the products have loaded, for the rows that name them. */
 function withProducts(products: readonly Product[], base: ServerRecordsState = state): ServerRecordsState {
-  const records = products.map((product) => productAdapter.toRecord(product, context(base)))
+  const records = products.map((product) => recordFrom(productAdapter, product, context(base)))
   return new Map([...base, ["commercial.products", moduleOf(records, products.map((product) => product.id))]])
 }
 const productsState = withProducts([res240, bulky, xmas])
 
 /** The state once the price rows module has loaded its lists and rows. */
 function withPriceRows(lists: readonly PriceList[], rows: readonly PriceListRow[], base: ServerRecordsState = productsState): ServerRecordsState {
-  const listRecords = lists.map((list) => priceListAdapter.toRecord(list, context(base)))
+  const listRecords = lists.map((list) => recordFrom(priceListAdapter, list, context(base)))
   const listed = new Map([...base, ["commercial.price-rows", moduleOf(listRecords, lists.map((list) => list.id))]])
-  const rowRecords = rows.map((row) => priceRowAdapter.toRecord(row, context(listed)))
+  const rowRecords = rows.map((row) => recordFrom(priceRowAdapter, row, context(listed)))
   return new Map([...base, ["commercial.price-rows", moduleOf([...listRecords, ...rowRecords], [...lists.map((list) => list.id), ...rows.map((row) => row.id)])]])
 }
 const pricedState = withPriceRows([plCph, plNext], [rowDefault, rowOrganisation, rowOsterbro, rowArea])
@@ -130,7 +130,7 @@ describe("the products module", () => {
   })
 
   test("shows a product as the catalogue reads it: its type and unit, its master data by name, its VAT and invoice fields, under its own uuid", () => {
-    const record = productAdapter.toRecord(res240, context())
+    const record = recordFrom(productAdapter, res240, context())
     assert.equal(record.id, `product-${res240.id}`)
     assert.equal(record.name, "Residual waste · 240L bin")
     assert.equal(record.context, "Container collection · /pickup")
@@ -189,23 +189,23 @@ describe("the products module", () => {
   })
 
   test("reads a product written later at its default price from the rows the store holds", () => {
-    assert.equal(productAdapter.toRecord(res240, context(pricedState)).value, "DKK 18.50/pickup")
-    assert.equal(productAdapter.toRecord(bulky, context(pricedState)).value, "Unpriced")
+    assert.equal(recordFrom(productAdapter, res240, context(pricedState)).value, "DKK 18.50/pickup")
+    assert.equal(recordFrom(productAdapter, bulky, context(pricedState)).value, "Unpriced")
   })
 
   test("says a product without a VAT rate has none, since its events block on it, and names an unloaded master row by its id chip", () => {
-    const record = productAdapter.toRecord(xmas, context())
+    const record = recordFrom(productAdapter, xmas, context())
     assert.equal(record.facts.VAT, "Not set: its events block until it has one")
     assert.equal(record.status, "Draft")
     assert.deepEqual(record.allowedTransitions, ["Active"])
     assert.equal(record.submittedValues?.vatPercent, undefined)
-    const chipped = productAdapter.toRecord(res240, context(new Map([["configure.organization", state.get("configure.organization")!]])))
+    const chipped = recordFrom(productAdapter, res240, context(new Map([["configure.organization", state.get("configure.organization")!]])))
     assert.equal(chipped.facts["Waste fraction"], `fraction-${residual.id}`)
   })
 
   test("offers the transitions the wire's three statuses take, and the store spells each", () => {
     assert.deepEqual(PRODUCT_TRANSITIONS, { draft: ["Active"], active: ["Inactive"], inactive: ["Active"] })
-    const record = productAdapter.toRecord(res240, context())
+    const record = recordFrom(productAdapter, res240, context())
     for (const status of ["Draft", "Active", "Inactive"]) assert.ok(spellsStatus(productsModule, record, status), status)
     assert.ok(!spellsStatus(productsModule, record, "Archived"))
   })
@@ -242,27 +242,27 @@ describe("the products module", () => {
   })
 
   test("patches only what moved — a cleared field as null — and refuses a product moved to another project", () => {
-    const before = productAdapter.toRecord(res240, context())
+    const before = recordFrom(productAdapter, res240, context())
     const after = { ...before, status: "Inactive", submittedValues: { ...before.submittedValues, invoiceCode: "", vatPercent: "0", serviceFrequencyId: "" } }
-    const body = productAdapter.toPatchBody(before, after, context())
+    const body = productAdapter.toPatchBody?.(before, after, context())
     assert.deepEqual(body, { status: "inactive", serviceFrequencyId: null, invoiceCode: null, vatPercent: 0 })
     assert.ok(ProductPatch.safeParse(body).success)
-    assert.equal(productAdapter.toPatchBody(before, { ...before }, context()), null)
-    assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, projectId: "project-harbor" } }, context()), { path: "projectId", message: "A product stays in its project" })
+    assert.equal(productAdapter.toPatchBody?.(before, { ...before }, context()), null)
+    assert.deepEqual(productAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, projectId: "project-harbor" } }, context()), { path: "projectId", message: "A product stays in its project" })
   })
 
   test("gives a hire product its free days (M14 of #293): read back as a fact, sent on a create and a patch, refused at the field, and none under any other unit", () => {
     const hire: Product = { ...bulky, id: "01a0d2a4-a280-700a-8000-000000000009", name: "Skip hire", kind: "additional-service", unit: "day", freeDays: 7 }
-    const before = productAdapter.toRecord(hire, context())
+    const before = recordFrom(productAdapter, hire, context())
     assert.equal(before.facts["Free days"], "7 days")
     assert.equal(before.submittedValues?.freeDays, "7")
-    assert.equal(productAdapter.toRecord(bulky, context()).facts["Free days"], undefined, "a product with none says nothing")
-    const longer = productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "14" } }, context())
+    assert.equal(recordFrom(productAdapter, bulky, context()).facts["Free days"], undefined, "a product with none says nothing")
+    const longer = productAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "14" } }, context())
     assert.deepEqual(longer, { freeDays: 14 })
     assert.ok(ProductPatch.safeParse(longer).success)
-    assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "" } }, context()), { freeDays: null })
-    assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, priceUnit: "job" } }, context()), { unit: "job", freeDays: null }, "a product sold by the job again has none")
-    for (const days of ["367", "1.5", "-1", "a"]) assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: days } }, context()), { path: "freeDays", message: FREE_DAYS_REFUSAL }, days)
+    assert.deepEqual(productAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "" } }, context()), { freeDays: null })
+    assert.deepEqual(productAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, priceUnit: "job" } }, context()), { unit: "job", freeDays: null }, "a product sold by the job again has none")
+    for (const days of ["367", "1.5", "-1", "a"]) assert.deepEqual(productAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: days } }, context()), { path: "freeDays", message: FREE_DAYS_REFUSAL }, days)
     const created = productAdapter.toCreateBody!(made("products-product-1", "Product", { projectId: COPENHAGEN, productName: "Skip hire", productType: "additional-service", priceUnit: "day", freeDays: "7" }), context())
     assert.deepEqual(created, { projectId: copenhagen.id, name: "Skip hire", kind: "additional-service", status: "draft", unit: "day", freeDays: 7 })
     assert.ok(ProductCreate.safeParse(created).success)
@@ -313,20 +313,20 @@ describe("the price rows module: the lists and their rows", () => {
   })
 
   test("shows a list as Settings › Commercial reads it: code, currency, default flag and period, its status a reading of the period", () => {
-    const current = priceListAdapter.toRecord(plCph, context(productsState))
+    const current = recordFrom(priceListAdapter, plCph, context(productsState))
     assert.equal(current.id, `price-list-${plCph.id}`)
     assert.equal(current.name, "PL-Copenhagen-2026")
     assert.equal(current.status, "Active")
     assert.equal(current.recordKind, "Price list")
     assert.deepEqual(current.submittedValues, { projectId: COPENHAGEN, code: "PL-Copenhagen-2026", name: "PL-Copenhagen-2026", currency: "DKK", isDefault: true, notes: "Annual tariff for Copenhagen municipal collection.", validFrom: "2026-01-01" })
-    const next = priceListAdapter.toRecord(plNext, context(productsState))
+    const next = recordFrom(priceListAdapter, plNext, context(productsState))
     assert.equal(next.status, "Scheduled")
     assert.equal(next.submittedValues?.validTo, "2027-12-31", "the form's last day in force; the wire's validTo is the first day out")
     assert.equal(next.facts.Default, "No")
   })
 
   test("shows a row with its list, its product and its conditions by name, the amount in the list's currency per the product's unit", () => {
-    const negotiated = priceRowAdapter.toRecord(rowOsterbro, context(pricedState))
+    const negotiated = recordFrom(priceRowAdapter, rowOsterbro, context(pricedState))
     assert.equal(negotiated.id, `price-row-${rowOsterbro.id}`)
     assert.equal(negotiated.name, "Østerbro Housing (negotiated)")
     assert.equal(negotiated.context, "Residual waste · 240L bin")
@@ -345,12 +345,12 @@ describe("the price rows module: the lists and their rows", () => {
       validFrom: "2026-01-01",
       validTo: "2027-02-02",
     })
-    assert.equal(priceRowAdapter.toRecord(rowDefault, context(pricedState)).name, "Everyone")
-    assert.equal(priceRowAdapter.toRecord(rowDefault, context(pricedState)).facts.Indexed, undefined, "a row typed in names no index")
-    const indexed = priceRowAdapter.toRecord({ ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000009", indexedFromId: rowDefault.id, indexLabel: "CPI 2027", indexBasisPoints: 320, validFrom: "2027-01-01" }, context(pricedState))
+    assert.equal(recordFrom(priceRowAdapter, rowDefault, context(pricedState)).name, "Everyone")
+    assert.equal(recordFrom(priceRowAdapter, rowDefault, context(pricedState)).facts.Indexed, undefined, "a row typed in names no index")
+    const indexed = recordFrom(priceRowAdapter, { ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000009", indexedFromId: rowDefault.id, indexLabel: "CPI 2027", indexBasisPoints: 320, validFrom: "2027-01-01" }, context(pricedState))
     assert.equal(indexed.facts.Indexed, "CPI 2027 +3.2% from 2027-01-01", "an indexed row names its index and its first day (#291 C8)")
-    assert.equal(priceRowAdapter.toRecord(rowOrganisation, context(pricedState)).facts["Customer type"], "Organisation")
-    const area = priceRowAdapter.toRecord(rowArea, context(pricedState))
+    assert.equal(recordFrom(priceRowAdapter, rowOrganisation, context(pricedState)).facts["Customer type"], "Organisation")
+    const area = recordFrom(priceRowAdapter, rowArea, context(pricedState))
     assert.equal(area.name, "Østerbro · Two-wheel bin · 240 L · Residual")
     assert.equal(area.status, "Scheduled")
     assert.deepEqual(area.submittedValues?.planningAreaId, `area-${AREA}`)
@@ -365,13 +365,13 @@ describe("the price rows module: the lists and their rows", () => {
   })
 
   test("patches a list's name, flag, notes and period, and refuses a code or a currency moved, which its rows are quoted in", () => {
-    const before = priceListAdapter.toRecord(plNext, context(pricedState))
+    const before = recordFrom(priceListAdapter, plNext, context(pricedState))
     const after = { ...before, submittedValues: { ...before.submittedValues, isDefault: true, validTo: "", notes: "Takes over in 2027" } }
-    const body = priceListAdapter.toPatchBody(before, after, context(pricedState))
+    const body = priceListAdapter.toPatchBody?.(before, after, context(pricedState))
     assert.deepEqual(body, { isDefault: true, notes: "Takes over in 2027", validTo: null })
     assert.ok(PriceListPatch.safeParse(body).success)
-    assert.deepEqual(priceListAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, code: "pl-cph-2029" } }, context(pricedState)), { path: "code", message: "A list keeps its code and its currency: its rows are quoted in them" })
-    assert.deepEqual(priceListAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, currency: "EUR" } }, context(pricedState)), { path: "currency", message: "A list keeps its code and its currency: its rows are quoted in them" })
+    assert.deepEqual(priceListAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, code: "pl-cph-2029" } }, context(pricedState)), { path: "code", message: "A list keeps its code and its currency: its rows are quoted in them" })
+    assert.deepEqual(priceListAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, currency: "EUR" } }, context(pricedState)), { path: "currency", message: "A list keeps its code and its currency: its rows are quoted in them" })
   })
 
   test("makes a row's create body under the chosen list, the amount in the list's minor units and each condition by server id", () => {
@@ -404,14 +404,14 @@ describe("the price rows module: the lists and their rows", () => {
   })
 
   test("patches a row's price, note and end only, and refuses a condition or its start moved: end it and add another", () => {
-    const before = priceRowAdapter.toRecord(rowOsterbro, context(pricedState))
+    const before = recordFrom(priceRowAdapter, rowOsterbro, context(pricedState))
     const after = { ...before, submittedValues: { ...before.submittedValues, amount: "17.25", note: "", validTo: "" } }
-    const body = priceRowAdapter.toPatchBody(before, after, context(pricedState))
+    const body = priceRowAdapter.toPatchBody?.(before, after, context(pricedState))
     assert.deepEqual(body, { unitPriceMinor: 1725, note: null, validTo: null })
     assert.ok(PriceListRowPatch.safeParse(body).success)
     const ended = "A row keeps its list, its product, its conditions and its start: end it and add another"
     for (const [key, value] of [["customerId", ""], ["validFrom", "2026-02-01"], ["productId", `product-${bulky.id}`], ["customerKind", "person"]] as const) {
-      assert.deepEqual(priceRowAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, [key]: value } }, context(pricedState)), { path: key, message: ended }, key)
+      assert.deepEqual(priceRowAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, [key]: value } }, context(pricedState)), { path: key, message: ended }, key)
     }
   })
 
@@ -434,8 +434,8 @@ describe("the price rows module: the lists and their rows", () => {
   })
 
   test("refuses every status move of a row or a list: their status is a reading of the period", () => {
-    const row = priceRowAdapter.toRecord(rowDefault, context(pricedState))
-    const list = priceListAdapter.toRecord(plCph, context(pricedState))
+    const row = recordFrom(priceRowAdapter, rowDefault, context(pricedState))
+    const list = recordFrom(priceListAdapter, plCph, context(pricedState))
     for (const record of [row, list]) for (const status of ["Scheduled", "Active", "Expired"]) assert.ok(!spellsStatus(priceRowsModule, record, status))
   })
 })
