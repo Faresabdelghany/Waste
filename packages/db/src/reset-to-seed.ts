@@ -63,6 +63,7 @@
 // reset counts both for the operator to read.
 import { isDeepStrictEqual } from "node:util"
 
+import { count } from "@waste/domain/text"
 import { getTableName, sql } from "drizzle-orm"
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
@@ -243,4 +244,36 @@ export async function resetToSeed(adminUrl: string, companyId: string = DEMO_COM
   } finally {
     await close()
   }
+}
+
+/** `a, b and c`. */
+const listed = (items: readonly string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`)
+
+/** What a reset says, line by line, for a run's summary: what it swept and kept, what the seed wrote back, and what became of the audit history, the outbox and pg-boss's jobs. */
+export function spellReset(report: ResetReport, adminUrl: string): string[] {
+  // The audit log is said apart from the state it is the history of (#291): a reset clears it.
+  const state = report.swept.filter(({ table }) => table !== getTableName(auditEvent))
+  const history = report.swept.find(({ table }) => table === getTableName(auditEvent))?.rows ?? 0
+  const rows = state.reduce((total, { rows: swept }) => total + swept, 0)
+  // A counter's series by its field: `nextScaleTicketNumber` is the scale-ticket counter.
+  const series = Object.keys(COUNTER_DEFAULTS).map((field) =>
+    field
+      .replace(/^next|Number$/g, "")
+      .replace(/(?<!^)([A-Z])/g, "-$1")
+      .toLowerCase(),
+  )
+  const values = Object.values(COUNTER_DEFAULTS).map(String)
+  return [
+    `Reset the demo company ${report.companyId} on ${new URL(adminUrl).hostname} to its seed, in one transaction.`,
+    `Swept ${count(rows, "row")} from ${count(state.length, "table")}, children first${state.map(({ table, rows: swept }) => `, ${table} ${swept}`).join("")}.`,
+    `Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; ` +
+      `the seeded rows are back at the seed's word, and ${count(report.otherAccounts, "account")} the seed does not name ${report.otherAccounts === 1 ? "is" : "are"} as it was.`,
+    `The seed wrote ${count(report.written, "row")}; the ${listed(series)} counters ${report.countersReset ? "were put back to" : "were already at"} ${listed(values)}, as a fresh seed leaves them.`,
+    `Audit history: the company's ${count(history, "row")} went with the sweep; the trail begins again with the seed writing the tenant back.`,
+    report.unsentEvents === 0 ? "Outbox: no unpublished event was swept." : `Outbox: ${count(report.unsentEvents, "unpublished event")} went with the sweep and will never be relayed.`,
+    report.waitingJobs === 0
+      ? "pg-boss: no waiting job names the company."
+      : `pg-boss: ${count(report.waitingJobs, "waiting job")} still ${report.waitingJobs === 1 ? "names" : "name"} the company and ${report.waitingJobs === 1 ? "is" : "are"} left on ${report.waitingJobs === 1 ? "its queue" : "their queues"}: ` +
+        "when a worker takes one it meets a tenant without the rows it names, and either finds nothing to do or fails, is retried and ends failed — an outbox consumer's copy on outbox.dead, which is not to be redriven.",
+  ]
 }

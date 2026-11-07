@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { checkSourceRun, fetchSourceArtifact, selectArtifact, type RunArtifact, type WorkflowRun } from "../pilot/github"
+import { checkSourceRun, fetchSourceArtifact, selectArtifact, type RunArtifact, type WorkflowRun } from "../artifacts"
 
 const RUN: WorkflowRun = {
   id: 18000000001,
@@ -43,19 +43,19 @@ describe("selectArtifact", () => {
   test("picks the newest attempt's artifact of the kind among the run's", () => {
     const picked = selectArtifact(
       [artifact(`pilot-backup-${RUN.id}-1`, { id: 11 }), artifact(`login-state-${RUN.id}-1`, { id: 12 }), artifact(`pilot-backup-${RUN.id}-2`, { id: 13 }), artifact("playwright-report", { id: 14 })],
-      { prefix: "pilot-backup", run: RUN },
+      { kind: "pilot-backup", run: RUN },
     )
     assert.deepEqual(picked, { id: 13, name: `pilot-backup-${RUN.id}-2`, attempt: "2" })
   })
 
   test("refuses none, an expired newest one, one from another run and an ambiguous pair", () => {
-    assert.throws(() => selectArtifact([artifact("playwright-report")], { prefix: "login-state", run: RUN }), /Run 18000000001 has no login-state artifact/)
-    assert.throws(() => selectArtifact([artifact(`login-state-${RUN.id}-1`, { expired: true })], { prefix: "login-state", run: RUN }), /login-state-18000000001-1 has expired/)
+    assert.throws(() => selectArtifact([artifact("playwright-report")], { kind: "login-state", run: RUN }), /Run 18000000001 has no login-state artifact/)
+    assert.throws(() => selectArtifact([artifact(`login-state-${RUN.id}-1`, { expired: true })], { kind: "login-state", run: RUN }), /login-state-18000000001-1 has expired/)
     assert.throws(
-      () => selectArtifact([artifact(`login-state-${RUN.id}-1`, { workflow_run: { id: 7, head_branch: "main", head_sha: RUN.head_sha } })], { prefix: "login-state", run: RUN }),
+      () => selectArtifact([artifact(`login-state-${RUN.id}-1`, { workflow_run: { id: 7, head_branch: "main", head_sha: RUN.head_sha } })], { kind: "login-state", run: RUN }),
       /login-state-18000000001-1 was uploaded by run 7/,
     )
-    assert.throws(() => selectArtifact([artifact(`login-state-${RUN.id}-2`, { id: 1 }), artifact(`login-state-${RUN.id}-2`, { id: 2 })], { prefix: "login-state", run: RUN }), /2 artifacts are named login-state-18000000001-2/)
+    assert.throws(() => selectArtifact([artifact(`login-state-${RUN.id}-2`, { id: 1 }), artifact(`login-state-${RUN.id}-2`, { id: 2 })], { kind: "login-state", run: RUN }), /2 artifacts are named login-state-18000000001-2/)
   })
 })
 
@@ -68,12 +68,12 @@ describe("fetchSourceArtifact", () => {
       const body = url.pathname.endsWith("/artifacts") ? { total_count: 1, artifacts: [artifact(`login-state-${RUN.id}-1`, { id: 77 })] } : RUN
       return new Response(JSON.stringify(body), { status: 200 })
     }
-    const pick = await fetchSourceArtifact({ api: "https://api.github.com", token: "t0ken", runId: String(RUN.id), prefix: "login-state", ...expected, fetch })
+    const pick = await fetchSourceArtifact({ apiUrl: "https://api.github.com", token: "t0ken", runId: String(RUN.id), kind: "login-state", ...expected, fetch })
     assert.deepEqual(pick, { id: 77, name: `login-state-${RUN.id}-1`, attempt: "1", commit: RUN.head_sha })
     assert.deepEqual(asked, [
       `https://api.github.com/repos/Faresabdelghany/Waste/actions/runs/18000000001 Bearer t0ken`,
       `https://api.github.com/repos/Faresabdelghany/Waste/actions/runs/18000000001/artifacts?per_page=100 Bearer t0ken`,
     ])
-    await assert.rejects(fetchSourceArtifact({ api: "https://api.github.com", token: "t", runId: "18000000001; rm", prefix: "login-state", ...expected, fetch }), /is not a run id/)
+    await assert.rejects(fetchSourceArtifact({ apiUrl: "https://api.github.com", token: "t", runId: "18000000001; rm", kind: "login-state", ...expected, fetch }), /is not a run id/)
   })
 })

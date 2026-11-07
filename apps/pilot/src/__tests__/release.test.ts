@@ -11,7 +11,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
-import { judgeChecks, judgeObservation, judgeOrder, observeRelease, releaseToDeployBranch, REQUIRED_CHECKS, requireChecks, resolveReleaseOrder, type CheckRun, type Observation } from "../pilot/release"
+import { judgeChecks, judgeObservation, judgeOrder, observeRelease, releaseToDeployBranch, REQUIRED_CHECKS, requireChecks, resolveReleaseOrder, type CheckRun, type Observation } from "../release"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
 const OLD = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"

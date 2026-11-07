@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # The Pilot's restore (Issue #152, decided in #133), in the two halves the
-# protected workflow runs as separate steps, so the age key reaches the first
-# alone and the owner's URL the second:
+# restore's phases run as separate steps (src/pilot/backup-scripts.ts), so
+# the age key reaches the first alone and the owner's URL the second:
 #
 #   pilot-restore.sh decrypt   BACKUP_FILE (the encrypted archive), AGE_IDENTITY
-#                              (the private key, PILOT_BACKUP_AGE_KEY) and
-#                              RESTORE_DIR (empty or absent): the archive
+#                              (the private key, PILOT_BACKUP_AGE_KEY),
+#                              RESTORE_DIR (empty or absent), BACKUP_MEMBERS
+#                              (every member a backup's archive may hold, one
+#                              per line: src/pilot/backup.ts, backupMembers)
+#                              and RESTORE_KEY_SCRATCH (the `mktemp -d`
+#                              template of the key's directory): the archive
 #                              decrypted and unpacked there, its member names
-#                              held to the backup's own before anything is
+#                              held to BACKUP_MEMBERS before anything is
 #                              written, the key on disk only for the moment
-#                              age reads it
-#   pilot-restore.sh apply     DATABASE_ADMIN_URL and RESTORE_DIR, after
-#                              `manifest.ts verify` and the write barrier: one
+#                              age reads it, and nothing but bash and age ever
+#                              holding it
+#   pilot-restore.sh apply     DATABASE_ADMIN_URL and RESTORE_DIR, after the
+#                              backup is verified against its manifest
+#                              (src/pilot/backup.ts) and the write barrier: one
 #                              psql, ON_ERROR_STOP, one transaction, dropping
 #                              the three application schemas and restoring
 #                              every schema dump and then every data dump the
@@ -39,23 +45,19 @@ case "${1:-}" in
     : "${BACKUP_FILE:?BACKUP_FILE names the encrypted archive}"
     : "${AGE_IDENTITY:?AGE_IDENTITY holds the private key}"
     : "${RESTORE_DIR:?RESTORE_DIR names where the backup is unpacked}"
+    : "${BACKUP_MEMBERS:?BACKUP_MEMBERS lists the members a backup may hold}"
+    : "${RESTORE_KEY_SCRATCH:?RESTORE_KEY_SCRATCH names the template of the directory the key is written to}"
     [ -s "$BACKUP_FILE" ] || fail "no encrypted backup at $BACKUP_FILE"
     mkdir -p "$RESTORE_DIR"
     chmod 700 "$RESTORE_DIR"
     [ -z "$(find "$RESTORE_DIR" -mindepth 1 -maxdepth 1)" ] || fail "$RESTORE_DIR is not empty"
-    keys="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pilot-restore-key.XXXXXX")"
+    keys="$(mktemp -d "$RESTORE_KEY_SCRATCH")"
     trap 'rm -rf "$keys"' EXIT
     (umask 077 && printf '%s\n' "$AGE_IDENTITY" > "$keys/identity")
     age --decrypt --identity "$keys/identity" --output "$keys/backup.tar" "$BACKUP_FILE"
     rm -f "$keys/identity"
-    # Only the backup's own members, flat: ./, then the dumps, the manifest
-    # and the fingerprint, never a path that leaves the directory.
     while IFS= read -r member; do
-      case "$member" in
-        ./ | ./[a-z]*-schema.sql | ./[a-z]*-data.sql | ./manifest.json | ./fingerprint.txt) ;;
-        *) fail "the archive holds a member a backup never has: $member" ;;
-      esac
-      case "$member" in */*/* | *..*) fail "the archive holds a member a backup never has: $member" ;; esac
+      grep -Fqx -- "$member" <<< "$BACKUP_MEMBERS" || fail "the archive holds a member a backup never has: $member"
     done < <(tar -tf "$keys/backup.tar")
     tar -x --no-same-owner -C "$RESTORE_DIR" -f "$keys/backup.tar"
     rm -f "$keys/backup.tar"

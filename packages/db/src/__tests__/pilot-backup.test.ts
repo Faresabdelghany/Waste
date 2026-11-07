@@ -8,7 +8,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, test } from "node:test"
 
-import { checkRestoreTarget, dumpPlan, majorOf, restorePlan, verifyBackup, writeManifest, type BackupManifest } from "../pilot/backup"
+import { backupMembers, checkRestoreTarget, dumpPlan, majorOf, restorePlan, verifyBackup, writeManifest, type BackupManifest } from "../pilot/backup"
 import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
 import { libpqEnvironment, shellExports } from "../pilot/pg-env"
@@ -53,6 +53,17 @@ describe("dumpPlan", () => {
       { schema: "wms", required: true, schemaFile: "wms-schema.sql", dataFile: "wms-data.sql" },
       { schema: "drizzle", required: true, schemaFile: "drizzle-schema.sql", dataFile: "drizzle-data.sql" },
       { schema: "pgboss", required: false, schemaFile: "pgboss-schema.sql", dataFile: "pgboss-data.sql" },
+    ])
+  })
+})
+
+describe("backupMembers", () => {
+  test("names what pilot-restore.sh decrypt lets out of an archive: the flat directory pilot-backup.sh tars, with every owned schema's two dumps, the manifest and the fingerprint", () => {
+    assert.deepEqual(backupMembers(), [
+      "./",
+      "./wms-schema.sql", "./drizzle-schema.sql", "./pgboss-schema.sql",
+      "./wms-data.sql", "./drizzle-data.sql", "./pgboss-data.sql",
+      "./manifest.json", "./fingerprint.txt",
     ])
   })
 })

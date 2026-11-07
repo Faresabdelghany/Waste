@@ -152,6 +152,16 @@
         "WASTE_API_ORIGIN"
       ]
     },
+    "@waste/pilot#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/workflows/ci.yml",
+        "$TURBO_ROOT$/.github/workflows/pilot-database.yml"
+      ]
+    },
     "@waste/db#test": {
       "dependsOn": [
         "^test"

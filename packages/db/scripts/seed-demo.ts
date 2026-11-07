@@ -3,60 +3,11 @@
 // is the point of its fixed ids. Idempotent, so running it after every
 // migration costs nothing: a run that finds the database already saying all of
 // it writes no row and exits 0 like any other.
-import { count } from "@waste/domain/text"
-
-import { seedDemo } from "../src/seed/demo"
+import { seedDemo, spellSeed } from "../src/seed/demo"
 
 const url = process.env.DATABASE_ADMIN_URL
 if (!url) {
   console.error("DATABASE_ADMIN_URL is not set (see .env.example at the repository root)")
   process.exit(1)
 }
-const { companyId, changed, counts } = await seedDemo(url)
-const held = [
-  count(counts.projects, "project"),
-  count(counts.serviceProviders, "service provider"),
-  count(counts.roles, "role"),
-  count(counts.roleGrants, "grant"),
-  count(counts.users, "user"),
-].join(", ")
-const registry = [
-  count(counts.wasteFractions, "waste fraction"),
-  count(counts.containerTypes, "container type"),
-  count(counts.serviceFrequencies, "service frequency", "service frequencies"),
-  count(counts.products, "product"),
-  count(counts.customers, "customer"),
-  count(counts.properties, "property", "properties"),
-  count(counts.propertyParties, "party", "parties"),
-  count(counts.propertyGroups, "property group"),
-  count(counts.propertyGroupMembers, "group member"),
-  count(counts.sharedCollectionPoints, "shared collection point"),
-  count(counts.sharedCollectionPointMembers, "point member"),
-  count(counts.agreements, "agreement"),
-  count(counts.subscriptions, "subscription"),
-  count(counts.containers, "container"),
-  count(counts.containerServicePlacements, "placement"),
-].join(", ")
-const configuration = [
-  count(counts.vehicleTypes, "vehicle type"),
-  count(counts.vehicles, "vehicle"),
-  count(counts.drivers, "driver"),
-  count(counts.depots + counts.warehouses + counts.unloadingStations, "place"),
-  count(counts.planningAreas, "planning area"),
-  count(counts.planningAreaBoundaries, "boundary", "boundaries"),
-  count(counts.collectionCalendars, "calendar"),
-  count(counts.routeSchemes, "route scheme"),
-  count(counts.priceLists, "price list"),
-  count(counts.priceListRows, "price row"),
-  count(counts.contaminantCodes, "contaminant code"),
-  count(counts.decommissionReasons, "decommission reason"),
-  count(counts.holidayLists, "holiday list"),
-  count(counts.holidayListHolidays, "listed holiday"),
-  count(counts.ticketTypes, "ticket type"),
-].join(", ")
-console.log(
-  `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +
-    `its Registry ${registry}; ` +
-    `its configuration ${configuration}; ` +
-    (changed === 0 ? "nothing to change" : `${count(changed, "row")} written`),
-)
+console.log(spellSeed(await seedDemo(url), url))

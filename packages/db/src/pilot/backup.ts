@@ -32,8 +32,8 @@ import { textList } from "../query/text-list"
 import { wms } from "../schema/wms"
 import { sha256OfFile } from "../sha256"
 import { PGBOSS_SCHEMA } from "../sql/pgboss"
-import type { RunRef } from "./github"
 import { databaseIdentity } from "./identity"
+import type { RunRef } from "./run"
 
 /** The schemas a backup may leave out where the database has none yet: pg-boss's, which arrives with migration 0011. */
 const OPTIONAL_SCHEMAS: readonly string[] = [PGBOSS_SCHEMA]
@@ -51,6 +51,14 @@ export const dataFileOf = (schema: string): string => `${schema}-data.sql`
 export function dumpFiles(schemas: readonly string[]): string[] {
   return [...schemas.map(schemaFileOf), ...schemas.map(dataFileOf)]
 }
+
+/** Every member a backup's archive may hold, as `tar` lists the flat archive pilot-backup.sh writes: the directory itself, the owned schemas' dumps, the manifest and the fingerprint. A decrypt refuses any other before it writes a file. */
+export function backupMembers(): string[] {
+  return ["./", ...[...dumpFiles(OWNED_SCHEMAS), MANIFEST_FILE, FINGERPRINT_COPY].map((name) => `./${name}`)]
+}
+
+/** pilot-backup.sh's exit status when a schema a backup requires is not there, so the database cannot be backed up whole: the one refusal a restore's safety backup may go on without. Every other failure is 1. */
+export const BACKUP_INCOMPLETE = 3
 
 /** One line of what pilot-backup.sh dumps: a schema, whether a backup requires it, and its two files. */
 export type PlannedDump = { schema: string; required: boolean; schemaFile: string; dataFile: string }

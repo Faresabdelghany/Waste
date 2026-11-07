@@ -3,17 +3,13 @@
 // itself, on main, dispatched by hand or started by CI's success on main
 // (the automatic release, ADR-0011) — so a backup or a login-state record
 // comes only from this workflow's own runs, never from a pull request's or
-// another workflow's artifacts. Of that run's artifacts the
-// newest attempt's of the kind asked for is taken, and one that has expired,
-// that another run uploaded, or that two artifacts claim, is refused. The
-// GitHub API is read with the job's token (`actions: read`).
-import type { Fetch } from "./release"
+// another workflow's artifacts. Of that run's artifacts the newest attempt's
+// of the kind asked for is taken, and one that has expired, that another run
+// uploaded, or that two artifacts claim, is refused. The GitHub API is read
+// with the job's token (`actions: read`).
+import { artifactsOf, type ArtifactKind } from "@waste/db/pilot/phase"
 
-/** One attempt of one workflow run, as a backup, a login record and an artifact's name carry it. */
-export type RunRef = { id: string; attempt: string }
-
-/** A commit as GitHub names it, and as a run's `head_sha` spells it. */
-export const COMMIT_ID = /^[0-9a-f]{40}$/
+import { gitHubRepository, type RepositoryOptions } from "./github"
 
 export type WorkflowRun = {
   id: number
@@ -47,11 +43,11 @@ export function checkSourceRun(run: WorkflowRun, { repository, workflowPath }: E
 
 export type ArtifactPick = { id: number; name: string; attempt: string }
 
-/** The newest attempt's artifact named `<prefix>-<run>-<attempt>`, refusing what cannot be trusted to be it. */
-export function selectArtifact(artifacts: readonly RunArtifact[], { prefix, run }: { prefix: string; run: WorkflowRun }): ArtifactPick {
-  const pattern = new RegExp(`^${prefix}-${run.id}-(\\d+)$`)
+/** The newest attempt's artifact of the kind, named `<kind>-<run>-<attempt>`, refusing what cannot be trusted to be it. */
+export function selectArtifact(artifacts: readonly RunArtifact[], { kind, run }: { kind: ArtifactKind; run: WorkflowRun }): ArtifactPick {
+  const pattern = artifactsOf(kind, String(run.id))
   const named = artifacts.filter((artifact) => pattern.test(artifact.name))
-  if (named.length === 0) throw new Error(`Run ${run.id} has no ${prefix} artifact`)
+  if (named.length === 0) throw new Error(`Run ${run.id} has no ${kind} artifact`)
   const attempt = Math.max(...named.map((artifact) => Number(pattern.exec(artifact.name)?.[1])))
   const newest = named.filter((artifact) => Number(pattern.exec(artifact.name)?.[1]) === attempt)
   if (newest.length > 1) throw new Error(`${newest.length} artifacts are named ${newest[0].name}: refusing to choose`)
@@ -61,29 +57,19 @@ export function selectArtifact(artifacts: readonly RunArtifact[], { prefix, run 
   return { id: chosen.id, name: chosen.name, attempt: String(attempt) }
 }
 
-export type SourceArtifactOptions = Expected & {
-  /** The API's origin, GITHUB_API_URL. */
-  api: string
-  token: string
+export type SourceArtifactOptions = RepositoryOptions & {
+  /** The workflow whose runs alone may be read from: this one's file. */
+  workflowPath: string
   runId: string
-  prefix: string
-  fetch?: Fetch
+  kind: ArtifactKind
 }
 
 /** Reads the source run and its artifacts, checks the run, and answers the artifact to download with the run's commit. */
-export async function fetchSourceArtifact({ api, token, runId, prefix, fetch = globalThis.fetch, ...expected }: SourceArtifactOptions): Promise<ArtifactPick & { commit: string }> {
+export async function fetchSourceArtifact({ runId, kind, workflowPath, ...github }: SourceArtifactOptions): Promise<ArtifactPick & { commit: string }> {
   if (!/^\d+$/.test(runId)) throw new Error(`"${runId}" is not a run id`)
-  const read = async <T>(path: string): Promise<T> => {
-    const response = await fetch(new URL(path, api), {
-      headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
-      signal: AbortSignal.timeout(30_000),
-    })
-    if (!response.ok) throw new Error(`GET ${path} answered ${response.status}`)
-    return (await response.json()) as T
-  }
-  const base = `/repos/${expected.repository}/actions/runs/${runId}`
-  const run = await read<WorkflowRun>(base)
-  checkSourceRun(run, expected)
-  const { artifacts } = await read<{ artifacts: RunArtifact[] }>(`${base}/artifacts?per_page=100`)
-  return { ...selectArtifact(artifacts, { prefix, run }), commit: run.head_sha }
+  const { read } = gitHubRepository(github)
+  const run = await read<WorkflowRun>(`/actions/runs/${runId}`, `reading run ${runId}`)
+  checkSourceRun(run, { repository: github.repository, workflowPath })
+  const { artifacts } = await read<{ artifacts: RunArtifact[] }>(`/actions/runs/${runId}/artifacts?per_page=100`, `reading the artifacts of run ${runId}`)
+  return { ...selectArtifact(artifacts, { kind, run }), commit: run.head_sha }
 }

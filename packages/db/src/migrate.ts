@@ -33,6 +33,7 @@
 // for the API role, whose login carries the same path; without this it would
 // depend on the owner role's setting, which on Supabase happens to include
 // `extensions` and elsewhere does not.
+import { count } from "@waste/domain/text"
 import { SESSION_POOLER_PORT, TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
@@ -135,4 +136,27 @@ export async function migrateDatabase(url: string, options: MigrateOptions = {})
 /** The journal check alone, under the same lock (`pnpm db:check`): what is applied, what is pending, and every problem. Writes nothing. */
 export async function checkDatabaseJournal(url: string, options: MigrateOptions = {}): Promise<JournalReport> {
   return withMigrationLock(url, options, ({ lock }) => journalUnderLock(lock))
+}
+
+/**
+ * The journal check as `pnpm db:check` and every Pilot operation say it: one
+ * line of what is applied and what is pending, then every problem thrown,
+ * since nothing may be written past a journal that disagrees with the folder.
+ * Answers the report, for the caller to judge what is pending.
+ */
+export async function requireJournal(url: string, log: (line: string) => void): Promise<JournalReport> {
+  const report = await checkDatabaseJournal(url)
+  const pending = report.pending.length === 0 ? "none pending" : `${count(report.pending.length, "pending migration")}: ${report.pending.join(", ")}`
+  log(`@waste/db: journal on ${new URL(url).hostname}: ${count(report.applied.length, "migration")} applied, ${pending}`)
+  if (report.problems.length > 0) {
+    throw new Error(`@waste/db: the journal disagrees with the migrations folder:\n${report.problems.map((problem) => `- ${problem}`).join("\n")}`)
+  }
+  return report
+}
+
+/** `migrateDatabase` as `pnpm db:migrate` and a release say it: which migrations it applied, and each notice a migration raised. */
+export async function migrateAndSay(url: string, { log, notice }: { log: (line: string) => void; notice: (line: string) => void }): Promise<{ applied: string[] }> {
+  const result = await migrateDatabase(url, { onnotice: (received) => notice(`postgres ${received.severity}: ${received.message}`) })
+  log(result.applied.length === 0 ? "@waste/db: no migration pending" : `@waste/db: applied ${result.applied.join(", ")}`)
+  return result
 }
