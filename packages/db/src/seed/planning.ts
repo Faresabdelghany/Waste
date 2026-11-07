@@ -63,8 +63,8 @@
 //
 //   Groups. Each scheme's implicit `default` group of the prototype
 //   (`collectionGroupsOf`, apps/web/lib/prototype/route-schemes/groups) is
-//   made an explicit row, since the server keeps every group as one: named as its
-//   scheme, first, running every service day. RS-Central's matches by rule —
+//   made an explicit row, since the server keeps every group as one: named as
+//   its scheme, first, running every service day. RS-Central's matches by rule —
 //   Residual, on the rear-loader vehicle type, whose compatible container
 //   types resources.ts writes — with WH-24 and Mads Jensen, its fixture's;
 //   it names no provider, its hauler being Kystbyen itself. RS-Østerbro's

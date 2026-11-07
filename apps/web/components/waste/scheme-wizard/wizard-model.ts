@@ -9,7 +9,7 @@
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { licenceDayOf, routesPerWeekLabel, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
-import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 import { routePreview, type RoutePreview } from "@/lib/prototype/map-planning/route-preview"
 import {
   resolveProjectCalendar,

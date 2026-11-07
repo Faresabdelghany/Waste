@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 import { clusterPoints } from "../clusters"
 import { FALLBACK_FRACTION_PALETTE, fractionColor } from "../colors"
 import { offsetMetres } from "@waste/domain/map-planning/geo"

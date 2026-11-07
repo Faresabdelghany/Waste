@@ -23,7 +23,7 @@ export function schemeHolidayPolicy(values: StoredValues | undefined): HolidayPo
  * A holiday list record's `submittedValues` key for the names of its
  * holidays: a JSON object of ISO date to name, written by the Holiday lists
  * pane beside `holidayDates`. A list that carries none is named through its
- * lookup (@waste/domain/route-schemes/holiday-names).
+ * lookup (@waste/domain/planning/holiday-names).
  */
 export const HOLIDAY_NAMES_KEY = "holidayNames"
 

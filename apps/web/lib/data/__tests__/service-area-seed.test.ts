@@ -18,7 +18,7 @@ import {
 import { getBusinessFormSchema } from "../business-form-schemas"
 import type { BusinessRecord } from "../business-modules"
 import { SERVICE_AREAS_MODULE, SERVICE_AREA_SEED_FIELDS, serviceAreaFormValues } from "../service-areas"
-import { FIXTURE_GAZETTEER } from "../street-gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 
 const square = [
   { lng: 12.5, lat: 55.6 },

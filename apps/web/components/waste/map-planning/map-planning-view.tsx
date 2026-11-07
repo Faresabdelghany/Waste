@@ -39,7 +39,7 @@ import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@/lib/prototype/map-planning/areas"
 import {

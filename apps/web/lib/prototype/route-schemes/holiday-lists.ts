@@ -5,7 +5,7 @@
 // The dates are spelled as every reader parses them (`holidayDates`); the
 // names go beside them under `holidayNames`, so a list that has been edited
 // names its own holidays and the lookup in
-// @waste/domain/route-schemes/holiday-names is the fallback for one that
+// @waste/domain/planning/holiday-names is the fallback for one that
 // never was. Pure data logic.
 
 import { formatValidity } from "./calendar-list"
