@@ -35,8 +35,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch, post, remove } from "@/lib/api/client"
-import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { accessUnknownSentence } from "@/lib/api/session"
 import {
   COUNTING_PERIOD_OPTIONS,

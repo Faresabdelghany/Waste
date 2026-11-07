@@ -21,9 +21,8 @@ import { useModuleRecords, useServerModuleState, useServerResolver } from "@/com
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { useCommandRunner, useModuleReady, useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
-import { problemSentence } from "@/lib/api/problem"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { unloadingStationAdapter } from "@/lib/api/records/places"
-import { problemOfError } from "@/lib/api/records/server-records"
 import {
   amountDueOf,
   COMPLETE_TICKET,

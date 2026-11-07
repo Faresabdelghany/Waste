@@ -14,8 +14,7 @@ import type { RouteMessage } from "@waste/contracts/route-messages"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useApiClient } from "@/components/waste/api-session-store"
-import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { authorLine, mintMessageId, readDriverRouteMessages, sendable, sendDriverRouteMessage } from "@/lib/driver/route-messages"
 
 /** How often an open thread is read again. */

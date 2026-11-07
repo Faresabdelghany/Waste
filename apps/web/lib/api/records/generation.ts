@@ -20,7 +20,7 @@ import { get, listPage, type ApiClient } from "../client"
 import type { Problem } from "../problem"
 import { PICKUPS_MODULE } from "./pickups"
 import { ROUTES_MODULE } from "./routes"
-import { problemOfError } from "./server-records"
+import { problemOfError } from "../problem"
 
 /** How often an open run is read again. */
 export const RUN_READ_EVERY_MS = 3_000

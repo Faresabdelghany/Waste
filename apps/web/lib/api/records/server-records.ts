@@ -79,7 +79,7 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import { UNREACHABLE_STATUS, type ApiClient } from "../client"
-import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
+import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn } from "./clock"
 
@@ -177,12 +177,6 @@ export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: b
 export function paneAnswerOf(module: ModuleState): PaneAnswer {
   if (module.status === "ready") return { records: module.records, ready: true, pending: false, notGranted: false, problem: null }
   return { records: [], ready: false, pending: module.status === "idle" || module.status === "loading", notGranted: module.status === "not-granted", problem: module.problem }
-}
-
-/** The problem an unknown failure is reported as; a thrown `ApiProblem` is reported as itself. */
-export function problemOfError(error: unknown): Problem {
-  if (error instanceof ApiProblem) return error.problem
-  return genericProblem(0, error instanceof Error ? error.message : "The request failed")
 }
 
 /** The adapter that owns a record, by the module's own order; undefined for a record no adapter claims. */

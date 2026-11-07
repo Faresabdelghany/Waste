@@ -23,7 +23,7 @@ import {
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
-import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
+import { genericProblem, isAccountRefusal, problemOfError, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf, type CommandInput, type Resolver, type ServerModule } from "@/lib/api/records/adapter"
 import { ME_PROJECTS, withMeProjects, type MeProject } from "@/lib/api/records/me-projects"
 import { MODULES_WITHOUT_ME, SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
@@ -37,7 +37,6 @@ import {
   IDLE,
   KEPT_ON_API,
   paneAnswerOf,
-  problemOfError,
   readModuleInto,
   readsChanged,
   readSourcesNow,

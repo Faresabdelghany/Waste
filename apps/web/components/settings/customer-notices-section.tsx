@@ -24,8 +24,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useApiClient } from "@/components/waste/api-session-store"
 import { get, listAll, put } from "@/lib/api/client"
-import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { CUSTOMER_NOTICES, isBroadcast, NOT_SENT, noticePicksOf, noticeRulesBody, noticeTemplateOptions, type NoticePick } from "@/lib/data/notification-rules"
 
 type Picks = Record<CustomerNoticeEvent, NoticePick>
