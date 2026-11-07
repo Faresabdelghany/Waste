@@ -72,6 +72,7 @@ import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { accessColumns, accessOf, grantsOfRows, uniqueIds, userStatus, type AccessShape } from "../access-shape"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -79,7 +80,7 @@ import { accessModuleOf, providerIdOf, providerNameOf } from "../auth/provider"
 import { allows, requireGrant, requireGrantOf } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 
 const MODULE = "configure.access"
 const UserPage = Page(User)

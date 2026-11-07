@@ -22,6 +22,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
@@ -29,7 +30,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 

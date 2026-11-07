@@ -103,6 +103,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -114,7 +115,7 @@ import { projectCurrency, projectToday } from "./fleet-lookups"
 import { refuseStranded } from "./periods"
 import { requireServiceAreaAssignment } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, stampsOf } from "./shared"
 
 const MODULE = "commercial.settlements"
 

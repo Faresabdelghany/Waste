@@ -49,6 +49,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -57,7 +58,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf, strengthFor } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)

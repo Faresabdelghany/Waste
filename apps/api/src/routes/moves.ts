@@ -50,6 +50,7 @@ import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
@@ -69,7 +70,7 @@ import { refuseStranded } from "./periods"
 import { findProperty, noSuchProperty, propertyWithParties } from "./property-writes"
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, lockRows, refuseOverlap, stamp } from "./shared"
+import { describeJson, IdParam, lockRow, lockRows, stamp } from "./shared"
 import { refuseInactiveCustomer } from "./statuses"
 
 /** What a move with subscriptions to carry and no number for the incoming agreement is told. */

@@ -115,6 +115,7 @@ import { PERIOD_ENDS_BY_TODAY, type BillingRunPreview } from "@waste/contracts/b
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
 import { catchUpFrom } from "@waste/domain/finance/periods"
 import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
+import { Refused } from "@waste/domain/refusal"
 import { addDays } from "@waste/domain/days"
 import { lastDayIn } from "@waste/domain/periods"
 import { and, asc, count, eq, exists, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
@@ -135,7 +136,7 @@ import { projectToday, type Scope } from "./project-clock"
 import { heldWhenCharged, holdsForReview } from "./billable-writes"
 import { mintHireCharges, planHireCharges } from "./hire-charges"
 import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"
-import { lockRow, refused, RefusedField } from "./shared"
+import { lockRow } from "./shared"
 
 /** The most ready events one batch of a run takes (#329): a batch is one transaction, and a thousand invoices is what Postgres is for (§7.2, §7.9); a payer above it alone is excluded, `too-many-events`. */
 export const BILLING_RUN_MAX_EVENTS = 5000
@@ -400,7 +401,7 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
 export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod, now: () => Date, batchMax: number = BILLING_RUN_MAX_EVENTS): Promise<BillingRunPreview> {
   const today = await projectToday(tx, scope, now)()
   // A run is for a closed period (M14 of #293): no charge reaches a day still to come, and no month is left undue past every later run's reach.
-  if (period.periodTo > today) throw new RefusedField("periodTo", PERIOD_ENDS_BY_TODAY)
+  if (period.periodTo > today) throw Refused.invalid("periodTo", PERIOD_ENDS_BY_TODAY)
   // The charges the run would mint, each as the run would write it: blocked without a price, held for review where the project holds its hires (M14 of #293), else ready.
   const holds = await holdsForReview(tx, scope)
   const planned = [...(await planRecurringCharges(tx, scope, period)).map((charge) => ({ ...charge, held: false })), ...(await planHireCharges(tx, scope, period, today)).map((hire) => ({ ...hire, held: heldWhenCharged(holds, "hire", hire.blockReason) }))]
@@ -541,7 +542,7 @@ async function startRun(tx: Tx, input: RunBillingInput, scope: Scope, at: Date):
   await lockRow(tx, project, { companyId, id: projectId })
   const issuedOn = await projectToday(tx, scope, () => at)()
   // A closed period alone, the office's run and the schedule's alike (as the preview's).
-  if (input.periodTo > issuedOn) throw new RefusedField("periodTo", PERIOD_ENDS_BY_TODAY)
+  if (input.periodTo > issuedOn) throw Refused.invalid("periodTo", PERIOD_ENDS_BY_TODAY)
   const open: OpenRun[] = await tx
     .select({ ...runColumns, idleMs: sql<number>`(extract(epoch from (now() - ${billingRun.updatedAt})) * 1000)::float8`.mapWith(Number) })
     .from(billingRun)
@@ -554,7 +555,7 @@ async function startRun(tx: Tx, input: RunBillingInput, scope: Scope, at: Date):
       resumed ??= run
       continue
     }
-    if (run.idleMs < staleAfterMs) throw refused(409, runUnderWay(run))
+    if (run.idleMs < staleAfterMs) throw Refused.conflict(runUnderWay(run))
     // A run whose process died over another period: what it issued stands, and the row says it never finished.
     await tx.update(billingRun).set({ status: "failed" }).where(and(eq(billingRun.companyId, companyId), eq(billingRun.id, run.id)))
   }

@@ -14,7 +14,7 @@
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
 import { ensurePlan as ensureCompanyPlan, type EnsuredPlan, type PlanRoute } from "@waste/db/commands/plans"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import type { JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import type { PlanSolver, PlanStatus, PlanStopWarning, PlanTrip } from "@waste/domain/routing/vocabulary"
@@ -26,7 +26,6 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
-import { WORKER_QUEUE_MISSING } from "./generation"
 import { stampsOf } from "./shared"
 
 export const noSuchPlan = (id: string) => problem(404, { detail: `No plan ${id} in the projects this account works in` })
@@ -288,7 +287,7 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
 /**
  * The office's door to a Plan (#170): `ensurePlan` of @waste/db/commands/plans
  * asked `interactive` — a dispatcher waits on it (#132 §1) — with a queue no
- * worker has made answered as the 503 it is.
+ * worker has made answered by the error handler as the 503 it is.
  */
 export async function ensurePlan(
   tx: Tx,
@@ -297,10 +296,5 @@ export async function ensurePlan(
   request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
   { routing, jobs }: { routing: RoutingIdentity; jobs: JobSender },
 ): Promise<EnsuredPlan> {
-  try {
-    return await ensureCompanyPlan(tx, principal.companyId, routeRow, { ...request, class: "interactive" }, { routing: { name: routing.name, profile: DEFAULT_PROFILE }, send: jobs.send })
-  } catch (error) {
-    if (error instanceof QueueMissing) throw problem(503, { detail: WORKER_QUEUE_MISSING })
-    throw error
-  }
+  return await ensureCompanyPlan(tx, principal.companyId, routeRow, { ...request, class: "interactive" }, { routing: { name: routing.name, profile: DEFAULT_PROFILE }, send: jobs.send })
 }

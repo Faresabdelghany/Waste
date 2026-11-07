@@ -81,6 +81,7 @@ import { and, asc, eq, exists, gt, inArray, isNull, or, sql, type SQL } from "dr
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -92,7 +93,7 @@ import { projectCurrency } from "./fleet-lookups"
 import { answerOf, batchesOf, INDEX_BELOW_ZERO, INDEX_TOO_LARGE, lockInBatches, productStatuses, refusePlan } from "./indexation"
 import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.service-provider-prices"

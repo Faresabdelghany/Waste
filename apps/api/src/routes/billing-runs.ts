@@ -19,7 +19,7 @@
 // grant `commercial.billing`, `view` to read and to preview, `create` to run,
 // and the command's refusal — another run of the project under way, an event
 // another run invoiced under this one — a `Refused` the API's error handler
-// answers as a 409 (problem.ts, `refusedProblem`).
+// answers as a 409 (problem.ts, `refusalProblem`).
 import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunListQuery, BillingRunPreview } from "@waste/contracts/billing"
 import { Page } from "@waste/contracts/pagination"

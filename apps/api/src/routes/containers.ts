@@ -113,6 +113,7 @@ import { and, asc, eq, gt, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -124,7 +125,7 @@ import { containerOf, containersFrom, createContainer, findContainer, patchConta
 import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type ContainerRef, type LifecycleOptions } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 import { refuseUnservedPlace, type Place } from "./statuses"
 
 const MODULE = "resources.containers"

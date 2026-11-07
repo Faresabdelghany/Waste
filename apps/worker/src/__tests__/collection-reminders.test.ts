@@ -102,7 +102,7 @@ describe("messaging.collection-reminders", { skip: roles.skip }, () => {
   test("is hourly off the hour, with no retry: the next hour is the retry", () => {
     assert.equal(collectionRemindersJob.schedule, "7 * * * *")
     assert.equal(collectionRemindersJob.queueOptions?.retryLimit, 0)
-    assert.equal(REMINDER_CHUNK, 50, "below the 64 subtransactions Postgres caches")
+    assert.equal(REMINDER_CHUNK, 50, "a transaction commits fifty customers at most, so a failure later in the run keeps them")
   })
 
   test("before two in the afternoon on the project's clock, nothing is sent", async () => {

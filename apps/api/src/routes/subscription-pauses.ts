@@ -47,6 +47,7 @@ import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -58,7 +59,7 @@ import { OUTSIDE_SUBSCRIPTION } from "./lifecycle"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
 import type { ClockOptions } from "./scheme-groups"
 import { askRuns, mergedRuns, runsBringingBack, stopsLeft, type Window } from "./service-ends"
-import { describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 
 const MODULE = "customers.agreements"
 const PausePage = Page(SubscriptionPause)

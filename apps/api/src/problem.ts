@@ -6,12 +6,16 @@
 // that, and anything else that escapes a handler, into a response:
 //
 //   a ProblemError          → its own body and headers (a 401 carries WWW-Authenticate)
-//   a Refused               → the problem of its status: a shared write
-//                             statement (`@waste/db/commands/*`, which the
-//                             worker runs too and which therefore throws no
-//                             ProblemError) refused a rule — a 409 with its
-//                             sentence, or a 400 at the field the value came
-//                             in, the shape the validator's own 400s take
+//   a Refused               → the problem its reason answers
+//                             (`refusalProblem`): a rule refused the command
+//                             (`@waste/domain/refusal`; the statements under
+//                             `@waste/db/commands`, which the worker runs too,
+//                             say no only so) — a conflict is a 409 with its
+//                             sentence, an invalid value a 400 at the field
+//                             of the body named as the command's input, the
+//                             shape the validator's own 400s take
+//   a QueueMissing          → 503: no worker has made the queue a send named
+//                             yet (`WORKER_QUEUE_MISSING`)
 //   one of Hono's own       → a problem of its status, the message as detail
 //   SQLSTATE 23505 or 23P01 → 409, since a key already taken and a period
 //                             already covered are the database errors a client
@@ -44,8 +48,9 @@
 import { STATUS_CODES } from "node:http"
 
 import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
-import { Refused } from "@waste/db/commands/shared"
+import { QueueMissing } from "@waste/db/jobs"
 import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, loggable, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
+import { Refused, type Refusal } from "@waste/domain/refusal"
 import type { ErrorHandler, NotFoundHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import type { ClientErrorStatusCode, ServerErrorStatusCode } from "hono/utils/http-status"
@@ -150,19 +155,38 @@ const CONFLICTS: Readonly<Record<string, string>> = {
 }
 
 /**
- * The problem a shared write statement's refusal answers (Issue #109 part B):
- * a 409 with the sentence, or — for a value the body carried that will not
- * do — the 400 `invalidRequest` answers, one error at the field the value
- * came in, so a client reads the same shape whether a route or a statement
- * both processes run noticed. The statements throw `Refused` and never a
- * `ProblemError`, since the worker runs them too and has no response to put
- * one in.
+ * The problem a refusal answers, whoever noticed it: a conflict the 409 with
+ * its sentence; an invalid value the 400 `invalidRequest` answers, one error
+ * at the body's field named as the command's input, so a client reads the
+ * same shape whether a route or a statement both processes run noticed.
  */
-export function refusedProblem(error: Refused): ProblemError {
-  return error.status === 400 ? invalidRequest("body", [{ path: error.path ?? "", message: error.message }]) : problem(error.status, { detail: error.message })
+export function refusalProblem(refusal: Refusal): ProblemError {
+  return refusal.reason === "invalid" ? invalidRequest("body", [{ path: refusal.input, message: refusal.sentence }]) : problem(409, { detail: refusal.sentence })
 }
 
-const refusedResponse = (error: Refused): Response => refusedProblem(error).getResponse()
+/** What a 503 says when a send names a queue no worker has made yet: the API creates none (`QueueMissing`, `@waste/db/jobs`). */
+export const WORKER_QUEUE_MISSING = "The worker has not started on this database yet, so its queue is not there; start it and ask again"
+
+/** The problem an error is answered with when it is one this API answers on purpose; undefined for anything else, which is a 500. */
+function problemOf(error: unknown): ProblemError | undefined {
+  if (error instanceof ProblemError) return error
+  if (error instanceof Refused) return refusalProblem(error.refusal)
+  if (error instanceof QueueMissing) return problem(503, { detail: WORKER_QUEUE_MISSING })
+  return undefined
+}
+
+/**
+ * The refusal an error is, as the problem the error handler answers it with
+ * — a route's own problem below 500, or a `Refused` whoever threw it — and
+ * undefined for anything else, an outage or a bug, which fails the request.
+ * The one rule a command over many rows reads to answer a row's refusal as
+ * that row's result: `POST /routes/dispatch`, an import's row, a completion's
+ * ledger work.
+ */
+export function refusalOf(error: unknown): ProblemError | undefined {
+  const answered = problemOf(error)
+  return answered !== undefined && answered.status < 500 ? answered : undefined
+}
 
 /**
  * Hono's error handler: the mapping in the header. `log` receives what became
@@ -171,8 +195,8 @@ const refusedResponse = (error: Refused): Response => refusedProblem(error).getR
  */
 export function errorHandler(log: (error: unknown) => void = console.error): ErrorHandler {
   return (error) => {
-    if (error instanceof ProblemError) return error.getResponse()
-    if (error instanceof Refused) return refusedResponse(error)
+    const answered = problemOf(error)
+    if (answered !== undefined) return answered.getResponse()
     if (error instanceof HTTPException) {
       return problemResponse(isProblemStatus(error.status) ? error.status : 500, error.message === "" ? {} : { detail: error.message })
     }

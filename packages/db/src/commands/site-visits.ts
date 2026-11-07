@@ -10,8 +10,8 @@
 // `externalId` first, as it stands (ADR-0011), refused where it names
 // another project or site; then holds the site to a recycling centre of the
 // project, each fraction to one it takes and the address's Property to the
-// project's (each a `Refused` 400 naming its field), and only then the site
-// to an active one (a 409). It renders the instant as the project's day;
+// project's (each an invalid input, `Refused`), and only then the site
+// to an active one (a conflict). It renders the instant as the project's day;
 // reads the credential in force for the plate or the card on that day, and
 // the Agreement the visit is charged to — a household's fee-paying one
 // (@waste/domain/visits/charges's `feePayingAgreement`: a subscription in
@@ -40,6 +40,7 @@ import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 import { businessAgreementOf, feePayingAgreement, householdPropertyOf, identifyVisit, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type Identified, type LikelyTrade, type VisitCharge, type VisitFacts, type VisitHolder, type VisitRuleFacts } from "@waste/domain/visits/charges"
 import type { SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 import { addDays } from "@waste/domain/days"
+import { Refused } from "@waste/domain/refusal"
 import { dayInTimezone } from "@waste/domain/clock"
 import { and, asc, count, desc, eq, exists, gte, inArray, isNotNull, isNull, lte, not, notInArray, or, sql } from "drizzle-orm"
 
@@ -54,7 +55,7 @@ import { priceDraft } from "./billable-writes"
 import { emit } from "./outbox"
 import { projectTimezone, type Scope } from "./project-clock"
 import { instantOf, stampsOf } from "./resolution-rows"
-import { lockRow, refused, RefusedField, uniqueConstraintOf } from "./shared"
+import { lockRow, replayed } from "./shared"
 
 /** What a site that is no recycling centre of the project is told, at `siteId`. */
 export const NOT_A_CENTRE = "Not a recycling centre of this project"
@@ -376,7 +377,7 @@ async function siteStatusOf(tx: Tx, scope: Scope, siteId: string, fractionIds: r
     .from(dropOffPoint)
     .where(and(eq(dropOffPoint.companyId, scope.companyId), eq(dropOffPoint.projectId, scope.projectId), eq(dropOffPoint.id, siteId)))
     .limit(1)
-  if (site === undefined || site.kind !== "recycling-centre") throw new RefusedField("siteId", NOT_A_CENTRE)
+  if (site === undefined || site.kind !== "recycling-centre") throw Refused.invalid("siteId", NOT_A_CENTRE)
   if (fractionIds.length === 0) return site.status
   const taken = await tx
     .select({ wasteFractionId: dropOffPointFraction.wasteFractionId })
@@ -384,7 +385,7 @@ async function siteStatusOf(tx: Tx, scope: Scope, siteId: string, fractionIds: r
     .where(and(eq(dropOffPointFraction.companyId, scope.companyId), eq(dropOffPointFraction.dropOffPointId, siteId), inArray(dropOffPointFraction.wasteFractionId, [...fractionIds])))
   const takes = new Set(taken.map((row) => row.wasteFractionId))
   const index = fractionIds.findIndex((id) => !takes.has(id))
-  if (index >= 0) throw new RefusedField(`wasteFractionIds.${index}`, NOT_TAKEN_HERE)
+  if (index >= 0) throw Refused.invalid(`wasteFractionIds.${index}`, NOT_TAKEN_HERE)
   return site.status
 }
 
@@ -400,7 +401,7 @@ async function visitByExternalId(tx: Tx, companyId: string, source: SiteVisitSou
 
 /** A gate's read already recorded, answered as it stands where it was the same site's, refused where another project or site took the id. */
 async function replayOf(tx: Tx, scope: Scope, input: RecordVisitInput, earlier: VisitRow): Promise<RecordedVisit> {
-  if (earlier.projectId !== scope.projectId || earlier.siteId !== input.siteId) throw refused(409, EXTERNAL_ID_TAKEN)
+  if (earlier.projectId !== scope.projectId || earlier.siteId !== input.siteId) throw Refused.conflict(EXTERNAL_ID_TAKEN)
   const fractions = (await fractionsOf(tx, scope.companyId, [earlier.id])).get(earlier.id) ?? []
   return { row: earlier, visit: siteVisitOf(earlier, fractions), replayed: true }
 }
@@ -427,9 +428,9 @@ export async function recordVisit(tx: Tx, input: RecordVisitInput): Promise<Reco
       .from(property)
       .where(and(eq(property.companyId, scope.companyId), eq(property.projectId, scope.projectId), eq(property.id, identifier.propertyId)))
       .limit(1)
-    if (found === undefined) throw new RefusedField("identifier.propertyId", NOT_A_PROPERTY)
+    if (found === undefined) throw Refused.invalid("identifier.propertyId", NOT_A_PROPERTY)
   }
-  if (siteStatus !== "active") throw refused(409, siteNotActive(siteStatus))
+  if (siteStatus !== "active") throw Refused.conflict(siteNotActive(siteStatus))
   const day = dayInTimezone(input.occurredAt, await projectTimezone(tx, scope.companyId, scope.projectId))
   let identifierValue: string | null = null
   let identified: Identified
@@ -472,20 +473,22 @@ export async function recordVisit(tx: Tx, input: RecordVisitInput): Promise<Reco
     chargeN: charge?.n ?? null,
     chargeProductId: charge?.productId ?? null,
   }
-  let row: VisitRow
-  try {
-    // A savepoint, so a second delivery of one gate read meeting the first's index rolls back alone and reads the first's visit.
-    ;[row] = await tx.transaction((savepoint) => savepoint.insert(siteVisit).values(values).returning(visitColumns))
-  } catch (error) {
-    if (input.externalId === null || uniqueConstraintOf(error) !== ONE_VISIT_PER_READ) throw error
-    const winner = await visitByExternalId(tx, input.companyId, input.source, input.externalId)
-    if (winner === undefined) throw error
-    return await replayOf(tx, scope, input, winner)
-  }
-  if (input.wasteFractionIds.length > 0) {
-    await tx.insert(siteVisitFraction).values(input.wasteFractionIds.map((wasteFractionId) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, visitId: row.id, wasteFractionId })))
-  }
-  const visit = siteVisitOf(row, input.wasteFractionIds)
-  await emit(tx, scope, { aggregateId: row.id, kind: "site-visit-recorded", payload: visit, projectId: scope.projectId, occurredAt: input.occurredAt })
-  return { row, visit, replayed: false }
+  const { externalId } = input
+  return await replayed(
+    externalId === null ? [] : [ONE_VISIT_PER_READ],
+    async () => {
+      // A savepoint, so a second delivery of one gate read meeting the first's index rolls back alone and reads the first's visit.
+      const [row] = await tx.transaction((savepoint) => savepoint.insert(siteVisit).values(values).returning(visitColumns))
+      if (input.wasteFractionIds.length > 0) {
+        await tx.insert(siteVisitFraction).values(input.wasteFractionIds.map((wasteFractionId) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, visitId: row.id, wasteFractionId })))
+      }
+      const visit = siteVisitOf(row, input.wasteFractionIds)
+      await emit(tx, scope, { aggregateId: row.id, kind: "site-visit-recorded", payload: visit, projectId: scope.projectId, occurredAt: input.occurredAt })
+      return { row, visit, replayed: false }
+    },
+    async () => {
+      const winner = externalId === null ? undefined : await visitByExternalId(tx, input.companyId, input.source, externalId)
+      return winner === undefined ? undefined : await replayOf(tx, scope, input, winner)
+    },
+  )
 }

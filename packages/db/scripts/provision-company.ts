@@ -18,9 +18,10 @@
 //     --admin-email ida.holm@fjordby.example --admin-name "Ida Holm"
 import { parseArgs } from "node:util"
 
+import { Refused } from "@waste/domain/refusal"
+
 import { createDb } from "../src/client"
 import { provisionCompany } from "../src/commands/provision-company"
-import { Refused } from "../src/commands/shared"
 import { newId } from "../src/ids"
 import { isLocalHost } from "../src/local-host"
 

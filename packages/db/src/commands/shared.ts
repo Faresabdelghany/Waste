@@ -25,35 +25,38 @@
 //                  generation's to take (#97 part B), in blocks, and the
 //                  office's one at a time for an ad-hoc route (#111).
 //   a refusal    — a rule a statement holds and the caller answers for: the
-//                  API as a 409 with a sentence, the worker as a failed job
-//                  or a line in its log. A statement throws `Refused` with
-//                  the sentence and the status the API would answer, and
-//                  never a `ProblemError`, which is Hono's and the API's
-//                  (the worker has no response to put it in); the API's
-//                  error handler maps a `Refused` to the problem of its
-//                  status (`refusedProblem`), so a route that calls a shared
-//                  statement answers what it always answered. A refusal the
-//                  database gives — a unique or exclusion violation the
-//                  statement foresaw and gave a sentence to — goes through
-//                  `refuseDuplicate` and `refuseOverlap`, the commands' two
-//                  doors, which read the constraint's name off the SQLSTATE
-//                  (`../sqlstate`) and throw the sentence as a 409 `Refused`;
-//                  a constraint the statement did not name is left to the
-//                  caller, which for the API is still a 409 with the
-//                  constraint's name — the signal that a sentence is missing.
+//                  API as its 409 or 400, the worker as a failed job or a
+//                  line in its log. A statement says no by throwing the
+//                  domain's `Refused` (`@waste/domain/refusal`): the sentence
+//                  and why — a conflict, or an invalid value at the input it
+//                  came in — and nothing of a response, since the worker has
+//                  none to put it in; the API's error handler maps it. A
+//                  statement whose refusal its callers count rather than
+//                  fail on answers it as a value instead (`queueMessage`). A
+//                  refusal the database gives — a constraint the caller
+//                  foresaw and gave a sentence to — goes through the doors
+//                  below, which read the constraint's name off the SQLSTATE
+//                  (`../sqlstate`): `refuseDuplicate` (23505) and
+//                  `refuseOverlap` (23P01) a conflict, `refuseCheck` (23514)
+//                  an invalid value, and `replayed` an idempotent retry
+//                  meeting its key, answered as the first application. A
+//                  constraint the caller did not name is left to it, which
+//                  for the API is a 409 with the constraint's name (or a 500
+//                  for a check) — the signal that a sentence is missing. The
+//                  API's routes and the statements here go through the same
+//                  doors.
 //
 // The API's routes/shared.ts re-exports `lockRow`, `lockRows` and
-// `nextNumber` from here, so a route reads them where it always did; its own
-// `refuseDuplicate` and `refuseOverlap` stay the routes' doors, answering a
-// `ProblemError` directly, since a route has the request in hand. Nothing
+// `nextNumber` from here, so a route reads them where it always did. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
+import { Refused, type Refusal } from "@waste/domain/refusal"
 import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-orm"
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
 import { company, COMPANY_COUNTERS } from "../schema/organisation"
-import { exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
+import { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
 
 // The SQLSTATE readers live in ../sqlstate, where the API's problem.ts and
 // the worker's consumers read them too; they are re-exported here as well,
@@ -64,64 +67,74 @@ export { checkConstraintOf, constraintOf, EXCLUSION_VIOLATION, exclusionConstrai
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
 
-/**
- * A rule a shared statement refused the write on: the sentence a person
- * reads, and the status the API answers it with — a 409 for a row that says
- * otherwise, a 400 for a value the body carried that will not do, which then
- * names the field it came in (`path`), the shape the API's field errors take.
- * Thrown by the statements here and by nothing else; the API's error handler
- * turns it into its problem and the worker's handler into a failed job, since
- * a refusal the domain's rules give is not a fact a consumer may swallow.
- */
-export class Refused extends Error {
-  readonly status: 400 | 409
-  /** The field of the body the refused value came in; a 400's, and never a 409's. */
-  readonly path: string | undefined
-
-  constructor(status: 400 | 409, detail: string, path?: string) {
-    super(detail)
-    this.name = "Refused"
-    this.status = status
-    this.path = path
-  }
-}
-
-/** `throw refused(409, "…")`: how a shared statement says a row already says otherwise. */
-export const refused = (status: 409, detail: string): Refused => new Refused(status, detail)
-
-/** A value the body carried that will not do, at the field it came in: the 400 the API answers `{ path, message }` with. */
-export class RefusedField extends Refused {
-  constructor(path: string, message: string) {
-    super(400, message, path)
-    this.name = "RefusedField"
-  }
-}
-
-/** What the two doors below share: run the write, and raise the sentence the statement wrote for the constraint it hit as a 409 `Refused`. */
-async function refusing<T>(constraintNamed: (error: unknown) => string | undefined, sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+/** Runs a write, and refuses with the caller's own refusal for a constraint it named; anything else is thrown as it came. */
+async function refusing<T, Said>(constraintNamed: (error: unknown) => string | undefined, sentences: Readonly<Record<string, Said>>, refusal: (said: Said) => Refused, write: () => Promise<T>): Promise<T> {
   try {
     return await write()
   } catch (error) {
     const constraint = constraintNamed(error)
-    const detail = constraint === undefined ? undefined : sentences[constraint]
-    if (detail === undefined) throw error
-    throw refused(409, detail)
+    const said = constraint === undefined ? undefined : sentences[constraint]
+    if (said === undefined) throw error
+    throw refusal(said)
   }
 }
 
 /**
- * Runs a write, and turns a unique violation the statement named into a
- * `Refused` 409 with that sentence. A constraint the statement did not name
- * is left to the caller, which for the API is still a 409 with the
- * constraint's name — the signal that a sentence is missing here.
+ * Runs a write, and turns a unique violation the caller named into a
+ * conflict with that sentence. Two doors and not one taking a SQLSTATE,
+ * because a caller foresees the two separately — the same table's name key
+ * and its `no_overlap` constraint say different things to a person — and a
+ * sentence written for one must not answer the other.
  */
 export async function refuseDuplicate<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
-  return await refusing(uniqueConstraintOf, sentences, write)
+  return await refusing(uniqueConstraintOf, sentences, Refused.conflict, write)
 }
 
 /** The same for an exclusion constraint: a row whose period overlaps one already there. */
 export async function refuseOverlap<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
-  return await refusing(exclusionConstraintOf, sentences, write)
+  return await refusing(exclusionConstraintOf, sentences, Refused.conflict, write)
+}
+
+/** What a check the caller named refuses: the input whose value will not do, and why. */
+export type CheckRefusal = Omit<Extract<Refusal, { reason: "invalid" }>, "reason">
+
+/**
+ * The door one SQLSTATE further along: a check violation (23514) the caller
+ * named, refused as an invalid value at its input, since nothing else in the
+ * table says otherwise — the row is alone and its own value will not do. For
+ * the check only the database can run, such as `st_isvalid` on a polygon
+ * whose ring crosses itself in a way the shape rule cannot see; a check the
+ * caller did not name is left to it, which for the API is a 500 logging the
+ * constraint.
+ */
+export async function refuseCheck<T>(sentences: Readonly<Record<string, CheckRefusal>>, write: () => Promise<T>): Promise<T> {
+  return await refusing(checkConstraintOf, sentences, ({ input, sentence }) => Refused.invalid(input, sentence), write)
+}
+
+/**
+ * The door that answers a key already taken with the first application
+ * rather than a refusal: a client-minted id, or an outside system's own id
+ * of a read, already present is the command already done. Runs the write in
+ * the caller's savepoint; when it fails with 23505 on one of the constraints
+ * named, `first` reads what was recorded under the key — a fresh statement,
+ * which sees the winner's committed row — and its answer stands in the
+ * write's place. A 23505 on any other constraint rethrows the write's own
+ * error, since it is not a replay; so does a named key that `first` finds
+ * nothing recorded under — unless the caller gives `taken`, whose answer
+ * stands in then: the key is held by a row the caller cannot see, which for
+ * the driver door is a command id another driver's device minted.
+ */
+export async function replayed<T>(keys: readonly string[], write: () => Promise<T>, first: () => Promise<T | undefined>, taken?: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    const constraint = uniqueConstraintOf(error)
+    if (constraint === undefined || !keys.includes(constraint)) throw error
+    const recorded = await first()
+    if (recorded !== undefined) return recorded
+    if (taken === undefined) throw error
+    return await taken()
+  }
 }
 
 /**

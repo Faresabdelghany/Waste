@@ -34,7 +34,6 @@ import { project } from "@waste/db/schema/organisation"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { validOn } from "@waste/db/query/valid-on"
 import type { Send } from "@waste/db/jobs"
-import { Refused } from "@waste/db/commands/shared"
 import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
 import { isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, type LedgerService } from "@waste/domain/execution/work-orders"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -44,7 +43,7 @@ import { newId } from "@waste/db/ids"
 import { openTicket } from "@waste/db/commands/open-ticket"
 
 import type { Principal } from "../auth/principal"
-import { ProblemError } from "../problem"
+import { ProblemError, refusalOf } from "../problem"
 import { issueContainer } from "./containers"
 import { move, type ContainerRef } from "./lifecycle"
 
@@ -63,11 +62,10 @@ type CompletedStop = {
   sharedCollectionPointId: string | null
 }
 
-/** What a movement the ledger refused is told in, in a person's words: a field's own sentence before a 400's general one. */
+/** What a movement the ledger refused is told in, in a person's words: a field's own sentence before a 400's general one; undefined for an error that is no refusal (`refusalOf`). */
 function sentenceOf(error: unknown): string | undefined {
-  if (error instanceof ProblemError) return error.body.errors?.[0]?.message ?? error.body.detail ?? error.body.title
-  if (error instanceof Refused) return error.message
-  return undefined
+  const refused = refusalOf(error)
+  return refused === undefined ? undefined : (refused.body.errors?.[0]?.message ?? refused.body.detail ?? refused.body.title)
 }
 
 /** A container as the ledger's commands name it: its id, its project and its label. */

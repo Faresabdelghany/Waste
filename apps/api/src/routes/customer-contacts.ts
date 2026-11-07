@@ -23,12 +23,13 @@ import { and, asc, eq } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseCheck } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { noSuchCustomer } from "./customer-writes"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 
 const MODULE = "customers.contacts"
 
@@ -64,7 +65,7 @@ export const contactOf = (row: Row): CustomerContact => ({
 })
 
 /** The table's check, the backstop under the body's and the patch's rule. */
-const UNREACHABLE = { customer_contact_channel_shape: { path: "email", message: REACHABLE_ON_A_CHANNEL } }
+const UNREACHABLE = { customer_contact_channel_shape: { input: "email", sentence: REACHABLE_ON_A_CHANNEL } }
 
 const lowercased = <T extends { email?: string | null }>(values: T): T => (values.email == null ? values : { ...values, email: values.email.toLowerCase() })
 

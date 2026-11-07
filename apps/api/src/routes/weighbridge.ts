@@ -68,7 +68,7 @@ import { findRoute, noSuchRoute } from "./execution-shapes"
 import { requireRoute, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, stampsOf } from "./shared"
+import { aheadOfClock, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 import { writeUnload } from "./unload-writes"
 
 const MODULE = "route-studio.weighbridge"
@@ -223,7 +223,7 @@ async function ingestOne(tx: Tx, principal: Principal, context: BatchContext, se
   const station = context.stations.get(sent.stationCode)
   if (station === undefined) return { ...named, outcome: "refused", reason: "unknown-station" }
   const weighedAt = new Date(sent.weighedAt)
-  if (weighedAt.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) return { ...named, outcome: "refused", reason: "ahead-of-clock" }
+  if (aheadOfClock(weighedAt, at)) return { ...named, outcome: "refused", reason: "ahead-of-clock" }
   const known = async () => {
     const [row] = await tx
       .select({ id: weighbridgeTicket.id })

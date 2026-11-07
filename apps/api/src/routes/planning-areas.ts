@@ -28,7 +28,7 @@
 // duplicate rings, a hole touching the shell along a line — and no shape rule
 // can restate, so it is the one check here only the database runs. It refuses
 // with 23514 naming `planning_area_boundary_boundary_valid`, and
-// `refuseCheck` (routes/shared.ts) turns that into the 400 on `boundary` a
+// `refuseCheck` (@waste/db/commands/shared) turns that into the 400 on `boundary` a
 // schema would have answered, with the one sentence the constraint can stand
 // behind, "Not a valid polygon": PostGIS says why in its own words and the
 // API does not guess. The database's exclusion constraint holds the other rule —
@@ -73,6 +73,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseCheck, refuseDuplicate, refuseOverlap, type CheckRefusal } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -82,7 +83,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, refuseOverlap, stampsOf, type Refusal } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stampsOf } from "./shared"
 
 const MODULE = "configure.areas"
 const PlanningAreaPage = Page(PlanningArea)
@@ -164,8 +165,8 @@ const BOUNDARY_RUNNING_SENTENCE = "This planning area already has a boundary in 
  */
 const POLYGON_INVALID = "planning_area_boundary_boundary_valid"
 const NOT_A_VALID_POLYGON = "Not a valid polygon"
-const polygonInvalid = (path: string): Record<string, Refusal> => ({
-  [POLYGON_INVALID]: { path, message: NOT_A_VALID_POLYGON },
+const polygonInvalid = (path: string): Record<string, CheckRefusal> => ({
+  [POLYGON_INVALID]: { input: path, sentence: NOT_A_VALID_POLYGON },
 })
 
 const noSuchArea = (id: string) => problem(404, { detail: `No planning area ${id} in the projects this account works in` })

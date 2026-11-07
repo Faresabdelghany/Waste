@@ -37,6 +37,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -47,7 +48,7 @@ import { requireEachOf } from "./id-sets"
 import { pointInvalid } from "./place-rules"
 import { requireWasteFraction } from "./references"
 import { groupedBy } from "./sets"
-import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, stamp, stampsOf, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stamp, stampsOf, timeOf } from "./shared"
 
 const MODULE = "resources.drop-off-points"
 const DropOffPointPage = Page(DropOffPointSchema)

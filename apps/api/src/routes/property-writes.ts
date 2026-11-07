@@ -33,12 +33,13 @@ import { property, propertyParty } from "@waste/db/schema/customers"
 import { projectToday } from "@waste/db/commands/project-clock"
 import { and, asc, eq, inArray, isNull, lte, or, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { invalidRequest, problem } from "../problem"
 import { requirePartyCustomers, type Entry, type Parent } from "./members"
-import { refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
+import { stamp, stampsOf } from "./shared"
 import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
 export const propertyColumns = {

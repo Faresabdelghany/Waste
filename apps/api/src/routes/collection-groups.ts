@@ -79,6 +79,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
@@ -113,7 +114,7 @@ import {
   type ClockOptions,
   type GroupRow,
 } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
 

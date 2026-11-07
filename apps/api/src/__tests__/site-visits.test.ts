@@ -11,7 +11,7 @@ import { after, before, describe, test } from "node:test"
 import { AccessCredential, FrequentVisitors, ONE_HOLDER, SiteVisit, SiteVisitCheckInAnswer, VisitAddresses, VisitSites, type VisitIdentifier } from "@waste/contracts/site-visits"
 import { VisitRule } from "@waste/contracts/visit-rules"
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { Refused } from "@waste/db/commands/shared"
+import { Refused } from "@waste/domain/refusal"
 import { EXTERNAL_ID_TAKEN, NOT_A_CENTRE, NOT_TAKEN_HERE, recordVisit, siteNotActive } from "@waste/db/commands/site-visits"
 import { newId } from "@waste/db/ids"
 import { agreement, subscription } from "@waste/db/schema/agreements"
@@ -314,7 +314,7 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     } finally {
       await withCompany(pool.db, a.companyId, (tx: Tx) => tx.update(dropOffPoint).set({ status: "active" }).where(and(eq(dropOffPoint.companyId, a.companyId), eq(dropOffPoint.id, site))))
     }
-    await assert.rejects(read(gateRead, { siteId: testId() }), (error: unknown) => error instanceof Refused && error.status === 409 && error.message === EXTERNAL_ID_TAKEN)
+    await assert.rejects(read(gateRead, { siteId: testId() }), (error: unknown) => error instanceof Refused && error.refusal.reason === "conflict" && error.message === EXTERNAL_ID_TAKEN)
   })
 
   test("the Site attendant finds the project's active centres and a household by its address, and checks it in by address", async () => {

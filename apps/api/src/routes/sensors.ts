@@ -69,6 +69,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -78,7 +79,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
 import { Allowance } from "../auth/public-door"
-import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, refuseDuplicate, refuseOverlap, stampsOf, strengthFor } from "./shared"
+import { aheadOfClock, created, describeCreated, describeJson, IdParam, lockRow, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "resources.sensors"
 
@@ -308,7 +309,7 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
       continue
     }
     const measuredAt = new Date(reading.measuredAt)
-    if (measuredAt.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) {
+    if (aheadOfClock(measuredAt, at)) {
       outcomes.push({ outcome: "refused", reason: "ahead-of-clock", detail: `Measured at ${reading.measuredAt}, after the server's clock; a reading is recorded after it is taken` })
       continue
     }
