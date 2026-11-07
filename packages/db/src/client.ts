@@ -10,7 +10,7 @@
 // as Postgres text and it does the mapping itself. Through the raw face,
 // therefore, `now()` arrives as a string and a Date parameter is not
 // accepted; send temporal values as ISO strings there. Pinned by a test.
-import { POOL_END_MS } from "@waste/server/process"
+import { POOL_END_MS } from "@waste/process/shutdown"
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js"
 import postgres, { type Sql } from "postgres"
 

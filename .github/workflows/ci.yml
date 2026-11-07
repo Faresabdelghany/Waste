@@ -142,6 +142,7 @@ jobs:
           interval: "1"
           container: pilot
           commit: ${{ github.sha }}
+          commit-url: http://127.0.0.1:3001
           image: waste-pilot:ci
       - name: Smoke test the supervisor
         run: |

@@ -27,7 +27,7 @@
 // a database that comes back is seen within a second, where postgres.js's own
 // backoff would grow towards 20 s over an outage. Readiness is then about the
 // database as seen from this process now, not about another pool's mood.
-import { bounded, CHECK_TIMEOUT_MS, type CheckOptions } from "@waste/server/readiness"
+import { bounded, CHECK_TIMEOUT_MS, type CheckOptions } from "@waste/process/readiness"
 
 import type { ClientOptions, Database } from "./client"
 

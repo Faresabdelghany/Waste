@@ -4,9 +4,9 @@
 // applied once in parseEnvironment for every variable, so a variable is a
 // plain schema with a default, or without one when the process cannot run
 // without it. Anything else in the environment is dropped, not carried around.
+import { withoutEmpty, type Environment } from "@waste/process/environment"
+import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import * as z from "zod"
-
-import { TRANSACTION_POOLER_PORT, withoutEmpty, type Environment } from "./process"
 
 /** The address to bind. Loopback by default; a container sets `0.0.0.0`. */
 export const Host = z

@@ -27,7 +27,7 @@
 // read in the same `getQueues` as the failed count when the queue is among
 // the ones asked for — a job that failed past its retries and waits for an
 // operator's redrive; information for the operator, never a reason for a 503.
-import { bounded, CHECK_TIMEOUT_MS, type CheckOptions } from "@waste/server/readiness"
+import { bounded, CHECK_TIMEOUT_MS, type CheckOptions } from "@waste/process/readiness"
 import type { PgBoss } from "pg-boss"
 
 export type BossCheck = { boss: "ok"; failedJobs: number; deadLetters?: number } | { boss: "stopped" } | { boss: "unreachable" }

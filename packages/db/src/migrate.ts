@@ -33,7 +33,7 @@
 // for the API role, whose login carries the same path; without this it would
 // depend on the owner role's setting, which on Supabase happens to include
 // `extensions` and elsewhere does not.
-import { TRANSACTION_POOLER_PORT } from "@waste/server/process"
+import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
 import type { Notice, ReservedSql } from "postgres"

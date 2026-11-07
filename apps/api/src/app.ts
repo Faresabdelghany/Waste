@@ -33,7 +33,7 @@ import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
 import { checkDatabase } from "@waste/db/probe"
 import type { ProofStorage } from "@waste/db/storage"
-import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { Hono, type Context } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 

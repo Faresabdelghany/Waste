@@ -3,7 +3,7 @@ description: >-
   Waits, within a deadline, for every process named to answer GET /readyz
   with the status asked for — 200 on a live stack, 503 against a database
   nobody answers on — then holds each GET /healthz to 200 and, where a commit
-  is given, the first process's /healthz to name it as build.commit and the
+  is given, the named process's /healthz to name it as build.commit and the
   image's revision label to be it. Every answer is printed with its body.
 inputs:
   urls:
@@ -22,7 +22,10 @@ inputs:
     description: A container that must stay running while the wait lasts; its stop fails the wait at once rather than at the deadline.
     default: ""
   commit:
-    description: The commit the first process's GET /healthz must name as build.commit.
+    description: The commit `commit-url`'s GET /healthz must name as build.commit, and `image`'s revision label must be.
+    default: ""
+  commit-url:
+    description: The origin, one of `urls`, whose GET /healthz names the build; required with `commit`, since only the API names one.
     default: ""
   image:
     description: An image whose org.opencontainers.image.revision label must be `commit`.
@@ -39,8 +42,13 @@ runs:
         INTERVAL: ${{ inputs.interval }}
         CONTAINER: ${{ inputs.container }}
         COMMIT: ${{ inputs.commit }}
+        COMMIT_URL: ${{ inputs.commit-url }}
         IMAGE: ${{ inputs.image }}
       run: |
+        if [ -n "$COMMIT" ] && [ -z "$COMMIT_URL" ]; then
+          echo "::error::a commit to check needs commit-url, the origin whose /healthz names the build"
+          exit 1
+        fi
         status() { curl --silent --output /dev/null --write-out '%{http_code}' "$1" || echo 000; }
         body() { curl --silent "$1" || true; }
         origins=()
@@ -69,7 +77,7 @@ runs:
         done
         [ "$failed" = 0 ] || { echo "::error::not every process answered GET /healthz 200 and GET /readyz $READY after $attempt attempts"; exit 1; }
         if [ -n "$COMMIT" ]; then
-          body "${origins[0]}/healthz" | jq --exit-status --arg commit "$COMMIT" '.build.commit == $commit'
+          body "$COMMIT_URL/healthz" | jq --exit-status --arg commit "$COMMIT" '.build.commit == $commit'
         fi
         if [ -n "$IMAGE" ]; then
           test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$COMMIT"

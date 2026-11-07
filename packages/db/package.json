@@ -30,7 +30,7 @@
   "dependencies": {
     "@waste/contracts": "workspace:*",
     "@waste/domain": "workspace:*",
-    "@waste/server": "workspace:*",
+    "@waste/process": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg-boss": "12.34.0",
     "postgres": "^3.4.9",

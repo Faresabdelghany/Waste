@@ -7,12 +7,11 @@
 // process past its host's deadline. The port itself is released as soon as
 // close() is called; the promise resolves when the last connection is gone.
 import { getRequestListener } from "@hono/node-server"
+import { SHUTDOWN_GRACE_MS } from "@waste/process/shutdown"
 import type { Hono } from "hono"
 import { once } from "node:events"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
-
-import { SHUTDOWN_GRACE_MS } from "./process"
 
 export type ListenOptions = {
   host: string

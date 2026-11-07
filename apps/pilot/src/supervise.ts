@@ -24,8 +24,8 @@
 // Nothing here knows a port, a path or a database: main.ts composes the two
 // `ChildSpec`s from the environment, and a test hands in `node -e` scripts
 // with small timings. Third process in a 256 MiB container, so no dependency:
-// Node's child_process and @waste/server/process's constants, nothing else.
-import { KILL_AFTER_MS } from "@waste/server/process"
+// Node's child_process and @waste/process's constants, nothing else.
+import { KILL_AFTER_MS } from "@waste/process/shutdown"
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process"
 import type { EventEmitter } from "node:events"
 import { constants as osConstants } from "node:os"

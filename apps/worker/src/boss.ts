@@ -73,7 +73,7 @@
 // idle egress gate 2 metered. Absent, every one of them is pg-boss's default.
 import { inTransaction } from "@waste/db/jobs"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
-import { JOB_STOP_MS } from "@waste/server/process"
+import { JOB_STOP_MS } from "@waste/process/shutdown"
 import { PgBoss, type ConstructorOptions, type WorkOptions } from "pg-boss"
 
 import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"

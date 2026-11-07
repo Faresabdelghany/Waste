@@ -1,32 +1,37 @@
 // What the supervisor composes from its environment: the two children as
-// their own images run them, and the memory line's period. The image sets
-// none of the Pilot's values here — the API's and the worker's own variables
+// their own images run them, and the memory line's period. It reads its own
+// variables (SUPERVISOR_VARIABLES) and nothing else; the image sets none of
+// the Pilot's values here — the API's and the worker's own variables
 // (DATABASE_URL, WORKER_DATABASE_URL, SUPABASE_URL, the knobs) pass through
 // untouched, since a child's environment is the supervisor's with these few
 // values over it.
-//
-//   PORT, HOST              the host's port and address, given to the API
-//                           (0.0.0.0 and 3001 unless set)
-//   WORKER_HOST, WORKER_PORT the worker's probe address, loopback 3002
-//                           unless set: internal to the container
-//   PILOT_API_DIR, PILOT_WORKER_DIR
-//                           each app's directory, the image's deploy
-//                           directories unless set; a workstation points them
-//                           at apps/api and apps/worker
-//   PILOT_MEMORY_LOG_SECONDS the memory line's period; off unless set
 //
 // Each child runs the bundle the image built where there is one (plain node,
 // src/server.mjs and src/main.mjs beside the source, so the API's
 // ../build.json still resolves), else the TypeScript source through tsx with
 // the app's own tsconfig — a workstation without Docker.
-import { API_PORT, withoutEmpty, WORKER_PORT, type Environment } from "@waste/server/process"
+import { withoutEmpty, type Environment } from "@waste/process/environment"
+import { API_PORT, WORKER_PORT } from "@waste/process/ports"
 
 import type { ChildSpec } from "./supervise"
 
-export type { Environment }
-
 /** The variables the supervisor reads itself; every other one passes through to the children, which declare their own. */
-export const SUPERVISOR_VARIABLES = ["HOST", "PORT", "WORKER_HOST", "WORKER_PORT", "PILOT_API_DIR", "PILOT_WORKER_DIR", "PILOT_MEMORY_LOG_SECONDS"] as const
+export const SUPERVISOR_VARIABLES = [
+  // The host's port and address, given to the API: 3001 and 0.0.0.0 unless set.
+  "PORT",
+  "HOST",
+  // The worker's probe address, loopback 3002 unless set: internal to the container.
+  "WORKER_HOST",
+  "WORKER_PORT",
+  // Each app's directory, the image's deploy directories unless set; a workstation points them at apps/api and apps/worker.
+  "PILOT_API_DIR",
+  "PILOT_WORKER_DIR",
+  // The memory line's period; off unless set.
+  "PILOT_MEMORY_LOG_SECONDS",
+] as const
+
+/** The supervisor's own variables out of the environment, set-but-empty as unset: reading any other is a type error. */
+const own = (source: Environment): Partial<Record<(typeof SUPERVISOR_VARIABLES)[number], string>> => withoutEmpty(source)
 
 export type Host = {
   /** Whether a bundle exists at the path. */
@@ -44,7 +49,7 @@ function spec(name: string, dir: string, entry: string, address: { HOST: string;
 }
 
 export function childSpecs(source: Environment, host: Host): { api: ChildSpec; worker: ChildSpec } {
-  const env: Partial<Record<(typeof SUPERVISOR_VARIABLES)[number], string>> = withoutEmpty(source)
+  const env = own(source)
   const apiDir = env.PILOT_API_DIR ?? "/app/apps/api"
   const workerDir = env.PILOT_WORKER_DIR ?? "/app/apps/worker"
   return {
@@ -57,7 +62,7 @@ export function childSpecs(source: Environment, host: Host): { api: ChildSpec; w
 export const MAX_TIMER_SECONDS = Math.floor(2_147_483_647 / 1000)
 
 /** The memory line's period in seconds, or undefined — off — unless PILOT_MEMORY_LOG_SECONDS is a positive number Node's timers can take. */
-export function memoryLogSeconds(env: Environment): number | undefined {
-  const value = Number(env.PILOT_MEMORY_LOG_SECONDS)
+export function memoryLogSeconds(source: Environment): number | undefined {
+  const value = Number(own(source).PILOT_MEMORY_LOG_SECONDS)
   return Number.isFinite(value) && value > 0 && value <= MAX_TIMER_SECONDS ? value : undefined
 }

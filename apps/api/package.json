@@ -17,6 +17,7 @@
     "@waste/db": "workspace:*",
     "@waste/documents": "workspace:*",
     "@waste/domain": "workspace:*",
+    "@waste/process": "workspace:*",
     "@waste/routing": "workspace:*",
     "@waste/server": "workspace:*",
     "drizzle-orm": "^0.45.2",

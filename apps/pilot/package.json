@@ -16,7 +16,7 @@
     "bundle": "node --import tsx src/bundle.ts"
   },
   "dependencies": {
-    "@waste/server": "workspace:*",
+    "@waste/process": "workspace:*",
     "esbuild": "~0.28.0",
     "tsx": "^4.23.12"
   },

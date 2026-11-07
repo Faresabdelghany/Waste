@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { setTimeout as sleep } from "node:timers/promises"
 import { describe, test } from "node:test"
 
-import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { REFUSED_URL, silentServer } from "@waste/tooling/unreachable"
 
 import { createDb, type Database } from "../client"

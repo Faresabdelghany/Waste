@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "What the API, the worker and the Pilot's supervisor each are as a Node process, spelled once: the facts the three agree on (`src/process.ts`: their default ports, set-but-empty counting as unset, the transaction pooler a session refuses, and the shutdown budget the supervisor's kill sits above), the environment's primitives each app declares its variables with (`src/env.ts`), the bind and graceful close (`src/listen.ts`), and the bound every readiness probe answers within (`src/readiness.ts`). `src/process.ts` imports nothing, since the supervisor's bundle reads it. Database knowledge stays in @waste/db, which depends on this package and never the other way. Server-only: apps/web is fenced out in eslint.config.mjs. Ships TypeScript source for tsx consumers.",
+  "description": "The kit the two Node servers, the API and the worker, share: the environment's primitives each app's env.ts declares its variables with (`src/env.ts`, over zod) and the bind and graceful close (`src/listen.ts`, over Hono's Node adapter). Built on @waste/process, the dependency-free half the supervisor and @waste/db read, so neither carries zod or Hono for it. Server-only: apps/web is fenced out in eslint.config.mjs. Ships TypeScript source for tsx consumers.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@waste/process": "workspace:*",
     "hono": "^4.13.8",
     "zod": "^4.6.5"
   },

@@ -12,10 +12,10 @@
     "test": "node --env-file-if-exists=../../.env --import tsx --test --test-timeout=120000 \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.1",
     "@waste/contracts": "workspace:*",
     "@waste/db": "workspace:*",
     "@waste/domain": "workspace:*",
+    "@waste/process": "workspace:*",
     "@waste/routing": "workspace:*",
     "@waste/server": "workspace:*",
     "drizzle-orm": "^0.45.2",

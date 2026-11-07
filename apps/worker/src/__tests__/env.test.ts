@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { TRANSACTION_POOLER_PORT } from "@waste/server/process"
+import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { turboTaskEnv } from "@waste/tooling/turbo"
 
 import { Env, parseEnv } from "../env"

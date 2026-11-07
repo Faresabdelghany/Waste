@@ -205,6 +205,9 @@ importers:
       '@waste/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@waste/process':
+        specifier: workspace:*
+        version: link:../../packages/process
       '@waste/routing':
         specifier: workspace:*
         version: link:../../packages/routing
@@ -251,9 +254,9 @@ importers:
 
   apps/pilot:
     dependencies:
-      '@waste/server':
+      '@waste/process':
         specifier: workspace:*
-        version: link:../../packages/server
+        version: link:../../packages/process
       esbuild:
         specifier: ~0.28.0
         version: 0.28.2
@@ -475,9 +478,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@hono/node-server':
-        specifier: ^2.1.1
-        version: 2.1.1(hono@4.13.8)
       '@waste/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -487,6 +487,9 @@ importers:
       '@waste/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@waste/process':
+        specifier: workspace:*
+        version: link:../../packages/process
       '@waste/routing':
         specifier: workspace:*
         version: link:../../packages/routing
@@ -555,9 +558,9 @@ importers:
       '@waste/domain':
         specifier: workspace:*
         version: link:../domain
-      '@waste/server':
+      '@waste/process':
         specifier: workspace:*
-        version: link:../server
+        version: link:../process
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(pg@8.23.0)(postgres@3.4.9)
@@ -627,6 +630,21 @@ importers:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
 
+  packages/process:
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.0.0
+      '@typescript/native':
+        specifier: npm:typescript@^7.0.2
+        version: typescript@7.0.2
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
+
   packages/routing:
     dependencies:
       '@waste/domain':
@@ -654,6 +672,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.8)
+      '@waste/process':
+        specifier: workspace:*
+        version: link:../process
       hono:
         specifier: ^4.13.8
         version: 4.13.8

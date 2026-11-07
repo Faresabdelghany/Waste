@@ -60,6 +60,7 @@ COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
 COPY packages/documents/package.json packages/documents/
 COPY packages/domain/package.json packages/domain/
+COPY packages/process/package.json packages/process/
 COPY packages/routing/package.json packages/routing/
 COPY packages/server/package.json packages/server/
 COPY packages/tooling/package.json packages/tooling/
@@ -75,6 +76,7 @@ COPY packages/contracts packages/contracts
 COPY packages/db packages/db
 COPY packages/documents packages/documents
 COPY packages/domain packages/domain
+COPY packages/process packages/process
 COPY packages/routing packages/routing
 COPY packages/server packages/server
 COPY tsconfig.base.json ./

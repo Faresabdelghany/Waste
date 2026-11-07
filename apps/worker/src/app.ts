@@ -25,7 +25,7 @@
 import { HealthResponse, PROBE_HEADERS, type WorkerReadinessResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { checkDatabase } from "@waste/db/probe"
-import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { Hono } from "hono"
 
 import { checkBoss, countStale, type BossProbe } from "./readiness"

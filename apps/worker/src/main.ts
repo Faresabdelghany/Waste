@@ -37,10 +37,10 @@
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
 import { probePoolOptions } from "@waste/db/probe"
 import { supabaseStorage } from "@waste/db/storage"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
 import { listen, type Listening } from "@waste/server/listen"
-import { CHECK_TIMEOUT_MS } from "@waste/server/readiness"
 
 import { createApp } from "./app"
 import { createBoss, startBoss, type Boss } from "./boss"

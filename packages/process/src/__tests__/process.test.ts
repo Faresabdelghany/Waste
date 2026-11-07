@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { API_PORT, JOB_STOP_MS, KILL_AFTER_MS, POOL_END_MS, SHUTDOWN_GRACE_MS, withoutEmpty, WORKER_PORT } from "../process"
+import { withoutEmpty } from "../environment"
+import { API_PORT, WORKER_PORT } from "../ports"
+import { JOB_STOP_MS, KILL_AFTER_MS, POOL_END_MS, SHUTDOWN_GRACE_MS } from "../shutdown"
 
 describe("the processes' facts", () => {
   test("the API on 3001 and the worker's probes one above it", () => {

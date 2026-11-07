@@ -10,8 +10,9 @@
 // pace absent meaning the Standard plan's own figures (@waste/routing/quota).
 // The keys of `Env` are the variables turbo.json hands `@waste/worker#dev`,
 // exactly.
+import type { Environment } from "@waste/process/environment"
+import { WORKER_PORT } from "@waste/process/ports"
 import { Host, parseEnvironment, Port, SessionUrl, wholeNumber } from "@waste/server/env"
-import { WORKER_PORT, type Environment } from "@waste/server/process"
 import * as z from "zod"
 
 /**

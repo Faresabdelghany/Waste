@@ -5,8 +5,9 @@
 // address lookup calls (#291 C13); and the knobs, absent unless set (#149:
 // the Pilot's are its host's environment, never a default here). The keys of
 // `Env` are the variables turbo.json hands `@waste/api#dev`, exactly.
+import type { Environment } from "@waste/process/environment"
+import { API_PORT } from "@waste/process/ports"
 import { Host, parseEnvironment, Port, PostgresUrl, wholeNumber } from "@waste/server/env"
-import { API_PORT, type Environment } from "@waste/server/process"
 import * as z from "zod"
 
 /** The database, as the API role `wms_api` (see .env.example at the repository root; through Supabase's pooler the user is `wms_api.<project-ref>`). */
