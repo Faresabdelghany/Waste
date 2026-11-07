@@ -9,7 +9,7 @@
 // A list is the company's, not a project's, so it is fenced by the company
 // alone; the grant is `configure.calendars`, the one a project's holidays
 // were always edited under. A change of a list's days re-decides the holds
-// of every project resting on it (#226, @waste/db/commands/holiday-holds), whatever
+// of every project resting on it (#226, @waste/db/commands/route-holds), whatever
 // projects the caller works in: the holds are the system's reading of the
 // days, not the office's word. A list a project rests on cannot be deleted
 // (409): the project is moved off it, or onto another, first.

@@ -18,7 +18,8 @@ import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommissi
 import { eq, sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
-import { companyRegistered, defaultDecommissionReasonRows, invitationOpen, provisionCompany, systemGrantRows, systemRoleRows, type CompanyProvision } from "../commands/provision-company"
+import { defaultDecommissionReasonRows, systemGrantRows, systemRoleRows } from "../commands/company-defaults"
+import { companyRegistered, invitationOpen, provisionCompany, type CompanyProvision } from "../commands/provision-company"
 import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
 import { role, roleGrant, userAccount } from "../schema/access"

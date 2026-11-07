@@ -20,7 +20,7 @@
 // read `for update`, so a dispatch racing the run takes its turn; the stop
 // candidates of every service date the run writes are one statement; the
 // creates take their numbers from the company's counter in one `update …
-// returning` (a block, whose row lock is the serialisation, so two runs never
+// returning` (`nextNumbers`, a block, whose row lock is the serialisation, so two runs never
 // share a number and no route is renumbered); then the writes, then the drift
 // stamps, then the run marked `succeeded` with its counts. A failure rolls
 // all of it back and a second, small transaction marks the run `failed` with
@@ -100,6 +100,7 @@
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
 import { cancelRoutesByGeneration, lockSchemeRoutes, routesWithOfficeStops, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
+import { nextNumbers } from "@waste/db/commands/shared"
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/domain/numbering"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
@@ -108,7 +109,6 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
-import { company } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
@@ -162,18 +162,6 @@ type Generated = { kind: "succeeded"; counts: GenerationCounts; projectId: strin
 
 /** What a run came to: the counts and the Plans the horizon asked for its routes (../routing/horizon.ts), or that the run was already done. */
 type Outcome = { kind: "succeeded"; counts: GenerationCounts; horizon: HorizonAsks } | { kind: "already-done"; status: string }
-
-/** The block of numbers the creates take: one `update … returning` under the company's row lock; the first number of the block. */
-async function takeNumbers(tx: Tx, companyId: string, count: number): Promise<number> {
-  if (count === 0) return 0
-  const [row] = await tx
-    .update(company)
-    .set({ nextRouteNumber: sql`${company.nextRouteNumber} + ${count}` })
-    .where(eq(company.id, companyId))
-    .returning({ next: company.nextRouteNumber })
-  if (row === undefined) throw new Error(`no company ${companyId} to number routes in`)
-  return row.next - count
-}
 
 /** A route of the scheme as the walk reads it: generated, so it names its group (`route_scheme_shape` holds a route with a scheme to one). */
 const groupOfRoute = (row: { id: string; collectionGroupId: string | null }): string => {
@@ -395,7 +383,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   // The crew on each route's day (O6 of #290): the periods touching the operating dates written, read once.
   const crewOnRoute = crewOnRouteDay(await awayPeriods(tx, scope, groups, existingRoutes, writing, existingRouteOf))
 
-  const numbers = { next: await takeNumbers(tx, companyId, plan.decisions.filter((decision) => decision.kind === "create").length) }
+  const numbers = { next: await nextNumbers(tx, companyId, "nextRouteNumber", plan.decisions.filter((decision) => decision.kind === "create").length) }
 
   /** Skips open stops the scheme no longer plans, by regeneration with the sentence: a cancel's every open stop, a trim's own. Deletes nothing (@waste/db/commands/scheme-routes, the statement the API's scheme ending shares). */
   const skipOpen = (ids: readonly string[], note: string): Promise<void> => skipStopsByGeneration(tx, companyId, ids, note, at)

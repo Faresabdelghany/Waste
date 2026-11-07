@@ -12,6 +12,7 @@ import { AccessCredential, FrequentVisitors, SiteVisit, SiteVisitCheckInAnswer, 
 import { VisitRule } from "@waste/contracts/visit-rules"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { Refused } from "@waste/domain/refusal"
+import { credentialsBeginLater, strandedCredentials } from "@waste/db/commands/agreement-periods"
 import { EXTERNAL_ID_TAKEN, NOT_A_CENTRE, NOT_TAKEN_HERE, recordVisit, siteNotActive } from "@waste/db/commands/site-visits"
 import { newId } from "@waste/db/ids"
 import { agreement, subscription } from "@waste/db/schema/agreements"
@@ -268,6 +269,35 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     await withCompany(pool.db, a.companyId, (tx: Tx) => tx.update(agreement).set({ status: "cancelled" }).where(and(eq(agreement.companyId, a.companyId), eq(agreement.id, ended))))
     const turnedAway = await checkIn({ identifier: { kind: "plate", value: "END1" }, occurredAt: at("2026-06-30", "11:00") })
     assert.deepEqual([turnedAway.visit.outcome, turnedAway.visit.refusalReason, turnedAway.visit.customerId, turnedAway.visit.agreementId, turnedAway.charge], ["refused", "not-fee-paying", fx.customers.anna.id, ended, null])
+  })
+
+  test("a business's credential sits inside its agreement's period: a shortening that would leave it outside is refused, counting it, and a termination ends it with the agreement", async () => {
+    const signed = async (number: string) => {
+      const response = await expect(
+        await olivia("/agreements", { method: "POST", body: { projectId: copenhagen, number, customerId: fx.customers.anna.id, payerCustomerId: fx.customers.anna.id, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" } }),
+        201,
+      )
+      return ((await response.json()) as { id: string }).id
+    }
+    const plateOf = (agreementId: string, values: Record<string, unknown> = {}) => register({ kind: "plate", value: `T${testId().slice(-6)}`, customerId: fx.customers.anna.id, agreementId, ...values })
+
+    const shortened = await signed(`AGR-SHORT-${testId().slice(-4)}`)
+    const plate = await plateOf(shortened)
+    assert.equal((await refused(await olivia(`/agreements/${shortened}`, { method: "PATCH", body: { validTo: "2026-11-01" } }), 409)).detail, strandedCredentials(1))
+    await expect(await olivia(`/access-credentials/${plate.id}`, { method: "PATCH", body: { validTo: "2026-11-01" } }), 200)
+    await expect(await olivia(`/agreements/${shortened}`, { method: "PATCH", body: { validTo: "2026-11-01" } }), 200)
+
+    const terminated = await signed(`AGR-TERM-${testId().slice(-4)}`)
+    const card = await plateOf(terminated, { kind: "card" })
+    const ended = await plateOf(terminated, { validTo: "2026-06-01" })
+    await expect(await olivia(`/agreements/${terminated}/terminate`, { method: "POST", body: { on: "2026-11-01" } }), 200)
+    const read = async (id: string) => AccessCredential.parse(await (await expect(await olivia(`/access-credentials/${id}`), 200)).json())
+    assert.deepEqual([(await read(card.id)).validTo, (await read(ended.id)).validTo], ["2026-11-01", "2026-06-01"], "the credential in force past the day ends on it; one already ended keeps its end")
+
+    const later = await signed(`AGR-LATE-${testId().slice(-4)}`)
+    await plateOf(later, { validFrom: "2026-12-01" })
+    assert.equal((await refused(await olivia(`/agreements/${later}/terminate`, { method: "POST", body: { on: "2026-11-01" } }), 409)).detail, credentialsBeginLater(1))
+    assert.deepEqual([strandedCredentials(1), credentialsBeginLater(2)], ["1 access credential would fall outside the agreement's period; end it first", "2 access credentials begin on or after that day; end them first"])
   })
 
   test("a household that no longer pays is not-fee-paying though its card is blocked too, in the design's order", async () => {

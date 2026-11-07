@@ -12,11 +12,12 @@
 //   the parent moves — a patch that shortens an Agreement so a Subscription
 //                     of it would fall outside is a 409, since the rows in
 //                     the way are not in the body and the caller has to end
-//                     them first. `refuseStranded` is that count and that
-//                     409, once, for every parent that asks it; `notWithin`
-//                     is the `where` for a child with a period of its own,
-//                     and a child that is a day (a calendar's holiday, Issue
-//                     #97) brings a `where` over its day instead.
+//                     them first. That side is `@waste/db/commands/periods`
+//                     (`refuseStranded`, `notWithin`, and a parent's declared
+//                     children), since a statement both processes run ends
+//                     a parent's children too; a child that is a day (a
+//                     calendar's holiday, Issue #97) brings a `where` over its
+//                     day instead.
 //
 // A patch carries one bound and the stored row the other, so what has to be
 // judged is the period the write leaves behind, not the body: `periodAfter`
@@ -44,14 +45,10 @@
 // or patch and for the subscription's own — and where a route locks two, it
 // takes them from the top down, the Agreement before the Subscription, so no
 // two requests hold half of each other's pair.
-import type { Tx } from "@waste/db/client"
-import type { ValidityColumns } from "@waste/db/schema/columns"
 import { ENDS_AFTER_IT_STARTS, validityOrdered } from "@waste/domain/periods"
 import { count } from "@waste/domain/text"
-import { count as countRows, sql, type SQL } from "drizzle-orm"
-import type { PgTable } from "drizzle-orm/pg-core"
 
-import { invalidRequest, problem } from "../problem"
+import { invalidRequest } from "../problem"
 
 /** The period a row is in force over: the first day in, and the first day out or null while it runs. */
 export type Period = { validFrom: string; validTo: string | null }
@@ -100,47 +97,13 @@ export function requireWithin(parent: Period, child: Period, message: string, at
 }
 
 /**
- * The `where` fragment matching the rows whose period leaves this one: the
- * other side of the rule, for the query behind the 409 a parent's patch
- * earns. A row with no end leaves a parent that has one, which is why the
- * null is named rather than left to a comparison that would answer null.
- */
-export function notWithin(columns: ValidityColumns, parent: Period): SQL {
-  const leaves = [sql`${columns.validFrom} < ${parent.validFrom}`]
-  if (parent.validTo !== null) {
-    leaves.push(sql`${columns.validTo} is null`, sql`${columns.validTo} > ${parent.validTo}`)
-  }
-  return sql`(${sql.join(leaves, sql` or `)})`
-}
-
-/**
- * The other side of the rule, for a parent whose period is moving: the
- * children the new period would leave outside are counted and the write is
- * refused with the count (409), because those rows are not in the body and
- * the caller has to end them first. `where` is the caller's — which table,
- * which parent, and what "outside" means for its rows: `notWithin` for a
- * child with a period of its own (a subscription, a placement), the day
- * against the two bounds for a child that is a day (a calendar's holiday) —
- * and it carries `company_id` and the parent's id and never `inProjects`,
- * since the parent was read under the caller's scope and a child's project is
- * the parent's by the composite key: a count that refuses a write must not be
- * the one statement that could miss a row. The sentence is the route's, since
- * only it knows what the children are called.
- */
-export async function refuseStranded(tx: Tx, table: PgTable, where: SQL | undefined, sentence: (rows: number) => string): Promise<void> {
-  const [row] = await tx.select({ rows: countRows() }).from(table).where(where)
-  const strays = row?.rows ?? 0
-  if (strays > 0) throw problem(409, { detail: sentence(strays) })
-}
-
-/**
  * The sentence most parents refuse with, spelled once: "1 price row falls
  * outside the new period; end it first", "2 holidays fall outside the new
  * period; remove them first" — the count through the domain's `count`, the
  * verb and the pronoun following it, `remedy` what the caller does with the
  * rows in the way (`end` a dated child, `remove` a day). A parent whose
  * children are ended another way — a placement through the ledger's commands
- * (routes/agreements.ts) — spells its own.
+ * (@waste/db/commands/agreement-periods) — spells its own.
  */
 export const strandedSentence =
   (noun: string, remedy: "end" | "remove", plural?: string) =>

@@ -24,6 +24,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
+import { nextNumber } from "@waste/db/commands/shared"
 import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
 import { newId } from "@waste/db/ids"
 import { role, roleGrant, userAccount } from "@waste/db/schema/access"
@@ -51,7 +52,7 @@ import { withCompany } from "@waste/db/tenant"
 import type { PickupExceptionReason, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
-import { eq, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 
 /** A UUID version 7 for a test row: the clock in the first 48 bits, the version and variant nibbles, randomness in the rest. */
 export function testId(now = Date.now()): string {
@@ -181,6 +182,8 @@ export type PlaceOptions = {
   /** The placement's period; open from 2026-01-01 unless said. */
   validFrom?: string
   validTo?: string | null
+  /** The subscription's end where it is not the placement's: an issue under a fixed-term subscription writes an open placement (`issueContainer`, @waste/db/commands/stock-ledger). */
+  subscriptionValidTo?: string | null
   /** The fraction the placement collects; residual unless said. */
   wasteFractionId?: string
 }
@@ -200,7 +203,7 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
       await tx.insert(property).values({ id: placed.propertyId, companyId, projectId, name: `${label}'s address`, address: `${label} 1, 2100 København Ø`, kind: "residential", status: "active" })
     }
     await tx.insert(container).values({ id: placed.containerId, companyId, projectId, label, containerTypeId: tenant.containerTypes.bin.id, ownership: "company" })
-    await tx.insert(subscription).values({ id: placed.subscriptionId, companyId, projectId, agreementId: options.agreementId, productId: options.productId, propertyId: placed.propertyId, quantity: 1, validFrom: options.validFrom ?? "2026-01-01", validTo: options.validTo ?? null })
+    await tx.insert(subscription).values({ id: placed.subscriptionId, companyId, projectId, agreementId: options.agreementId, productId: options.productId, propertyId: placed.propertyId, quantity: 1, validFrom: options.validFrom ?? "2026-01-01", validTo: options.subscriptionValidTo === undefined ? (options.validTo ?? null) : options.subscriptionValidTo })
     await tx.insert(containerServicePlacement).values({ id: placed.placementId, companyId, projectId, containerId: placed.containerId, subscriptionId: placed.subscriptionId, wasteFractionId: options.wasteFractionId ?? tenant.fractions.residual.id, validFrom: options.validFrom ?? "2026-01-01", validTo: options.validTo ?? null })
   })
   return placed
@@ -254,17 +257,6 @@ export type StopSeed = {
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
-/** The next route number of the company, the way generation takes it. */
-async function nextRouteNumber(tx: Tx, companyId: string): Promise<number> {
-  const [row] = await tx
-    .update(company)
-    .set({ nextRouteNumber: sql`${company.nextRouteNumber} + 1` })
-    .where(eq(company.id, companyId))
-    .returning({ next: company.nextRouteNumber })
-  if (row === undefined) throw new Error(`no company ${companyId} to number a route in`)
-  return row.next - 1
-}
-
 /**
  * A completed route of the scheme on a day with the stops given, each
  * `completed` unless said, with the stamps a completed route carries. Its
@@ -280,7 +272,7 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
   const pickupIds = stops.map((_, index) => testId(minted + 1 + index))
   let number = 0
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    number = await nextRouteNumber(tx, companyId)
+    number = await nextNumber(tx, companyId, "nextRouteNumber")
     if (!adHoc) await tx.insert(collectionGroup).values({ id: groupId, companyId, projectId, routeSchemeId: tenant.scheme.id, name: `Group ${number}`, position: number, days: ["monday"], stopSource: "rule" })
     await tx.insert(route).values({
       id,
@@ -386,16 +378,12 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
   const id = testId()
   const closedAt = seed.resolution === null ? null : (seed.closedAt ?? at("2026-10-07", "23:30"))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    const [numbered] = await tx
-      .update(company)
-      .set({ nextTicketNumber: sql`${company.nextTicketNumber} + 1` })
-      .where(eq(company.id, companyId))
-      .returning({ next: company.nextTicketNumber })
+    const number = await nextNumber(tx, companyId, "nextTicketNumber")
     await tx.insert(ticket).values({
       id,
       companyId,
       projectId: tenant.projects.copenhagen.id,
-      number: (numbered?.next ?? 1) - 1,
+      number,
       kind: seed.kind ?? "missed-collection",
       ticketTypeId: seed.ticketTypeId ?? (await defaultTicketTypeOf(tx, companyId, seed.kind ?? "missed-collection", newId)),
       status: seed.resolution === null ? "open" : "completed",

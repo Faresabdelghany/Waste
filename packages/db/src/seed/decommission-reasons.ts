@@ -6,7 +6,7 @@
 // reasons are the tenant's once there — the office renames and retires them —
 // so nothing is ever restored, and a run that finds them writes nothing.
 import type { Tx } from "../client"
-import { defaultDecommissionReasonRows } from "../commands/provision-company"
+import { defaultDecommissionReasonRows } from "../commands/company-defaults"
 import { decommissionReason } from "../schema/stock"
 import { counted, DEMO_COMPANY_ID } from "./ids"
 

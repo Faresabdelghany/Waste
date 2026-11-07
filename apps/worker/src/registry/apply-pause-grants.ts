@@ -15,47 +15,31 @@
 // long since acted on by hand.
 //
 // The pause is written once: its id is the Decision's, so a redelivery meets
-// the primary key and writes nothing. A grant over days the subscription is
-// already paused on — the office paused it by hand — is left to that pause,
-// and logged. Under the subscription's agreement's lock and then its own, as
-// the office's pause takes them, and as the deciding account with the
-// Application's number as the reason, so the audit trail says whose decision
-// paused it. The planned stops in the pause drop at the scheme's next run —
-// the nightly plan-ahead's or the next Generate — as for an office pause no
-// run was asked for.
-import type { Tx } from "@waste/db/client"
+// the primary key and writes nothing. It is written as the office's pause is
+// (`pauseSubscription`, @waste/db/commands/subscription-pauses), under the
+// subscription's agreement's lock and then its own, and as the deciding
+// account with the Application's number as the reason, so the audit trail
+// says whose decision paused it. A grant over days the subscription is
+// already paused on — the office paused it by hand — is that statement's
+// refusal, left to that pause and logged. The planned stops in the pause drop
+// at the scheme's next run — the nightly plan-ahead's or the next Generate —
+// as for an office pause no run was asked for.
+import { lockedSubscription, pauseSubscription } from "@waste/db/commands/subscription-pauses"
 import { projectToday } from "@waste/db/query/project-clock"
-import { lockRow } from "@waste/db/commands/shared"
-import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
-import { exclusionConstraintOf } from "@waste/db/sqlstate"
+import { subscriptionPause } from "@waste/db/schema/agreements"
 import { actAs, withCompany } from "@waste/db/tenant"
 import { pauseOfGrant } from "@waste/domain/registry/applications"
+import { Refused } from "@waste/domain/refusal"
 import { and, eq } from "drizzle-orm"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
 import type { JobContext } from "../runtime/definition"
-
-/** `EXCLUDE USING gist (company_id, subscription_id, daterange)`: one pause of a subscription in force at a time. */
-const PAUSED_ALREADY = "subscription_pause_no_overlap"
 
 /** What one decision came to. */
 export type PauseApplied = { event: string; did: "paused" | "nothing" | "already-paused" | "replayed"; pauseId: string | null }
 
 /** The reason the audit trail carries: the Application by the number a decision letter quotes. */
 export const grantReason = (number: number) => `Application ${number} granted`
-
-async function lockedSubscription(tx: Tx, companyId: string, id: string) {
-  const [found] = await tx.select({ agreementId: subscription.agreementId }).from(subscription).where(and(eq(subscription.companyId, companyId), eq(subscription.id, id))).limit(1)
-  if (found === undefined) return undefined
-  await lockRow(tx, agreement, { companyId, id: found.agreementId })
-  await lockRow(tx, subscription, { companyId, id })
-  const [row] = await tx
-    .select({ id: subscription.id, projectId: subscription.projectId, validFrom: subscription.validFrom, validTo: subscription.validTo })
-    .from(subscription)
-    .where(and(eq(subscription.companyId, companyId), eq(subscription.id, id)))
-    .limit(1)
-  return row
-}
 
 /** One decision to what was done with it, in one fenced transaction as the tenant. */
 export async function applyPauseGrant(event: RelayedEvent<"application-decided">, { api, log, now }: Pick<JobContext, "api" | "log" | "now">): Promise<PauseApplied> {
@@ -75,9 +59,9 @@ export async function applyPauseGrant(event: RelayedEvent<"application-decided">
           if (pause === null) return nothing
           await actAs(tx, { userAccountId: decision.decidedBy, reason: grantReason(application.number) })
           try {
-            await tx.transaction((savepoint) => savepoint.insert(subscriptionPause).values({ id: decision.id, companyId: event.companyId, projectId: parent.projectId, ...pause }))
+            await pauseSubscription(tx, event.companyId, parent, { id: decision.id, validFrom: pause.validFrom, validTo: pause.validTo })
           } catch (error) {
-            if (exclusionConstraintOf(error) !== PAUSED_ALREADY) throw error
+            if (!(error instanceof Refused)) throw error
             return { event: event.id, did: "already-paused", pauseId: null }
           }
           return { event: event.id, did: "paused", pauseId: decision.id }

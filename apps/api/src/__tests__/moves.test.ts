@@ -21,6 +21,7 @@ import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogu
 import { ContainerServicePlacement } from "@waste/contracts/containers"
 import { Customer, Property } from "@waste/contracts/customers"
 import { MoveOutcome } from "@waste/contracts/moves"
+import { AccessCredential } from "@waste/contracts/site-visits"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { agreement as agreementTable, subscription as subscriptionTable } from "@waste/db/schema/agreements"
@@ -242,6 +243,15 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     const outcome = await moved(olivia, property.id, { agreementNumber: "AGR-M2N" })
     assert.equal(outcome.outgoing.agreement?.validTo, ON)
     assert.equal(outcome.incoming.agreement?.payerCustomerId, arriving.id, "the incoming customer pays where the body names no payer")
+  })
+
+  test("keeps the outgoing agreement where a credential charged to it runs past the day, which ending it would leave outside it", async () => {
+    const property = await rented("Østerbrogade 140")
+    const outgoing = await agreementOf("AGR-M7")
+    await subscribed(outgoing, property, collection, true)
+    await make(olivia, "/access-credentials", { projectId: copenhagen, kind: "plate", value: `M${testId().slice(-6)}`, customerId: leaving.id, agreementId: outgoing.id, validFrom: "2026-01-01" }, AccessCredential)
+    const outcome = await moved(olivia, property.id, { agreementNumber: "AGR-M7N" })
+    assert.deepEqual([outcome.outgoing.agreement?.validTo, outcome.outgoing.subscriptions.map((ended) => ended.validTo)], [null, [ON]])
   })
 
   test("a dry run answers what the move would do and writes nothing", async () => {

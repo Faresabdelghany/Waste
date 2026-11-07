@@ -16,7 +16,8 @@
 // the identity day; `route_scheme_id`), the scheme's planning area, the
 // container's type, the fraction on the day and the pickup's status now —
 // the table's word, not the payload's, since pg-boss delivers in no promised
-// order; then the placement of the container valid on the service date with
+// order; then the placement of the container in force on the service date
+// (`subscribedPlacementOn`, @waste/db/query/placement-in-force) with
 // its subscription, agreement (status, customer, payer, `price_list_id`,
 // currency) and the customer's kind, the product (unit, `vat_percent`), and
 // the list the agreement is priced under with its rows on the day — the
@@ -91,11 +92,10 @@ import { lockRow } from "@waste/db/commands/shared"
 import { priceVisitCharge } from "@waste/db/commands/site-visits"
 import { liveScaleTicketEventsOf, windowLinesOf } from "@waste/db/commands/window-prices"
 import { scaleTicket } from "@waste/db/schema/scale-house"
+import { subscribedPlacementOn, type SubscribedPlacement } from "@waste/db/query/placement-in-force"
 import { validOn } from "@waste/db/query/valid-on"
-import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { customer } from "@waste/db/schema/customers"
 import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
 import { weightReview } from "@waste/db/schema/finance"
 import { ticketKindProduct } from "@waste/db/schema/finance"
@@ -203,39 +203,6 @@ async function originStoodFor(tx: Tx, companyId: string, movedFromPickupId: stri
   throw new Error(`pickup ${movedFromPickupId} names no first stop to stand for`)
 }
 
-/** The placement as read, before the list: what the domain's `PlacementFacts` carries less the list, plus the list the agreement names (null for the project's default), which the next read needs. */
-type PlacementRead = Omit<PlacementFacts, "priceList"> & { priceListId: string | null }
-
-/** The placement of the container valid on the day, with its subscription, agreement, customer's kind and product; undefined when none was. Resolution's consumer reads a stop's agreement and customer through it too (#258). */
-export async function placementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<PlacementRead | undefined> {
-  const [row] = await tx
-    .select({
-      subscriptionId: subscription.id,
-      agreementId: agreement.id,
-      agreementStatus: agreement.status,
-      customerId: agreement.customerId,
-      customerKind: customer.kind,
-      priceListId: agreement.priceListId,
-      productId: product.id,
-      unit: product.unit,
-      vatPercent: product.vatPercent,
-    })
-    .from(containerServicePlacement)
-    .innerJoin(subscription, and(eq(subscription.companyId, containerServicePlacement.companyId), eq(subscription.id, containerServicePlacement.subscriptionId)))
-    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.id, subscription.agreementId)))
-    .innerJoin(customer, and(eq(customer.companyId, agreement.companyId), eq(customer.id, agreement.customerId)))
-    .innerJoin(product, and(eq(product.companyId, subscription.companyId), eq(product.id, subscription.productId)))
-    .where(and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.projectId, projectId), eq(containerServicePlacement.containerId, containerId), validOn(containerServicePlacement, day)))
-    .limit(1)
-  if (row === undefined) return undefined
-  return {
-    subscriptionId: row.subscriptionId,
-    agreement: { id: row.agreementId, status: row.agreementStatus, customerKind: row.customerKind, customerId: row.customerId },
-    product: { id: row.productId, unit: row.unit, vatPercent: row.vatPercent },
-    priceListId: row.priceListId,
-  }
-}
-
 /** Whether the container stood under a public placement on the day (M12 of #293): a bin the project's contract pays for, with no subscription, whose stop is charged to nobody. */
 export async function publicPlacementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<boolean> {
   const [row] = await tx
@@ -275,7 +242,7 @@ export const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => 
  * proof that recorded it, and — where a step is charged under a placement —
  * the step's product priced as any product is.
  */
-async function exceptionFacts(tx: Tx, companyId: string, found: PickupRow, pickupId: string, placement: PlacementRead | undefined): Promise<ExceptionFacts | null> {
+async function exceptionFacts(tx: Tx, companyId: string, found: PickupRow, pickupId: string, placement: SubscribedPlacement | undefined): Promise<ExceptionFacts | null> {
   const place = placeOf(found)
   if (place === undefined) return null
   const stop: PickupExceptionStop = {
@@ -324,7 +291,7 @@ async function exceptionFacts(tx: Tx, companyId: string, found: PickupRow, picku
  */
 export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFacts["kind"], found: PickupRow, pickupId: string): Promise<{ facts: PickupEventFacts; live: EventReading[] }> {
   // An address-only stop has no container and so no placement, and an office stop is a job or nothing: the domain judges either on its origin alone.
-  const placement = found.containerId === null || found.origin === "office" ? undefined : await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
+  const placement = found.containerId === null || found.origin === "office" ? undefined : await subscribedPlacementOn(tx, { companyId, projectId: found.projectId }, found.containerId, found.serviceDate)
   let priced: PlacementFacts | null = null
   if (placement !== undefined) {
     const { priceListId, ...facts } = placement
@@ -443,7 +410,7 @@ export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, f
   let reached: TicketCompletedFacts["agreement"] = null
   if (found.routeId !== null && found.pickupId !== null) {
     const stop = await pickupRow(tx, companyId, found.routeId, found.pickupId)
-    const placement = stop === undefined || stop.containerId === null ? undefined : await placementOn(tx, companyId, stop.projectId, stop.containerId, stop.serviceDate)
+    const placement = stop === undefined || stop.containerId === null ? undefined : await subscribedPlacementOn(tx, { companyId, projectId: stop.projectId }, stop.containerId, stop.serviceDate)
     if (placement !== undefined && (found.agreementId === null || found.agreementId === placement.agreement.id)) reached = { id: placement.agreement.id, subscriptionId: placement.subscriptionId }
   }
   if (reached === null && found.agreementId !== null) reached = { id: found.agreementId, subscriptionId: null }
@@ -604,7 +571,7 @@ export async function weightFacts(tx: Tx, companyId: string, unloadId: string): 
   const weighed: WeighedStopFacts[] = []
   for (const share of tonnageShares(reviewed.netKg, carried)) {
     const stop = byPickup.get(share.pickupId)!
-    const placement = stop.containerId === null ? undefined : await placementOn(tx, companyId, found.projectId, stop.containerId, onRoute.serviceDate)
+    const placement = stop.containerId === null ? undefined : await subscribedPlacementOn(tx, { companyId, projectId: found.projectId }, stop.containerId, onRoute.serviceDate)
     let priced: PlacementFacts | null = null
     if (placement !== undefined) {
       const { priceListId, ...facts } = placement
