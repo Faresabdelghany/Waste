@@ -75,9 +75,8 @@ import type {
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@/lib/prototype/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { SCHEME_API_WARNINGS_KEY } from "@/lib/prototype/route-schemes/lifecycle"
-import { parseServiceDays, sortServiceDays } from "@waste/domain/planning/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
-import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/planning/scheme-seasons"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"
@@ -104,6 +103,7 @@ import {
   type ServerModule,
 } from "./adapter"
 import type { ActionOutcome, SendAction } from "./server-records"
+import { parseServiceDays, SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** Where a scheme keeps its groups' server ids: JSON, the web's group id to the server's. */
 export const SERVER_GROUP_IDS_KEY = "serverGroupIds"

@@ -17,9 +17,8 @@
 // The closed lists live in ../planning/vocabulary since Issue #97, where the
 // database and the contracts read them too; the day arithmetic is ../days.
 
-import { addDays, daysBetween, isIsoDate, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
+import { addDays, daysBetween, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
 import { RECURRENCE_FREQUENCIES, type WEEK_ROTATIONS } from "./vocabulary"
-import { seasonsFromValues } from "./scheme-seasons"
 import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
 
 /**
@@ -248,71 +247,7 @@ export function recurrenceSentence(recurrence: SchemeRecurrence): string {
   return `${recurrenceCadenceLabel(recurrence)} on ${days}`
 }
 
-export function parseServiceDays(value: string): ServiceDay[] {
-  const tokens = value
-    .split(",")
-    .map((token) => token.trim().toLowerCase())
-    .filter((token): token is ServiceDay => (SERVICE_DAYS as readonly string[]).includes(token))
-  return sortServiceDays([...new Set(tokens)])
-}
-
-/**
- * The shared guard for reading a record's structured `serviceDays` out of its
- * submitted form values: the values object may be missing entirely, and the
- * field may hold a non-string in merged or hand-edited stores. Returns []
- * when nothing parses. The project's weekend (`values.weekend`) is another
- * field, with its own read.
- */
-export function serviceDaysFromValues(
-  values: Record<string, unknown> | null | undefined,
-): ServiceDay[] {
-  const raw = values?.serviceDays
-  return parseServiceDays(typeof raw === "string" ? raw : "")
-}
-
 export const isRecurrenceFrequency = (
   value: unknown,
 ): value is RecurrenceFrequency =>
   typeof value === "string" && (RECURRENCE_FREQUENCIES as readonly string[]).includes(value)
-
-const isRotation = (value: unknown): value is WeekRotation =>
-  value === "odd" || value === "even"
-
-/**
- * Reads a scheme's recurrence from its submitted form values (the
- * `route-studio.schemes` field ids, also kept on created records as
- * `submittedValues`). Returns null while the recurrence is still incomplete:
- * no frequency, no service day, no effective-from, or an every-2-weeks
- * frequency without a week rotation. The seasons ride along where the record
- * carries a set the date math may read (scheme-seasons.ts).
- */
-export function recurrenceFromValues(
-  values: Record<string, string | boolean | undefined>,
-): SchemeRecurrence | null {
-  const frequency = values.frequency
-  if (!isRecurrenceFrequency(frequency)) return null
-  // Daily always serves the full week; a partial stored list cannot narrow it.
-  const serviceDays = frequency === "daily" ? [...SERVICE_DAYS] : serviceDaysFromValues(values)
-  if (serviceDays.length === 0) return null
-  const effectiveFrom = typeof values.effectiveFrom === "string" ? values.effectiveFrom : ""
-  // Malformed dates (possible in hand-edited or corrupted submittedValues)
-  // must not reach the date walk — an invalid cursor would throw mid-render.
-  if (!isIsoDate(effectiveFrom)) return null
-  const effectiveTo = typeof values.effectiveTo === "string" ? values.effectiveTo : ""
-  if (effectiveTo && !isIsoDate(effectiveTo)) return null
-  const weekRotation = isRotation(values.weekRotation) ? values.weekRotation : undefined
-  if (frequency === "every-2-weeks" && !weekRotation) return null
-  // A daily scheme has no seasons (O17 of #290); any other carries the record's, where it has some.
-  const seasons = frequency === "daily" ? [] : seasonsFromValues(values)
-  return {
-    frequency,
-    serviceDays,
-    ...(frequency === "every-2-weeks" ? { weekRotation } : {}),
-    effectiveFrom,
-    effectiveTo,
-    ...(typeof values.plannedStartTime === "string" && values.plannedStartTime
-      ? { startTime: values.plannedStartTime }
-      : {}),
-    ...(seasons.length === 0 ? {} : { seasons }),
-  }
-}

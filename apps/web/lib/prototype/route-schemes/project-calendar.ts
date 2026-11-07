@@ -21,8 +21,8 @@ import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
 import { holidayListFromDates, holidayNamesFor, withCarriedNames } from "@waste/domain/planning/holiday-names"
 import type { SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { type HolidayList, NO_HOLIDAYS, type ServiceDay } from "@waste/domain/days"
-import { parseServiceDays } from "@waste/domain/planning/recurrence"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
+import { parseServiceDays } from "./recurrence-values"
 
 /** The list name shown when the project has no holiday list. */
 export const NO_HOLIDAY_LIST_LABEL = "None on this project"

@@ -30,7 +30,6 @@ import {
   schemeValidationGroups,
 } from "./groups"
 import { vehicleTypeOfRecord } from "./matching"
-import { recurrenceFromValues, serviceDaysFromValues } from "@waste/domain/planning/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import {
@@ -39,6 +38,7 @@ import {
   validateScheme,
   type SchemeValidationResult,
 } from "./validation"
+import { recurrenceFromValues, serviceDaysFromValues } from "./recurrence-values"
 
 export const SCHEME_LIFECYCLE_STATUSES = [
   "Draft",

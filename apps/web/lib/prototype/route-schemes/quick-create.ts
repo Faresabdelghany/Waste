@@ -34,9 +34,10 @@ import {
   type StopMatchRule,
 } from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/planning/occurrences"
-import { isRecurrenceFrequency, parseServiceDays, type RecurrenceFrequency, type WeekRotation } from "@waste/domain/planning/recurrence"
+import { isRecurrenceFrequency, type RecurrenceFrequency, type WeekRotation } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import { isSchemeServiceType } from "./scope"
+import { parseServiceDays } from "./recurrence-values"
 
 /**
  * The scheme draft both create paths hand to record creation: Guided Setup

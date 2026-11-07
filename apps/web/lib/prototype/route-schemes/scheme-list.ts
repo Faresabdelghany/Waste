@@ -17,12 +17,9 @@ import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT, cleanFact } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { matchPlansFromValues } from "./matching"
-import {
-  recurrenceCadenceLabel,
-  recurrenceFromValues,
-  serviceDaysFromValues,
-} from "@waste/domain/planning/recurrence"
+import { recurrenceCadenceLabel } from "@waste/domain/planning/recurrence"
 import { stringValue } from "./validation"
+import { recurrenceFromValues, serviceDaysFromValues } from "./recurrence-values"
 
 /** A display fact, with blank and placeholder values treated as absent. */
 const factOf = (record: BusinessRecord, label: string): string | undefined => cleanFact(record.facts?.[label])

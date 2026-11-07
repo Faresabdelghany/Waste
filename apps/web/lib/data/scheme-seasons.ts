@@ -3,10 +3,11 @@
 // whole. What the set means and how it is checked is the domain's
 // (@waste/domain/planning/scheme-seasons, seasons).
 import { recurrenceCadenceLabel } from "@waste/domain/planning/recurrence"
-import { SCHEME_SEASONS_KEY, seasonsValue, type StoredSchemeSeason } from "@waste/domain/planning/scheme-seasons"
+import { type StoredSchemeSeason } from "@waste/domain/planning/scheme-seasons"
 import { seasonSpanLabel } from "@waste/domain/planning/seasons"
 
 import type { BusinessRecord } from "./business-modules"
+import { SCHEME_SEASONS_KEY, seasonsValue } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** "Summer · 1 May – 30 Sep · Every week": one season as the page lists it. */
 export function seasonLine(season: StoredSchemeSeason): string {

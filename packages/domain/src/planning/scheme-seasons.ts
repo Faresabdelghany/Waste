@@ -1,16 +1,10 @@
-// A Route Scheme record's Seasons (O17 of #290): how the web's record carries
-// them and what the scheme page's editor checks before it saves. The record
-// keeps the set as JSON under `SCHEME_SEASONS_KEY`, each season as the wire
-// spells it (the rotation null for every cadence but every-2-weeks); the
-// adapter writes that JSON from the API's resource and sends it back whole,
-// and `recurrenceFromValues` reads it, so the fixture preview and the API's
-// occurrence read run a season alike. The date math is seasons.ts's.
+// A Route Scheme's Seasons (O17 of #290) as the wire spells them — the
+// rotation null for every cadence but every-2-weeks — read into the date
+// math's seasons, and what the scheme page's editor checks before it saves,
+// in the contracts' words. The date math is seasons.ts's.
 
-import { SEASON_FREQUENCIES, WEEK_ROTATIONS, type SeasonFrequency, type WeekRotation } from "./vocabulary"
+import type { SeasonFrequency, WeekRotation } from "./vocabulary"
 import { isMonthDay, overlappingSeasons, SEASONS_MAX, type SchemeSeason } from "./seasons"
-
-/** The record's key the seasons ride under, as JSON. */
-export const SCHEME_SEASONS_KEY = "seasons"
 
 /** A season as the record and the wire spell it: the rotation null where the cadence takes none. */
 export type StoredSchemeSeason = {
@@ -21,45 +15,9 @@ export type StoredSchemeSeason = {
   weekRotation: WeekRotation | null
 }
 
-const isSeasonFrequency = (value: unknown): value is SeasonFrequency => typeof value === "string" && (SEASON_FREQUENCIES as readonly string[]).includes(value)
-const isRotation = (value: unknown): value is WeekRotation => typeof value === "string" && (WEEK_ROTATIONS as readonly string[]).includes(value)
-
-/** One stored season, or null where an entry of hand-edited JSON is not one. */
-function storedSeasonOf(value: unknown): StoredSchemeSeason | null {
-  if (typeof value !== "object" || value === null) return null
-  const { name, startsOn, endsOn, frequency, weekRotation } = value as Record<string, unknown>
-  if (typeof name !== "string" || typeof startsOn !== "string" || typeof endsOn !== "string") return null
-  if (!isMonthDay(startsOn) || !isMonthDay(endsOn) || startsOn === endsOn || !isSeasonFrequency(frequency)) return null
-  const rotation = isRotation(weekRotation) ? weekRotation : null
-  if ((frequency === "every-2-weeks") !== (rotation !== null)) return null
-  return { name, startsOn, endsOn, frequency, weekRotation: rotation }
-}
-
-/** The record's seasons as stored, entries that are not seasons left out; none where the key is absent or not JSON. */
-export function storedSeasonsFromValues(values: Record<string, unknown> | null | undefined): StoredSchemeSeason[] {
-  const raw = values?.[SCHEME_SEASONS_KEY]
-  if (typeof raw !== "string" || raw.trim() === "") return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.flatMap((entry) => storedSeasonOf(entry) ?? []) : []
-  } catch {
-    return []
-  }
-}
-
 /** The domain's seasons from the stored ones, the null rotation left out. */
 export const schemeSeasonsOf = (stored: readonly StoredSchemeSeason[]): SchemeSeason[] =>
   stored.map(({ weekRotation, ...season }) => ({ ...season, ...(weekRotation === null ? {} : { weekRotation }) }))
-
-/** The record's seasons for the date math; none where it has none, or they are not ones the date math may read together. */
-export function seasonsFromValues(values: Record<string, unknown> | null | undefined): SchemeSeason[] {
-  const stored = storedSeasonsFromValues(values)
-  return seasonProblems(stored).length === 0 ? schemeSeasonsOf(stored) : []
-}
-
-/** The JSON a record carries for a set of seasons, by the day each starts. */
-export const seasonsValue = (seasons: readonly StoredSchemeSeason[]): string =>
-  JSON.stringify([...seasons].sort((a, b) => a.startsOn.localeCompare(b.startsOn)))
 
 /**
  * Every sentence a set of seasons fails, in the contracts' words where they

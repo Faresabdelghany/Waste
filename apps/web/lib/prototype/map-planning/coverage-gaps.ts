@@ -15,7 +15,7 @@ import type { BusinessRecord } from "../prototype-record"
 import { effectiveStopPlans } from "../route-schemes/groups"
 import { effectiveSchemeStatus, schemesInPlanning } from "../route-schemes/lifecycle"
 import { containerInService, containerServesAhead } from "../route-schemes/matching"
-import { recurrenceFromValues } from "@waste/domain/planning/recurrence"
+import { recurrenceFromValues } from "../route-schemes/recurrence-values"
 
 export type CoverageGaps = {
   /** Containers that need service. */

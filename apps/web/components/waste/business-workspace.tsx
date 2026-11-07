@@ -99,7 +99,7 @@ import {
   withDerivedSchemeContext,
   type SchemeRowSummary,
 } from "@/lib/prototype/route-schemes/scheme-list"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/planning/recurrence"
+import { recurrenceSentence, todayIso } from "@waste/domain/planning/recurrence"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
@@ -262,6 +262,7 @@ import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-liv
 import { useGrants } from "@/components/auth/use-grants"
 import { mayOn } from "@/lib/api/grants"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId

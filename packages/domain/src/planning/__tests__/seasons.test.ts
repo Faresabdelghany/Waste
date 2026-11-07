@@ -1,14 +1,14 @@
 // Seasons of a Route Scheme (O17 of #290): the month-day reading, the season
 // in force on a date, the overlap rule, and the cadence each season gives the
 // occurrences — through generateOccurrences, the one occurrence function —
-// and how a scheme record carries them (scheme-seasons.ts).
+// and a stored set read for the date math and checked (scheme-seasons.ts).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { generateOccurrences } from "../occurrences"
 import { isoWeek, NO_HOLIDAYS, serviceDayOf } from "../../days"
-import { cadenceOn, matchesRecurrence, recurrenceFromValues, type SchemeRecurrence } from "../recurrence"
-import { SCHEME_SEASONS_KEY, seasonProblems, seasonsFromValues, seasonsValue, storedSeasonsFromValues, type StoredSchemeSeason } from "../scheme-seasons"
+import { cadenceOn, matchesRecurrence, type SchemeRecurrence } from "../recurrence"
+import { schemeSeasonsOf, seasonProblems, type StoredSchemeSeason } from "../scheme-seasons"
 import { isMonthDay, overlappingSeasons, seasonContains, seasonLastDay, seasonOn, seasonsCoverYear, seasonSpanLabel, seasonStartOf, seasonsOverlap, type SchemeSeason } from "../seasons"
 import { schemeFrequencyReconciliationWarnings } from "../frequency-reconciliation"
 
@@ -148,39 +148,22 @@ describe("the cadence a season gives the occurrences", () => {
   })
 })
 
-describe("a scheme record's seasons", () => {
+describe("a stored set of seasons", () => {
   const stored = [
     { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" },
     { name: "Summer", startsOn: "05-01", endsOn: "10-01", frequency: "weekly", weekRotation: null },
   ] as const satisfies readonly StoredSchemeSeason[]
 
-  test("ride as JSON by the day they start, and read back for the date math with the null rotation left out", () => {
-    const values = { [SCHEME_SEASONS_KEY]: seasonsValue(stored) }
-    assert.deepEqual(storedSeasonsFromValues(values).map((season) => season.name), ["Summer", "Winter"])
-    assert.deepEqual(seasonsFromValues(values), [summer, winter])
+  test("is the date math's seasons with the null rotation left out", () => {
+    assert.deepEqual(schemeSeasonsOf(stored), [winter, summer])
   })
 
-  test("a record without them, with JSON that is not a list, or with entries that are not seasons reads none of those", () => {
-    assert.deepEqual(storedSeasonsFromValues({}), [])
-    assert.deepEqual(storedSeasonsFromValues({ [SCHEME_SEASONS_KEY]: "not json" }), [])
-    assert.deepEqual(storedSeasonsFromValues({ [SCHEME_SEASONS_KEY]: "{}" }), [])
-    assert.deepEqual(storedSeasonsFromValues({ [SCHEME_SEASONS_KEY]: JSON.stringify([{ ...stored[1], startsOn: "02-29" }, { ...stored[1], frequency: "daily" }, stored[0]]) }).map((season) => season.name), ["Winter"])
-  })
-
-  test("a set the date math may not read together is read as none, and the editor says why", () => {
+  test("the editor says why a set will not do", () => {
     const overlapping = [stored[1], { ...stored[1], name: "Autumn", startsOn: "09-01", endsOn: "11-01" }]
-    assert.deepEqual(seasonsFromValues({ [SCHEME_SEASONS_KEY]: JSON.stringify(overlapping) }), [])
     assert.deepEqual(seasonProblems(overlapping), ["Seasons share no day: Autumn overlaps Summer"])
     assert.deepEqual(seasonProblems([stored[1], { ...stored[0], name: "Summer", weekRotation: null }]), ["Summer: pick the week rotation for every 2 weeks", "A season name is used once in a scheme"])
     assert.deepEqual(seasonProblems([{ ...stored[1], name: " ", endsOn: "05-01" }]), ["Every season needs a name", "A season: a season ends on another day than it starts; a season of the whole year is the scheme's own cadence"])
     assert.deepEqual(seasonProblems(stored), [])
-  })
-
-  test("recurrenceFromValues carries them, except on a daily scheme", () => {
-    const values = { frequency: "weekly", serviceDays: "monday", effectiveFrom: "2026-01-05", [SCHEME_SEASONS_KEY]: seasonsValue(stored) }
-    assert.deepEqual(recurrenceFromValues(values)?.seasons, [summer, winter])
-    assert.equal(recurrenceFromValues({ ...values, frequency: "daily" })?.seasons, undefined)
-    assert.equal(recurrenceFromValues({ ...values, [SCHEME_SEASONS_KEY]: undefined })?.seasons, undefined)
   })
 })
 

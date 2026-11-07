@@ -12,7 +12,6 @@ import { useEffect, useState } from "react"
 import type { Occurrence } from "@waste/contracts/route-schemes"
 import { todayIso } from "@waste/domain/planning/recurrence"
 import { addDays, formatShortDay } from "@waste/domain/days"
-import { SCHEME_SEASONS_KEY } from "@waste/domain/planning/scheme-seasons"
 
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -25,6 +24,7 @@ import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 import { useApiClient } from "./api-session-store"
 import { useServerModuleState } from "./business-record-store"
+import { SCHEME_SEASONS_KEY } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** How far ahead the tab looks: eight weeks, the fortnightly scheme's four collections. */
 const WINDOW_DAYS = 56

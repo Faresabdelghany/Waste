@@ -79,7 +79,7 @@ import {
   withRouteWasteFractions,
   withStopServiceDate,
 } from "@/lib/prototype/route-schemes/scheme-tabs"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/planning/recurrence"
+import { recurrenceSentence, todayIso } from "@waste/domain/planning/recurrence"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { stringValue } from "@/lib/prototype/route-schemes/validation"
 import { recordCountLabel } from "@/lib/table-copy"
@@ -132,6 +132,7 @@ import {
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { readableKey } from "@/lib/data/record-key"
+import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** The date a generated route operates on (D17). */
 function routeOperatingDate(route: BusinessRecord): string | undefined {

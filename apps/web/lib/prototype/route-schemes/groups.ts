@@ -28,7 +28,7 @@ import {
   stopSelectionMode,
   type StopMatchExclusion,
 } from "./matching"
-import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/planning/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import {
   dayPlansFromValues,
@@ -40,6 +40,7 @@ import {
   type SchemeStopRuleSource,
   type SchemeValidationInput,
 } from "./validation"
+import { serviceDaysFromValues } from "./recurrence-values"
 
 export const COLLECTION_GROUPS_KEY = "collectionGroups"
 

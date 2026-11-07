@@ -23,8 +23,9 @@ import { MONTH_LABELS } from "@waste/domain/days"
 import { DAILY_HAS_NO_SEASONS } from "@waste/domain/planning/schemes"
 import { SEASON_FREQUENCIES, type SeasonFrequency, type WeekRotation } from "@waste/domain/planning/vocabulary"
 import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/planning/recurrence"
-import { seasonProblems, storedSeasonsFromValues, type StoredSchemeSeason } from "@waste/domain/planning/scheme-seasons"
+import { seasonProblems, type StoredSchemeSeason } from "@waste/domain/planning/scheme-seasons"
 import { SEASONS_MAX } from "@waste/domain/planning/seasons"
+import { storedSeasonsFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** The days each month offers: a year without a leap day, the one a season is read in. */
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]

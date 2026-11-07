@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { RECURRENCE_WEEKLY_RATES, matchesRecurrence, occurrencesPerWeek, recurrenceCadenceLabel, recurrenceFromValues, serviceDaysRangeLabel, weeksFromEffectiveFrom, type RecurrenceFrequency } from "../recurrence"
+import { RECURRENCE_WEEKLY_RATES, matchesRecurrence, occurrencesPerWeek, recurrenceCadenceLabel, serviceDaysRangeLabel, weeksFromEffectiveFrom, type RecurrenceFrequency } from "../recurrence"
 import { addDays, mondayOf, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../../days"
 
 describe("serviceDaysRangeLabel", () => {
@@ -45,16 +45,9 @@ describe("every-4-weeks", () => {
     assert.equal(matchesRecurrence(recurrence, "2026-11-10"), true)
   })
 
-  test("label, rate, and value parsing", () => {
+  test("label and rate", () => {
     assert.equal(recurrenceCadenceLabel({ frequency: "every-4-weeks" }), "Every 4 weeks")
     assert.equal(RECURRENCE_WEEKLY_RATES["every-4-weeks"], 0.25)
-    const recurrence = recurrenceFromValues({
-      frequency: "every-4-weeks",
-      serviceDays: "monday",
-      effectiveFrom: "2026-09-14",
-      effectiveTo: "",
-    })
-    assert.equal(recurrence?.frequency, "every-4-weeks")
   })
 })
 
@@ -72,16 +65,6 @@ describe("daily and every-3-weeks", () => {
     assert.equal(matchesRecurrence(recurrence, "2026-09-21"), false)
     assert.equal(RECURRENCE_WEEKLY_RATES.daily, 7)
     assert.equal(recurrenceCadenceLabel({ frequency: "daily" }), "Daily")
-  })
-
-  test("recurrenceFromValues widens a daily scheme to the full week", () => {
-    const recurrence = recurrenceFromValues({
-      frequency: "daily",
-      serviceDays: "monday, tuesday",
-      effectiveFrom: "2026-09-14",
-      effectiveTo: "",
-    })
-    assert.equal(recurrence?.serviceDays.length, 7)
   })
 
   test("every 3 weeks anchors on the effective-from week", () => {

@@ -11,7 +11,6 @@ import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, sche
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { schemeGenerationRecorded } from "@/lib/prototype/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { serviceDaysFromValues } from "@waste/domain/planning/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 import { count } from "@waste/domain/text"
@@ -22,6 +21,7 @@ import type { ModuleState } from "@/lib/api/records/server-records"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import { serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
 
