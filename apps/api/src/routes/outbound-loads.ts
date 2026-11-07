@@ -1,51 +1,4 @@
-// A transfer station's haul-out (M17 of #293, row 28.3): the Outbound Loads
-// that take a Transfer Station's material on to the site that treats or
-// disposes of it, a station's stock, and the office's adjustments of it.
-//
-//   GET    /outbound-loads                         view
-//   POST   /outbound-loads                         create
-//   GET    /outbound-loads/:id                     view
-//   PATCH  /outbound-loads/:id                     edit    the costs, our ticket, the note
-//   POST   /outbound-loads/:id/receive             edit    the receiving site's ticket
-//   POST   /outbound-loads/:id/reconcile           edit
-//   POST   /outbound-loads/:id/dispute             edit
-//   POST   /outbound-loads/:id/cancel              edit
-//   GET    /unloading-stations/:id/stock           view
-//   GET    /unloading-stations/:id/adjustments     view
-//   POST   /unloading-stations/:id/adjustments     create
-//
-// All under `route-studio.weights`, the module the Unload is read in: the
-// roles that capture and review the weights that come in are the roles that
-// send the material on and reconcile what the receiving site weighed. No new
-// module and no charter changes.
-//
-// A load is a project's and its two stations are the company's. A create
-// names a project the caller works in (400), stations and a fraction of the
-// company (400 at the field), our vehicle of the project and a hauler of the
-// company where it names them (400), and then answers the rules a person can
-// fix as 409s: the station it leaves is a transfer station, and the station
-// it goes to takes the fraction, in the Unload's sentences. The plate is the
-// body's, or our vehicle's where the body gives none. Every instant the body
-// gives is held to the request's clock by the skew the Unload capture is held
-// to, and a receipt comes on or after the departure (400 at `receivedAt`).
-//
-// The commands lock the load, read it again, and ask the domain's machine
-// (@waste/domain/execution/haul-out): the next status, the command already
-// done (200 with no write), or the sentence as a 409. A receipt read beside a
-// load is the receiving site's net against ours, within the project's weight
-// tolerance or beyond it, read on every answer and stored nowhere.
-//
-// A station's stock is a reading, one row per project and fraction in the
-// caller's projects (one with `projectId`): the Unloads tipped there by their
-// weight review, as the tonnage report counts them — approved and not yet
-// reviewed count, a rejected weight is reported beside and in no total, a
-// corrected one is superseded by its correction, and a load the station
-// refused counts nowhere — less the loads that left it not cancelled, plus
-// the adjustments. It is answered for any station of the company the caller
-// reaches; only a transfer station's means stock, and only a transfer
-// station takes an adjustment (409). An adjustment is a ledger row, answered
-// 201 with no address of its own: a station's adjustments are listed under it.
-import type { Action } from "@waste/domain/access/modules"
+
 import { OUTBOUND_LOAD_COMMANDS, notATransferStation, outboundLoadTransition, receiptReading, SAY_WHY, type OutboundLoadCommand } from "@waste/domain/execution/haul-out"
 import { unloadStanding } from "@waste/domain/insight/readings"
 import {
@@ -75,17 +28,17 @@ import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
 import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
-import { Hono, type Context, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
+import type { Context } from "hono"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, requireUnloadingStation, requireVehicle, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 
@@ -230,11 +183,6 @@ async function stockOf(tx: Tx, principal: Principal, stationId: string, projectI
     .sort((a, b) => a.projectId.localeCompare(b.projectId) || a.wasteFractionId.localeCompare(b.wasteFractionId))
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
 const COMMAND_DESCRIPTIONS: Record<OutboundLoadCommand, { summary: string; description: string; problems: string }> = {
   receive: {
     summary: "Record the receiving site's ticket",
@@ -261,9 +209,8 @@ const COMMAND_DESCRIPTIONS: Record<OutboundLoadCommand, { summary: string; descr
 
 const COMMAND_BODIES = { receive: OutboundLoadReceive, reconcile: OutboundLoadReconcile, dispute: OutboundLoadReason, cancel: OutboundLoadReason } as const
 
-export type OutboundLoadRouteOptions = { now?: () => Date }
-
-export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: OutboundLoadRouteOptions = {}) {
+export function outboundLoadRoutes(deps: RouteDeps) {
+  const { now } = deps
   /** A command on a load: locked, read again, asked of the machine, and written with what it sets beside the status. */
   async function command(c: Context<AuthEnv>, id: string, name: OutboundLoadCommand, sets: (found: LoadRow) => Partial<typeof outboundLoad.$inferInsert>): Promise<Response> {
     const principal = c.get("principal")
@@ -282,24 +229,22 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     return c.json((await loadsOf(tx, principal.companyId, [row!]))[0]!)
   }
 
-  const routes = new Hono<AuthEnv>()
+  const declared = routes(deps)
     .get(
       "/outbound-loads",
-      describeRoute({
+      {
         operationId: "listOutboundLoads",
         summary: "The outbound loads",
         description:
           "One page of the loads sent on from transfer stations in the projects the caller works in, oldest first (ids are time-ordered), each with the receiving site's ticket read against our out-weighing once it is recorded. `projectId`, `status`, `fromStationId` and `toStationId` narrow the page. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: OutboundLoadListQuery,
+        invalid: ["the project is not one the caller works in", "the status is not one of the five"],
         responses: {
           200: describeJson("One page of outbound loads.", LoadPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, the project is not one the caller works in, or the status is not one of the five."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", OutboundLoadListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, fromStationId, toStationId } = c.req.valid("query")
         const principal = c.get("principal")
@@ -327,24 +272,20 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/outbound-loads",
-      describeRoute({
+      {
         operationId: "createOutboundLoad",
         summary: "Send a load on",
         description:
           "Records a load leaving a transfer station for another station of the company, usually an external plant: the fraction, the carrier — our vehicle of the project, whose plate is the load's unless the body gives one, or a hauler with the plate — when it left, our out-weighing, and the haul and disposal costs in the project's currency where they are known. Costs are recorded and never billed or settled. The load departs; the server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: OutboundLoadCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, sends a load to the station it leaves, gives neither our vehicle nor a plate, breaks the weights' rule, names a project the caller does not work in or a station, fraction, vehicle or hauler that is not one, or departs after the request's clock"],
         responses: {
           201: describeCreated("The load as it was written.", OutboundLoad),
-          400: describeProblem(
-            "The body is missing a field, holds a value of the wrong shape, names a member the server owns, sends a load to the station it leaves, gives neither our vehicle nor a plate, breaks the weights' rule, names a project the caller does not work in or a station, fraction, vehicle or hauler that is not one, or departs after the request's clock.",
-          ),
-          ...commonProblems("create"),
           409: describeProblem("The station it leaves is not a transfer station, or the station it goes to does not take the fraction."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", OutboundLoadCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const principal = c.get("principal")
@@ -381,21 +322,18 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/outbound-loads/:id",
-      describeRoute({
+      {
         operationId: "getOutboundLoad",
         summary: "One outbound load",
         description: "One load of the projects the caller works in, with the receiving site's ticket read against our out-weighing once it is recorded.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The load.", OutboundLoad),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No outbound load with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -407,24 +345,22 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .patch(
       "/outbound-loads/:id",
-      describeRoute({
+      {
         operationId: "patchOutboundLoad",
         summary: "Record a load's costs, ticket or note",
         description:
           "Records the haul and disposal costs, our weighbridge's ticket or the note as they become known, in any status but cancelled. The stations, the carrier and the weights are the load's: a wrong one is cancelled and sent again. A disputed load keeps a note, since it says why.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: OutboundLoadPatch,
+        invalid: ["the patch is empty or names a field the caller does not own", "it takes the note off a disputed load"],
         responses: {
           200: describeJson("The load as it now stands.", OutboundLoad),
-          400: describeProblem("The path does not hold an id, the patch is empty or names a field the caller does not own, or it takes the note off a disputed load."),
-          ...commonProblems("edit"),
           404: describeProblem("No outbound load with that id in the projects the caller works in."),
           409: describeProblem("The load is cancelled."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", OutboundLoadPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -445,23 +381,21 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/unloading-stations/:id/stock",
-      describeRoute({
+      {
         operationId: "getUnloadingStationStock",
         summary: "What a station holds",
         description:
           "What the station holds by project and fraction, in the projects the caller works in (one with `projectId`): what our Unloads tipped there by their weight review — approved or not yet reviewed (`inKg`); under a weight a review rejected, beside and in no total (`rejectedKg`); a corrected unload by its correction; a load the station refused nowhere — less what left on outbound loads not cancelled (`outKg`), plus the stock counts' adjustments (`adjustedKg`). What that leaves (`onHandKg`) may read below zero. Only a transfer station's reading is stock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: MaterialStockQuery,
+        invalid: ["the project is not one the caller works in"],
         responses: {
           200: describeJson("The station's stock.", MaterialStock),
-          400: describeProblem("The path does not hold an id, or the project is not one the caller works in."),
-          ...commonProblems("view"),
           404: describeProblem("No unloading station with that id that the caller reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", MaterialStockQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { projectId } = c.req.valid("query")
@@ -474,22 +408,20 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/unloading-stations/:id/adjustments",
-      describeRoute({
+      {
         operationId: "listMaterialAdjustments",
         summary: "A station's stock adjustments",
         description: "One page of the station's stock adjustments in the projects the caller works in, oldest first. `projectId` and `wasteFractionId` narrow the page. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: MaterialAdjustmentListQuery,
+        invalid: ["the project is not one the caller works in"],
         responses: {
           200: describeJson("One page of the station's adjustments.", AdjustmentPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or the project is not one the caller works in."),
-          ...commonProblems("view"),
           404: describeProblem("No unloading station with that id that the caller reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", MaterialAdjustmentListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, projectId, wasteFractionId } = c.req.valid("query")
@@ -519,24 +451,22 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/unloading-stations/:id/adjustments",
-      describeRoute({
+      {
         operationId: "createMaterialAdjustment",
         summary: "Adjust a station's stock",
         description:
           "Appends a stock count's correction of what a transfer station holds of a fraction for a project: signed whole kilograms, never zero, with the count's words. A wrong adjustment is answered by another; the ledger keeps both.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: MaterialAdjustmentCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, adjusts by zero, or names a project the caller does not work in or a fraction that is not the company's"],
         responses: {
           201: describeJson("The adjustment as it was appended.", MaterialAdjustment),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, holds a value of the wrong shape, adjusts by zero, or names a project the caller does not work in or a fraction that is not the company's."),
-          ...commonProblems("create"),
           404: describeProblem("No unloading station with that id that the caller reaches."),
           409: describeProblem("The station is not a transfer station."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", MaterialAdjustmentCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -557,25 +487,23 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
 
   for (const name of OUTBOUND_LOAD_COMMANDS) {
     const { summary, description, problems } = COMMAND_DESCRIPTIONS[name]
-    routes.post(
+    declared.post(
       `/outbound-loads/:id/${name}`,
-      describeRoute({
+      {
         operationId: `${name}OutboundLoad`,
         summary,
         description,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: COMMAND_BODIES[name],
+        invalid: [name === "receive" ? "the body is missing a field, holds a value of the wrong shape, or receives the load before it departed or after the request's clock" : "the body holds a value of the wrong shape or is missing the reason"],
         responses: {
           200: describeJson("The load as it now stands; a command already done answers the load unchanged.", OutboundLoad),
-          400: describeProblem(name === "receive" ? "The path does not hold an id, or the body is missing a field, holds a value of the wrong shape, or receives the load before it departed or after the request's clock." : "The path does not hold an id, or the body holds a value of the wrong shape or is missing the reason."),
-          ...commonProblems("edit"),
           404: describeProblem("No outbound load with that id in the projects the caller works in."),
           409: describeProblem(problems),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", COMMAND_BODIES[name]),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json") as Record<string, unknown>
@@ -592,5 +520,5 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
       },
     )
   }
-  return routes
+  return declared
 }

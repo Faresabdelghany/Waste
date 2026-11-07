@@ -1,38 +1,4 @@
-// The scale house (M16a of #293, #404): the tare register and the tickets
-// weighed at the window of one of our own sites.
-//
-// `/vehicle-tares` is the register: a vehicle's weight empty in a project, by
-// its plate and, where it is weighed with them, its trailer's plate and the
-// container it carries, each stored as the match reads a plate
-// (`tareKeyOf`). One active tare per plate, trailer and container; a
-// re-weighing patches the row, which the audit trail keeps, and a retired one
-// stays for the tickets completed on it.
-//
-// `/scale-tickets` is the window. A ticket is weighed in at its gross
-// (`POST /scale-tickets`), numbered in the company's series, at a station
-// that is ours (`ownership = company`), weighs (`weighbridge`) and is in use,
-// for an account customer under one of its agreements in the ticket's
-// project, or a walk-in. A plate that is one of the project's vehicles names
-// it. `POST …/complete` takes the tare — a second pass, or the vehicle's
-// registered tare — and the load split into lines of the station's fractions
-// that sum to the net (`linesIssue`), all in one transaction under the
-// ticket's lock. One of our own vehicles' ticket is a single fraction and is
-// matched as a weighbridge's ticket is (`matchTicket`, over O27's
-// `routesOf`): matched, it is written as that route's Unload through O27's
-// writer, which emits `unload-recorded`; unmatched, it keeps why. `POST
-// …/void` voids a ticket with its reason, never deleting it; one written as
-// an Unload stands, since weight control settles that Unload.
-//
-// The window's prices (M16b of #293): a line may name the window's product it
-// is sold by — one of the project's, per tonne or per cubic metre, the latter
-// with its declared volume — and the completion and the void are news for
-// Finance (`scale-ticket-completed`, `scale-ticket-voided`), whose consumer
-// charges an account's lines under its agreement and cancels them on the void.
-// `GET …/amount-due` reads what a ticket comes to at the window, a walk-in's
-// under the project's default list, priced as Finance would; it stores
-// nothing. No payment is taken here: that waits for the owner's decision
-// (M15).
-import type { Action } from "@waste/domain/access/modules"
+
 import { NOT_A_STATION } from "@waste/domain/execution/commands"
 import { routeLabel, scaleTicketLabel } from "@waste/domain/numbering"
 import { Page } from "@waste/contracts/pagination"
@@ -71,20 +37,18 @@ import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { linesIssue, netOf, registeredTare, tareKeyOf } from "@waste/domain/scale-house/rules"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { scaleLineColumns, scaleTicketColumns, scaleTicketOf, scaleTicketsOf, type ScaleTicketRow } from "@waste/db/shapes/scale-tickets"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { routesOf } from "./weighbridge"
 
@@ -240,32 +204,26 @@ async function vehicleOfPlate(tx: Tx, companyId: string, projectId: string, plat
   return matches.length === 1 ? { id: matches[0].id, projectId, timezone: matches[0].timezone } : null
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function scaleHouseRoutes(deps: RouteDeps) {
+  const { now } = deps
   return (
-    new Hono<AuthEnv>()
+    routes(deps)
       // --- The tare register ---
       .get(
         "/vehicle-tares",
-        describeRoute({
+        {
           operationId: "listVehicleTares",
           summary: "The tare register",
           description:
             "One page of the registered tares in the projects the caller works in, oldest first (ids are time-ordered). `projectId`, `plate` (keyed as stored: upper case, letters and digits alone, however it is typed) and `status` narrow the page. Hand `nextCursor` back as `cursor` for the next page.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: VehicleTareListQuery,
+          invalid: ["the project is not one the caller works in", "the status is not one of the two"],
           responses: {
             200: describeJson("One page of registered tares.", TarePage),
-            400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, the project is not one the caller works in, or the status is not one of the two."),
-            ...commonProblems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", VehicleTareListQuery),
+        },
         async (c) => {
           const { limit, cursor, projectId, plate, status } = c.req.valid("query")
           const principal = c.get("principal")
@@ -292,22 +250,20 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .post(
         "/vehicle-tares",
-        describeRoute({
+        {
           operationId: "createVehicleTare",
           summary: "Register a tare",
           description:
             "Registers a vehicle's weight empty in a project the caller works in, by its plate and, where it is weighed with them, its trailer's plate and the container it carries — each stored as upper case letters and digits alone — with the day it was weighed and, optionally, the haulier it belongs to. A tare starts active, and one is active per plate, trailer and container. The server mints the id.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "create",
+          body: VehicleTareCreate,
+          invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, a project the caller does not work in or a customer that is not the company's, or a plate with no letter or digit"],
           responses: {
             201: describeCreated("The tare as it was written.", VehicleTare),
-            400: describeProblem("The body is missing a field, holds a value of the wrong shape, names a member the server owns, a project the caller does not work in or a customer that is not the company's, or a plate with no letter or digit."),
-            ...commonProblems("create"),
             409: describeProblem("An active tare is registered for the plate, trailer and container already."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "create"),
-        validate("json", VehicleTareCreate),
+        },
         async (c) => {
           const body = c.req.valid("json")
           const principal = c.get("principal")
@@ -336,21 +292,18 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .get(
         "/vehicle-tares/:id",
-        describeRoute({
+        {
           operationId: "getVehicleTare",
           summary: "One registered tare",
           description: "One registered tare of the projects the caller works in.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          params: IdParam,
           responses: {
             200: describeJson("The tare.", VehicleTare),
-            400: describeProblem("The path does not hold an id."),
-            ...commonProblems("view"),
             404: describeProblem("No registered tare with that id in the projects the caller works in."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("param", IdParam),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const row = await findTare(c.get("tx"), c.get("principal"), id)
@@ -360,24 +313,22 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .patch(
         "/vehicle-tares/:id",
-        describeRoute({
+        {
           operationId: "patchVehicleTare",
           summary: "Re-weigh, re-own or retire a tare",
           description:
             "Changes the weight and the day it was weighed, the haulier, the label, or the status: `retired` keeps the tare for the tickets completed on it and finds it for no new one; `active` takes it back where no other tare of its plate, trailer and container is active. The plates and the container are what the tare is of: register another.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "edit",
+          params: IdParam,
+          body: VehicleTarePatch,
+          invalid: ["the body changes nothing, holds a value of the wrong shape, names a member the server owns or a customer that is not the company's"],
           responses: {
             200: describeJson("The tare as it now stands.", VehicleTare),
-            400: describeProblem("The path does not hold an id, or the body changes nothing, holds a value of the wrong shape, names a member the server owns or a customer that is not the company's."),
-            ...commonProblems("edit"),
             404: describeProblem("No registered tare with that id in the projects the caller works in."),
             409: describeProblem("Another tare of the plate, trailer and container is active."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "edit"),
-        validate("param", IdParam),
-        validate("json", VehicleTarePatch),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const patch = c.req.valid("json")
@@ -399,21 +350,19 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       // --- The tickets ---
       .get(
         "/scale-tickets",
-        describeRoute({
+        {
           operationId: "listScaleTickets",
           summary: "The scale house's tickets",
           description:
             "One page of the scale tickets in the projects the caller works in, oldest first (ids are time-ordered), each with its lines. `projectId`, `unloadingStationId`, `status`, `party` and `customerId` narrow the page. Hand `nextCursor` back as `cursor` for the next page.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: ScaleTicketListQuery,
+          invalid: ["the project is not one the caller works in", "a filter holds a value of the wrong shape"],
           responses: {
             200: describeJson("One page of tickets.", TicketPage),
-            400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, the project is not one the caller works in, or a filter holds a value of the wrong shape."),
-            ...commonProblems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", ScaleTicketListQuery),
+        },
         async (c) => {
           const { limit, cursor, projectId, unloadingStationId, status, party, customerId } = c.req.valid("query")
           const principal = c.get("principal")
@@ -442,23 +391,19 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .post(
         "/scale-tickets",
-        describeRoute({
+        {
           operationId: "createScaleTicket",
           summary: "Weigh a vehicle in",
           description:
             "The first pass over the scale: a ticket at its gross, at one of our own stations in use with a weighbridge, for an account customer under one of its agreements in the ticket's project, or a walk-in. `weighedInAt` is now where omitted, and no later than the clock. A plate that is one of the project's vehicles names it. The ticket opens numbered in the company's series (`ST-<n>`). The server mints the id.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "create",
+          body: ScaleTicketCreate,
+          invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, a project the caller does not work in, a station that is not one of our own in use with a weighbridge, a customer that is not the company's, an agreement that is not this customer's in the project, a visitor on an account's ticket, or an instant ahead of the clock"],
           responses: {
             201: describeCreated("The ticket as it was written, open.", ScaleTicket),
-            400: describeProblem(
-              "The body is missing a field, holds a value of the wrong shape, names a member the server owns, a project the caller does not work in, a station that is not one of our own in use with a weighbridge, a customer that is not the company's, an agreement that is not this customer's in the project, a visitor on an account's ticket, or an instant ahead of the clock.",
-            ),
-            ...commonProblems("create"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "create"),
-        validate("json", ScaleTicketCreate),
+        },
         async (c) => {
           const body = c.req.valid("json")
           const principal = c.get("principal")
@@ -508,21 +453,18 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .get(
         "/scale-tickets/:id",
-        describeRoute({
+        {
           operationId: "getScaleTicket",
           summary: "One scale ticket",
           description: "One scale ticket of the projects the caller works in, with its lines.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          params: IdParam,
           responses: {
             200: describeJson("The ticket.", ScaleTicket),
-            400: describeProblem("The path does not hold an id."),
-            ...commonProblems("view"),
             404: describeProblem("No scale ticket with that id in the projects the caller works in."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("param", IdParam),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const principal = c.get("principal")
@@ -535,23 +477,21 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .patch(
         "/scale-tickets/:id",
-        describeRoute({
+        {
           operationId: "patchScaleTicket",
           summary: "Correct an open ticket's visitor or note",
           description: "Changes an open ticket's walk-in name or its note. What was weighed and for whom is what the ticket is: void it and weigh again.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "edit",
+          params: IdParam,
+          body: ScaleTicketPatch,
+          invalid: ["the body changes nothing, holds a value of the wrong shape, names a member the server owns, or names a visitor on an account's ticket"],
           responses: {
             200: describeJson("The ticket as it now stands.", ScaleTicket),
-            400: describeProblem("The path does not hold an id, or the body changes nothing, holds a value of the wrong shape, names a member the server owns, or names a visitor on an account's ticket."),
-            ...commonProblems("edit"),
             404: describeProblem("No scale ticket with that id in the projects the caller works in."),
             409: describeProblem("The ticket is completed or voided."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "edit"),
-        validate("param", IdParam),
-        validate("json", ScaleTicketPatch),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const patch = c.req.valid("json")
@@ -572,26 +512,22 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .post(
         "/scale-tickets/:id/complete",
-        describeRoute({
+        {
           operationId: "completeScaleTicket",
           summary: "Weigh a vehicle out",
           description:
             "Completes an open ticket at its tare — a second pass (`weighed`), or the active tare registered for its plate, trailer and container (`registered`) — with the load split into lines of fractions the station takes, each fraction and origin once, summing to the net. `weighedOutAt` is now where omitted, after the first pass and no later than the clock. One of our own vehicles' ticket is one line, and is matched to the route the vehicle ran as a weighbridge's ticket is: matched, it is written as that route's Unload (`source = integration`) and `unload-recorded` is emitted; unmatched, it keeps why.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "edit",
+          params: IdParam,
+          body: ScaleTicketComplete,
+          invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, a tare not under the gross, a second pass before the first or ahead of the clock, a fraction that is not the company's or that the station does not take, lines that do not sum to the net, or several lines for one of our own vehicles"],
           responses: {
             200: describeJson("The ticket as it now stands, completed with its lines.", ScaleTicket),
-            400: describeProblem(
-              "The path does not hold an id, or the body is missing a field, holds a value of the wrong shape, names a member the server owns, a tare not under the gross, a second pass before the first or ahead of the clock, a fraction that is not the company's or that the station does not take, lines that do not sum to the net, or several lines for one of our own vehicles.",
-            ),
-            ...commonProblems("edit"),
             404: describeProblem("No scale ticket with that id in the projects the caller works in."),
             409: describeProblem("The ticket is completed or voided, or no active tare is registered for its vehicle, or the registered tare is not under the gross."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "edit"),
-        validate("param", IdParam),
-        validate("json", ScaleTicketComplete),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const body = c.req.valid("json")
@@ -700,24 +636,22 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .post(
         "/scale-tickets/:id/void",
-        describeRoute({
+        {
           operationId: "voidScaleTicket",
           summary: "Void a ticket",
           description:
             "Voids an open or completed ticket with its reason — written in error, a duplicate, the visitor left before the second pass, or another the note says — and the instant and the account. A ticket is never deleted. One written as a route's Unload stands: weight control settles that Unload.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "edit",
+          params: IdParam,
+          body: ScaleTicketVoid,
+          invalid: ["the body is missing the reason, holds a value of the wrong shape, names a member the server owns, or gives another reason with no note"],
           responses: {
             200: describeJson("The ticket as it now stands, voided.", ScaleTicket),
-            400: describeProblem("The path does not hold an id, or the body is missing the reason, holds a value of the wrong shape, names a member the server owns, or gives another reason with no note."),
-            ...commonProblems("edit"),
             404: describeProblem("No scale ticket with that id in the projects the caller works in."),
             409: describeProblem("The ticket is voided already, or was written as a route's Unload."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "edit"),
-        validate("param", IdParam),
-        validate("json", ScaleTicketVoid),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const body = c.req.valid("json")
@@ -747,23 +681,20 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
       )
       .get(
         "/scale-tickets/:id/amount-due",
-        describeRoute({
+        {
           operationId: "getScaleTicketAmountDue",
           summary: "What a ticket comes to at the window",
           description:
             "Each line of a completed ticket priced as Finance would price it on its weighed-out day: an account's under its agreement, a walk-in's under the project's default list with no customer — the line's product per tonne or per cubic metre, the quantity tier its measure meets, the rate times its kilograms or litres — or the reason it has none (`no-product`, `no-price-list`, `no-price-row`, `no-vat-rate`, `agreement-draft`, `amount-too-large`); with the net, the VAT and the total of the priced lines, and whether every line was. It stores nothing and takes no payment. An open or voided ticket comes to nothing yet (409).",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          params: IdParam,
           responses: {
             200: describeJson("What the ticket comes to.", ScaleTicketAmountDue),
-            400: describeProblem("The path does not hold an id."),
-            ...commonProblems("view"),
             404: describeProblem("No scale ticket with that id in the projects the caller works in."),
             409: describeProblem("The ticket is open or voided."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("param", IdParam),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const principal = c.get("principal")

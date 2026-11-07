@@ -36,18 +36,17 @@ import { maintenanceDue, planIssue, type VehicleReadings } from "@waste/domain/r
 import { ACTIVE_MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
 import { takesReference } from "@waste/domain/status-gates"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import { lockRow } from "@waste/db/commands/shared"
 import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const VEHICLES = "fleet.vehicles"
@@ -69,9 +68,8 @@ export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the s
 const noSuchPlan = (id: string) => problem(404, { detail: `No maintenance plan ${id} in the projects this account works in` })
 const noSuchOrder = (id: string) => problem(404, { detail: `No maintenance order ${id} in the projects this account works in` })
 
-const page = { 400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."), 401: describeProblem("No usable token (see WWW-Authenticate).") }
-const unauthenticated = { 401: describeProblem("No usable token (see WWW-Authenticate).") }
-const forbidden = (action: string) => ({ 403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${VEHICLES}\`.`) })
+/** What a list refuses beside the page rule. */
+const LIST_INVALID = ["a filter is malformed", "`projectId` is not a project this account works in"]
 
 // The plans.
 
@@ -187,21 +185,22 @@ async function openOrder(tx: Tx, principal: Principal, id: string): Promise<Orde
   return row
 }
 
-export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: { now?: () => Date } = {}) {
-  return new Hono<AuthEnv>()
+export function maintenanceRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/maintenance-plans",
-      describeRoute({
+      {
         operationId: "listMaintenancePlans",
         summary: "The maintenance plans of the caller's vehicles",
         description:
           "One page of maintenance plans (O20 of #290) of the vehicles and trailers of the projects the caller works in, oldest first, each with `due`: its next limits counted from the last service, the readings it was judged on — the last service's — and its state on its project's day, `ok`, `due-soon` inside two weeks, a thousand kilometres or fifty hours of a limit, or `overdue` past one. `projectId`, `vehicleId` and `status` narrow it. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("One page of plans.", PlanPage), ...page, ...forbidden("view") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("query", MaintenancePlanListQuery),
+        module: VEHICLES,
+        action: "view",
+        query: MaintenancePlanListQuery,
+        invalid: LIST_INVALID,
+        responses: { 200: describeJson("One page of plans.", PlanPage) },
+      },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -228,22 +227,19 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/maintenance-plans",
-      describeRoute({
+      {
         operationId: "createMaintenancePlan",
         summary: "Give a vehicle a maintenance plan",
         description:
           "Gives a vehicle or a trailer of a project the caller works in a service at intervals (O20 of #290): every `intervalDays`, `intervalKm` or `intervalHours`, at least one, counted from the last service — `lastDoneOn`, and the odometer and the engine hours then, which a distance or an hours interval needs. The plan lives in the vehicle's project and starts active. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "create",
+        body: MaintenancePlanCreate,
+        invalid: ["the body is missing a field, names a member the server owns, gives no interval, a distance or hours interval without its reading, an interval out of bounds, or a vehicle of no project this account works in"],
         responses: {
           201: describeCreated("The plan, with where it stands.", MaintenancePlan),
-          400: describeProblem("The body is missing a field, names a member the server owns, gives no interval, a distance or hours interval without its reading, an interval out of bounds, or a vehicle of no project this account works in."),
-          ...unauthenticated,
-          ...forbidden("create"),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "create"),
-      validate("json", MaintenancePlanCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -272,16 +268,15 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/maintenance-plans/:id",
-      describeRoute({
+      {
         operationId: "getMaintenancePlan",
         summary: "One maintenance plan",
         description: "One maintenance plan of the caller's projects, with where it stands (O20 of #290).",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("The plan.", MaintenancePlan), 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("view"), 404: describeProblem("No maintenance plan with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("param", IdParam),
+        module: VEHICLES,
+        action: "view",
+        params: IdParam,
+        responses: { 200: describeJson("The plan.", MaintenancePlan), 404: describeProblem("No maintenance plan with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -294,24 +289,21 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .patch(
       "/maintenance-plans/:id",
-      describeRoute({
+      {
         operationId: "patchMaintenancePlan",
         summary: "Change a maintenance plan",
         description:
           "Changes a plan's name, its intervals (null for none), its last service, or its status — `retired` raises nothing more and keeps the orders that name it (O20 of #290). The plan as it then stands must still give an interval, and the reading each distance or hours interval counts from (400 at the field). A Maintenance Order completed moves the last service by itself.",
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "edit",
+        params: IdParam,
+        body: MaintenancePlanPatch,
+        invalid: ["the body changes nothing, names a member the server owns, or leaves the plan without an interval or an interval without its reading"],
         responses: {
           200: describeJson("The plan, with where it stands.", MaintenancePlan),
-          400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the server owns, or leaves the plan without an interval or an interval without its reading."),
-          ...unauthenticated,
-          ...forbidden("edit"),
           404: describeProblem("No maintenance plan with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "edit"),
-      validate("param", IdParam),
-      validate("json", MaintenancePlanPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -334,16 +326,16 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/maintenance-orders",
-      describeRoute({
+      {
         operationId: "listMaintenanceOrders",
         summary: "The maintenance orders of the caller's vehicles",
         description: "One page of Maintenance Orders (O20 of #290) of the vehicles and trailers of the projects the caller works in, oldest first. `projectId`, `vehicleId`, `planId` and `status` (`open`, `completed`, `cancelled`) narrow it. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("One page of orders.", OrderPage), ...page, ...forbidden("view") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("query", MaintenanceOrderListQuery),
+        module: VEHICLES,
+        action: "view",
+        query: MaintenanceOrderListQuery,
+        invalid: LIST_INVALID,
+        responses: { 200: describeJson("One page of orders.", OrderPage) },
+      },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, planId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -371,22 +363,19 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/maintenance-orders",
-      describeRoute({
+      {
         operationId: "createMaintenanceOrder",
         summary: "Open a maintenance order",
         description:
           "Opens a Maintenance Order on a vehicle or a trailer of a project the caller works in (O20 of #290): of one of the vehicle's active plans, whose name it takes where `title` is absent, or a one-off with its own title — a repair, a defect mended. `dueOn` is the day it is planned for. The order lives in the vehicle's project and starts open. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "create",
+        body: MaintenanceOrderCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names neither a plan nor a title, a vehicle of no project this account works in, or a plan that is not an active plan of the vehicle"],
         responses: {
           201: describeCreated("The order, open.", MaintenanceOrder),
-          400: describeProblem("The body is missing a field, names a member the server owns, names neither a plan nor a title, a vehicle of no project this account works in, or a plan that is not an active plan of the vehicle."),
-          ...unauthenticated,
-          ...forbidden("create"),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "create"),
-      validate("json", MaintenanceOrderCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -407,16 +396,15 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/maintenance-orders/:id",
-      describeRoute({
+      {
         operationId: "getMaintenanceOrder",
         summary: "One maintenance order",
         description: "One Maintenance Order of the caller's projects (O20 of #290).",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("The order.", MaintenanceOrder), 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("view"), 404: describeProblem("No maintenance order with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("param", IdParam),
+        module: VEHICLES,
+        action: "view",
+        params: IdParam,
+        responses: { 200: describeJson("The order.", MaintenanceOrder), 404: describeProblem("No maintenance order with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const [row] = await c
@@ -431,25 +419,22 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/maintenance-orders/:id/complete",
-      describeRoute({
+      {
         operationId: "completeMaintenanceOrder",
         summary: "Complete a maintenance order",
         description:
           "Closes an open order as done (O20 of #290): on `completedOn`, no later than the project's today, with the odometer and the engine hours then and what was done. An order of a plan is the plan's service: the plan's last service moves to the completion's day and readings, and a plan that counts kilometres or engine hours needs its reading.",
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "edit",
+        params: IdParam,
+        body: MaintenanceOrderComplete,
+        invalid: ["the body is missing `completedOn`, names a member it does not own, gives a day after the project's today, or leaves out the reading its plan counts"],
         responses: {
           200: describeJson("The order, completed.", MaintenanceOrder),
-          400: describeProblem("The path does not hold an id, or the body is missing `completedOn`, names a member it does not own, gives a day after the project's today, or leaves out the reading its plan counts."),
-          ...unauthenticated,
-          ...forbidden("edit"),
           404: describeProblem("No maintenance order with that id in the projects this account works in."),
           409: describeProblem("The order is already completed or cancelled."),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "edit"),
-      validate("param", IdParam),
-      validate("json", MaintenanceOrderComplete),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -479,24 +464,21 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/maintenance-orders/:id/cancel",
-      describeRoute({
+      {
         operationId: "cancelMaintenanceOrder",
         summary: "Cancel a maintenance order",
         description: "Closes an open order as not done, with why in `note` where the office says (O20 of #290). Its plan's last service stays as it was.",
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "edit",
+        params: IdParam,
+        body: MaintenanceOrderCancel,
+        invalid: ["the body names a member it does not own or a blank note"],
         responses: {
           200: describeJson("The order, cancelled.", MaintenanceOrder),
-          400: describeProblem("The path does not hold an id, or the body names a member it does not own or a blank note."),
-          ...unauthenticated,
-          ...forbidden("edit"),
           404: describeProblem("No maintenance order with that id in the projects this account works in."),
           409: describeProblem("The order is already completed or cancelled."),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "edit"),
-      validate("param", IdParam),
-      validate("json", MaintenanceOrderCancel),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")

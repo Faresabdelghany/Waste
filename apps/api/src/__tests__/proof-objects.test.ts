@@ -20,7 +20,7 @@ import { Hono } from "hono"
 
 import type { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
-import { authenticate, identify } from "../auth/principal"
+import { routeDeps } from "../deps"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
 import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "../routes/proof-objects"
@@ -88,8 +88,9 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
   const mounted = (storage: ProofStorage | null) => {
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", proofObjectRoutes(identify({ pool, verifier: keys.verifier }), { pool, storage, now: () => NOW, log: (entry) => logged.push(entry) }))
-    app.route("/", driverDoorRoutes(authenticate({ pool, verifier: keys.verifier }), { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
+    const deps = { probe: pool, pool, verifier: keys.verifier, now: () => NOW, storage }
+    app.route("/", proofObjectRoutes(routeDeps({ ...deps, log: (entry) => logged.push(entry) })).app)
+    app.route("/", driverDoorRoutes(routeDeps({ ...deps, log: () => {}, jobs: createJobSender(pool) })).app)
     return app as unknown as ReturnType<typeof createApp>
   }
 

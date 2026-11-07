@@ -26,17 +26,17 @@ import { userAccount } from "@waste/db/schema/access"
 import { driver } from "@waste/db/schema/fleet"
 import { routeMessage } from "@waste/db/schema/route-messages"
 import { and, asc, eq } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute, resolver } from "hono-openapi"
+import { resolver } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
 import { replayed } from "@waste/db/commands/shared"
 import type { RouteRow } from "@waste/db/shapes/routes"
 
 import { resolveDriver } from "../auth/driver"
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { findAssignedRoute, findRoute, noSuchAssignedRoute, noSuchRoute } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
@@ -108,26 +108,22 @@ async function append(tx: Tx, principal: Principal, route: RouteRow, message: { 
 
 const describeAppended = (description: string) => ({ description, content: { "application/json": { schema: resolver(RouteMessage) } } })
 
-export function routeMessageRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function routeMessageRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/routes/:id/messages",
-      describeRoute({
+      {
         operationId: "listRouteMessages",
         summary: "A route's messages with its driver",
         description: "The route's thread, oldest first: every message the office and the route's driver wrote about it, each with its author, the account that sent it, the name the thread shows and when it was written. Read whatever the route's status.",
-        security: BEARER_SECURITY,
+        module: OFFICE_MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The route's messages.", RouteMessages),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${OFFICE_MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(OFFICE_MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -139,23 +135,20 @@ export function routeMessageRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/routes/:id/messages",
-      describeRoute({
+      {
         operationId: "sendRouteMessage",
         summary: "Write to a route's driver",
         description: "Appends the office's message to the route's thread, which its driver reads on the route's screen. Plain text, trimmed, 1 to 1000 characters. A message is never edited or taken back. Answers 201 with the message and no `Location`: a thread is read whole. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: OFFICE_MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteMessageCreate,
+        invalid: ["the body is empty, too long, or carries a member the command does not take"],
         responses: {
           201: describeAppended("The message as the thread reads it."),
-          400: describeProblem("The path does not hold an id, or the body is empty, too long, or carries a member the command does not take."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${OFFICE_MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(OFFICE_MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteMessageCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { body } = c.req.valid("json")
@@ -168,22 +161,19 @@ export function routeMessageRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/driver/routes/:id/messages",
-      describeRoute({
+      {
         operationId: "listDriverRouteMessages",
         summary: "The messages of one of the driver's routes",
         description: "The thread of a route assigned to the caller's driver profile, oldest first: what the office wrote and what the driver wrote. A route not assigned to this driver, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`).",
-        security: BEARER_SECURITY,
+        module: DRIVER_MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The route's messages.", RouteMessages),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, the caller's role does not allow \`view\` on \`${DRIVER_MODULE}\`, or no active driver profile is bound to this login.`),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
-      }),
-      guard,
-      requireGrant(DRIVER_MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -196,25 +186,23 @@ export function routeMessageRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/driver/routes/:id/messages",
-      describeRoute({
+      {
         operationId: "sendDriverRouteMessage",
         summary: "Write to the office about one of the driver's routes",
         description: `Appends the driver's message to the thread of a route assigned to them, under the id their device minted. Plain text, trimmed, 1 to 1000 characters. Sent again under the same id — an answer lost on the way — it answers 200 with the message already written and writes nothing; an id another message holds is refused (409, \`${MESSAGE_ID_TAKEN}\`). Answers 201 with the message and no \`Location\`.`,
-        security: BEARER_SECURITY,
+        module: DRIVER_MODULE,
+        action: "edit",
+        params: IdParam,
+        body: DriverRouteMessageCreate,
+        invalid: ["the body has no id, an empty or too long body, or a member the command does not take"],
         responses: {
           200: describeJson("The message already written under that id.", RouteMessage),
           201: describeAppended("The message as the thread reads it."),
-          400: describeProblem("The path does not hold an id, or the body has no id, an empty or too long body, or a member the command does not take."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${DRIVER_MODULE}\`, or no active driver profile is bound to this login.`),
           404: describeProblem("No route with that id is assigned to this driver."),
           409: describeProblem("The id names another message."),
         },
-      }),
-      guard,
-      requireGrant(DRIVER_MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", DriverRouteMessageCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")

@@ -29,7 +29,10 @@ export function changeReasonOf(header: string | undefined): string | null {
   return reason
 }
 
+/** The writer of a request's transactions: the Principal, and the reason its header gives, read once (a 400 for one that will not do). */
+export const writerOf = (principal: Principal, header: string | undefined) => ({ userAccountId: principal.user.id, reason: changeReasonOf(header) })
+
 /** Names the writer of the request's transaction: the Principal, and the reason its header gives. */
 export function writtenBy(tx: Tx, principal: Principal, header: string | undefined): Promise<void> {
-  return actAs(tx, { userAccountId: principal.user.id, reason: changeReasonOf(header) })
+  return actAs(tx, writerOf(principal, header))
 }

@@ -28,14 +28,13 @@ import { slaTargetKey } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketKind, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, eq, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { describeJson, IdParam } from "./shared"
 import { requireSetTypes } from "./ticket-type-rules"
 
@@ -67,27 +66,23 @@ async function targetsOf(tx: Tx, companyId: string, projectId: string): Promise<
     .where(and(eq(ticketSla.companyId, companyId), eq(ticketSla.projectId, projectId)))
 }
 
-export function ticketSlaRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function ticketSlaRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/projects/:id/ticket-sla",
-      describeRoute({
+      {
         operationId: "getTicketSla",
         summary: "A project's ticket SLA",
         description:
           "The targets a ticket of the project is due by: each the hours from opening to the due date for a priority, for every kind (`kind` and `ticketTypeId` null), for one kind, which wins over every kind's, or for one ticket type (#548 of #544), which wins over its kind's. By priority in the vocabulary's order, every kind first, then the kinds, then the types. A project without targets answers an empty list, and its tickets open with no due date unless the opener names one.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The project's targets.", TicketSla),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No project with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -97,25 +92,22 @@ export function ticketSlaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/projects/:id/ticket-sla",
-      describeRoute({
+      {
         operationId: "putTicketSla",
         summary: "Replace a project's ticket SLA",
         description:
           "Replaces the whole set with the one in the body: a target the body leaves out is gone, and an empty list leaves the project without an SLA. Each kind or ticket type and priority is named once, every kind counting as one, and a target names a kind or a type, never both (400 at `targets.N`); a type is one of this company's (400 at `targets.N.ticketTypeId`) and, where the set names it afresh, active (409). The hours run from 1 to 8760, a year (400 at `targets.N.hours`). A target the body keeps keeps its id and moves only its hours, and a target whose hours did not change is not written, so the audit log reads one row's history per kind and priority, with the `Waste-Change-Reason` the request gave. A ticket already open keeps its due date: the SLA sets one as a ticket opens.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketSlaSet,
+        invalid: ["the body is missing `targets`, names a member it does not own, names a kind or a type and a priority twice, a kind and a type in one target, or a type that is not this company's, carries more targets than it may, or gives hours outside 1..8760"],
         responses: {
           200: describeJson("The project's targets as they now stand.", TicketSla),
-          400: describeProblem("The path does not hold an id, or the body is missing `targets`, names a member it does not own, names a kind or a type and a priority twice, a kind and a type in one target, or a type that is not this company's, carries more targets than it may, or gives hours outside 1..8760."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No project with that id in the projects this account works in."),
           409: describeProblem("A ticket type the set names afresh is retired."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketSlaSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { targets } = c.req.valid("json")

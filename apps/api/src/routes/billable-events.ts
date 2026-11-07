@@ -59,7 +59,6 @@ import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { billableEvent } from "@waste/db/schema/finance"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import type { Action } from "@waste/domain/access/modules"
 import type { BillableEventLinks } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
@@ -68,22 +67,20 @@ import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { refuseUnofferedProduct, unofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "@waste/db/commands/billable-writes"
 import { eventColumns, eventOf, eventsFrom, statusIs, statusOf, UNNAMED, type EventReading } from "@waste/db/shapes/billable-events"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { eventScope, findEvent, noSuchEvent } from "./billing-shapes"
 import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 
@@ -226,32 +223,28 @@ async function lockedEvent(tx: Tx, principal: Principal, id: string): Promise<Ev
   return current
 }
 
-const commandProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
+const commandProblems = {
   404: describeProblem("No billable event with that id in the projects this account works in."),
-})
+}
 
-export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function billableEventRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/billable-events",
-      describeRoute({
+      {
         operationId: "listBillableEvents",
         summary: "The billable events of the caller's projects",
         description:
           "One page of billable events, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. Every row carries its `status`, a reading and never a column — `blocked` is a block reason, `cancelled` a cancellation stamp, `invoiced` an invoice line naming it (its id in `invoiceLineId`), `reversed` a reversal naming it, `ready` none of those, the later fact winning — and `status` filters by that same reading in SQL. `kind` and `blockReason` are one each; `agreementId`, `productId`, `routeId`, `pickupId` and `ticketId` the events naming that row; `customerId` the payer, through the agreement, held to a customer of this company (400 on the query); `from` and `to` a window of service dates, both inclusive (`to` on or after `from`). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: BillableEventListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in", "`customerId` is not a customer of this company"],
         responses: {
           200: describeJson("One page of billable events.", EventPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `customerId` is not a customer of this company."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", BillableEventListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, kind, blockReason, agreementId, customerId, productId, routeId, pickupId, ticketId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -286,25 +279,22 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .post(
       "/billable-events",
-      describeRoute({
+      {
         operationId: "createBillableEvent",
         summary: "Enter a billable event by hand",
         description:
           "The office's manual event, in a project the caller works in (400 at `projectId` otherwise): a `manual` event under an agreement of the project (400 at `agreementId`, `Not an agreement of this project`) for a product of the project (400 at `productId`, `Not a product of this project`) that is offered — a draft or inactive product is refused (409, `" +
           unofferedProduct("inactive") +
           "`) — with a `quantity` in the product's unit, the `serviceDate` it is priced and billed on, and a `note`. Priced by the resolver unless the body prices it: the list the agreement is priced under and in force on the day (its own, else the project's default), the row that wins under the agreement's customer's kind and the negotiated rows for that customer, the product's VAT rate — or blocked with the reason that stood in the way (`agreement-draft`, `no-price-list`, `no-price-row`, `no-vat-rate`), a fact to keep and reprice once mended. With `unitPriceMinor` and `overrideReason` — the pair, neither without the other (400 at `overrideReason`) — the person's price stands with no row, in the agreement's currency at the product's rate; a draft agreement (409, `The agreement is a draft; an event priced by hand needs a signed agreement`) or a product with no VAT rate (409, `The product has no VAT rate; an event priced by hand needs the product's rate — set it first`) refuses it, since a blocked row carries no price and the person's word would be lost. The status, the links, the origin and the stamps are the server's. Nothing is published.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: BillableEventCreate,
+        invalid: ["the body is missing a field, names a member the server owns, gives a price without its reason or a reason without a price, or names a project, agreement or product the rules above refuse — each at the field that is wrong — or a quantity whose amount comes to more than 2147483647 minor units"],
         responses: {
           201: describeCreated("The event as recorded, `ready` or `blocked`.", BillableEvent),
-          400: describeProblem("The body is missing a field, names a member the server owns, gives a price without its reason or a reason without a price, or names a project, agreement or product the rules above refuse — each at the field that is wrong — or a quantity whose amount comes to more than 2147483647 minor units."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("The product is not offered, or a hand-priced event's agreement is a draft or its product has no VAT rate; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", BillableEventCreate),
+      },
       async (c) => {
         const body: BillableEventCreate = c.req.valid("json")
         const tx = c.get("tx")
@@ -351,21 +341,19 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .get(
       "/billable-events/:id",
-      describeRoute({
+      {
         operationId: "getBillableEvent",
         summary: "One billable event",
         description:
           "One billable event of a project the caller works in, as it now stands, with its `status` read off the row and the two rows that may name it, and `invoiceLineId`, the line that charges for it once a run has put it on one. An event of another company, or of a project this account does not work in, is an event that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The billable event.", BillableEvent),
-          400: describeProblem("The path does not hold an id."),
-          ...commandProblems("view"),
+          ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findEvent(c.get("tx"), c.get("principal"), id)
@@ -375,23 +363,22 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .post(
       "/billable-events/:id/reprice",
-      describeRoute({
+      {
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
           "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a job blocked `no-product` (a bulky collection's, O11 of #290) a product of the project sold by the job (400, `A job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. A weight charge (O28 of #290) is priced again as the consumer priced it: its stored kilograms at the day's price per tonne, under its stop's conditions, the unit price and the net the weighed load's amount. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). A job or a hire priced now is held for review as it would have been charged priced, where its project holds them (`holdForReview`, M14 of #293). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BillableEventReprice,
+        invalid: ["the body names a member the command does not take, names a product on an event that is not a ticket's or a job, names a product that is not the project's, or names a job a product not sold by the job"],
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
-          400: describeProblem("The path does not hold an id, or the body names a member the command does not take, names a product on an event that is not a ticket's or a job, names a product that is not the project's, or names a job a product not sold by the job."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The event is not blocked, or the product named is not offered, or the price comes to more than an event's amount holds; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BillableEventReprice),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -438,23 +425,22 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .post(
       "/billable-events/:id/cancel",
-      describeRoute({
+      {
         operationId: "cancelBillableEvent",
         summary: "Cancel a ready, held or blocked event",
         description:
           "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected`, `visit-voided`, `weight-revised` and `scale-ticket-voided` are the consumer's and are refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BillableEventCancel,
+        invalid: ["the body is missing the reason, names the consumer's reason, or names a member the command does not take"],
         responses: {
           200: describeJson("The event, cancelled.", BillableEvent),
-          400: describeProblem("The path does not hold an id, or the body is missing the reason, names the consumer's reason, or names a member the command does not take."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The event is invoiced or reversed, or is a reversal; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BillableEventCancel),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason, note } = c.req.valid("json")
@@ -476,23 +462,22 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .post(
       "/billable-events/:id/hold",
-      describeRoute({
+      {
         operationId: "holdBillableEvent",
         summary: "Hold a ready event for review",
         description:
           "The `hold` command (M14 of #293): a `ready` event is stamped `held` with the caller, the request's clock and the office's `reason`, and a billing run passes over it — its preview counts it as held — until it is released. A project that holds its hires and jobs for review (`holdForReview`) has them held as they are charged, with no person. A `held` event answers 200 as it stands, without a write. A `blocked` event goes to no run until it is priced (409, `Billable event <id> is blocked; it goes to no run until it is priced, so there is nothing to hold`), and an `invoiced`, `cancelled` or `reversed` one is refused in the status's words (409), as is a `reversal` whatever its status (409, `A reversal is not held; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BillableEventHold,
+        invalid: ["the body is missing the reason or names a member the command does not take"],
         responses: {
           200: describeJson("The event, held.", BillableEvent),
-          400: describeProblem("The path does not hold an id, or the body is missing the reason or names a member the command does not take."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The event is blocked, invoiced, cancelled or reversed, or is a reversal; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BillableEventHold),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")
@@ -514,23 +499,22 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
     )
     .post(
       "/billable-events/:id/release",
-      describeRoute({
+      {
         operationId: "releaseBillableEvent",
         summary: "Release a held event to the next run",
         description:
           "The `release` command (M14 of #293): a `held` event's hold is cleared, whoever put it there, and it is `ready` again for the next run whose period it falls in. A `ready` event answers 200 as it stands, without a write; any other is refused (409, `Billable event <id> is not held`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BillableEventRelease,
+        invalid: ["the body says something"],
         responses: {
           200: describeJson("The event, ready.", BillableEvent),
-          400: describeProblem("The path does not hold an id, or the body says something."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The event is not held."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BillableEventRelease),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

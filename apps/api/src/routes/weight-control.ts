@@ -61,8 +61,6 @@ import { weightReview } from "@waste/db/schema/finance"
 import { weightReviewTransition } from "@waste/domain/finance/transitions"
 import type { WeightReviewDecision } from "@waste/domain/finance/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { emit } from "@waste/db/commands/outbox"
 import { newId } from "@waste/db/ids"
 import type { UnloadRow } from "@waste/db/shapes/unloads"
@@ -70,10 +68,11 @@ import { reviewColumns, reviewOf, type ReviewRow } from "@waste/db/shapes/weight
 import { lockRow } from "@waste/db/commands/shared"
 import { appendUnload } from "@waste/db/commands/unloads"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { findUnload, noSuchUnload } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
@@ -144,8 +143,6 @@ async function decided(tx: Tx, principal: Principal, id: string, decision: Weigh
 }
 
 const commandProblems = {
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
   404: describeProblem("No unload with that id in the projects this account works in."),
   409: describeProblem("The unload was corrected; the detail names the unload to review instead."),
 }
@@ -155,11 +152,11 @@ const CORRECTED = "An unload that was corrected is refused (409, `This unload wa
 const EMITS = "A decision that writes its review emits `weight-reviewed` with the review in the same transaction, which Finance reads to charge or uncharge a weight sold by the tonne; one that stays emits nothing."
 const LOCKED = "Runs under the unload's route's row lock — a ledger row cannot be locked by the API role, which may not update it — with the reading read again under it, so two reviews take turns and the fold never forks."
 
-export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function weightControlRoutes(deps: RouteDeps) {
+  return routes(deps)
     .post(
       "/unloads/:id/approve",
-      describeRoute({
+      {
         operationId: "approveUnloadWeight",
         summary: "Approve an unload's weight",
         description:
@@ -172,18 +169,17 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WeightApprove,
+        invalid: ["the body names a member the command does not take"],
         responses: {
           200: describeJson("The unload was already approved: the review that approved it, as it stands.", WeightReview),
           201: describeJson("The review as it was appended.", WeightReview),
-          400: describeProblem("The path does not hold an id, or the body names a member the command does not take."),
           ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WeightApprove),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -193,7 +189,7 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/unloads/:id/reject",
-      describeRoute({
+      {
         operationId: "rejectUnloadWeight",
         summary: "Reject an unload's weight",
         description:
@@ -206,18 +202,17 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WeightReject,
+        invalid: ["the body has no note or names a member the command does not take"],
         responses: {
           200: describeJson("The unload was already rejected: the review that rejected it, as it stands.", WeightReview),
           201: describeJson("The review as it was appended.", WeightReview),
-          400: describeProblem("The path does not hold an id, or the body has no note or names a member the command does not take."),
           ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WeightReject),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -227,7 +222,7 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/unloads/:id/correct",
-      describeRoute({
+      {
         operationId: "correctUnloadWeight",
         summary: "Correct an unload's weight with a new unload",
         description:
@@ -240,17 +235,16 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WeightCorrect,
+        invalid: ["the body is missing the net weight or the note, names a member the command does not take, gives one of gross and tare without the other, or a net that is not gross less tare"],
         responses: {
           201: describeJson("The review as it was appended, naming the new unload.", WeightReview),
-          400: describeProblem("The path does not hold an id, or the body is missing the net weight or the note, names a member the command does not take, gives one of gross and tare without the other, or a net that is not gross less tare."),
           ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WeightCorrect),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { netKg, grossKg, tareKg, weighbridgeTicket, note } = c.req.valid("json")
@@ -279,24 +273,20 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/unloads/:id/reviews",
-      describeRoute({
+      {
         operationId: "listUnloadWeightReviews",
         summary: "One unload's weight reviews",
         description:
           "One page of the unload's reviews, oldest first — a cursor over time-ordered ids is a cursor over recording order — each carrying the decision, the note, the new unload a correction wrote, and who decided. The ledger is append-only: nothing here is ever updated or removed, and the unload's `weightReview` is the last row of this list folded. An unload of another company, or of a project this account does not work in, is an unload that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: WeightReviewListQuery,
         responses: {
           200: describeJson("One page of the unload's reviews, oldest first.", ReviewPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No unload with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", WeightReviewListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")

@@ -57,7 +57,6 @@ import { Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, Tick
 import type { Tx } from "@waste/db/client"
 import { assignTicket } from "@waste/db/commands/ticket-assignment"
 import { moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-automation"
-import type { JobSender } from "@waste/db/jobs"
 import { propertyParty } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
@@ -70,8 +69,6 @@ import { OPEN_ROUTE_STATUSES, pickupMissed } from "@waste/domain/execution/vocab
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { appendTicketEvent, BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 import { alertOf } from "@waste/db/shapes/alerts"
@@ -79,12 +76,13 @@ import { eventColumns, eventOf, labelOf, linksOf, NO_TICKET_LINKS, ticketColumns
 import { labelOf as routeLabelOf } from "@waste/db/shapes/routes"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { findReachedRoute } from "./execution-shapes"
 import { partyInForce } from "./property-writes"
 import {
@@ -104,7 +102,6 @@ import {
   type Scope,
 } from "./references"
 import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
-import type { ClockOptions } from "./scheme-groups"
 import { created, dayWindow, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
@@ -283,8 +280,6 @@ const visibleTo = (tx: Tx, companyId: string, customerId: string, now: Date) =>
   )
 
 const commandProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem(
     action === "edit"
       ? "No ticket with that id in the projects this account works in: a Service Provider's account reads, raises and comments, and moves no ticket."
@@ -317,7 +312,8 @@ function overdueAt(overdue: boolean, at: Date): SQL | undefined {
   return overdue ? pastDue : or(notInArray(ticket.status, [...OPEN_TICKET_STATUSES]), isNull(ticket.dueAt), gte(ticket.dueAt, at))
 }
 
-export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
+export function ticketRoutes(deps: RouteDeps) {
+  const { now, jobs } = deps
   /**
    * One machine command: the lock, the read, the transition, and on a move
    * the move every door writes (`moveTicket`), with what the command carries
@@ -353,25 +349,22 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     return { row, wrote: true }
   }
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/tickets",
-      describeRoute({
+      {
         operationId: "listTickets",
         summary: "The tickets of the caller's projects",
         description:
           "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — or, for a Service Provider's account, which works in none, the tickets about a route its provider runs (as `GET /routes` reaches it). `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `ticketTypeId` (#545 of #544), `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `teamId` one team's and `unassigned=true` the tickets nobody works (`false` those somebody does) — so `teamId` with `open=true` and `unassigned=true` is the team's queue, which anyone with the grant takes from (O30 of #290) — `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: TicketListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in", "`customerId` is not a customer of this company"],
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `customerId` is not a customer of this company."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", TicketListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, open, overdue, kind, ticketTypeId, priority, source, assigneeUserAccountId, teamId, unassigned, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -413,23 +406,20 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets",
-      describeRoute({
+      {
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
           "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `teamId` is the team the ticket waits with (O30 of #290): one of this company's (400) that is active (409, `The team \"…\" is retired; a ticket waits with an active team`), null for none, and, absent, the project's default team for the kind (`GET /projects/:id/ticket-team-defaults`) while that team is active, else none. `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered, and `ticket-assigned` after it where an assignee is named (O16 of #290). A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee, a team nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. The ticket's Ticket Type (#545 of #544) is `ticketTypeId`, a type of this company (400, `Not a ticket type of this company`) that is active (409, `The ticket type \"…\" is retired; a ticket is of an active type`), whose kind `kind` agrees with where both are named (400 at `kind`), the ticket taking the type's kind; `kind` alone opens the kind's default type. `fieldValues` holds the type's custom fields' values by key: each key a field of the type and each value one its field takes (400 at `fieldValues.<key>`), and every field the type requires to open filled in (400 at its key, `Fill in Requested date: a ticket of type … is opened with it`). The type's opening actions (#546 of #544, `PUT /ticket-types/{id}/actions`) run after `ticket-opened`, in the same transaction, as the system and held to neither the type's roles nor its required fields, each leaving its line in the history; the 201 answers the ticket as they leave it. `ticket-assigned` for the body's assignee follows `ticket-opened` before them, carrying the ticket as it opened, and an action's assignee is told by its own; a missed collection its type's actions closed is not answered closed again, the record's reply recorded all the same.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: TicketCreate,
+        invalid: ["the body is missing a field, names neither a type nor a kind, names a member the server owns, names a source the office may not write, dates the ticket more than five minutes after the request, names a pickup without its route, or names a type, a value, a project, link, assignee or alert the rules above refuse, or leaves a field its type requires to open empty — each at the field that is wrong"],
         responses: {
           201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
-          400: describeProblem("The body is missing a field, names neither a type nor a kind, names a member the server owns, names a source the office may not write, dates the ticket more than five minutes after the request, names a pickup without its route, or names a type, a value, a project, link, assignee or alert the rules above refuse, or leaves a field its type requires to open empty — each at the field that is wrong."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("The type named is retired, the team named is retired, or the alert named is resolved or linked to another ticket; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", TicketCreate),
+      },
       async (c) => {
         const body: TicketCreate = c.req.valid("json")
         const tx = c.get("tx")
@@ -491,21 +481,19 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/tickets/:id",
-      describeRoute({
+      {
         operationId: "getTicket",
         summary: "One ticket with its history and the alerts naming it",
         description:
           "One ticket of a project the caller works in, or about a route a Service Provider's account runs (as `GET /tickets` reaches it), as it now stands: the case, its history in recording order — the `created` row, every assignment and status change with its note, every comment with its visibility and attachment key — and the alerts linked to it. A ticket of another company, or one outside that reach, is a ticket that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The ticket, its history and its alerts.", TicketDetail),
-          400: describeProblem("The path does not hold an id."),
           ...commandProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -517,25 +505,24 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .patch(
       "/tickets/:id",
-      describeRoute({
+      {
         operationId: "patchTicket",
         summary: "Change a ticket's own fields",
         description:
           "Moves the case's own fields — `subject`, `description`, `kind`, `ticketTypeId`, `fieldValues`, `priority`, `dueAt`, `teamId` and the `links` — and nothing the machine or the assignment owns: the status moves through the commands, the assignee through `assign`, and the source, the project, the number, the resolution and the stamps never. At least one field must be given. Under the ticket's row lock. " +
           CLOSED +
           " Every link named is held as on the create (400 at `links.<field>`), the pickup rule against the row the patch leaves behind: a body moving `pickupId` alone names the stored route, one moving `routeId` under a stored pickup must name the pickup's route, and a body clearing the route under a pickup is refused at `links.pickupId`; a ticket may not be its own parent (400). `teamId` hands the case to another team, one of this company's (400) that is active (409) — the team it already waits with is kept whatever its status — or to none with null; the assignee stays as it is, and the kind moving does not move the team. `ticketTypeId` moves the ticket to another type of this company (400) that is active (409) — the type it already is of is kept whatever its status — its kind following, and `kind` beside it must be that type's (400 at `kind`); `kind` alone moves it to that kind's default type (#545 of #544). `fieldValues` is merged into the values the ticket holds: a value replaces one, held to its field on the type the patch leaves (400 at `fieldValues.<key>`), null clears one whatever its key, and a key not named stays; a type moved keeps the values the ticket holds. `updatedAt` moves; no history row is appended, since a field edit is the audit log's (ADR-0005).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketPatch,
+        invalid: ["the body changes nothing, names a member the patch does not take, or names a type, a value or a link the rules above refuse — at the field that is wrong"],
         responses: {
           200: describeJson("The ticket as it now stands.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the patch does not take, or names a type, a value or a link the rules above refuse — at the field that is wrong."),
           ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first. Or the type or the team named is retired, or the patch moves a counting rule's ticket off the property it counted."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -577,24 +564,23 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/assign",
-      describeRoute({
+      {
         operationId: "assignTicket",
         summary: "Move who works a ticket",
         description:
           "The `assign` command: sets the assignee to the account named, or to nobody with null, and appends an `assigned` event carrying the body's note and the assignee after it. The account is one of this company's that is not deactivated (400, `Not a user account of this company`) and works in the ticket's project — every project, or a Project Access row (400, `Not a user account working in this project`) — since a ticket assigned to someone who cannot see it is a bug and not a choice. The account already assigned answers 200 as the ticket stands, without a write or an event. An assignment to an account writes `ticket-assigned` to the outbox with the ticket as answered, from which the worker e-mails the assignee where they asked to hear of it (O16 of #290); one to nobody writes none. Under the ticket's row lock. " +
           CLOSED,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketAssign,
+        invalid: ["the body is missing `assigneeUserAccountId`, names a member the command does not take, or names an account the rules above refuse"],
         responses: {
           200: describeJson("The ticket as it now stands.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body is missing `assigneeUserAccountId`, names a member the command does not take, or names an account the rules above refuse."),
           ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketAssign),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { assigneeUserAccountId, note } = c.req.valid("json")
@@ -611,23 +597,22 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/start",
-      describeRoute({
+      {
         operationId: "startTicket",
         summary: "Start work on a ticket",
         description:
           "The `start` command: `open`, `pending` or `on-hold` becomes `in-progress`, and a `status-changed` event is appended with the body's note if any. A ticket already in progress answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketStart,
+        invalid: ["the body names a member the command does not take"],
         responses: {
           200: describeJson("The ticket, in progress.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body names a member the command does not take."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketStart),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -637,23 +622,22 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/wait",
-      describeRoute({
+      {
         operationId: "waitTicket",
         summary: "Wait for the customer",
         description:
           "The `wait` command: `open`, `in-progress` or `on-hold` becomes `pending` — waiting for the customer, and the note says for what — with a `status-changed` event carrying the note. A ticket already pending answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketWait,
+        invalid: ["the body has no note or names a member the command does not take"],
         responses: {
           200: describeJson("The ticket, pending.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body has no note or names a member the command does not take."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketWait),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -663,23 +647,22 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/hold",
-      describeRoute({
+      {
         operationId: "holdTicket",
         summary: "Put a ticket on hold",
         description:
           "The `hold` command: `open`, `in-progress` or `pending` becomes `on-hold` — waiting on us, and the note says for what — with a `status-changed` event carrying the note. A ticket already on hold answers 200 as it stands, without a write or an event. Under the ticket's row lock. " + CLOSED + TYPE_ROLES + TYPE_ACTIONS,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketHold,
+        invalid: ["the body has no note or names a member the command does not take"],
         responses: {
           200: describeJson("The ticket, on hold.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body has no note or names a member the command does not take."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketHold),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -689,7 +672,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/complete",
-      describeRoute({
+      {
         operationId: "completeTicket",
         summary: "Complete a ticket",
         description:
@@ -699,18 +682,17 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           " A ticket whose type requires a field to open or to complete that it leaves empty is refused (409, `Ticket T-8831 needs Decision before it is completed`), before the body's 400s." +
           " The `ticket-completed` event is written in the same transaction, carrying the ticket as the completion left it; Finance is its consumer." +
           TYPE_ACTIONS,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketComplete,
+        invalid: ["the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, a re-collection stop without its route, a route that is not the project's or a stop that is not that route's, or a product with a resolution nothing is charged for, a product that is not the project's or one sold by the month"],
         responses: {
           200: describeJson("The ticket, completed.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, a re-collection stop without its route, a route that is not the project's or a stop that is not that route's, or a product with a resolution nothing is charged for, a product that is not the project's or one sold by the month."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket is completed or rejected already, leaves a field its type requires empty, the re-collection route has ended, the re-collection stop was missed, or the product is not offered; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketComplete),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { resolution, note, recollectionRouteId, recollectionPickupId, productId } = c.req.valid("json")
@@ -730,7 +712,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/reject",
-      describeRoute({
+      {
         operationId: "rejectTicket",
         summary: "Reject a ticket",
         description:
@@ -739,18 +721,17 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           TYPE_ROLES +
           " The `ticket-rejected` event is written in the same transaction, carrying the ticket as the rejection left it." +
           TYPE_ACTIONS,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketReject,
+        invalid: ["the body has no reason or names a member the command does not take"],
         responses: {
           200: describeJson("The ticket, rejected.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body has no reason or names a member the command does not take."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket is completed or rejected already; reopen it first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketReject),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")
@@ -763,22 +744,21 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/reopen",
-      describeRoute({
+      {
         operationId: "reopenTicket",
         summary: "Reopen a closed ticket",
         description:
           "The `reopen` command: `completed` or `rejected` becomes `open` with the body's note as the `status-changed` event's body, and the closing columns — `resolution`, `recollectionRouteId` with `recollectionPickupId`, `chargeProductId` and `closedAt` — are cleared, since a reopened ticket is open; the closing stands in the history. A ticket that is open in any of the four open statuses answers 200 as it stands, without a write or an event. Under the ticket's row lock." + TYPE_ROLES,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketReopen,
+        invalid: ["the body has no note or names a member the command does not take"],
         responses: {
           200: describeJson("The ticket, open again.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body has no note or names a member the command does not take."),
           ...statusCommandProblems(),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketReopen),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -788,21 +768,19 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/tickets/:id/evidence",
-      describeRoute({
+      {
         operationId: "getTicketEvidence",
         summary: "What the stop a ticket is about recorded",
         description:
           "The stop the ticket names (`links.pickupId`), read as one thing for the office and for the reply its customer is sent: the stop's outcome and reason, what it is for (`service`), whether the outcome stands on the office's correction (`corrected`), when it was recorded, where the device stood for it — the latest completion's, skip's or failure's place, the office's correction's where one stands, the arrival's where the outcome recorded none — the proofs taken at the stop, the reply that quotes them on the project's clock, and whether the record alone answers the case (a `missed-collection` whose emptying the driver recorded skipped or failed `not-presented`, never on the office's correction). Read under the ticket's grant, the proofs are told narrowed to what the reply quotes — their kind, door, time, reason, corrected outcome and object key — and never with the device, the account, the session, the driver's note or a weight, which `GET /pickups/{id}` keeps under the stops' grant; a photo's or a signature's bytes are signed for through `GET /pickups/{id}/proof-objects`, under that grant too. `stop` is null for a ticket about no stop.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The stop's evidence, or null.", TicketEvidence),
-          400: describeProblem("The path does not hold an id."),
           ...commandProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -815,23 +793,22 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/reply-with-evidence",
-      describeRoute({
+      {
         operationId: "replyToTicketWithEvidence",
         summary: "Reply to the customer with the stop's record",
         description:
           "One step: a customer-visible `comment` whose body is the reply `GET /tickets/{id}/evidence` writes, the body's `note` after it, and with `complete` the case completed `answered` in the same transaction — the `status-changed` row, `closedAt` and the `ticket-completed` event, as `complete` writes them. Under the ticket's row lock. A ticket about no stop is refused (409, `This ticket names no stop, so no record answers it`); with `complete`, a completed or rejected ticket is refused as `complete` refuses it, while the reply alone is taken on a closed ticket, as a comment is. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. Answers 201 with the ticket's history, and no `Location`, like a comment. With `complete`, the completion is a person's command held to the ticket's type (#545 of #544): where the type names the roles that may complete it, a caller of another role is refused (403, naming them), and a ticket short of a field its type requires is refused (409, `Ticket T-8831 needs Decision before it is completed`).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketReplyWithEvidence,
+        invalid: ["the body names a member the command does not take"],
         responses: {
           201: describeJson("The ticket with its history, the reply its last comment.", TicketDetail),
-          400: describeProblem("The path does not hold an id, or the body names a member the command does not take."),
           ...statusCommandProblems(),
           409: describeProblem("The ticket names no stop, or, with `complete`, it is completed or rejected already or leaves a field its type requires empty."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketReplyWithEvidence),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note, complete } = c.req.valid("json")
@@ -849,22 +826,21 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/tickets/:id/events",
-      describeRoute({
+      {
         operationId: "listTicketEvents",
         summary: "One ticket's history",
         description:
           "One page of the ticket's history, oldest first — a cursor over time-ordered ids is a cursor over recording order — each row a snapshot of the status and the assignee after it: the `created` row, every `assigned` and `status-changed` with its note or reason, every `comment` with its body, who may read it and its attachment key. `kind` narrows it to one kind, `visibility` to the rows the office alone may read or to the customer's — `visibility=customer` is the thread the portal reads, and leaves every internal row out; `visibility=service-provider` the thread of the provider that runs the ticket's route. A Service Provider's account reads that thread alone. A ticket of another company, or one outside the caller's reach — its projects, or the tickets about a route a Service Provider's account runs — is a ticket that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: TicketEventListQuery,
+        invalid: ["a filter is malformed"],
         responses: {
           200: describeJson("One page of the ticket's history, oldest first.", EventPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or a filter is malformed."),
           ...commandProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", TicketEventListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, kind, visibility } = c.req.valid("query")
@@ -892,22 +868,21 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/tickets/:id/comments",
-      describeRoute({
+      {
         operationId: "commentTicket",
         summary: "Comment on a ticket",
         description:
           "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Its snapshot, the status and the assignee after it, is read under the ticket's row lock, so a comment and a command on one ticket take turns and the history never shows a comment stamped with a status the row had already left. Answers 201 with the event and no `Location`, like the ledger's commands: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read. `service-provider` is the thread the office and the Service Provider running the ticket's route read. A Service Provider's account comments on a ticket it reads (as `GET /tickets/{id}` reaches it) in that thread alone — the default is written as it — and `customer` is refused (400), since the office speaks to the customer.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: TicketComment,
+        invalid: ["the body has no `body`, names a member the command does not take, gives an attachment key of the wrong shape, or gives one naming another company or another ticket"],
         responses: {
           201: describeJson("The comment as it was appended.", TicketEvent),
-          400: describeProblem("The path does not hold an id, or the body has no `body`, names a member the command does not take, gives an attachment key of the wrong shape, or gives one naming another company or another ticket."),
           ...commandProblems("create"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", TicketComment),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { body, visibility, objectKey } = c.req.valid("json")

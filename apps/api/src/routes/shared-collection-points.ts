@@ -47,17 +47,16 @@ import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { sharedCollectionPoint, sharedCollectionPointMember } from "@waste/db/schema/customers"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import {
   entriesFor,
   entriesOf,
@@ -167,26 +166,23 @@ async function findPoint(tx: Tx, principal: Principal, id: string): Promise<Row 
   return row
 }
 
-export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function sharedCollectionPointRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/shared-collection-points",
-      describeRoute({
+      {
         operationId: "listSharedCollectionPoints",
         summary: "The shared collection points the caller's projects run",
         description:
           "One page of shared collection points, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its members. `projectId` narrows it to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ProjectScopedListQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of shared collection points.", SharedCollectionPointPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.shared`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ProjectScopedListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -214,25 +210,20 @@ export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/shared-collection-points",
-      describeRoute({
+      {
         operationId: "createSharedCollectionPoint",
         summary: "Plan a shared collection point",
         description:
           "Plans a place several properties share, inside a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The location is required — the place is the record — and one outside the WGS 84 range is refused before the database sees it; the eligibility distance, where given, is a whole number of metres above zero. The customer the point answers to, where given, must be this company's, and every member must be a property of this same project. `members` is the list the point starts with. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: SharedCollectionPointCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same property twice, points at a customer that is not this company's, or serves a property that is not of this project"],
         responses: {
           201: describeCreated("The shared collection point as it was written.", SharedCollectionPoint),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same property twice, points at a customer that is not this company's, or serves a property that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.shared`."),
           409: describeProblem("The project already has a shared collection point with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", SharedCollectionPointCreate),
+      },
       async (c) => {
         const { members: asked, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -254,23 +245,19 @@ export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/shared-collection-points/:id",
-      describeRoute({
+      {
         operationId: "getSharedCollectionPoint",
         summary: "One shared collection point",
         description:
           "One shared collection point of a project the caller works in, with its members. A point of another company, or of a project this account does not work in, is a point that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The shared collection point.", SharedCollectionPoint),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.shared`."),
           404: describeProblem("No shared collection point with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -282,27 +269,22 @@ export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/shared-collection-points/:id",
-      describeRoute({
+      {
         operationId: "patchSharedCollectionPoint",
         summary: "Change a shared collection point",
         description:
           "Changes one shared collection point of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since the place is the record; a null clears the eligibility distance, the access conditions, the availability, the driver's instructions or the customer the point answers to. The project is not patchable, since a record does not move between projects, and the members are a set, so they are `PUT /shared-collection-points/{id}/members`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SharedCollectionPointPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project and the members included), holds a point outside the WGS 84 range, or points at a customer that is not this company's"],
         responses: {
           200: describeJson("The shared collection point as it now stands.", SharedCollectionPoint),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the members included), holds a point outside the WGS 84 range, or points at a customer that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.shared`."),
           404: describeProblem("No shared collection point with that id in the projects this account works in."),
           409: describeProblem("The project already has another shared collection point with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SharedCollectionPointPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -329,26 +311,21 @@ export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/shared-collection-points/:id/members",
-      describeRoute({
+      {
         operationId: "putSharedCollectionPointMembers",
         summary: "Replace a shared collection point's members",
         description:
           "Replaces the whole membership with the one in the body: a property the body leaves out does not put its waste here afterwards, and an empty list is a point nobody is a member of. Every member must be a property of the point's own project, and a property is named at most once, since it is a member or it is not and the role says what kind. The record's `updatedAt` moves, since the members are part of the point on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SharedCollectionPointMembersSet,
+        invalid: ["the body is missing `members`, names a member it does not own, names the same property twice, or serves a property that is not of this project"],
         responses: {
           200: describeJson("The shared collection point with the members it now has.", SharedCollectionPoint),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `members`, names a member it does not own, names the same property twice, or serves a property that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.shared`."),
           404: describeProblem("No shared collection point with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SharedCollectionPointMembersSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { members: asked } = c.req.valid("json")

@@ -29,22 +29,18 @@
 // one whose Storage refuses the call (no bucket, a key it does not take);
 // Storage's silence is a 502 the device asks again past.
 import { ProofObjectLinks, ProofUpload, ProofUploadRequest } from "@waste/contracts/proof-objects"
-import type { Database } from "@waste/db/client"
 import { pickup, proofOfService } from "@waste/db/schema/execution"
 import { loggable } from "@waste/db/sqlstate"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
-import { withCompany } from "@waste/db/tenant"
 import { NO_PROOF_STORAGE, objectKeyOf } from "@waste/domain/storage-objects"
 import { notActive } from "@waste/domain/execution/transitions"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { labelOf } from "@waste/db/shapes/routes"
 
 import { resolveDriver } from "../auth/driver"
-import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { findAssignedRoute, noSuchAssignedRoute, noSuchPickup, pickupReach } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
@@ -63,18 +59,8 @@ export const STORAGE_SILENT = "Storage did not answer; nothing was signed, and t
 /** What Storage's refusal is told: the deployment's bucket or key is not as its migration and settings make them, which asking again does not change. */
 export const STORAGE_REFUSED = "Storage refused the request: this deployment's proofs bucket or its key is not in order"
 
-export type ProofObjectOptions = {
-  /** The request pool: each handler's one short transaction runs on it. */
-  pool: Database
-  /** The proofs' Storage, or null on a deployment without its key. */
-  storage: ProofStorage | null
-  /** The app's clock: when a read URL lapses. */
-  now: () => Date
-  /** Where the cause of Storage's silence goes. */
-  log: (error: unknown) => void
-}
-
-export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { pool, storage, now, log }: ProofObjectOptions) {
+export function proofObjectRoutes(deps: RouteDeps) {
+  const { storage, now, log } = deps
   /** Storage, or the deployment's 503. */
   const required = (): ProofStorage => {
     if (storage === null) throw problem(503, { kind: NO_PROOF_STORAGE, detail: NO_PROOF_STORAGE_DETAIL })
@@ -95,33 +81,31 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
     }
   }
 
-  return new Hono<IdentifiedEnv>()
+  return routes(deps)
     .post(
       "/driver/uploads",
-      describeRoute({
+      {
         operationId: "signProofUpload",
         summary: "Where the device puts the bytes of one of its commands' photos or signatures",
         description:
           "The driver door (O1 of #290). The object of the command `commandId` on the route `routeId`, which must be assigned to the driver and active — the door applies the command on no other — lives in the private `proofs` bucket under `<companyId>/<routeId>/<commandId>.<extension>`; the answer is that key and a signed URL to `PUT` the bytes to, straight to Storage, until `expiresAt` (`state: \"upload\"`), or that the bucket holds the key already (`state: \"uploaded\"`), a retry after an upload whose answer was lost. The device then sends the `add-photo` or `add-signature` command naming the key, which the door holds to the same three ids. Nothing is written here, and no byte passes through the API.",
-        security: BEARER_SECURITY,
+        transaction: false,
+        body: ProofUploadRequest,
+        invalid: ["the body is not a route id, a command id and one of the bucket's formats"],
         responses: {
           200: describeJson("The key, and where to put the bytes or that they are there.", ProofUpload),
-          400: describeProblem("The body is not a route id, a command id and one of the bucket's formats."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or no active driver profile is bound to this login."),
           404: describeProblem("The route is not assigned to this driver, or not there."),
           409: describeProblem("The route is not active: the door would reject the command the object is for."),
           502: describeProblem(STORAGE_SILENT),
           503: describeProblem(`${NO_PROOF_STORAGE_DETAIL}; or ${STORAGE_REFUSED}`),
         },
-      }),
-      guard,
-      validate("json", ProofUploadRequest),
+      },
       async (c) => {
         const bucket = required()
         const { routeId, commandId, extension } = c.req.valid("json")
         const principal = c.get("principal")
-        await withCompany(pool.db, principal.companyId, async (tx) => {
+        await c.get("transact")(async (tx) => {
           const profile = await resolveDriver(tx, principal)
           const assigned = await findAssignedRoute(tx, principal, profile, routeId)
           if (assigned === undefined) throw noSuchAssignedRoute(routeId)
@@ -136,29 +120,26 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
     )
     .get(
       "/pickups/:id/proof-objects",
-      describeRoute({
+      {
         operationId: "getPickupProofObjects",
         summary: "Read URLs for a stop's photos and signatures",
         description: `A read URL for each of the stop's Proofs of Service that names an object, in recording order, lasting ${READ_URL_TTL_SECONDS / 60} minutes; a null URL where the private \`proofs\` bucket holds no such object — never uploaded, or removed after its days. The stop is read under the grant and the reach of \`GET /pickups/:id\`: a pickup of the caller's projects, or of a route a Service Provider's account runs. No byte passes through the API.`,
-        security: BEARER_SECURITY,
+        module: PICKUPS,
+        action: "view",
+        transaction: false,
+        params: IdParam,
         responses: {
           200: describeJson("The stop's objects and their read URLs.", ProofObjectLinks),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${PICKUPS}\`.`),
           404: describeProblem("No such pickup in the projects this account works in, or, for a Service Provider's account, on no route its provider runs."),
           502: describeProblem(STORAGE_SILENT),
           503: describeProblem(`${NO_PROOF_STORAGE_DETAIL}; or ${STORAGE_REFUSED}`),
         },
-      }),
-      guard,
-      requireGrant(PICKUPS, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const bucket = required()
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
-        const objects = await withCompany(pool.db, principal.companyId, async (tx) => {
+        const objects = await c.get("transact")(async (tx) => {
           const [stop] = await tx.select({ id: pickup.id }).from(pickup).where(and(pickupReach(tx, principal), eq(pickup.id, id))).limit(1)
           if (stop === undefined) throw noSuchPickup(id)
           return await tx

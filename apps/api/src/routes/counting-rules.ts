@@ -34,24 +34,22 @@ import { countedStops, stopOnItsRoute } from "@waste/db/commands/counting-rules"
 import { property } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { countingRule, team, ticket } from "@waste/db/schema/resolution"
-import type { Action } from "@waste/domain/access/modules"
 import { periodsOver, SIMULATION_TICKETS_SHOWN, wholePeriods } from "@waste/domain/resolution/counting-rules"
 import { ACTIVE_TEAM_STATUSES, ACTIVE_TICKET_TYPE_STATUSES, type TeamStatus } from "@waste/domain/resolution/vocabulary"
 import { retiredTeam } from "@waste/domain/resolution/teams"
 import { retiredTicketType } from "@waste/domain/resolution/ticket-types"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { NOT_A_TEAM, requireContainerType, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { findNamedType } from "./ticket-type-rules"
@@ -162,29 +160,22 @@ async function simulate(tx: Tx, principal: Principal, body: CountingSimulationBo
   }
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function countingRuleRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/counting-rules",
-      describeRoute({
+      {
         operationId: "listCountingRules",
         summary: "The company's counting rules",
         description: "One page of the company's counting rules, oldest first (ids are time-ordered). `status` narrows the page to the active or the inactive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: CountingRuleListQuery,
+        invalid: ["the status is not one of its list"],
         responses: {
           200: describeJson("One page of counting rules.", CountingRulePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or the status is not one of its list."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", CountingRuleListQuery),
+      },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -201,22 +192,20 @@ export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/counting-rules",
-      describeRoute({
+      {
         operationId: "createCountingRule",
         summary: "Add a counting rule",
         description:
           "Adds a rule counting the completed emptyings at each property over a calendar `period` — of one waste fraction or one container type where it names them — that opens one ticket of `ticketTypeId`, waiting with `teamId`, on a property whose count reaches `limit`, once per property and period. `notifiesTeam` e-mails each member of the team the ticket as it opens. `status` is `inactive` unless said, so a rule is simulated first. `name` is unique inside the company. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: CountingRuleCreate,
+        invalid: ["the body is missing a field, names a member the server owns, sets a limit outside 1..1000, or names a fraction, a container type, a ticket type or a team that is not the company's"],
         responses: {
           201: describeCreated("The rule as it was written.", CountingRule),
-          400: describeProblem("The body is missing a field, names a member the server owns, sets a limit outside 1..1000, or names a fraction, a container type, a ticket type or a team that is not the company's."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a rule with that name, or the ticket type or the team is retired."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", CountingRuleCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -233,25 +222,23 @@ export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/counting-rules/simulation",
-      describeRoute({
+      {
         operationId: "simulateCountingRule",
         summary: "Simulate a counting rule over past emptyings",
         description:
           "Counts what a rule's terms — its period, its limit, its fraction and container type — would have counted over the emptyings from `from` to `to` (the first day not counted, at most three years after `from`), widened to whole periods, in the projects the caller works in, and answers the tickets it would have opened: how many, at how many properties, and the first " +
           SIMULATION_TICKETS_SHOWN +
           " by the day each property's count reached the limit, with the period's whole count. A property counts its emptyings by its route's service date. Nothing is written.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        also: [PICKUPS, "view"],
+        body: CountingSimulationBody,
+        invalid: ["the body is missing a field, sets a limit outside 1..1000, runs its window backwards or over three years, or names a fraction or a container type that is not the company's"],
         responses: {
           200: describeJson("The tickets the rule would have opened.", CountingSimulation),
-          400: describeProblem("The body is missing a field, sets a limit outside 1..1000, runs its window backwards or over three years, or names a fraction or a container type that is not the company's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on both \`${MODULE}\` and \`${PICKUPS}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      requireGrant(PICKUPS, "view"),
-      validate("json", CountingSimulationBody),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -263,21 +250,18 @@ export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/counting-rules/:id",
-      describeRoute({
+      {
         operationId: "getCountingRule",
         summary: "One counting rule",
         description: "One rule of the caller's company. Another company's rule is a rule that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The rule.", CountingRule),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No counting rule with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findRule(c.get("tx"), c.get("principal"), id)
@@ -287,24 +271,22 @@ export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/counting-rules/:id",
-      describeRoute({
+      {
         operationId: "patchCountingRule",
         summary: "Change a counting rule, or switch it on or off",
         description:
           "Changes any of the rule's fields; `status` switches it on (`active`) or off (`inactive`). A ticket type or a team named afresh is the company's and active; one the rule already names stands whatever its status. The tickets the rule has opened keep the count and the period they were opened for; a changed term counts from the next emptying on, and a property that already has its ticket for a period gets no second one. Under the rule's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CountingRulePatch,
+        invalid: ["the patch is empty, names a field the server owns, sets a limit outside 1..1000, or names a fraction, a container type, a ticket type or a team that is not the company's"],
         responses: {
           200: describeJson("The rule as it now stands.", CountingRule),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the server owns, sets a limit outside 1..1000, or names a fraction, a container type, a ticket type or a team that is not the company's."),
-          ...commonProblems("edit"),
           404: describeProblem("No counting rule with that id in this company."),
           409: describeProblem("The company already has another rule with that name, or the ticket type or the team named is retired."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CountingRulePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -327,22 +309,19 @@ export function countingRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .delete(
       "/counting-rules/:id",
-      describeRoute({
+      {
         operationId: "deleteCountingRule",
         summary: "Remove a counting rule that has opened no ticket",
         description: "Removes a rule set up wrongly, while no ticket names it; the audit trail keeps what it was. A rule that has opened a ticket is switched off instead (409). Answers 204 with no body.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "delete",
+        params: IdParam,
         responses: {
           204: { description: "The rule is removed." },
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("delete"),
           404: describeProblem("No counting rule with that id in this company."),
           409: describeProblem("The rule has opened a ticket."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "delete"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

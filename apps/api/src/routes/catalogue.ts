@@ -45,17 +45,16 @@ import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema
 import { ONE_CADENCE, serviceFrequencyShape } from "@waste/domain/registry/catalogue"
 import { HAZARDOUS_CODE, hazardousOf, isHazardousCode } from "@waste/domain/registry/waste-code"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.master"
@@ -240,26 +239,22 @@ async function findFrequency(tx: Tx, principal: Principal, id: string): Promise<
   return row
 }
 
-export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function catalogueRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/waste-fractions",
-      describeRoute({
+      {
         operationId: "listWasteFractions",
         summary: "The company's waste fractions",
         description:
           "One page of the fractions the company collects, oldest first (ids are time-ordered). Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PageRequest,
         responses: {
           200: describeJson("One page of waste fractions.", WasteFractionPage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -277,43 +272,36 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/waste-fractions",
-      describeRoute({
+      {
         operationId: "createWasteFraction",
         summary: "Add a waste fraction",
         description:
           "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. `wasteCode`, optional, is the European List of Waste entry the national waste-data system keys the fraction by, six digits compact (`200301`) with an asterisk after a hazardous entry's; the waste-data report names a fraction without one with a warning. `treatment`, optional, is how it is treated once collected: `reuse`, `recycling`, `energy-recovery` or `disposal` (M13 of #293). `hazardous`, optional, says it is hazardous waste, what its transfer note prints (O18 of #290): left out, it is hazardous exactly where the code is starred, and a starred code with `hazardous: false` is refused (400 at `hazardous`), since the list marks that entry hazardous. The server mints the id; a body that carries one is refused.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: WasteFractionCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names one the server owns, or gives a starred waste code with `hazardous: false`"],
         responses: {
           201: describeCreated("The waste fraction as it was written.", WasteFraction),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names one the server owns, or gives a starred waste code with `hazardous: false`."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
           409: describeProblem("The company already has a waste fraction with that key, or with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", WasteFractionCreate),
+      },
       async (c) => created(c, "/waste-fractions", await createWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/waste-fractions/:id",
-      describeRoute({
+      {
         operationId: "getWasteFraction",
         summary: "One waste fraction",
         description: "One fraction of the caller's company. Another company's fraction is a fraction that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The waste fraction.", WasteFraction),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
           404: describeProblem("No waste fraction with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const [row] = await c
@@ -328,45 +316,38 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/waste-fractions/:id",
-      describeRoute({
+      {
         operationId: "patchWasteFraction",
         summary: "Rename a waste fraction or set its waste code, treatment, density or hazardous flag",
         description:
           "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, how it is treated once collected, or its density, kg per cubic metre as it lies in a container, which a stop's expected weight multiplies its container's litres by (1 to 2000); a null clears the code, the treatment or the density. `hazardous` says it is hazardous waste (O18 of #290); a patch setting a starred code and saying nothing of it makes the fraction hazardous, and a fraction under a starred code — the patch's or the one it holds — is never told it is not (400 at `hazardous`). The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WasteFractionPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, the key included, or tells a fraction under a starred code it is not hazardous"],
         responses: {
           200: describeJson("The waste fraction as it now stands.", WasteFraction),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, the key included, or tells a fraction under a starred code it is not hazardous."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.master`."),
           404: describeProblem("No waste fraction with that id in this company."),
           409: describeProblem("The company already has another waste fraction with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WasteFractionPatch),
+      },
       async (c) => c.json(await patchWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/container-types",
-      describeRoute({
+      {
         operationId: "listContainerTypes",
         summary: "The company's container types",
         description:
           "One page of the container types the company owns, oldest first (ids are time-ordered). Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PageRequest,
         responses: {
           200: describeJson("One page of container types.", ContainerTypePage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -382,43 +363,36 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/container-types",
-      describeRoute({
+      {
         operationId: "createContainerType",
         summary: "Add a container type",
         description:
           "Adds a container type to the company's own vocabulary. The name is unique inside the company; `volumeLitres` is optional, and null means nobody recorded one — zero is not a volume. `serviceSeconds`, the time an emptying of one takes at the kerb (1 to 3600), is optional too. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ContainerTypeCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, or names one the server owns"],
         responses: {
           201: describeCreated("The container type as it was written.", ContainerType),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
           409: describeProblem("The company already has a container type with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ContainerTypeCreate),
+      },
       async (c) => created(c, "/container-types", await createContainerType(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/container-types/:id",
-      describeRoute({
+      {
         operationId: "getContainerType",
         summary: "One container type",
         description: "One container type of the caller's company. Another company's type is a type that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The container type.", ContainerType),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
           404: describeProblem("No container type with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const [row] = await c
@@ -433,45 +407,39 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/container-types/:id",
-      describeRoute({
+      {
         operationId: "patchContainerType",
         summary: "Change a container type",
         description:
           "Changes the name, the volume or the service seconds of one container type; every field is optional and at least one must be given. A null volume is the volume nobody recorded; `serviceSeconds` is the time an emptying of one takes at the kerb (1 to 3600), its stop's service time, and null leaves a stop to the unknown figure.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ContainerTypePatch,
+        invalid: ["the patch is empty, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The container type as it now stands.", ContainerType),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, or holds a value of the wrong shape."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.master`."),
           404: describeProblem("No container type with that id in this company."),
           409: describeProblem("The company already has another container type with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ContainerTypePatch),
+      },
       async (c) => c.json(await patchContainerType(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/service-frequencies",
-      describeRoute({
+      {
         operationId: "listServiceFrequencies",
         summary: "The cadences the caller's projects offer",
         description:
           "One page of service frequencies, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ProjectScopedListQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of service frequencies.", ServiceFrequencyPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ProjectScopedListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -495,25 +463,20 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-frequencies",
-      describeRoute({
+      {
         operationId: "createServiceFrequency",
         summary: "Add a service frequency",
         description:
           "Adds a cadence to one project, which must be a project the caller works in. The name is unique inside the project. A rate nobody gives is on demand; `collectionsPerWeek: 1` with neither interval is monthly, since a month is not a number of weeks; and an interval needs a rate to belong to, `weeksBetween` and `daysBetween` being two ways of saying the same thing. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ServiceFrequencyCreate,
+        invalid: ["the body is missing a field, names a member the server owns, gives an interval with no rate or both intervals at once, or names a project this account does not work in"],
         responses: {
           201: describeCreated("The service frequency as it was written.", ServiceFrequency),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, gives an interval with no rate or both intervals at once, or names a project this account does not work in.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
           409: describeProblem("The project already has a service frequency with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ServiceFrequencyCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const principal = c.get("principal")
@@ -530,23 +493,19 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-frequencies/:id",
-      describeRoute({
+      {
         operationId: "getServiceFrequency",
         summary: "One service frequency",
         description:
           "One cadence of a project the caller works in. A frequency of another company, or of a project this account does not work in, is a frequency that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The service frequency.", ServiceFrequency),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.master`."),
           404: describeProblem("No service frequency with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findFrequency(c.get("tx"), c.get("principal"), id)
@@ -556,27 +515,22 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/service-frequencies/:id",
-      describeRoute({
+      {
         operationId: "patchServiceFrequency",
         summary: "Change a service frequency",
         description:
           "Changes one cadence of a project the caller works in; every field is optional and at least one must be given. The project is not patchable: a record does not move between projects. The patch is held against the stored row, so a change that would leave it with an interval and no rate, or with both intervals, is refused.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceFrequencyPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project included), or would leave the row with an interval and no rate or with both intervals"],
         responses: {
           200: describeJson("The service frequency as it now stands.", ServiceFrequency),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), or would leave the row with an interval and no rate or with both intervals.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.master`."),
           404: describeProblem("No service frequency with that id in the projects this account works in."),
           409: describeProblem("The project already has another service frequency with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceFrequencyPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

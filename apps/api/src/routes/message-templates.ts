@@ -16,17 +16,16 @@ import type { Tx } from "@waste/db/client"
 import { messageTemplate } from "@waste/db/schema/messaging"
 import { channelShapeIssue } from "@waste/domain/messaging/template"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.templates"
@@ -72,25 +71,22 @@ async function findTemplate(tx: Tx, principal: Principal, id: string): Promise<R
   return row
 }
 
-export function messageTemplateRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function messageTemplateRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/message-templates",
-      describeRoute({
+      {
         operationId: "listMessageTemplates",
         summary: "The message templates",
         description: "One page of the message templates of the caller's projects, or of one (`projectId`), oldest first, active and inactive alike.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: MessageTemplateListQuery,
+        invalid: ["the project is not one the caller works in"],
         responses: {
           200: describeJson("One page of message templates.", TemplatePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or the project is not one the caller works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.templates`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", MessageTemplateListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const principal = c.get("principal")
@@ -108,23 +104,20 @@ export function messageTemplateRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/message-templates",
-      describeRoute({
+      {
         operationId: "createMessageTemplate",
         summary: "Write a message template",
         description:
           "Writes a template in a project the caller works in: its name, one template's in the project; what it is for (`service`, which the customer's consent governs, or `billing`, which it does not); its channel; a subject for an e-mail and none for a text message; and its body. A text names its values as `{{recipientName}}`, `{{customerName}}` and `{{companyName}}`, and any other placeholder is refused. Active unless the body says otherwise. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: MessageTemplateCreate,
+        invalid: ["the body is missing a field, breaks its channel's shape, names a placeholder no message fills, holds a value of the wrong shape, names one the server owns, or names a project the caller does not work in"],
         responses: {
           201: describeCreated("The template as it was written.", MessageTemplate),
-          400: describeProblem("The body is missing a field, breaks its channel's shape, names a placeholder no message fills, holds a value of the wrong shape, names one the server owns, or names a project the caller does not work in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.templates`."),
           409: describeProblem("The project already has a template of that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", MessageTemplateCreate),
+      },
       async (c) => {
         const principal = c.get("principal")
         const values = c.req.valid("json")
@@ -141,22 +134,18 @@ export function messageTemplateRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/message-templates/:id",
-      describeRoute({
+      {
         operationId: "getMessageTemplate",
         summary: "One message template",
         description: "One message template of a project the caller works in.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The template.", MessageTemplate),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.templates`."),
           404: describeProblem("No template with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findTemplate(c.get("tx"), c.get("principal"), id)
@@ -166,25 +155,22 @@ export function messageTemplateRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/message-templates/:id",
-      describeRoute({
+      {
         operationId: "patchMessageTemplate",
         summary: "Change a message template",
         description:
           "Changes one template; every field is optional and at least one must be given, and the project is the template's for good. The template as it will stand is held to its channel's shape: a channel moved to e-mail needs a subject, and one moved to text messages a null subject. A message already queued keeps the text it was rendered with.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: MessageTemplatePatch,
+        invalid: ["the patch is empty, would break the channel's shape, names a placeholder no message fills, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The template as it now stands.", MessageTemplate),
-          400: describeProblem("The path does not hold an id, or the patch is empty, would break the channel's shape, names a placeholder no message fills, names a field the caller does not own, or holds a value of the wrong shape."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.templates`."),
           404: describeProblem("No template with that id in the projects the caller works in."),
           409: describeProblem("The project already has another template of that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", MessageTemplatePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

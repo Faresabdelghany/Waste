@@ -80,20 +80,19 @@ import { liveAllocationsName } from "@waste/domain/resources/allocations"
 import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, groupsName, poweredVehicleHasACompartment } from "@waste/domain/resources/fleet"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
-import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
+import { groupsInForceNaming } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireProviderShape, stamp } from "./shared"
 import { liveAllocationsNaming } from "./vehicle-allocations"
 
@@ -419,26 +418,24 @@ export async function vehicleByRegistration(tx: Tx, companyId: string, registrat
   return row === undefined ? undefined : await vehicleWithCompartments(tx, companyId, row)
 }
 
-export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function vehicleRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/vehicles",
-      describeRoute({
+      {
         operationId: "listVehicles",
         summary: "The vehicles the caller's projects run",
         description:
           "One page of vehicles, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the vehicles its provider owns, wherever they are based — each with its compartments by position and each compartment's waste fractions. `projectId` narrows it to one of those projects, or for a provider's account to a project its provider holds a Service Area in today; naming another is refused. `kind` answers the powered vehicles or the trailers, `vehicleTypeId` one type's, `status` one status, `homeDepotId` the vehicles based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: VehicleListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)"],
         responses: {
           200: describeJson("One page of vehicles, each with its compartments.", VehiclePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicles`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", VehicleListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, kind, vehicleTypeId, status, homeDepotId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -469,46 +466,37 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/vehicles",
-      describeRoute({
+      {
         operationId: "createVehicle",
         summary: "Register a vehicle with its compartments",
         description:
           "Registers a vehicle in one project, which must be a project the caller works in, with the compartments it starts with in position order, 1..n in the body's order — a powered vehicle has at least one, a trailer may have none. The registration (the plate) is unique across the company, not inside a project, and so is the callsign where given. The vehicle type is one of this company's, the home depot one of the named project's, the owning service provider one of this company's and named with `service-provider` ownership and with nothing else, and every compartment's waste fractions are this company's, each named once per compartment. `ownership` defaults to `company` and `status` to `active`. `requiredLicenceClass` is required: an unknown class passes nobody, so a vehicle without one is a vehicle nobody may take out. A Service Provider's account registers its own vehicles: in a project its provider holds a Service Area in today, with `service-provider` ownership naming its own provider — anything else is refused at the field. The server mints every id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: VehicleCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, gives a powered vehicle no compartment, names a fraction twice in one compartment, names the provider without service-provider ownership or the ownership without a provider, or names a vehicle type, service provider, depot or waste fraction outside the scope its key allows — each at the entry that is wrong"],
         responses: {
           201: describeCreated("The vehicle as it was written, with its compartments.", Vehicle),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a powered vehicle no compartment, names a fraction twice in one compartment, names the provider without service-provider ownership or the ownership without a provider, or names a vehicle type, service provider, depot or waste fraction outside the scope its key allows — each at the entry that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.vehicles`."),
           409: describeProblem("The company already has a vehicle with that registration, or one with that callsign."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", VehicleCreate),
+      },
       async (c) => created(c, "/vehicles", await createVehicle(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/vehicles/:id",
-      describeRoute({
+      {
         operationId: "getVehicle",
         summary: "One vehicle",
         description:
           "One vehicle of a project the caller works in, with its compartments by position and each compartment's waste fractions. A vehicle of another company, or of a project this account does not work in, is a vehicle that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The vehicle, with its compartments.", Vehicle),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicles`."),
           404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -520,51 +508,41 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .patch(
       "/vehicles/:id",
-      describeRoute({
+      {
         operationId: "patchVehicle",
         summary: "Change a vehicle",
         description:
           "Changes one vehicle of a project the caller works in; every field is optional and at least one must be given. The project and the kind do not change — a record does not move between projects, and a powered vehicle does not become a trailer — and the compartments are a set, so they are `PUT /vehicles/{id}/compartments`. A null clears the callsign, the provider, the payload, the home depot, the fuel, the telematics device or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` vehicle names its provider and no other does. A new vehicle type is this company's, a new home depot this project's, a new provider this company's. A status change is a plain patch except retiring: a vehicle with a live allocation — planned or confirmed and not yet over, naming it as the vehicle or as the trailer — is not retired under it, nor is one a collection group of a route scheme in force today names, whatever that scheme's status; the patch is refused (409) counting them — release the allocations, reassign the groups, and retire it then. Both counts run under the vehicle's row lock, and a vehicle already retired is not asked again.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VehiclePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project, the kind and the compartments included), leaves the ownership and the provider disagreeing, or names a vehicle type, service provider or depot outside the scope its key allows"],
         responses: {
           200: describeJson("The vehicle as it now stands, with its compartments.", Vehicle),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project, the kind and the compartments included), leaves the ownership and the provider disagreeing, or names a vehicle type, service provider or depot outside the scope its key allows.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicles`."),
           404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
           409: describeProblem("The company already has another vehicle with that registration or that callsign, or the vehicle is being retired under live allocations or under collection groups of schemes in force: the detail counts them."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VehiclePatch),
+      },
       async (c) => c.json(await patchVehicle(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now)),
     )
     .put(
       "/vehicles/:id/compartments",
-      describeRoute({
+      {
         operationId: "putVehicleCompartments",
         summary: "Replace a vehicle's compartments",
         description:
           "Replaces the whole list with the one in the body, in position order: a compartment the body leaves out is not a compartment afterwards, positions are 1..n in the body's order, and each compartment's waste fractions are this company's, each named once per compartment. A powered vehicle keeps at least one compartment, so an empty list is refused for one and is a bare trailer for the other; the stored kind decides. The list is replaced under the vehicle's row lock, and the vehicle's `updatedAt` moves, since the compartments are part of the vehicle on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VehicleCompartmentsSet,
+        invalid: ["the body is missing `compartments`, names a member it does not own, is over twenty compartments, leaves a powered vehicle without one, names a fraction twice in one compartment, or names a waste fraction that is not this company's — at the entry that is wrong"],
         responses: {
           200: describeJson("The vehicle with the compartments it now has.", Vehicle),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `compartments`, names a member it does not own, is over twenty compartments, leaves a powered vehicle without one, names a fraction twice in one compartment, or names a waste fraction that is not this company's — at the entry that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicles`."),
           404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VehicleCompartmentsSet),
+      },
       async (c) => c.json(await replaceVehicleCompartments(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").compartments)),
     )
 }

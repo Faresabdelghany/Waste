@@ -58,27 +58,24 @@ import type { Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { billingRun, invoice, payment, paymentAllocation } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
-import type { Action } from "@waste/domain/access/modules"
 import { bankLineKey, bankLineLabels, bankLineReference, matchBankLine, minorDigitsOf, type OpenInvoice } from "@waste/domain/finance/payments"
 import { numberOf } from "@waste/domain/numbering"
 import { INT4_MAX } from "@waste/domain/requests"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, sum, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, lockRows, refuseDuplicate } from "@waste/db/commands/shared"
 import { invoiceColumns, labelOf, standingsOf, type InvoiceRow, type InvoiceStanding } from "@waste/db/shapes/invoices"
 import { projectToday } from "@waste/db/query/project-clock"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { invoiceScope } from "./billing-shapes"
 import { noSuchCustomer } from "./customer-writes"
 import { requireCustomer } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.payments"
@@ -300,13 +297,8 @@ async function statementOf(tx: Tx, principal: Principal, customerId: string, que
   return { customerId, currency: query.currency, from: query.from, to: query.to, openingBalanceMinor, lines, closingBalanceMinor: balance }
 }
 
-const problems = (action: Action, what = "payment") => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-  404: describeProblem(`No ${what} with that id in the projects this account works in.`),
-})
-
-export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function paymentRoutes(deps: RouteDeps) {
+  const { now } = deps
   /** How each invoice stands on its project's day, the clock read once for the request. */
   const standings = (tx: Tx, companyId: string, rows: readonly InvoiceRow[]): Promise<Map<string, InvoiceStanding>> => {
     const at = now()
@@ -314,25 +306,22 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
   }
   const outstandingOf = async (tx: Tx, companyId: string, row: InvoiceRow): Promise<number> => (await standings(tx, companyId, [row])).get(row.id)?.outstandingMinor ?? 0
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/payments",
-      describeRoute({
+      {
         operationId: "listPayments",
         summary: "The payments of the caller's projects",
         description:
           "One page of payments, oldest first, from the projects the caller works in, each with what its allocations apply (`allocatedMinor`, reversals taken off) and what remains (`unallocatedMinor`), a credit on its payer's balance. `projectId` narrows it to one of those projects; `customerId` one payer's payments, held to a customer of this company (400 on the query); `invoiceId` the payments with an allocation to one invoice; `unmatched=true` only those not allocated in full; `from` and `to` a window over `paidOn`, both inclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PaymentListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in", "`customerId` is not a customer of this company"],
         responses: {
           200: describeJson("One page of payments.", PaymentPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `customerId` is not a customer of this company."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PaymentListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, customerId, invoiceId, unmatched, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -371,21 +360,19 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .get(
       "/payments/:id",
-      describeRoute({
+      {
         operationId: "getPayment",
         summary: "One payment with its allocations",
         description:
           "One payment of a project the caller works in, as it arrived, with what it has allocated and what remains, and its allocations in recording order — each applying part of it to one invoice, or, negative, reversing one of them.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The payment with its allocations.", PaymentDetail),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
+          404: describeProblem("No payment with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -396,22 +383,19 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/payments",
-      describeRoute({
+      {
         operationId: "createPayment",
         summary: "Register a payment by hand",
         description:
           "Registers money as it arrived — paid at the counter, a transfer read off the bank's site — in a project the caller works in, with its amount, currency and day, the reference the payer gave and a note. Named, `invoiceId` is the invoice it pays: an invoice of that project (400 at `invoiceId`, `Not an invoice of this project`), never a credit note (400), in the payment's currency (400 at `currency`); its payer is the payment's, and a `customerId` naming another is refused (400 at `customerId`, `Not the invoice's payer`). The payment is allocated to it up to what it owes on the project's day and the rest stays unallocated, a credit on the payer's balance. Without an invoice the payment is unmatched, its payer the `customerId` named or nobody's yet. `source` is `manual`. Under the row locks of the project and of the run that issued the invoice, which a credit note against it takes too, so what the invoice owes is read with nothing moving under it. No refunds here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: PaymentCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, a customer that is not this company's, an invoice outside the project or a credit note, a currency other than the invoice's, or a payer other than the invoice's — each at the field that is wrong"],
         responses: {
           201: describeCreated("The payment with its allocation; read at `/payments/{id}`.", PaymentDetail),
-          400: describeProblem("The body is missing a field, names a member the server owns, names a project this account does not work in, a customer that is not this company's, an invoice outside the project or a credit note, a currency other than the invoice's, or a payer other than the invoice's — each at the field that is wrong."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PaymentCreate),
+      },
       async (c) => {
         const body: PaymentCreate = c.req.valid("json")
         const tx = c.get("tx")
@@ -455,23 +439,22 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/payments/:id/allocations",
-      describeRoute({
+      {
         operationId: "allocatePayment",
         summary: "Match part of a payment to an invoice",
         description:
           "Applies `amountMinor` of a payment to one invoice: the office's match of an unmatched payment, or of what remains of one. The invoice is of the payment's project (400 at `invoiceId`), never a credit note (400), in the payment's currency (400 at `invoiceId`), and, where the payment names its payer, that payer's (400 at `invoiceId`, `Not an invoice of the payment's payer`). The amount is at most what the payment has left (409, `Only 300.00 DKK of the payment remains to allocate`) and at most what the invoice owes on the project's day (409, `Invoice INV-26007188 owes only 1250.00 DKK`). Answers 201 with the payment and its allocations and no `Location`, like the ledger's commands: an allocation is read on its payment. Under the row locks of the project and of the invoice's run.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: AllocationCreate,
+        invalid: ["the body is missing a field, names a member the server owns, a positive amount it does not hold, or an invoice the payment may not pay — each at the field that is wrong"],
         responses: {
           201: describeJson("The payment with its allocations, the new one last.", PaymentDetail),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, a positive amount it does not hold, or an invoice the payment may not pay — each at the field that is wrong."),
-          ...problems("create"),
+          404: describeProblem("No payment with that id in the projects this account works in."),
           409: describeProblem("The amount is more than the payment has left or than the invoice owes; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", AllocationCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body: AllocationCreate = c.req.valid("json")
@@ -498,22 +481,20 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/payment-allocations/:id/reverse",
-      describeRoute({
+      {
         operationId: "reversePaymentAllocation",
         summary: "Undo a wrong match",
         description:
           "Appends the negative of an allocation, naming it: the invoice owes that amount again and the payment has it back to allocate. An allocation is reversed once (409, `This allocation is reversed already`), and a reversal is not reversed (409, `A reversal is not reversed; allocate the payment again`). Answers 201 with the payment and its allocations and no `Location`, like the ledger's commands. Under the project's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
         responses: {
           201: describeJson("The payment with its allocations, the reversal last.", PaymentDetail),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("create", "payment allocation"),
+          404: describeProblem("No payment allocation with that id in the projects this account works in."),
           409: describeProblem("The allocation is a reversal, or is reversed already; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -549,24 +530,21 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/payments/bank-lines",
-      describeRoute({
+      {
         operationId: "importBankLines",
         summary: "Match a bank statement's lines to invoices",
         description:
           "Takes up to a batch of a bank statement's incoming lines, as the browser read them from our own CSV (`booked_on;amount;currency;reference;text`; ISO 20022 CAMT.053 maps onto it later), each with its row and how many identical lines the file held before it. Each line is a payment of `source = bank-file` on its booking day, its reference and text kept as the bank gave them. A line is matched to an open invoice of the caller's projects in its currency by the invoice's frozen payment reference — as the bank gives it, or inside a FI card's printed line `+71<…+creditor<` — or else by the one label its text names (`INV-26007188`); a match allocates what the invoice owes at most and lands the payment in the invoice's project under its payer, and anything else lands unmatched in `projectId`, nobody's yet. A line a statement already brought — the same booking day, amount, currency, reference, text and count of identical lines before it — is `duplicate`, answered with the payment it already is, so a statement imported twice adds nothing. `dryRun` answers what each line would be, 200, and writes and holds nothing; otherwise 201 with no `Location`, like the ledger's commands. Under the row locks of every project the lines land in and of the runs that issued the invoices they match, in id order.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: BankLines,
+        invalid: ["the body is missing a field, names a member the server owns, holds more lines than a batch or an outgoing line, or names a project this account does not work in — each at the field that is wrong"],
         responses: {
           200: describeJson("A dry run: what each line would be, nothing written.", BankLinesResult),
           201: describeJson("Each line's outcome in the body's order, with the payment it is, and the counts.", BankLinesResult),
-          400: describeProblem("The body is missing a field, names a member the server owns, holds more lines than a batch or an outgoing line, or names a project this account does not work in — each at the field that is wrong."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("A line of the batch was imported already into a project this account does not work in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", BankLines),
+      },
       async (c) => {
         const body: BankLines = c.req.valid("json")
         const dryRun = body.dryRun === true
@@ -653,24 +631,21 @@ export function paymentRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .get(
       "/customers/:id/statement",
-      describeRoute({
+      {
         operationId: "getCustomerStatement",
         summary: "A customer's statement",
         description:
           "A payer's invoices, credit notes and payments in one `currency` over `from`..`to`, both inclusive, from the projects the caller works in: the opening balance of everything before `from` — invoiced less credited less paid — then each line by day, invoices before credit notes before payments on one day, with the balance after it, and the closing balance. An invoice raises the balance by its gross and a credit note lowers it by its own; a payment naming the payer lowers it by its whole amount, what it has not allocated included, which is the payer's credit; a payment of nobody's counts by what its allocations put on this payer's invoices. A customer of another company is a customer that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: CustomerStatementQuery,
+        invalid: ["the query is missing the currency or the window, or the window runs backwards"],
         responses: {
           200: describeJson("The statement.", CustomerStatement),
-          400: describeProblem("The path does not hold an id, or the query is missing the currency or the window, or the window runs backwards."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No customer with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", CustomerStatementQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const query: CustomerStatementQuery = c.req.valid("query")

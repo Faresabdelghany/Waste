@@ -28,17 +28,16 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -142,26 +141,23 @@ export async function calendarByName(tx: Tx, principal: Principal, projectId: st
   return row === undefined ? undefined : calendarOf(row)
 }
 
-export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function collectionCalendarRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/collection-calendars",
-      describeRoute({
+      {
         operationId: "listCollectionCalendars",
         summary: "The collection calendars of the caller's projects",
         description:
           "One page of collection calendars, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `validOn` asks for the calendars in force on that day, `validFrom` inclusive and `validTo` exclusive: at most one per project, since a project has one calendar at a time. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: CollectionCalendarListQuery,
+        invalid: ["`validOn` is not a calendar day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of collection calendars.", CollectionCalendarPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.calendars`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", CollectionCalendarListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -187,46 +183,37 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/collection-calendars",
-      describeRoute({
+      {
         operationId: "createCollectionCalendar",
         summary: "Write a collection calendar",
         description:
           "Writes a collection calendar in one project, which must be a project the caller works in. The name is unique inside the project. The period is half-open — `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the calendar is still running — and a project has one calendar in force at a time, so a period overlapping the project's other calendar is refused (409): the per-year calendars tile the project's timeline, and the next begins where the earlier one ends. A calendar carries no holidays: a project's are the days of the company's holiday list it names. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: CollectionCalendarCreate,
+        invalid: ["the body is missing a field, names a member a calendar does not carry (its holidays among them), names a project this account does not work in, or ends on or before the day it starts"],
         responses: {
           201: describeCreated("The calendar as it was written.", CollectionCalendar),
-          400: describeProblem(
-            "The body is missing a field, names a member a calendar does not carry (its holidays among them), names a project this account does not work in, or ends on or before the day it starts.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.calendars`."),
           409: describeProblem("The project already has a calendar with that name, or one in force over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", CollectionCalendarCreate),
+      },
       async (c) => created(c, "/collection-calendars", await createCalendar(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/collection-calendars/:id",
-      describeRoute({
+      {
         operationId: "getCollectionCalendar",
         summary: "One collection calendar",
         description:
           "One collection calendar of a project the caller works in. A calendar of another company, or of a project this account does not work in, is a calendar that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The calendar.", CollectionCalendar),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.calendars`."),
           404: describeProblem("No collection calendar with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -238,25 +225,22 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/collection-calendars/:id",
-      describeRoute({
+      {
         operationId: "patchCollectionCalendar",
         summary: "Amend a collection calendar",
         description:
           "Changes the name or the period of one collection calendar of a project the caller works in; every field is optional and at least one must be given. The project is not patchable, since a record does not move between projects. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself; and the period may not overlap the project's other calendar (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CollectionCalendarPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project included), or ends on or before the day it starts"],
         responses: {
           200: describeJson("The calendar as it now stands.", CollectionCalendar),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), or ends on or before the day it starts."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.calendars`."),
           404: describeProblem("No collection calendar with that id in the projects this account works in."),
           409: describeProblem("The project already has another calendar with that name, or one in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CollectionCalendarPatch),
+      },
       async (c) => c.json(await patchCalendar(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }

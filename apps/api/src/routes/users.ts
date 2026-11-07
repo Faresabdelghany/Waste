@@ -69,18 +69,18 @@ import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } fr
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { accessColumns, accessOf, grantsOfRows, uniqueIds, userStatus, type AccessShape } from "../access-shape"
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf, providerNameOf } from "../auth/provider"
-import { allows, requireGrant, requireGrantOf } from "../auth/require"
+import { allows } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.access"
@@ -300,26 +300,23 @@ async function writeAccess(tx: Tx, companyId: string, userAccountId: string, sha
   }
 }
 
-export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function userRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/users",
-      describeRoute({
+      {
         operationId: "listUsers",
         summary: "The company's users",
         description:
           "One page of the company's user accounts, oldest first (ids are time-ordered), each with its derived status and the projects it works in — or, for a Service Provider's account, under `service-providers.service-provider-workspace`, the accounts of its own provider. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "view",
+        query: PageRequest,
         responses: {
           200: describeJson("One page of users.", UserPage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "view"),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -341,25 +338,21 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/users",
-      describeRoute({
+      {
         operationId: "inviteUser",
         summary: "Invite a user",
         description:
           "Creates an account in the caller's company with no login bound, so its status is `invited` until the person first signs in. No e-mail is sent: the login is created separately, with the same address, and the access token hook binds it to this account on its first sign-in. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. A Service Provider's account invites under `service-providers.service-provider-workspace` and into its own team alone: the access names its own provider (400 at the field otherwise), and the role is a provider's — scope `Own service provider` — allowing nothing the inviter's own role does not (400 at `roleId`, naming the first action beyond it). The server mints the id; a body that carries one is refused.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "create",
+        body: UserInvite,
+        invalid: ["the body is missing a field, names none or more than one way of reaching something, or names a role, project or service provider that is not this company's — or, from a Service Provider's account, an access other than its own provider's, or a role that is not a provider's or allows more than its own"],
         responses: {
           201: describeCreated("The account as it was written.", User),
-          400: describeProblem(
-            "The body is missing a field, names none or more than one way of reaching something, or names a role, project or service provider that is not this company's — or, from a Service Provider's account, an access other than its own provider's, or a role that is not a provider's or allows more than its own.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           409: describeProblem("The company already has a user with that e-mail address."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "create"),
-      validate("json", UserInvite),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -393,22 +386,19 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/users/:id",
-      describeRoute({
+      {
         operationId: "getUser",
         summary: "One user",
         description: "One account of the caller's company — for a Service Provider's account, of its own provider. Another company's account, or another provider's, is an account that does not exist here.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The user.", User),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -421,27 +411,23 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/users/:id",
-      describeRoute({
+      {
         operationId: "patchUser",
         summary: "Change a user",
         description:
           "Changes the account's name, its role, or what it reaches; every field is optional and at least one must be given. An access change names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId` and replaces the whole shape: the old Project Access or Service Provider Access rows go and the new ones arrive in the same transaction. A patch that names none of the three leaves the access alone. The e-mail is the invitation's and the status is derived, so neither can be patched. The primary administrator cannot be moved to another role or narrowed (409). A Service Provider's account changes its own provider's accounts alone, under `service-providers.service-provider-workspace`: an access names its own provider and a role is a provider's allowing no more than its own (400 at the field), and its own account it does not move to another role (409).",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "edit",
+        params: IdParam,
+        body: UserPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, names two ways of reaching something, or names a role, project or service provider that is not this company's"],
         responses: {
           200: describeJson("The user as it now stands.", User),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own, names two ways of reaching something, or names a role, project or service provider that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
           409: describeProblem("The account is the primary administrator: its role and its reach over every project stand; or a provider's manager moves its own account to another role."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "edit"),
-      validate("param", IdParam),
-      validate("json", UserPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -491,24 +477,21 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/users/:id/deactivate",
-      describeRoute({
+      {
         operationId: "deactivateUser",
         summary: "Switch a user off",
         description:
           "Stamps `deactivatedAt`, so the account's status is `deactivated` and the next request it makes is refused — the API looks a caller up on every call, so the refusal is immediate. Its role, its grants and its access rows are left as they are, and reactivating gives them back. An account that is already deactivated answers 200 with the instant it was switched off, unchanged. The primary administrator cannot be deactivated (409). A Service Provider's account switches off its own provider's accounts alone, under `service-providers.service-provider-workspace`, and never its own (409).",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "edit",
+        params: IdParam,
         responses: {
           200: describeJson("The user, deactivated.", User),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
           409: describeProblem("The account is the primary administrator: it is the company's last way in; or a provider's manager switches its own account off."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "edit"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -533,23 +516,20 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/users/:id/reactivate",
-      describeRoute({
+      {
         operationId: "reactivateUser",
         summary: "Switch a user on again",
         description:
           "Clears `deactivatedAt`. The account is `active` again, or `invited` if nobody ever signed in as it; its role and access rows were never touched. An account that is already active answers 200 unchanged. A Service Provider's account switches its own provider's accounts on again alone, under `service-providers.service-provider-workspace`.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "edit",
+        params: IdParam,
         responses: {
           200: describeJson("The user, active again.", User),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "edit"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -570,26 +550,22 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/users/:id/make-primary-administrator",
-      describeRoute({
+      {
         operationId: "makePrimaryAdministrator",
         summary: "Make a user the primary administrator",
         description:
           "Moves the primary administrator's flag to this account and takes it off the one that carried it, in the request's one transaction under the company's row lock, so two transfers at once take turns and the company never has two or none. The account must be active — signed in as at least once and not deactivated — and must reach every project: a service provider's account, or one given some projects only, is refused (409), because the primary administrator is the company's last way in and reaches all of it. An account that already is the primary administrator answers 200 unchanged. The grant is `edit` on `configure.access` rather than the primary administrator's alone: the flag usually moves because its holder has left, and another administrator has to be able to move it before deactivating them.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
         responses: {
           200: describeJson("The user, now the primary administrator.", User),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
           404: describeProblem("No user with that id in this company."),
           409: describeProblem(
             "The account is deactivated, has never been signed in as, belongs to a service provider, or reaches some projects only.",
           ),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

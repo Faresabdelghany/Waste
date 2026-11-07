@@ -22,21 +22,19 @@ import { Message, MessageCreate, MessageListQuery } from "@waste/contracts/messa
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { queueMessage } from "@waste/db/commands/messaging"
-import type { JobSender } from "@waste/db/jobs"
 import { customer } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { Refused } from "@waste/domain/refusal"
 import { and, desc, eq, isNotNull, lt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
+import { describeProblem, invalidRequest, problem, WORKER_QUEUE_MISSING } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
@@ -100,26 +98,24 @@ async function findMessage(tx: Tx, principal: Principal, id: string): Promise<Ro
   return row
 }
 
-export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { jobs: JobSender }) {
-  return new Hono<AuthEnv>()
+export function messageRoutes(deps: RouteDeps) {
+  const { jobs } = deps
+  return routes(deps)
     .get(
       "/messages",
-      describeRoute({
+      {
         operationId: "listMessages",
         summary: "The delivery log",
         description:
           "One page of the customers' messages of the caller's projects, newest first (a staff notice is its recipient's, at `GET /me/notices`), narrowed to a customer (`customerId`), a project (`projectId`) or a status (`status`). Each says what was rendered, the address it went to, and how its sending stands: `queued` for the worker, `sent`, `failed` past its attempts, or `withheld` because the customer allows no service messages.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: MessageListQuery,
+        invalid: ["a filter will not do", "the project is not one the caller works in"],
         responses: {
           200: describeJson("One page of messages.", MessagePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter will not do, or the project is not one the caller works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", MessageListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, customerId, status } = c.req.valid("query")
         const principal = c.get("principal")
@@ -145,24 +141,21 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
     )
     .post(
       "/messages",
-      describeRoute({
+      {
         operationId: "createMessage",
         summary: "Send a message from a template",
         description:
           "Queues a template to a customer, or to one of its active contact persons, on the template's channel: the address is the contact's where one is named and the customer's own otherwise, and the subject and body are rendered now and kept as sent. The message is answered `queued`; the worker sends it through the deployment's provider — a log-only sender until a card-free provider is verified — and judges the customer's consent to service messages at the send. Read it again to learn how it stands. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: MessageCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape or names one the server owns, or names a template outside the caller's projects, a customer the company does not have, or a contact person not the customer's"],
         responses: {
           201: describeCreated("The message as it was queued.", Message),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape or names one the server owns, or names a template outside the caller's projects, a customer the company does not have, or a contact person not the customer's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.contacts`."),
           409: describeProblem("The template is inactive, the contact person is inactive, or the recipient has no address on the template's channel."),
           503: describeProblem(`No worker has started on this database yet, so the send queue is not there (${JSON.stringify(WORKER_QUEUE_MISSING)}); nothing was written.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", MessageCreate),
+      },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -184,22 +177,18 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
     )
     .get(
       "/messages/:id",
-      describeRoute({
+      {
         operationId: "getMessage",
         summary: "One message",
         description: "One customer's message of the delivery log, in a project the caller works in, as its sending now stands; a staff notice is its recipient's, at `GET /me/notices`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The message.", Message),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
           404: describeProblem("No message with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findMessage(c.get("tx"), c.get("principal"), id)

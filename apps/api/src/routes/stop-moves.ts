@@ -57,22 +57,20 @@ import { ANOTHER_ROUTE, emptiedAlready, emptiedThereAlready, leavesNoStop, merge
 import { routeTransition } from "@waste/domain/execution/transitions"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { labelOf, type RouteRow } from "@waste/db/shapes/routes"
 import { lockRows } from "@waste/db/commands/shared"
 import { pickupFitStops } from "@waste/db/commands/fleet-fit"
 import { pickupsOfRoute, type PickupRow } from "@waste/db/shapes/pickups"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { detailOf, findRoute, noSuchRoute, routeScope } from "./execution-shapes"
 import { refuseMisfit } from "./fleet-fit"
 import { addOfficeStop, takeOffStop } from "./pickups"
 import type { Scope } from "./references"
 import { cancelLockedRoute, createAdHocRoute, lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const PICKUPS = "route-studio.pickups"
@@ -197,31 +195,30 @@ const MOVE =
   "Each stop moved is taken off where it stood — `skipped` with the reason `removed-by-dispatcher`, its note naming the route it went to, `pickup-skipped` written — and the office's own stop of the same work is added to the other route as `POST /routes/{id}/pickups` adds one, after its last position, in the order the stops stood: judged on that route's service date (a container with no placement then, a bulky booking for another day, a work order's container no longer where its move takes it from, the same work planned there already are each a 409 in Add stop's words), and booked for the open ticket the stop answered, where it answered one. An emptying is refused onto a route that empties the container already (409, `Route RC-1043 empties container BIN-7 already; take one of the two stops off instead`), and a stop the route's planned vehicle cannot serve (O7 of #290) — a fraction none of its compartments carries, a container its type does not lift, a stop heavier than one trip of its fraction — is refused (409, `WH-24 has no compartment for Glass, which 2 stops of route RC-1042 collect`). Generation never brings back the stop taken off nor skips or doubles the office's, so the move outlives the next run with no hold. A refusal rolls back the whole move. Under both routes' row locks, taken in id order; both routes' `updatedAt` move."
 
 const problems = (grants: string) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow ${grants}.`),
   404: describeProblem("No route with that id in the projects this account works in: a Service Provider's account moves no stop."),
 })
 
-export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function stopMoveRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .post(
       "/routes/:id/move-stops",
-      describeRoute({
+      {
         operationId: "moveRouteStops",
         summary: "Move stops onto another route",
         description: `Moves open stops of the route (O23 of #290) onto the route \`toRouteId\` names, of the same project (400 at \`toRouteId\` for the route itself or any other). \`pickupIds\` names open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not). ${STATES} ${MOVE}`,
-        security: BEARER_SECURITY,
+        module: PICKUPS,
+        action: "edit",
+        params: IdParam,
+        body: RouteMoveStops,
+        invalid: ["the body names no stop, one twice, an id that is not an open stop of the route, a member the command does not take, or no other route of its project"],
         responses: {
           200: describeJson("The route the stops left, as it now stands.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body names no stop, one twice, an id that is not an open stop of the route, a member the command does not take, or no other route of its project."),
           ...problems(`\`edit\` on \`${PICKUPS}\``),
           409: describeProblem("A route is active, completed or cancelled, or a stop is refused where it would go; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(PICKUPS, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteMoveStops),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { pickupIds, toRouteId } = c.req.valid("json")
@@ -247,23 +244,22 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
     )
     .post(
       "/routes/:id/split",
-      describeRoute({
+      {
         operationId: "splitRoute",
         summary: "Split stops off onto a new route",
         description: `Splits the route (O23 of #290): a new ad-hoc route (#111) is made on the route's operating date — its service date too, as \`POST /routes\` makes one — with the route's depot, unloading station, planned start and service provider, and the vehicle, the driver and the note the body names, where it names them, judged as \`POST /routes\` judges them (400 at the field, the licence on the day, then 409s for a vehicle or driver out of service or away that day, allocated that day with another crew, or on another route of the day — taken with \`acceptSameDay\` where the times are not both known, never at once; O7 of #290); then the open stops \`pickupIds\` names move onto it. The stops are open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not), and leave the route some of its open stops (400; a move to another route takes them all). ${STATES} ${MOVE} The \`route-reassigned\` event is written for the new route where it names a driver or a vehicle.`,
-        security: BEARER_SECURITY,
+        module: ROUTES,
+        action: "create",
+        also: [PICKUPS, "edit"],
+        params: IdParam,
+        body: RouteSplit,
+        invalid: ["the body names no stop, one twice, an id that is not an open stop of the route, every open stop of it, a member the command does not take, or a vehicle or driver the rules of `POST /routes` refuse — each at its field"],
         responses: {
           201: describeCreated("The new route, planned, with the stops moved onto it.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body names no stop, one twice, an id that is not an open stop of the route, every open stop of it, a member the command does not take, or a vehicle or driver the rules of `POST /routes` refuse — each at its field."),
           ...problems(`\`create\` on \`${ROUTES}\` and \`edit\` on \`${PICKUPS}\``),
           409: describeProblem("The route is active, completed or cancelled; a vehicle or driver named is out of service or away on the day; or a stop is refused on the new route; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(ROUTES, "create"),
-      requireGrant(PICKUPS, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteSplit),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -301,23 +297,22 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
     )
     .post(
       "/routes/:id/merge",
-      describeRoute({
+      {
         operationId: "mergeRoutes",
         summary: "Merge another route into this one",
         description: `Merges the route \`routeId\` names, of the same project (400 at \`routeId\` for this route itself or any other), into this one (O23 of #290): every open stop of it moves onto this route, and it is then cancelled as \`POST /routes/{id}/cancel\` cancels one, with the reason code \`merged\` and the reason \`Merged into route RC-1042\` — \`route-cancelled\` written, a hold cleared, generation never bringing back a route the office cancelled. A route with no open stop is cancelled all the same. ${STATES} ${MOVE}`,
-        security: BEARER_SECURITY,
+        module: ROUTES,
+        action: "edit",
+        also: [PICKUPS, "edit"],
+        params: IdParam,
+        body: RouteMerge,
+        invalid: ["the body names no route, a member the command does not take, or no other route of this route's project"],
         responses: {
           200: describeJson("This route, as it now stands with the stops merged onto it.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body names no route, a member the command does not take, or no other route of this route's project."),
           ...problems(`\`edit\` on \`${ROUTES}\` and on \`${PICKUPS}\``),
           409: describeProblem("A route is active, completed or cancelled, or a stop is refused here; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(ROUTES, "edit"),
-      requireGrant(PICKUPS, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteMerge),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { routeId } = c.req.valid("json")

@@ -59,20 +59,19 @@ import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { liveAllocationsName } from "@waste/domain/resources/allocations"
 import { groupsName, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { providerIdOf, providerNameOf, reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { requireDepot, requireProviderAccount, requireServiceProvider, requireUserAccount, type Scope } from "./references"
-import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
+import { groupsInForceNaming } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireProviderShape } from "./shared"
 import { shiftValues } from "./time-windows"
 import { liveAllocationsNaming } from "./vehicle-allocations"
@@ -250,26 +249,24 @@ export async function driverByWorkforceReference(tx: Tx, companyId: string, refe
   return row === undefined ? undefined : driverOf(row)
 }
 
-export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function driverRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/drivers",
-      describeRoute({
+      {
         operationId: "listDrivers",
         summary: "The drivers the caller's projects employ",
         description:
           "One page of drivers, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the drivers its provider employs, wherever they are based. `projectId` narrows it to one of those projects, or for a provider's account to a project its provider holds a Service Area in today; naming another is refused. `status` answers one status, `licenceClass` the drivers holding exactly that class (not the ones whose class covers it: that is the licence rule's question, asked when a vehicle is named), `homeDepotId` the drivers based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DriverListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)"],
         responses: {
           200: describeJson("One page of drivers.", DriverPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.drivers`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DriverListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, licenceClass, homeDepotId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -297,45 +294,36 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/drivers",
-      describeRoute({
+      {
         operationId: "createDriver",
         summary: "Register a driver",
         description:
           "Registers a workforce profile in one project, which must be a project the caller works in. The workforce reference, where given, is unique across the company; the login (`userAccountId`), where given, is a user account of this company that is not deactivated, and one account is the login of at most one driver. The employing service provider is this company's and is named with `service-provider` employment and with nothing else; the home depot is the named project's. The licence is three attributes: the class held (`b`, `c` or `ce`; null is not on record, which is eligible for nothing), the number, and the expiry as the last day it holds — whether a driver may take a vehicle on a day is judged where a vehicle is named, never here. `status` defaults to `active`. A Service Provider's account registers its own drivers: in a project its provider holds a Service Area in today, with `service-provider` employment naming its own provider, and a login, where given, of its own team — anything else is refused at the field. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: DriverCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, gives a class outside `b`, `c`, `ce` or an expiry that is not a calendar day, names the provider without service-provider employment or the employment without a provider, or names a service provider, depot or user account outside the scope its key allows — each at the field that is wrong"],
         responses: {
           201: describeCreated("The driver as it was written.", Driver),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a class outside `b`, `c`, `ce` or an expiry that is not a calendar day, names the provider without service-provider employment or the employment without a provider, or names a service provider, depot or user account outside the scope its key allows — each at the field that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.drivers`."),
           409: describeProblem("The company already has a driver with that workforce reference, or that login already has a driver profile."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", DriverCreate),
+      },
       async (c) => created(c, "/drivers", await createDriver(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/drivers/:id",
-      describeRoute({
+      {
         operationId: "getDriver",
         summary: "One driver",
         description: "One driver of a project the caller works in. A driver of another company, or of a project this account does not work in, is a driver that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The driver.", Driver),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.drivers`."),
           404: describeProblem("No driver with that id in the projects this account works in, or, for a Service Provider's account, none its provider employs."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -347,29 +335,24 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .patch(
       "/drivers/:id",
-      describeRoute({
+      {
         operationId: "patchDriver",
         summary: "Change a driver",
         description:
           "Changes one driver of a project the caller works in; every field is optional and at least one must be given. The project is not patchable, since a record does not move between projects. A null clears the workforce reference, the provider, the home depot, the licence class, number or expiry, the login or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` driver names the employing provider and no other does. A new provider is this company's, a new home depot this project's, a new login a user account of this company that is not deactivated and not already another driver's. A licence renewal is an edit here — the class and the expiry move — and the audit log is its history. A status change is a plain patch except taking the driver out of service: `inactive` or `suspended` under a live allocation — planned or confirmed and not yet over — or under a collection group of a route scheme in force today, whatever that scheme's status, is refused (409) counting them — release the allocations, reassign the groups, and set it then. Both counts run under the driver's row lock, and a driver already inactive or suspended is not asked again when moved to the other.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: DriverPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project included), gives a class outside `b`, `c`, `ce` or an expiry that is not a calendar day, leaves the employment and the provider disagreeing, or names a service provider, depot or user account outside the scope its key allows"],
         responses: {
           200: describeJson("The driver as it now stands.", Driver),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), gives a class outside `b`, `c`, `ce` or an expiry that is not a calendar day, leaves the employment and the provider disagreeing, or names a service provider, depot or user account outside the scope its key allows.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.drivers`."),
           404: describeProblem("No driver with that id in the projects this account works in, or, for a Service Provider's account, none its provider employs."),
           409: describeProblem(
             "The company already has another driver with that workforce reference, that login already has a driver profile, or the driver is being set inactive or suspended under live allocations or under collection groups of schemes in force: the detail counts them.",
           ),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", DriverPatch),
+      },
       async (c) => c.json(await patchDriver(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now)),
     )
 }

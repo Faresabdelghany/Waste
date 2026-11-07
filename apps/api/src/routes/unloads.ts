@@ -60,20 +60,16 @@ import { notTaken, recordOfficeUnload, stationTakes } from "@waste/db/commands/u
 import { route, unload } from "@waste/db/schema/execution"
 import { transferNoteOf } from "@waste/domain/execution/transfer-note"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { lockRow } from "@waste/db/commands/shared"
 import { unloadAnswered, unloadsAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import { describeProblem, invalidRequest } from "../problem"
 import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadScope } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { noteRefusal, transferNoteInputOf } from "./transfer-notes"
 
@@ -81,26 +77,24 @@ const MODULE = "route-studio.weights"
 
 const UnloadPage = Page(Unload)
 
-export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function unloadRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/unloads",
-      describeRoute({
+      {
         operationId: "listUnloads",
         summary: "The unloads of the caller's projects",
         description:
           "One page of unloads, oldest first (ids are time-ordered, so a cursor over them is a cursor over recording order), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's unloads, and must be a route of a project this account works in (400 on the query); `unloadingStationId` what was tipped at one station, `wasteFractionId` one fraction, and `from` and `to` the window over `occurredAt` (both inclusive, `to` on or after `from`). Every unload carries `weightReview`, weight control's reading over it — the latest review's decision as its status, or `captured` where nobody has looked, with that review's id and, after a correction, the new unload the correction wrote — and `reviewStatus` narrows the page to one reading: `captured` is the weights desk's queue. Reviewing is `POST /unloads/{id}/approve`, `/reject` and `/correct`. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: UnloadListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in", "`routeId` is not a route of one"],
         responses: {
           200: describeJson("One page of unloads.", UnloadPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `routeId` is not a route of one."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", UnloadListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, routeId, unloadingStationId, wasteFractionId, reviewStatus: status, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -131,23 +125,19 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/unloads/:id",
-      describeRoute({
+      {
         operationId: "getUnload",
         summary: "One unload",
         description:
           "One unload of a project the caller works in: the route and session it was recorded on, the station and the fraction, the weights, the station's ticket, who recorded it, and `weightReview` — weight control's reading, the latest review's decision or `captured`, with that review's id and the new unload a correction wrote. An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The unload.", Unload),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No unload with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -159,25 +149,21 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/unloads/:id/transfer-note",
-      describeRoute({
+      {
         operationId: "getUnloadTransferNote",
         summary: "One unload's waste transfer note as its PDF",
         description:
           "The waste transfer note that goes with the load (O18 of #290): one A4 page naming the company as the transferor and carrier with the vehicle and the driver the load came on (the session's, else the route's actual crew, else its planned one), the station as the transferee, the waste — the fraction, its European List of Waste code as the list prints it, whether it is hazardous, the net weight and the weighbridge's gross and tare where weighed, the station's ticket — and the day and time of the transfer on the project's clock, with lines for both parties to sign. In Danish for a Danish project, in English otherwise. Its number is the unload's id. The unload never changes, but the company, the station and the fraction are read as they stand, so the bytes' sha256 is the ETag; `If-None-Match` with it answers 304. A load the station refused was not transferred, and an unload a weight review corrected has its correction's note: both are refused (409). Inline, named by the unload's id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: { description: "The PDF.", content: { "application/pdf": { schema: { type: "string" as const, format: "binary" } } } },
           304: { description: "The ETag named is the note's as it stands." },
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No unload with that id in the projects this account works in."),
           409: describeProblem("The station refused the load, or a weight review corrected the unload; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -201,27 +187,22 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/routes/:id/unloads",
-      describeRoute({
+      {
         operationId: "recordRouteUnload",
         summary: "Capture an unload the office holds the ticket for",
         description:
           "The office's capture of a weighbridge ticket on a route that ran (`active` or `completed`; a route that has not is refused, 409, and a cancelled one does not change): appends one Unload with `source` dispatch, the caller as its recorder, no session, and a server-minted id. The station is one of this company's — any station, since a full truck unloads where it can — and the fraction one of this company's (400 at the field). `netKg` is what was tipped, whole kilograms; `grossKg` and `tareKg` come together or not at all (400 at `tareKg`), and where both are given net is gross less tare (400 at `netKg`). `occurredAt` is when the truck tipped, on the caller's word, and at most five minutes ahead of the request's clock (400). `refusal` says the station refused the load: a reason from the list, and a note, which `other` needs (400 at `refusal.note`). An accepted load's fraction is one the station takes — a station that names none takes nothing — and any other is a 400 at `wasteFractionId` naming the station; a refused load's fraction may be any. The answer carries `load`, the stops' weights of the fraction on board against the net, as every unload does. The `unload-recorded` event is written in the same transaction, carrying the unload as answered.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: UnloadCreate,
+        invalid: ["the body is missing a field, names a member the server owns, gives one of gross and tare without the other or a net that is not gross less tare, dates the unload more than five minutes after the request, names a station or a fraction that is not this company's, refuses the load for another reason without a note, or names, for a load the station took, a fraction the station does not take"],
         responses: {
           201: describeCreated("The unload as it was appended.", Unload),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives one of gross and tare without the other or a net that is not gross less tare, dates the unload more than five minutes after the request, names a station or a fraction that is not this company's, refuses the load for another reason without a note, or names, for a load the station took, a fraction the station does not take.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
           409: describeProblem("The route has not run, or is cancelled."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", UnloadCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { unloadingStationId, wasteFractionId, netKg, grossKg, tareKg, weighbridgeTicket, occurredAt, note, refusal } = c.req.valid("json")

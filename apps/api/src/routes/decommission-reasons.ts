@@ -9,18 +9,14 @@ import { Page } from "@waste/contracts/pagination"
 import { DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
 import { decommissionReason } from "@waste/db/schema/stock"
-import type { Action } from "@waste/domain/access/modules"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.master"
@@ -57,30 +53,23 @@ async function findReason(tx: Tx, companyId: string, id: string): Promise<Row | 
   return row
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function decommissionReasonRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function decommissionReasonRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/decommission-reasons",
-      describeRoute({
+      {
         operationId: "listDecommissionReasons",
         summary: "The company's decommission reasons",
         description:
           "One page of the reasons the company scraps a container for, oldest first (ids are time-ordered). `status` narrows the page to the active or the retired. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DecommissionReasonListQuery,
+        invalid: ["the status is not one of the two"],
         responses: {
           200: describeJson("One page of decommission reasons.", DecommissionReasonPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or the status is not one of the two."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DecommissionReasonListQuery),
+      },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -98,22 +87,20 @@ export function decommissionReasonRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/decommission-reasons",
-      describeRoute({
+      {
         operationId: "createDecommissionReason",
         summary: "Add a decommission reason",
         description:
           "Adds a reason to the company's own list. `code` is the stable slug a report quotes, set once and lowercase; `name` is what a person reads; both are unique inside the company. `status` is `active` unless said. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: DecommissionReasonCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, or names a member the server owns"],
         responses: {
           201: describeCreated("The decommission reason as it was written.", DecommissionReason),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names a member the server owns."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a decommission reason with that code, or with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", DecommissionReasonCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const { companyId } = c.get("principal")
@@ -129,21 +116,18 @@ export function decommissionReasonRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/decommission-reasons/:id",
-      describeRoute({
+      {
         operationId: "getDecommissionReason",
         summary: "One decommission reason",
         description: "One reason of the caller's company. Another company's reason is a reason that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The decommission reason.", DecommissionReason),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No decommission reason with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findReason(c.get("tx"), c.get("principal").companyId, id)
@@ -153,24 +137,22 @@ export function decommissionReasonRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/decommission-reasons/:id",
-      describeRoute({
+      {
         operationId: "patchDecommissionReason",
         summary: "Rename or retire a decommission reason",
         description:
           "Changes the name a person reads, or the status: `inactive` retires the reason from new decommissions while every decommission given it keeps it, and `active` offers it again. The code is not patchable: it is the slug a report quotes, and a reason that needs another one is another reason.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: DecommissionReasonPatch,
+        invalid: ["the patch is empty or names a field the caller does not own, the code included"],
         responses: {
           200: describeJson("The decommission reason as it now stands.", DecommissionReason),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own, the code included."),
-          ...commonProblems("edit"),
           404: describeProblem("No decommission reason with that id in this company."),
           409: describeProblem("The company already has another decommission reason with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", DecommissionReasonPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

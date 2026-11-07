@@ -32,16 +32,12 @@ import { plan, planLeg } from "@waste/db/schema/routing"
 import { routeEta, type EtaStop } from "@waste/domain/routing/eta"
 import { POSITION_RETENTION_DAYS, TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import type { RouteRow } from "@waste/db/shapes/routes"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest } from "../problem"
 import { findReachedRoute, noSuchRoute } from "./execution-shapes"
 import { planStopsByPlan } from "./plan-shapes"
-import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.live"
@@ -165,27 +161,25 @@ export async function liveEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, n
   return { nextPickupId: next?.pickupId ?? null, nextAt: next?.eta?.toISOString() ?? null, finishAt: reading.finishAt?.toISOString() ?? null }
 }
 
-export function positionRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function positionRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/routes/:id/positions",
-      describeRoute({
+      {
         operationId: "getRouteTrack",
         summary: "One session's track of a route",
         description: `Where the route's vehicle was while a session ran (O8 of #290): the positions the Driver App recorded, in the order they were taken — the route's open session's, else its latest's, unless \`sessionId\` names another session of this route. A track longer than ${TRACK_POINTS_MAX} points is thinned evenly, its last point kept, and \`thinned\` says so; a route never started answers no session and no points. Positions are kept ${POSITION_RETENTION_DAYS} days at most, so an older session's track is empty. Read per route only: an office account reads the routes of its projects, a Service Provider's account the routes it serves.`,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: RouteTrackQuery,
+        invalid: ["`sessionId` is not a session of this route"],
         responses: {
           200: describeJson("The track.", RouteTrack),
-          400: describeProblem("The path does not hold an id, or `sessionId` is not a session of this route."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id that this account reads."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", RouteTrackQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { sessionId } = c.req.valid("query")
@@ -207,23 +201,19 @@ export function positionRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
     )
     .get(
       "/routes/:id/eta",
-      describeRoute({
+      {
         operationId: "getRouteEta",
         summary: "When the route's vehicle is expected at each stop",
         description:
           "Each stop of the route's active Plan, in its order, with `eta`, the instant the vehicle is expected there (O8 of #290): the Plan's legs from the route's start — or, before it starts, its planned departure and never earlier than now — each stop's time at the kerb, the wait for a stop's window that has not opened, as the optimiser waits, fifteen minutes at each unload visit on the way, and the progress so far: a stop the driver decided is passed and the estimates go on from its outcome, a stop the vehicle is at is arrived, and on a running route no stop still to come is expected before now. `eta` is null for a stop passed and for every stop of a route that has ended, or whose Plan is not measured, or that has no departure; a stop the active Plan does not name has no row, and a route without one answers no stops. The driver's break is not placed, so a stop after it may be expected early by its minutes. `finishAt` is when the trip is expected to end.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The estimates.", RouteEta),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id that this account reads."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

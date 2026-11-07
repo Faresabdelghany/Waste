@@ -21,18 +21,13 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import { OptimiseAnswer, Plan, PlanDetail, type OptimiseFallback } from "@waste/contracts/plans"
 import { plan } from "@waste/db/schema/routing"
 import { optimiseSolver } from "@waste/domain/routing/plans"
-import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { findReachedRoute, noSuchRoute } from "./execution-shapes"
 import { ensurePlan, findPlan, findReachedPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planReach, type PlanRow } from "./plan-shapes"
-import type { JobSender } from "@waste/db/jobs"
 import { labelOf } from "@waste/db/shapes/routes"
 import { pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
@@ -45,38 +40,28 @@ const PlanPage = Page(Plan)
 /** What asking for a Plan of a route with no open stops is told: there is nothing to order. */
 export const nothingToOrder = (label: string): string => `Route ${label} has no open pickups to order`
 
-export type PlanRouteOptions = {
-  /** The routing provider: its name keys the fingerprint; no call is ever made on the request (#124 §4). */
-  routing: RoutingIdentity
-  /** pg-boss's send for this process (#187): the Plan's job rides the request's transaction through it. */
-  jobs: JobSender
-}
-
 /** The optimise answer: the Plan, and why it is a baseline when it is. */
 const answerOf = (row: PlanRow, fallback: OptimiseFallback | null): OptimiseAnswer => ({ ...planOf(row), fallback })
 
-export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }: PlanRouteOptions) {
-  return new Hono<AuthEnv>()
+export function planRoutes(deps: RouteDeps) {
+  const { routing, jobs } = deps
+  return routes(deps)
     .get(
       "/routes/:id/plans",
-      describeRoute({
+      {
         operationId: "listRoutePlans",
         summary: "The Plans of one route",
         description:
           "One page of the route's Plans, oldest first (ids are time-ordered) — every calculation ever asked for over this route, whoever ordered it: the optimiser, a dispatcher's reorder (`manual`), or the generated order measured (`baseline`). A re-optimisation is a new Plan and the previous rows stay, so this is the history; the route's own read says which one is active. Legs are `GET /plans/{id}`'s, fetched only when a map draws. The route is one `GET /routes/{id}` reaches: of the caller's projects, or one a Service Provider's account runs. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of the route's Plans.", PlanPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in, or, for a Service Provider's account, none its provider runs."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
@@ -95,23 +80,19 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
     )
     .get(
       "/plans/:id",
-      describeRoute({
+      {
         operationId: "getPlan",
         summary: "One Plan with its legs",
         description:
           "One Plan of a project the caller works in, with its legs in driving order — each a stored LineString with its metres and seconds, written by the measurement and never patched (#124). A `calculating` or `failed` Plan has no legs yet, or ever. A Plan of another company, or of a project this account does not work in — for a Service Provider's account, of a route its provider does not run — is a Plan that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The Plan and its legs.", PlanDetail),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No plan with that id in the projects this account works in, or, for a Service Provider's account, on no route its provider runs."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -123,26 +104,22 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
     )
     .post(
       "/routes/:id/optimise",
-      describeRoute({
+      {
         operationId: "optimiseRoute",
         summary: "Ask for a Plan over a route's open stops",
         description:
           "Asks the routing provider for an ordered, measured Plan over the route's open pickups: from the route's depot they go to the optimiser — one request takes fifty locations, a full trip's unloading station one of them, so a larger route is optimised in parts swept around the depot, a request each (O15 of #290) — and otherwise the request becomes a `baseline` measurement of the generated order, read \"Not optimised\", and the answer's `fallback` says why — `too-many-stops` (more than ten requests' worth: 500 stops, 490 on a full trip) or `no-depot` (the optimiser orders the stops from the depot, #171); `fallback` is null when the optimiser took it. Answers at once with the Plan — 202 `calculating` when this request created it and its job now waits for the worker, 200 when an identical request's Plan already stood: a `ready` one is re-activated and consumes no provider call, a `calculating` one is already on its way (two clicks are one job). Accepted while the routing quota is exhausted — the Plan answers `calculating` and, once the worker's quota engine has deferred it, `deferredUntil` — and the route beneath is never gated: dispatch and execution go on over the generated order, drawn dashed. A route that has started is refused (409): the sequence is frozen (ADR-0002); a completed or cancelled one does not change. Takes no body. Under the route's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
         responses: {
           200: describeJson("An identical request's Plan already stood: re-activated if it was ready, or still calculating; with the reason it is a baseline, when it is.", OptimiseAnswer),
           202: describeJson("The Plan this request created, calculating; its job waits for the worker; with the reason it is a baseline, when it is.", OptimiseAnswer),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
           409: describeProblem("The route is active, completed or cancelled, or has no open pickups to order."),
           503: describeProblem("No worker has started on this database yet, so the routing queue is not there to send to; nothing was written."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

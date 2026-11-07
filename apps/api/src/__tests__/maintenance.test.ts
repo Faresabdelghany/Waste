@@ -14,7 +14,7 @@ import { AN_INTERVAL, KM_NEEDS_A_READING, NAME_THE_ORDER } from "@waste/domain/r
 import { Hono } from "hono"
 
 import type { createApp } from "../app"
-import { authenticate } from "../auth/principal"
+import { routeDeps } from "../deps"
 import { errorHandler } from "../problem"
 import { alreadyClosed, maintenanceRoutes, NEEDS_THE_ODOMETER, NOT_A_PLAN_OF_THE_VEHICLE, NOT_A_VEHICLE_HERE, NOT_AHEAD } from "../routes/maintenance"
 import { callingAs, type Call } from "./calls"
@@ -49,10 +49,9 @@ describe("vehicle maintenance", { skip: database.skip }, () => {
     a = await seedTenant(pool)
     const planning = await seedPlanning(pool, a)
     fleet = await seedFleet(pool, a, planning)
-    const guard = authenticate({ pool, verifier: keys.verifier })
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", maintenanceRoutes(guard, { now: () => NOW }))
+    app.route("/", maintenanceRoutes(routeDeps({ probe: pool, pool, verifier: keys.verifier, now: () => NOW })).app)
     const asApp = app as unknown as ReturnType<typeof createApp>
     olivia = callingAs(asApp, keys, a.users.olivia, a.companyId)
     viewer = callingAs(asApp, keys, a.users.viewer, a.companyId)

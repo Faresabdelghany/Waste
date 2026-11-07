@@ -130,9 +130,6 @@ import { seasonsOf } from "./scheme-seasons"
 import { stamp } from "./shared"
 import { oneDay, refuseCrewsAway } from "./availability-rules"
 
-/** What a route module takes beside the guard: the app's clock, which "today" on a project's clock is rendered from; a test pins it. */
-export type ClockOptions = { now?: () => Date }
-
 /** The grant every scheme and group route runs under: a group is a part of its scheme and not a surface of its own. */
 export const MODULE = "route-studio.schemes"
 

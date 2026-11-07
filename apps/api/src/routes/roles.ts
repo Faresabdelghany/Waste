@@ -38,18 +38,17 @@ import type { Tx } from "@waste/db/client"
 import { role, roleGrant } from "@waste/db/schema/access"
 import { PROVIDER_ROLE_SCOPE, systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { grantsOfRows, normalisedGrants } from "../access-shape"
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf } from "../auth/provider"
-import { requireGrant, requireGrantOf } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.access"
@@ -133,26 +132,23 @@ async function findRole(tx: Tx, companyId: string, id: string): Promise<Row> {
   return row
 }
 
-export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function roleRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/roles",
-      describeRoute({
+      {
         operationId: "listRoles",
         summary: "The company's roles",
         description:
           "One page of the company's roles, oldest first (ids are time-ordered), each with its whole matrix — or, for a Service Provider's account, under `service-providers.service-provider-workspace`, the roles of a provider's team (scope `Own service provider`), the ones it may give its own accounts where they allow no more than its own. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "view",
+        query: PageRequest,
         responses: {
           200: describeJson("One page of roles.", RolePage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "view"),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -174,23 +170,20 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/roles",
-      describeRoute({
+      {
         operationId: "createRole",
         summary: "Add a role",
         description:
           "Creates a custom role in the caller's company: the server writes it with no key and `system: false`, since a key belongs to a seeded role. The grants are stored as the system spells them — `edit`, `create` and `delete` imply `view`, a module named twice is merged — and default to none. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: RoleCreate,
+        invalid: ["the body is missing a field, names one the server owns, or names a module or action outside the vocabulary"],
         responses: {
           201: describeCreated("The role as it was written.", Role),
-          400: describeProblem("The body is missing a field, names one the server owns, or names a module or action outside the vocabulary."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.access`."),
           409: describeProblem("The company already has a role with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", RoleCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -209,22 +202,19 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/roles/:id",
-      describeRoute({
+      {
         operationId: "getRole",
         summary: "One role",
         description: "One role of the caller's company, with its whole matrix — for a Service Provider's account, a role of a provider's team. Another company's role, or for a provider's account any other, is a role that does not exist here.",
-        security: BEARER_SECURITY,
+        module: accessModuleOf,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The role.", Role),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No role with that id in this company."),
         },
-      }),
-      guard,
-      requireGrantOf(accessModuleOf, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -241,25 +231,22 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/roles/:id",
-      describeRoute({
+      {
         operationId: "patchRole",
         summary: "Change a role's copy",
         description:
           "Changes the name, the scope or the description; every field is optional and at least one must be given. A system role's name and description are the company's to change — a company may call the Dispatcher by a name of its own — but its scope is the platform's, which every seed restores to the charter: another scope on a system role is refused (409), while re-stating the one it has names nothing new, so a body sending the copy whole is taken. A role's `key` and its `system` flag are not a caller's to change, so the body does not name them, and the matrix is `PUT /roles/{id}/grants`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RolePatch,
+        invalid: ["the patch is empty or names a field the caller does not own"],
         responses: {
           200: describeJson("The role as it now stands.", Role),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
           404: describeProblem("No role with that id in this company."),
           409: describeProblem("The company already has another role with that name, or the patch moves a system role's scope."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RolePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -281,25 +268,22 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/roles/:id/grants",
-      describeRoute({
+      {
         operationId: "putRoleGrants",
         summary: "Replace a role's matrix",
         description:
           "Replaces the whole matrix of a custom role with the one in the body: a module the body leaves out is not allowed at all afterwards, and an empty list is a role that may do nothing. The set is stored as the system spells it — `edit`, `create` and `delete` imply `view`, a module named twice is merged — and a revoked grant takes effect on the holder's very next request, since the API looks a caller's grants up on every call. A system role's matrix is the platform's, which every seed restores to the charter, so replacing it is refused (409): a company that wants another reach makes a custom role.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RoleGrants,
+        invalid: ["the body is missing `grants`, names a member it does not own, or names a module or action outside the vocabulary"],
         responses: {
           200: describeJson("The role with the matrix it now has.", Role),
-          400: describeProblem("The path does not hold an id, or the body is missing `grants`, names a member it does not own, or names a module or action outside the vocabulary."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
           404: describeProblem("No role with that id in this company."),
           409: describeProblem("The role is a system role, whose matrix is the platform's."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RoleGrants),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { grants: asked } = c.req.valid("json")

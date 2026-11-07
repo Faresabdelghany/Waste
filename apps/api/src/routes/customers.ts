@@ -28,39 +28,32 @@ import { Customer, CustomerCreate, CustomerPatch } from "@waste/contracts/custom
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { customer } from "@waste/db/schema/customers"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
+import { describeProblem } from "../problem"
 import { createCustomer, customerColumns as columns, customerOf, noSuchCustomer, patchCustomer } from "./customer-writes"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
 const CustomerPage = Page(Customer)
 
-export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function customerRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/customers",
-      describeRoute({
+      {
         operationId: "listCustomers",
         summary: "The company's customers",
         description:
           "One page of the company's customers, people and organisations alike, oldest first (ids are time-ordered). Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PageRequest,
         responses: {
           200: describeJson("One page of customers.", CustomerPage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -76,43 +69,36 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/customers",
-      describeRoute({
+      {
         operationId: "createCustomer",
         summary: "Register a customer",
         description:
           "Registers a person or an organisation in the caller's company. Only the kind and the name are required: a sole trader has no registration number, and a customer who gave no phone number still has to be billable. The status defaults to `active` and service messages to allowed. A registration number, where given, is one customer's inside the company. The e-mail is stored lowercase. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: CustomerCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, or names one the server owns"],
         responses: {
           201: describeCreated("The customer as it was written.", Customer),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.contacts`."),
           409: describeProblem("The company already has a customer with that registration number."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", CustomerCreate),
+      },
       async (c) => created(c, "/customers", await createCustomer(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/customers/:id",
-      describeRoute({
+      {
         operationId: "getCustomer",
         summary: "One customer",
         description: "One customer of the caller's company. Another company's customer is a customer that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The customer.", Customer),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
           404: describeProblem("No customer with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const [row] = await c
@@ -127,25 +113,22 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/customers/:id",
-      describeRoute({
+      {
         operationId: "patchCustomer",
         summary: "Change a customer",
         description:
           "Changes one customer of the caller's company; every field is optional and at least one must be given. A null clears an optional field, and a new e-mail is stored lowercase like the first one.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CustomerPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The customer as it now stands.", Customer),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, or holds a value of the wrong shape."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.contacts`."),
           404: describeProblem("No customer with that id in this company."),
           409: describeProblem("The company already has another customer with that registration number, or an organisation with active contact persons is made a person."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CustomerPatch),
+      },
       async (c) => c.json(await patchCustomer(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }

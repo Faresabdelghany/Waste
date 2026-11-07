@@ -33,33 +33,29 @@ import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
-import type { Action } from "@waste/domain/access/modules"
 import { onlyABookedBooking } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, gte, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow } from "@waste/db/commands/shared"
 import { bookingAnswered, bookingOf, bulkyItemsOf, selectBookings, statusOf, type BookingRow } from "@waste/db/shapes/bulky-bookings"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "operate.bulky-bookings"
 
 const BookingPage = Page(BulkyBooking)
-
-type ClockOptions = { now?: () => Date }
 
 /** What a booking for a customer who is not active is told: a status gates a new reference. */
 export const INACTIVE_CUSTOMER = "The customer is inactive; a bulky collection is booked for an active customer"
@@ -116,33 +112,27 @@ async function placeProject(tx: Tx, principal: Principal, place: { propertyId?: 
   return found.projectId
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
 const DAY_REFUSALS =
   "the place has no location, or lies in no planning area with a bulky schedule; the day is today or earlier, not a bulky collection day where the place is, or fully booked (`2027-03-09 is fully booked: every bulky collection slot that day is taken`)"
 
-export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function bulkyBookingRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/bulky-bookings",
-      describeRoute({
+      {
         operationId: "listBulkyBookings",
         summary: "The projects' bulky bookings",
         description:
           "One page of the Bulky Bookings of the projects the caller works in, oldest first (ids are time-ordered), each with its items in the order listed and its live stop — the planned one, or the one that collected it — and its status read from the two: `booked`, `routed`, `collected` or `cancelled`. `projectId` narrows it to one of those projects (naming another is refused); `status`, `customerId`, `propertyId`, `sharedCollectionPointId` and `planningAreaId` to one of each; `from` and `to` to a window of the booking's day, both inclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: BulkyBookingListQuery,
+        invalid: ["a day is not a calendar day", "the window ends before it starts", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of bookings.", BookingPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a day is not a calendar day, the window ends before it starts, or `projectId` is not a project this account works in."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", BulkyBookingListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, customerId, propertyId, sharedCollectionPointId, planningAreaId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -177,22 +167,20 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/bulky-bookings/availability",
-      describeRoute({
+      {
         operationId: "getBulkyAvailability",
         summary: "The days a place may be booked for a bulky collection",
         description:
           "The days of the window, both ends included, a place — `propertyId` or `sharedCollectionPointId`, one of the two, of a project the caller works in (400 at the field otherwise), and of `projectId` where the query names one (400 at `projectId` for a project the caller does not work in, at the place's field for a place of another) — may book a bulky collection on: the days of the Bulky Schedule of the planning area the place lies in on each day, its location inside the area's boundary in force that day, after the project's today on its clock, in date order. Each day names its slots, how many bookings not cancelled hold one, how many are left — a full day is listed with none left, and a booking of it is refused — and the schedule and area they are counted under; where two scheduled areas hold the place on a day, the lowest area code's. The days are the schedule's occurrences (`generateOccurrences`): a skipped holiday is no day, and a shifted one is offered on the day it moved to. The window is at most 92 days. A place with no location, or in no planning area with a bulky schedule over the window, is refused (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: BulkyAvailabilityQuery,
+        invalid: ["the query names no place or two, a project this account does not work in or a place not of the project it names, a day that is not a calendar day, a window ending before it starts or longer than 92 days, or a place of a project this account does not work in"],
         responses: {
           200: describeJson("The place's days with their slots.", BulkyAvailability),
-          400: describeProblem("The query names no place or two, a project this account does not work in or a place not of the project it names, a day that is not a calendar day, a window ending before it starts or longer than 92 days, or a place of a project this account does not work in."),
-          ...commonProblems("view"),
           409: describeProblem("The place has no location, or lies in no planning area with a bulky schedule over the window."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", BulkyAvailabilityQuery),
+      },
       async (c) => {
         const { projectId: named, propertyId, sharedCollectionPointId, from, to } = c.req.valid("query")
         const tx = c.get("tx")
@@ -209,21 +197,19 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/bulky-bookings",
-      describeRoute({
+      {
         operationId: "createBulkyBooking",
         summary: "Book a bulky collection",
         description: `Books a bulky collection for a customer: at one of the two places — a property or a shared collection point of the agreement's project — on a day, of a waste fraction, with its items (at least one, each a description and a count), charged to an agreement of a project the caller works in (400 at \`agreementId\` otherwise). The customer is the company's (400) and the agreement's (400 at \`customerId\`), the place the project's (400 at its field) and the fraction the company's (400). Then the rows: the customer active (409), the place served — an active property, an open or restricted point (409); the agreement signed, in force on the day, and serving the place that day through a subscription there (409 each); then the day: ${DAY_REFUSALS} (409). The booking takes one slot of its day under its schedule's row lock, so two bookings of the last slot take turns and the second is refused. It freezes the area, the schedule and the schedule's product — what its completion is charged at — and stands \`booked\` until the office routes it as a stop (\`POST /routes/{id}/pickups\` with \`service: bulky\`). \`bulky-booking-booked\` is written to the outbox with the booking as answered, from which the customer is sent the project's notice where a rule names one (O16 of #290). The same statement answers the citizen portal's door (#383).`,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: BulkyBookingCreate,
+        invalid: ["the body is missing a field, names a member the server owns, no place or two, no item or too many, an agreement of a project this account does not work in or of another customer, or a customer, place or fraction that is not the company's or the project's"],
         responses: {
           201: describeCreated("The booking, booked, with its items.", BulkyBooking),
-          400: describeProblem("The body is missing a field, names a member the server owns, no place or two, no item or too many, an agreement of a project this account does not work in or of another customer, or a customer, place or fraction that is not the company's or the project's."),
-          ...commonProblems("create"),
           409: describeProblem(`The customer is inactive; the place is not served; the agreement is not signed, not in force on the day, or serves nothing at the place; ${DAY_REFUSALS}.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", BulkyBookingCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -255,21 +241,18 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/bulky-bookings/:id",
-      describeRoute({
+      {
         operationId: "getBulkyBooking",
         summary: "One bulky booking",
         description: "One Bulky Booking of a project the caller works in, with its items, its live stop and its status. A booking of another company, or of a project this account does not work in, is a booking that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The booking.", BulkyBooking),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No booking with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -281,23 +264,21 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .patch(
       "/bulky-bookings/:id",
-      describeRoute({
+      {
         operationId: "patchBulkyBooking",
         summary: "Change a bulky booking",
         description: `Moves a booked Bulky Booking to another day, replaces its items whole, or changes its note; every field is optional and at least one must be given. Under the booking's row lock, only a \`booked\` one changes (409: a routed one's stop is taken off its route first, a collected or cancelled one stands). A new day is judged as on the create — the agreement in force on it and serving the place that day, then ${DAY_REFUSALS} (409) — and takes a slot of it, its area, schedule and product those of the new day; the old day's slot is freed. The way to book again a booking whose stop was missed.`,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BulkyBookingPatch,
+        invalid: ["the patch is empty, names a member it does not take, or lists no item or too many"],
         responses: {
           200: describeJson("The booking as it now stands.", BulkyBooking),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a member it does not take, or lists no item or too many."),
-          ...commonProblems("edit"),
           404: describeProblem("No booking with that id in the projects this account works in."),
           409: describeProblem(`The booking is not booked; the agreement is not in force on the new day or serves nothing at the place then; ${DAY_REFUSALS}.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BulkyBookingPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const fields = c.req.valid("json")
@@ -324,24 +305,22 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/bulky-bookings/:id/cancel",
-      describeRoute({
+      {
         operationId: "cancelBulkyBooking",
         summary: "Cancel a bulky booking",
         description:
           "Cancels a booked Bulky Booking, saying why: its instant, the person and the reason are stamped, and its slot is freed. Under the booking's row lock, only a `booked` one is cancelled (409: a routed one's stop is taken off its route first, `POST /pickups/{id}/remove`; a collected or cancelled one stands). The row stays, with its items. `bulky-booking-cancelled` is written to the outbox with the booking as answered, from which the customer is sent the project's notice where a rule names one (O16 of #290).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BulkyBookingCancel,
+        invalid: ["the body has no reason or carries a member the command does not take"],
         responses: {
           200: describeJson("The booking, cancelled.", BulkyBooking),
-          400: describeProblem("The path does not hold an id, or the body has no reason or carries a member the command does not take."),
-          ...commonProblems("edit"),
           404: describeProblem("No booking with that id in the projects this account works in."),
           409: describeProblem("The booking is routed, collected or cancelled already."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BulkyBookingCancel),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")

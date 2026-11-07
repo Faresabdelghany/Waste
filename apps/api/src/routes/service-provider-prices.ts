@@ -79,19 +79,18 @@ import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { priceEnded, priceEndedBy } from "@waste/domain/finance/transitions"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, exists, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { projectCurrency } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { reachesThroughAssignments } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { answerOf, batchesOf, INDEX_BELOW_ZERO, INDEX_TOO_LARGE, lockInBatches, productStatuses, refusePlan } from "./indexation"
 import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
@@ -187,26 +186,23 @@ const underProvider = (tx: Tx, companyId: string, serviceProviderId: string) =>
       .where(and(eq(serviceAreaAssignment.companyId, companyId), eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId), eq(serviceAreaAssignment.serviceProviderId, serviceProviderId))),
   )
 
-export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function serviceProviderPriceRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/service-provider-prices",
-      describeRoute({
+      {
         operationId: "listServiceProviderPrices",
         summary: "The service provider prices the caller reaches",
         description:
           "One page of service provider prices, oldest first (ids are time-ordered). An office account reads the prices of the projects it works in; a service provider's account, which works in no project, reads the prices under the assignments naming its own provider and no other. `projectId` narrows it to one of the caller's projects; naming another is refused. `serviceAreaAssignmentId` narrows it to one assignment's, `serviceProviderId` to the prices under every assignment naming that provider, `productId` to one product's, and `validOn` to the prices in force on that day, `validFrom` inclusive and `validTo` exclusive — which is how the fee on a day is read across an indexation. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ServiceProviderPriceListQuery,
+        invalid: ["`validOn` is not a calendar day", "a filter is not an id", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of service provider prices.", PricePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, a filter is not an id, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.service-provider-prices`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ServiceProviderPriceListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaAssignmentId, serviceProviderId, productId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -234,23 +230,20 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-provider-prices",
-      describeRoute({
+      {
         operationId: "createServiceProviderPrice",
         summary: "Write a service provider price",
         description:
           "Writes the first row of a price chain under one assignment, which must be an assignment of a project the caller works in (400 on `serviceAreaAssignmentId`; the body names no project, since the assignment's is the price's): the product, a product of that project (400 on `productId`) and `active`, since a price is a new reference to it (409 otherwise); the bid in minor units, contractually locked from here on; the current fee, the bid when absent; and the period, half-open and inside the assignment's (400 on the bound outside). The currency is the project's and is not in the body. One price of an assignment and a product is in force at a time, so a period overlapping one is refused (409, `This assignment already prices this product over part of that period; end it first`); a new fee is not a second row here but an indexation, `POST /service-provider-prices/{id}/index`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ServiceProviderPriceCreate,
+        invalid: ["the body is missing a field, names a member the server owns (the currency and the index columns included), ends on or before the day it starts, puts a bound outside the assignment's period, or names an assignment outside the caller's projects or a product that is not the assignment's project's"],
         responses: {
           201: describeCreated("The price as it was written.", ServiceProviderPrice),
-          400: describeProblem("The body is missing a field, names a member the server owns (the currency and the index columns included), ends on or before the day it starts, puts a bound outside the assignment's period, or names an assignment outside the caller's projects or a product that is not the assignment's project's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `commercial.service-provider-prices`."),
           409: describeProblem("The product is not active, or the assignment already prices this product over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ServiceProviderPriceCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -287,24 +280,21 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-provider-prices/index",
-      describeRoute({
+      {
         operationId: "indexServiceProviderPrices",
         summary: "Apply an index to many service provider prices",
         description:
           "Applies an index from `appliedFrom` to every price under one provider's assignments in the projects the caller works in (`serviceProviderId`) or under one award (`serviceAreaAssignmentId`, of a project the caller works in), exactly one of the two, each as the single `POST /service-provider-prices/{id}/index` writes it: a price in force on that day that started before it is ended on it and its successor written with the same assignment, product, bid, currency and end, the fee `round(base × (1 + basisPoints / 10 000))` half away from zero over the bid or the current fee (`base`), `indexedFromId` naming the price, the label, the basis points and the base. A price that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a price that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the scope's assignments' locks and then the prices', so a bulk index and a single one take turns.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        body: ServiceProviderPriceBulkIndex,
+        invalid: ["the body is missing a field, names a member the server owns, names both a provider and an award or neither, names a provider not of this company or an award outside the caller's projects, gives a base outside the two, or gives basis points that take a fee below zero or past 2147483647 minor units"],
         responses: {
           200: describeJson("The preview: what each price would become, nothing written.", IndexResult),
           201: describeJson("What each price became, each indexed line naming its successor.", IndexResult),
-          400: describeProblem("The body is missing a field, names a member the server owns, names both a provider and an award or neither, names a provider not of this company or an award outside the caller's projects, gives a base outside the two, or gives basis points that take a fee below zero or past 2147483647 minor units."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
           409: describeProblem("No price in scope runs into `appliedFrom` from an earlier day, so a write would index nothing."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", ServiceProviderPriceBulkIndex),
+      },
       async (c) => {
         const index = c.req.valid("json")
         const tx = c.get("tx")
@@ -389,23 +379,19 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-provider-prices/:id",
-      describeRoute({
+      {
         operationId: "getServiceProviderPrice",
         summary: "One service provider price",
         description:
           "One price the caller reaches: of a project an office account works in, or under an assignment naming a service provider account's own provider. A price outside that is a price that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The price.", ServiceProviderPrice),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.service-provider-prices`."),
           404: describeProblem("No service provider price with that id this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -416,25 +402,22 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/service-provider-prices/:id",
-      describeRoute({
+      {
         operationId: "patchServiceProviderPrice",
         summary: "Amend a service provider price",
         description:
           "Changes the notes or the end of one price of a project the caller works in; every field is optional and at least one must be given. The bid never changes — it is contractually locked — and the fee moves through `POST /service-provider-prices/{id}/index` alone; the assignment, the product, the start and the project are not patchable either. Moving the end is held under the assignment's lock and then the price's: the end still comes after the start, the price still lies inside the assignment's period (400 on `validTo`), and the price still overlaps no other row of the chain (409): a reopened or lengthened row meeting the indexed one after it is refused there. A service provider's account changes nothing here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceProviderPricePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the bid, the fee, the assignment, the product and the start included), ends on or before the day the price starts, or puts the end outside the assignment's period"],
         responses: {
           200: describeJson("The price as it now stands.", ServiceProviderPrice),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the bid, the fee, the assignment, the product and the start included), ends on or before the day the price starts, or puts the end outside the assignment's period."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
           404: describeProblem("No service provider price with that id in the projects this account works in."),
           409: describeProblem("Another price of the assignment and the product is in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceProviderPricePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -470,25 +453,22 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-provider-prices/:id/index",
-      describeRoute({
+      {
         operationId: "indexServiceProviderPrice",
         summary: "Index a service provider price",
         description:
           "Applies an indexation to one price of a project the caller works in, as a new row and never an update: this row is ended on `appliedFrom` and the next is written from it with the same assignment, product, bid and currency, the new fee — `round(base × (1 + basisPoints / 10 000))` in minor units, half away from zero, `base` the locked bid or the fee this row carries (`bid` or `current-fee`, the latter compounding earlier indexations) — `indexedFromId` naming this row, the label, the basis points (negative is a deflator) and the base, and this row's end as its own, so the fee on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. `appliedFrom` is after this row's start (400 on `appliedFrom`, `The index applies inside the price's period`); a row already ended on or before `appliedFrom` is over and not the one to index (409, `This price was valid to 2026-12-31; index the price in force`, its end named by its last day in, as the office reads it). A price whose product is no longer active takes no index, since the next row is a new reference to it (409). Held under the assignment's lock and then the row's, so two indexations take turns. Answers the new row, 201 with `Location`, since a row was made.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceProviderPriceIndex,
+        invalid: ["the body is missing a field, names a member the server owns, gives a base outside the two, applies the index on or before the row's start, or gives basis points that take the fee below zero or past 2147483647 minor units"],
         responses: {
           201: describeCreated("The indexed price, the new row of the chain.", ServiceProviderPrice),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, gives a base outside the two, applies the index on or before the row's start, or gives basis points that take the fee below zero or past 2147483647 minor units."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
           404: describeProblem("No service provider price with that id in the projects this account works in."),
           409: describeProblem("The price already ended on or before the day the index applies from, or its product is not active."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceProviderPriceIndex),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const index = c.req.valid("json")

@@ -17,19 +17,15 @@ import { HolidayList, HolidayListCreate, HolidayListHolidaysSet, HolidayListList
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
-import type { Action } from "@waste/domain/access/modules"
 import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -135,30 +131,22 @@ async function writeHolidays(tx: Tx, companyId: string, listId: string, holidays
 /** The body's days in the order the table reads them back, by day, so a write answers what the next read says. */
 const byDay = (holidays: readonly Holiday[]): Holiday[] => [...holidays].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function holidayListRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/holiday-lists",
-      describeRoute({
+      {
         operationId: "listHolidayLists",
         summary: "The company's holiday lists",
         description:
           "One page of the company's holiday lists, oldest first (ids are time-ordered), each with its days by day and how many of the company's projects rest on it. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: HolidayListListQuery,
         responses: {
           200: describeJson("One page of holiday lists.", HolidayListPage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", HolidayListListQuery),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -178,22 +166,20 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/holiday-lists",
-      describeRoute({
+      {
         operationId: "createHolidayList",
         summary: "Add a holiday list",
         description:
           "Adds a list to the company's own: `country` is ISO 3166-1 alpha-2 and `name` what a person reads and a project names, each once inside the company; `holidays` the days it starts with, each named once, none when absent. The server mints the id. A project rests on it once its `holidayList` names it.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: HolidayListCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, names the same day twice, or carries more than 400 days"],
         responses: {
           201: describeCreated("The holiday list as it was written.", HolidayList),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names a member the server owns, names the same day twice, or carries more than 400 days."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a holiday list for that country, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", HolidayListCreate),
+      },
       async (c) => {
         const { holidays, ...values } = c.req.valid("json")
         const { companyId } = c.get("principal")
@@ -210,21 +196,18 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/holiday-lists/:id",
-      describeRoute({
+      {
         operationId: "getHolidayList",
         summary: "One holiday list",
         description: "One list of the caller's company, with its days by day. Another company's list is a list that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The holiday list.", HolidayList),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No holiday list with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -236,24 +219,22 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/holiday-lists/:id",
-      describeRoute({
+      {
         operationId: "patchHolidayList",
         summary: "Rename a holiday list, or move it to another country",
         description:
           "Changes the country or the name. A new name follows to every project resting on the list in the same statement (the projects' `holidayList` is a key into it), so no project leaves the list by a rename. The days are a set and are replaced through `PUT /holiday-lists/:id/holidays`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: HolidayListPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The holiday list as it now stands.", HolidayList),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, or holds a value of the wrong shape."),
-          ...commonProblems("edit"),
           404: describeProblem("No holiday list with that id in this company."),
           409: describeProblem("The company already has another holiday list for that country, or with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", HolidayListPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -277,22 +258,19 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .delete(
       "/holiday-lists/:id",
-      describeRoute({
+      {
         operationId: "deleteHolidayList",
         summary: "Remove a holiday list",
         description: "Removes a list no project rests on, with its days. A list a project still names is refused: move the project off it, or onto another list, first.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "delete",
+        params: IdParam,
         responses: {
           204: { description: "The list and its days are gone." },
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("delete"),
           404: describeProblem("No holiday list with that id in this company."),
           409: describeProblem("A project of the company rests on the list."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "delete"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { companyId } = c.get("principal")
@@ -312,23 +290,21 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/holiday-lists/:id/holidays",
-      describeRoute({
+      {
         operationId: "putHolidayListHolidays",
         summary: "Replace a holiday list's days",
         description:
           "Replaces the whole set with the one in the body: a day the body leaves out is not a holiday afterwards, and an empty set is a list without holidays. Each entry is a day and a name or null, each day named once (400 on `holidays`). The list's `updatedAt` moves, since the days are part of the list on the wire. The change releases in the same transaction, in every project resting on the list, the hold on each route the office moved by hand (`heldAt`) that it re-decides under its scheme's holiday policy — one standing where the scheme put the collection, when a holiday added or taken away moves or skips it, and one the office moved to a day that becomes a holiday the scheme moves collections off — so the next generation run plans them with their neighbours (#226).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: HolidayListHolidaysSet,
+        invalid: ["the body is missing `holidays`, names a member it does not own, names the same day twice, or carries more than 400 days"],
         responses: {
           200: describeJson("The holiday list with the days it now has.", HolidayList),
-          400: describeProblem("The path does not hold an id, or the body is missing `holidays`, names a member it does not own, names the same day twice, or carries more than 400 days."),
-          ...commonProblems("edit"),
           404: describeProblem("No holiday list with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", HolidayListHolidaysSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { holidays } = c.req.valid("json")

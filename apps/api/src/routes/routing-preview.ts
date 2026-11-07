@@ -33,20 +33,17 @@
 // share one call.
 import { RoutingPreview, RoutingPreviewRequest, type RoutingPreviewLeg } from "@waste/contracts/routing-preview"
 import type { Position2D } from "@waste/contracts/geojson"
-import type { Database } from "@waste/db/client"
 import { quotaRows, recordQuota } from "@waste/db/commands/routing-quota"
 import { loggable } from "@waste/db/sqlstate"
-import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { distinctConsecutive, samePosition } from "@waste/domain/geo"
-import { DEFAULT_PROFILE, type RoutedLeg } from "@waste/routing/provider"
-import type { Outcome, QuotaEngine } from "@waste/routing/quota"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
+import { DEFAULT_PROFILE, type RoutedLeg, type RoutingProvider } from "@waste/routing/provider"
+import { quotaKnobs, QuotaEngine, type Outcome } from "@waste/routing/quota"
 
-import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { Transact } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { describeJson } from "./shared"
 
 const MODULE = "route-studio.schemes"
@@ -153,24 +150,19 @@ function answerOf(provider: string, points: readonly Position2D[], outcome: Outc
 /** Whether an outcome stands for the same request asked again: the road and the provider's refusal of the points do; a deferral and a key refused are the quota's and the key's state, not the request's. */
 const standsFor = (outcome: Outcome<unknown>): boolean => outcome.kind === "answered" || outcome.kind === "refused"
 
-export type RoutingPreviewOptions = {
-  /** The request pool: the handler's own two short transactions run on it. */
-  pool: Database
-  /** The provider behind the quota engine the preview asks through; it never waits inside a request. */
-  engine: QuotaEngine
-  now: () => Date
-  /** Where the cause of a provider that did not answer goes. */
-  log: (error: unknown) => void
-}
+/** The quota engine the preview asks through: the provider's, interactive and never waiting inside a request, at `callsPerMinute` (ROUTING_PREVIEW_CALLS_PER_MINUTE) or the preview's own. */
+export const previewEngine = (provider: RoutingProvider, callsPerMinute = PREVIEW_CALLS_PER_MINUTE): QuotaEngine =>
+  new QuotaEngine(provider, { ...quotaKnobs({ callsPerMinute }), waits: false })
 
-export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { pool, engine, now, log }: RoutingPreviewOptions) {
+export function routingPreviewRoutes(deps: RouteDeps) {
+  const { routingEngine: engine, now, log } = deps
   const cache = new PreviewCache()
   const asking = new Map<string, Promise<RoutingPreview>>()
 
   /** One call through the engine, bracketed by the company's readings — taken before, written after when the engine learned something — and the answer cached where it stands. */
-  async function ask(key: string, companyId: string, points: readonly Position2D[]): Promise<RoutingPreview> {
+  async function ask(key: string, companyId: string, transact: Transact, points: readonly Position2D[]): Promise<RoutingPreview> {
     const keys = { companyId, provider: engine.name }
-    const rows = await withCompany(pool.db, companyId, (tx) => quotaRows(tx, keys))
+    const rows = await transact((tx) => quotaRows(tx, keys))
     for (const { family, updatedAt, ...standing } of rows) engine.refresh(family, { ...standing, observedAt: updatedAt })
     const before = engine.state("directions").observedAt?.getTime() ?? null
     const distinct = distinctConsecutive(points)
@@ -186,7 +178,7 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
     const learned = engine.state("directions")
     if ((learned.observedAt?.getTime() ?? null) !== before) {
       try {
-        await withCompany(pool.db, companyId, (tx) => recordQuota(tx, { ...keys, family: "directions" }, learned))
+        await transact((tx) => recordQuota(tx, { ...keys, family: "directions" }, learned))
       } catch (error) {
         // Bookkeeping, not the preview's answer: the engine holds the reading, and the next call writes it again.
         log(loggable(error))
@@ -203,25 +195,23 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
     return answer
   }
 
-  return new Hono<IdentifiedEnv>().post(
+  return routes(deps).post(
     "/routing/preview",
-    describeRoute({
+    {
       operationId: "previewRoute",
       summary: "The road through a drafted route's points, for the guided setup",
       description:
         "Measures the points in the order given — a drafted route's depot, its stops in generation's order and its unloading station, as the guided setup draws them — through the routing provider, directions only, and writes nothing: no Plan (a Plan belongs to a Route, and a draft has none) and no job. `basis: \"road\"` answers one leg per consecutive pair of the points, a point repeated (two bins at one address) a zero leg, with the totals and the `provider` whose geometry it is, for the attribution a map owes. `basis: \"estimate\"` answers that there is no road and why (`reason`): the directions quota is spent, or the minute's allowance is — `resumesAt` says when it opens again, and nothing is queued — or the provider refuses the key, or cannot route the points, in its own words (`resumesAt` null). The same points are answered from a cache for a day, for anyone; the routing quota is spent from its reserve, never waited for inside the request. The quota's reading is `GET /routing/quota`.",
-      security: BEARER_SECURITY,
+      module: MODULE,
+      action: "view",
+      transaction: false,
+      body: RoutingPreviewRequest,
+      invalid: ["the body is not two to 502 positions of `[longitude, latitude]`, or carries a member it does not know"],
       responses: {
         200: describeJson("The road through the points, or the reason there is none.", RoutingPreview),
-        400: describeProblem(`The body is not two to 502 positions of \`[longitude, latitude]\`, or carries a member it does not know.`),
-        401: describeProblem("No usable token (see WWW-Authenticate)."),
-        403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         502: describeProblem("The routing provider did not answer; nothing was cached, and the preview may be asked again."),
       },
-    }),
-    guard,
-    requireGrant(MODULE, "view"),
-    validate("json", RoutingPreviewRequest),
+    },
     async (c) => {
       const { points } = c.req.valid("json")
       const key = planFingerprint({ provider: engine.name, profile: DEFAULT_PROFILE, solver: "baseline", stops: points })
@@ -229,7 +219,7 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
       if (held !== undefined) return c.json(held)
       let pending = asking.get(key)
       if (pending === undefined) {
-        pending = ask(key, c.get("principal").companyId, points).finally(() => asking.delete(key))
+        pending = ask(key, c.get("principal").companyId, c.get("transact"), points).finally(() => asking.delete(key))
         asking.set(key, pending)
       }
       try {

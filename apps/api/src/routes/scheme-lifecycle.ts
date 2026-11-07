@@ -75,17 +75,16 @@ import { addDays } from "@waste/domain/days"
 import { DISPATCHED_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { lockRow } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { askGenerationBestEffort } from "./generation"
 import { writeScheme } from "./route-schemes"
-import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type ClockOptions, type SchemeRow } from "./scheme-groups"
+import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type SchemeRow } from "./scheme-groups"
 import { describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 /** What an effective day before tomorrow is refused with, at its field. */
@@ -167,8 +166,6 @@ async function planSuccessor(tx: Tx, principal: Principal, jobs: JobSender, succ
   return asked === undefined || asked.kind === "refused" ? null : asked.run.id
 }
 
-export type SchemeLifecycleOptions = ClockOptions & { jobs: JobSender }
-
 /**
  * The next version of a scheme from `validFrom`, as `POST
  * /route-schemes/:id/successor` writes it, under the predecessor's row lock:
@@ -214,29 +211,27 @@ export async function writeSuccessor(
   return { predecessor: await schemeWithGroups(tx, principal.companyId, row, now), successor, routes, generationRunId }
 }
 
-export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: SchemeLifecycleOptions) {
-  return new Hono<AuthEnv>()
+export function schemeLifecycleRoutes(deps: RouteDeps) {
+  const { now, jobs } = deps
+  return routes(deps)
     .post(
       "/route-schemes/:id/archive",
-      describeRoute({
+      {
         operationId: "archiveRouteScheme",
         summary: "Archive a route scheme: its delete, which erases nothing",
         description:
           "Archives one route scheme of a project the caller works in, under its row lock. `effectiveFrom` is the first day the scheme no longer runs: tomorrow on the project's clock when absent, and never sooner, since today's routes are operating. The scheme's period is cut at that day — or, for a scheme that would not have started by then, left as it is and the scheme put back to `draft`, which plans nothing — Plan Ahead is turned off and `archivedAt` stamped. Nothing is erased: the groups, the seasons and every route the scheme generated stay. In the same transaction its routes with a service date on or after the day are ended as a generation run ends a shortened scheme's: a `planned` route is cancelled by generation with the `regeneration` reason code and the sentence `Route scheme archived — future planning stopped`, its hold cleared and its open stops skipped; one carrying an open stop the office added — a stop moved onto it among them — is trimmed instead, the scheme's own open stops skipped and the office's left standing on the planned route. A `ready` or `active` route is left as it stands and counted as `kept`, for the office to cancel by hand; a completed or cancelled one is history already. No event is written. From then on the scheme refuses its patch, its groups' writes, a Generate and a successor (409), and reads with `archivedAt` set.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "delete",
+        params: IdParam,
+        body: RouteSchemeArchive,
+        invalid: ["the body names a member it does not have", "`effectiveFrom` is not a calendar day or comes before tomorrow on the project's clock"],
         responses: {
           200: describeJson("The scheme as it now stands, and what became of its routes from the day.", RouteSchemeArchived),
-          400: describeProblem("The path does not hold an id, the body names a member it does not have, or `effectiveFrom` is not a calendar day or comes before tomorrow on the project's clock."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `delete` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
           409: describeProblem("The scheme is archived already."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "delete"),
-      validate("param", IdParam),
-      validate("json", RouteSchemeArchive),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { effectiveFrom: asked } = c.req.valid("json")
@@ -262,25 +257,22 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .post(
       "/route-schemes/:id/successor",
-      describeRoute({
+      {
         operationId: "createRouteSchemeSuccessor",
         summary: "Write the next version of a route scheme, from a day",
         description:
           "Writes the next version of one route scheme of a project the caller works in: a new scheme of the same name, in force from `validFrom` to the end the predecessor had, and the predecessor's period cut at `validFrom`, in one transaction under the predecessor's row lock. The new version is the predecessor as it reads — its recurrence, holiday and edit policies, Plan Ahead and its window, status, planning area, depot and station, every collection group with its rule or its picked containers, provider, vehicle and driver, and its seasons — written as `POST /route-schemes` writes a scheme and held to every rule a create is held to, so a crew retired, suspended or away on the new start, or a validated scheme that no longer holds together, is refused as a create would refuse it; edit it afterwards like any scheme. `validFrom` comes after the predecessor's start, before its end, and on tomorrow on the project's clock at the earliest; a predecessor route already `ready` or `active` on or after it refuses the successor (409, naming the routes), since the new version would collect those days again — cancel them, or start the next version later. The predecessor's routes with a service date on or after `validFrom` are ended as an archive ends them — a planned route cancelled by generation with the sentence `Superseded by the scheme's next version from <day>`, or trimmed where it carries an open stop the office added, a `ready` or `active` one kept and counted — and a validated new version is planned in the same transaction: a generation run over its Plan Ahead window from `validFrom` is queued as Generate queues one, its id answered as `generationRunId` (null for a draft, which plans nothing, or where no worker has made the queue yet — then press Generate). `Location` names the new version.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: RouteSchemeSuccessorCreate,
+        invalid: ["the body is missing `validFrom` or names a member it does not have", "`validFrom` is not a calendar day", "comes before tomorrow on the project's clock", "or lies outside the predecessor's period", "a group's driver may not take its vehicle on the new start"],
         responses: {
           201: describeCreated("The predecessor as it now stands, the new version, and what became of the predecessor's routes from the day; `Location` names the new version.", RouteSchemeSuccession),
-          400: describeProblem("The path does not hold an id, the body is missing `validFrom` or names a member it does not have, `validFrom` is not a calendar day, comes before tomorrow on the project's clock, or lies outside the predecessor's period, or a group's driver may not take its vehicle on the new start."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
           409: describeProblem("The scheme is archived, a route of it is dispatched or running on or after `validFrom`, a group's vehicle or driver is retired, suspended, inactive or away on the new start, or the scheme is validated and the new version would not hold together: the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", RouteSchemeSuccessorCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { validFrom } = c.req.valid("json")

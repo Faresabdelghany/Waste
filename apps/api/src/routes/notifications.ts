@@ -21,23 +21,17 @@ import { notificationPreference } from "@waste/db/schema/notifications"
 import type { NotificationEvent } from "@waste/domain/notifications/vocabulary"
 import type { AlertSeverity } from "@waste/domain/resolution/vocabulary"
 import { and, desc, eq, lt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
 import { messageColumns, messageOf } from "./messages"
 import { describeJson } from "./shared"
 
 const NoticePage = Page(Message)
-
-const signedIn = {
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem("No active account here."),
-}
 
 /** The caller's preferences as their rows stand. */
 async function preferencesOf(tx: Tx, principal: Principal): Promise<NotificationPreferences> {
@@ -66,37 +60,32 @@ async function putPreference(tx: Tx, principal: Principal, event: NotificationEv
     .onConflictDoUpdate({ target: [notificationPreference.companyId, notificationPreference.userAccountId, notificationPreference.event], set: { minSeverity: asked.minSeverity } })
 }
 
-export function notificationRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function notificationRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/me/notification-preferences",
-      describeRoute({
+      {
         operationId: "getNotificationPreferences",
         summary: "Which e-mails I asked for",
         description:
           "The caller's own choice of staff e-mails (O16 of #290): the least severe alert they are told of when one is raised in a project they read alerts in (`alertRaisedMinSeverity`, null for none), and whether they are told when a ticket is assigned to them. An account that never chose asks for nothing.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("The caller's preferences.", NotificationPreferences), ...signedIn },
-      }),
-      guard,
+        responses: { 200: describeJson("The caller's preferences.", NotificationPreferences) },
+      },
       async (c) => c.json(await preferencesOf(c.get("tx"), c.get("principal"))),
     )
     .put(
       "/me/notification-preferences",
-      describeRoute({
+      {
         operationId: "putNotificationPreferences",
         summary: "Choose which e-mails I get",
         description:
           "Replaces the caller's choice whole and answers it as it now stands. An alert e-mail goes to an account whose role reads alerts (`view` on `operate.exceptions`) in the alert's project, judged when the alert is raised, so a choice made without that grant waits for it. The e-mails are sent through the deployment's messaging provider, a log-only sender until a provider is chosen; `GET /me/notices` lists what was sent.",
-        security: BEARER_SECURITY,
+        body: NotificationPreferencesPut,
+        invalid: ["the body is missing a field, names a severity that is not one, or names a member the body does not take"],
         responses: {
           200: describeJson("The caller's preferences as they now stand.", NotificationPreferences),
-          400: describeProblem("The body is missing a field, names a severity that is not one, or names a member the body does not take."),
-          ...signedIn,
         },
-      }),
-      guard,
-      validate("json", NotificationPreferencesPut),
+      },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -108,20 +97,16 @@ export function notificationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/me/notices",
-      describeRoute({
+      {
         operationId: "listMyNotices",
         summary: "The e-mails I was sent",
         description:
           "One page of the staff notices sent to the caller, newest first, in the projects they work in: each the `staff` message the worker queued for an alert raised or a ticket assigned, with what was rendered, the address it went to and how its sending stands. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of the caller's notices.", NoticePage),
-          400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
-          ...signedIn,
         },
-      }),
-      guard,
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const principal = c.get("principal")

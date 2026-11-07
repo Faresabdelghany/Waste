@@ -28,27 +28,23 @@ import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planStop } from "@waste/db/schema/routing"
-import type { JobSender } from "@waste/db/jobs"
 import { stopLoadKg } from "@waste/domain/execution/workload"
 import { balanceDay, type BalanceRoute, type BalanceStop } from "@waste/domain/routing/balance"
 import { NOT_STARTED_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { optimiseSolver } from "@waste/domain/routing/plans"
-import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, count, eq, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { fitsOf } from "@waste/db/commands/fleet-fit"
 import { lockRows } from "@waste/db/commands/shared"
 import { pickupsOfRoute, type PickupRow } from "@waste/db/shapes/pickups"
 import { routeColumns, type RouteRow } from "@waste/db/shapes/routes"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { findRoute, routeScope } from "./execution-shapes"
 import { ensurePlan } from "./plan-shapes"
-import type { ClockOptions } from "./scheme-groups"
 import { describeJson } from "./shared"
 import { moveStops } from "./stop-moves"
 import { shiftsByRoute, workloadsByRoute } from "./workload"
@@ -189,28 +185,24 @@ async function previewOf(tx: Tx, principal: Principal, routes: readonly RouteRow
   return { token, moves, routes: weighed }
 }
 
-export type RouteBalanceOptions = ClockOptions & { routing: RoutingIdentity; jobs: JobSender }
-
-export function routeBalanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: RouteBalanceOptions) {
-  return new Hono<AuthEnv>()
+export function routeBalanceRoutes(deps: RouteDeps) {
+  const { now, routing, jobs } = deps
+  return routes(deps)
     .post(
       "/routes/balance-preview",
-      describeRoute({
+      {
         operationId: "previewRouteBalance",
         summary: "Propose balancing a day's routes",
         description:
           "Weighs the project's routes of `operatingDate` that are `planned` or `ready` (O15 of #290) — each one's expected kilograms against its planned vehicle's payload, and its work against its planned driver's shift as the route read weighs it: its active Plan's drive and waiting, its stops' time at the kerb, its unload visits on the way and the break — and proposes moving open stops off the routes that run over either onto routes of the day that can take them and stay within both: of the same service provider (or the company's own), whose vehicle carries the stop's fraction, lifts its container and takes its weight on one trip (O7 of #290, as a move judges it), that do not empty its container already, and whose working day reaches the stop's window. Each round moves, off the route furthest over, the stop that costs a receiving route least, at most fifty moves. Distances are straight lines read as roads, so `after` is an estimate until the routes are measured again. Nothing moves: `POST /routes/balance` applies what the office accepts, with the `token` this answers.",
-        security: BEARER_SECURITY,
+        module: PICKUPS,
+        action: "edit",
+        body: RouteBalanceDay,
+        invalid: ["the body names a project the caller does not work in, or is not a day of one"],
         responses: {
           200: describeJson("The moves, every route of the day before and after them, and the day's token.", RouteBalancePreview),
-          400: describeProblem("The body names a project the caller does not work in, or is not a day of one."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.pickups`."),
         },
-      }),
-      guard,
-      requireGrant(PICKUPS, "edit"),
-      validate("json", RouteBalanceDay),
+      },
       async (c) => {
         const day = c.req.valid("json")
         const tx = c.get("tx")
@@ -221,24 +213,21 @@ export function routeBalanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/routes/balance",
-      describeRoute({
+      {
         operationId: "applyRouteBalance",
         summary: "Apply a day's balance",
         description:
           "Moves the stops of a balance preview the office accepted — all of its moves or some, each once, never one it did not propose (400 at `moves`) — under every route of the day's row lock, taken in id order. The day is read again and its token compared with the preview's: anything that moved since is a 409, and the balance is previewed again. Each stop is moved as `POST /routes/{id}/move-stops` moves one (O23 of #290): taken off where it stood, `removed-by-dispatcher`, and the office's stop of the same work added on the other route, naming the stop it came from, so the move outlives the next generation run; a refusal there rolls back every move. Each route the moves touched that still has open stops is then asked a new Plan, `interactive`: one optimisation call a route of up to fifty stops, one a part above that, a baseline measurement above ten parts or without a depot.",
-        security: BEARER_SECURITY,
+        module: PICKUPS,
+        action: "edit",
+        body: RouteBalanceApply,
+        invalid: ["the body names a project the caller does not work in, no move, one stop twice, or a move the balance does not propose"],
         responses: {
           200: describeJson("How many stops moved, and the Plan each touched route was asked.", RouteBalanceResult),
-          400: describeProblem("The body names a project the caller does not work in, no move, one stop twice, or a move the balance does not propose."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.pickups`."),
           409: describeProblem("The day changed since the preview, or a stop is refused where it would go; the detail says which."),
           503: describeProblem("The worker has not made its routing queues yet."),
         },
-      }),
-      guard,
-      requireGrant(PICKUPS, "edit"),
-      validate("json", RouteBalanceApply),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")

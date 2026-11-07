@@ -17,11 +17,10 @@ import type { ProofStorage } from "@waste/db/storage"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, ONE_SUBJECT } from "@waste/domain/inspections/rules"
 import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
-import { FakeProvider } from "@waste/routing/fake"
 import { Hono } from "hono"
 
 import type { createApp } from "../app"
-import { authenticate, identify } from "../auth/principal"
+import { routeDeps } from "../deps"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
 import { fieldInspectionRoutes, INSPECTION_CLOSED, KEY_NAMES_ANOTHER, NOT_A_CONTAINER, PHOTO_ALREADY_APPENDED } from "../routes/field-inspections"
@@ -84,15 +83,13 @@ describe("M23a: the fill estimate and field inspections", { skip: database.skip 
   let oliviaWithout: Call
 
   const mounted = (storage: ProofStorage | null) => {
-    const guard = authenticate({ pool, verifier: keys.verifier })
+    const deps = routeDeps({ probe: pool, pool, verifier: keys.verifier, now: () => NOW, log: () => {}, jobs: createJobSender(pool), storage })
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", driverDoorRoutes(guard, { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
-    app.route("/", routeRoutes(guard, { now: () => NOW, routing: new FakeProvider(), jobs: createJobSender(pool) }))
-    app.route("/", pickupRoutes(guard, { now: () => NOW, jobs: createJobSender(pool) }))
-    const inspections = fieldInspectionRoutes(guard, identify({ pool, verifier: keys.verifier }), { now: () => NOW, pool, storage, log: () => {} })
-    app.route("/", inspections.routes)
-    app.route("/", inspections.objects)
+    app.route("/", driverDoorRoutes(deps).app)
+    app.route("/", routeRoutes(deps).app)
+    app.route("/", pickupRoutes(deps).app)
+    app.route("/", fieldInspectionRoutes(deps).app)
     return app as unknown as ReturnType<typeof createApp>
   }
 

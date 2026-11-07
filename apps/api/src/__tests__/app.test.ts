@@ -5,6 +5,7 @@ import { Validator } from "@seriousme/openapi-schema-validator"
 import { HealthResponse, ReadinessResponse } from "@waste/contracts/health"
 import { createDb } from "@waste/db/client"
 import { probePoolOptions } from "@waste/db/probe"
+import { DRIVER_COMMAND_KINDS } from "@waste/domain/execution/vocabulary"
 import { REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import { REFUSED_URL } from "@waste/tooling/unreachable"
 
@@ -44,6 +45,16 @@ type Spec = {
   info: { title: string; version: string; description?: string }
   paths: Record<string, Record<string, Operation>>
   components?: { securitySchemes?: Record<string, unknown> }
+}
+
+/** The order an operation's lines take under one path. */
+const METHODS = ["get", "post", "put", "patch", "delete"]
+
+// `t.assert.snapshot` (Node 22.13), which the installed @types/node (22.0) does not declare yet.
+declare module "node:test" {
+  interface TestContext {
+    readonly assert: { snapshot(value: unknown, options?: { serializers?: ((value: unknown) => unknown)[] }): void }
+  }
 }
 
 const spec = async () => (await (await app.request("/openapi.json")).json()) as Spec
@@ -138,362 +149,62 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access, registry, planning, resources, execution, resolution and finance contexts and the driver door and the public door, and no other path", async () => {
+  test("documents the operations the snapshot lists, each with its security and its answers, and no other", async (t) => {
+    // One line per operation, sorted, so two branches that each add a route
+    // add a line each and merge: the method and path, the operationId, the
+    // bearer requirement or none (the probes, this document and the public
+    // door's reads), and every status it answers, a 201 marked where it
+    // declares Location — a create says where the row is now read; an append
+    // to a ledger, a command or a set replacement does not. A route added,
+    // removed or re-described is a change here: run this file with
+    // `--test-update-snapshots` and read the diff.
     const document = await spec()
-    assert.deepEqual(Object.keys(document.paths).sort(), [
-      "/access-credentials",
-      "/access-credentials/{id}",
-      "/access-credentials/{id}/block",
-      "/access-credentials/{id}/unblock",
-      "/addresses",
-      "/addresses/{id}",
-      "/agreements",
-      "/agreements/{id}",
-      "/agreements/{id}/subscriptions",
-      "/agreements/{id}/terminate",
-      "/alerts",
-      "/alerts/{id}",
-      "/alerts/{id}/acknowledge",
-      "/alerts/{id}/link-ticket",
-      "/alerts/{id}/resolve",
-      "/applications",
-      "/applications/{id}",
-      "/applications/{id}/decide",
-      "/applications/{id}/decisions",
-      "/applications/{id}/reopen",
-      "/applications/{id}/review",
-      "/applications/{id}/withdraw",
-      "/audit-events",
-      "/billable-events",
-      "/billable-events/{id}",
-      "/billable-events/{id}/cancel",
-      "/billable-events/{id}/hold",
-      "/billable-events/{id}/release",
-      "/billable-events/{id}/reprice",
-      "/billing-runs",
-      "/billing-runs/preview",
-      "/billing-runs/{id}",
-      "/bulky-bookings",
-      "/bulky-bookings/availability",
-      "/bulky-bookings/{id}",
-      "/bulky-bookings/{id}/cancel",
-      "/bulky-schedules",
-      "/bulky-schedules/{id}",
-      "/collection-calendars",
-      "/collection-calendars/{id}",
-      "/collection-groups/{id}",
-      "/collection-groups/{id}/containers",
-      "/collection-groups/{id}/stop-matching-rule",
-      "/company",
-      "/container-types",
-      "/container-types/{id}",
-      "/containers",
-      "/containers/{id}",
-      "/containers/{id}/adjust",
-      "/containers/{id}/decommission",
-      "/containers/{id}/movements",
-      "/containers/{id}/placements",
-      "/containers/{id}/receive",
-      "/containers/{id}/return",
-      "/containers/{id}/transfer",
-      "/contaminant-codes",
-      "/contaminant-codes/{id}",
-      "/contaminant-codes/{id}/fractions",
-      "/counting-rules",
-      "/counting-rules/simulation",
-      "/counting-rules/{id}",
-      "/customer-contacts/{id}",
-      "/customers",
-      "/customers/{id}",
-      "/customers/{id}/contacts",
-      "/customers/{id}/statement",
-      "/decommission-reasons",
-      "/decommission-reasons/{id}",
-      "/depots",
-      "/depots/{id}",
-      "/driver-absences",
-      "/driver-absences/{id}",
-      "/driver/commands",
-      "/driver/me",
-      "/driver/routes",
-      "/driver/routes/{id}",
-      "/driver/routes/{id}/identify",
-      "/driver/routes/{id}/messages",
-      "/driver/uploads",
-      "/drivers",
-      "/drivers/{id}",
-      "/drop-off-points",
-      "/drop-off-points/{id}",
-      "/drop-off-points/{id}/exceptions",
-      "/drop-off-points/{id}/fractions",
-      "/drop-off-points/{id}/hours",
-      "/field-inspections",
-      "/field-inspections/{id}",
-      "/field-inspections/{id}/close",
-      "/field-inspections/{id}/photo-objects",
-      "/field-inspections/{id}/photos",
-      "/field-inspections/{id}/uploads",
-      "/generation-runs/{id}",
-      "/healthz",
-      "/holiday-lists",
-      "/holiday-lists/{id}",
-      "/holiday-lists/{id}/holidays",
-      "/imports",
-      "/imports/preview",
-      "/imports/templates/{kind}",
-      "/imports/{id}",
-      "/imports/{id}/rows",
-      "/integrations",
-      "/invoices",
-      "/invoices/{id}",
-      "/invoices/{id}/credit-notes",
-      "/invoices/{id}/document",
-      "/maintenance-orders",
-      "/maintenance-orders/{id}",
-      "/maintenance-orders/{id}/cancel",
-      "/maintenance-orders/{id}/complete",
-      "/maintenance-plans",
-      "/maintenance-plans/{id}",
-      "/me",
-      "/me/notices",
-      "/me/notification-preferences",
-      "/message-templates",
-      "/message-templates/{id}",
-      "/messages",
-      "/messages/{id}",
-      "/outbound-loads",
-      "/outbound-loads/{id}",
-      "/outbound-loads/{id}/cancel",
-      "/outbound-loads/{id}/dispute",
-      "/outbound-loads/{id}/receive",
-      "/outbound-loads/{id}/reconcile",
-      "/payment-allocations/{id}/reverse",
-      "/payments",
-      "/payments/bank-lines",
-      "/payments/{id}",
-      "/payments/{id}/allocations",
-      "/pickup-exception-rules",
-      "/pickup-exception-rules/{id}",
-      "/pickups",
-      "/pickups/{id}",
-      "/pickups/{id}/correct-outcome",
-      "/pickups/{id}/proof-objects",
-      "/pickups/{id}/remove",
-      "/placements",
-      "/placements/{id}",
-      "/planning-area-boundaries",
-      "/planning-area-boundaries/{id}",
-      "/planning-areas",
-      "/planning-areas/containing",
-      "/planning-areas/{id}",
-      "/planning-areas/{id}/boundaries",
-      "/plans/{id}",
-      "/price-list-rows/{id}",
-      "/price-lists",
-      "/price-lists/{id}",
-      "/price-lists/{id}/index",
-      "/price-lists/{id}/resolve",
-      "/price-lists/{id}/rows",
-      "/products",
-      "/products/{id}",
-      "/projects",
-      "/projects/{id}",
-      "/projects/{id}/branding",
-      "/projects/{id}/notification-rules",
-      "/projects/{id}/ticket-sla",
-      "/projects/{id}/ticket-team-defaults",
-      "/properties",
-      "/properties/{id}",
-      "/properties/{id}/moves",
-      "/properties/{id}/parties",
-      "/properties/{id}/pickup-exceptions",
-      "/properties/{id}/zones",
-      "/property-groups",
-      "/property-groups/{id}",
-      "/property-groups/{id}/members",
-      "/public/{slug}",
-      "/public/{slug}/addresses",
-      "/public/{slug}/addresses/{id}/collection-days",
-      "/public/{slug}/addresses/{id}/collection-days.ics",
-      "/public/{slug}/drop-off-points",
-      "/readyz",
-      "/reports/revenue",
-      "/reports/service",
-      "/reports/tickets",
-      "/reports/tonnage",
-      "/reports/waste-data",
-      "/reports/waste-data.csv",
-      "/right-sizing-proposals",
-      "/right-sizing-proposals/run",
-      "/right-sizing-proposals/{id}",
-      "/right-sizing-proposals/{id}/approve",
-      "/right-sizing-proposals/{id}/dismiss",
-      "/roles",
-      "/roles/{id}",
-      "/roles/{id}/grants",
-      "/route-schemes",
-      "/route-schemes/{id}",
-      "/route-schemes/{id}/archive",
-      "/route-schemes/{id}/collection-groups",
-      "/route-schemes/{id}/generate",
-      "/route-schemes/{id}/generation-runs",
-      "/route-schemes/{id}/occurrences",
-      "/route-schemes/{id}/successor",
-      "/routes",
-      "/routes/balance",
-      "/routes/balance-preview",
-      "/routes/dispatch",
-      "/routes/live",
-      "/routes/{id}",
-      "/routes/{id}/assign",
-      "/routes/{id}/cancel",
-      "/routes/{id}/commands",
-      "/routes/{id}/dispatch",
-      "/routes/{id}/eta",
-      "/routes/{id}/merge",
-      "/routes/{id}/messages",
-      "/routes/{id}/move-stops",
-      "/routes/{id}/optimise",
-      "/routes/{id}/pickup-order",
-      "/routes/{id}/pickups",
-      "/routes/{id}/plans",
-      "/routes/{id}/positions",
-      "/routes/{id}/release-hold",
-      "/routes/{id}/reschedule",
-      "/routes/{id}/split",
-      "/routes/{id}/unloads",
-      "/routing/preview",
-      "/routing/quota",
-      "/scale-tickets",
-      "/scale-tickets/{id}",
-      "/scale-tickets/{id}/amount-due",
-      "/scale-tickets/{id}/complete",
-      "/scale-tickets/{id}/void",
-      "/sensor-pairings/{id}",
-      "/sensor-readings",
-      "/sensors",
-      "/sensors/{id}",
-      "/sensors/{id}/pairings",
-      "/sensors/{id}/readings",
-      "/service-area-assignments",
-      "/service-area-assignments/{id}",
-      "/service-areas",
-      "/service-areas/{id}",
-      "/service-areas/{id}/assignments",
-      "/service-areas/{id}/planning-areas",
-      "/service-areas/{id}/waste-fractions",
-      "/service-frequencies",
-      "/service-frequencies/{id}",
-      "/service-provider-activities",
-      "/service-provider-activities/{id}",
-      "/service-provider-activities/{id}/approve",
-      "/service-provider-activities/{id}/cancel",
-      "/service-provider-activities/{id}/complete",
-      "/service-provider-activities/{id}/reject",
-      "/service-provider-activities/{id}/withdraw",
-      "/service-provider-prices",
-      "/service-provider-prices/index",
-      "/service-provider-prices/{id}",
-      "/service-provider-prices/{id}/index",
-      "/service-providers",
-      "/service-providers/{id}",
-      "/sessions",
-      "/sessions/{id}",
-      "/settlements",
-      "/settlements/{id}",
-      "/settlements/{id}/calculate",
-      "/settlements/{id}/close",
-      "/settlements/{id}/events",
-      "/settlements/{id}/reopen",
-      "/shared-collection-points",
-      "/shared-collection-points/{id}",
-      "/shared-collection-points/{id}/members",
-      "/shared-collection-points/{id}/pickup-exceptions",
-      "/site-visits",
-      "/site-visits/addresses",
-      "/site-visits/frequent",
-      "/site-visits/sites",
-      "/site-visits/{id}",
-      "/site-visits/{id}/void",
-      "/stock-balances",
-      "/stock-movements",
-      "/subscription-pauses",
-      "/subscription-pauses/{id}",
-      "/subscription-pauses/{id}/cancel",
-      "/subscriptions",
-      "/subscriptions/{id}",
-      "/subscriptions/{id}/change",
-      "/subscriptions/{id}/pauses",
-      "/tank-installations",
-      "/tank-installations/{id}",
-      "/tank-installations/{id}/inspections",
-      "/teams",
-      "/teams/{id}",
-      "/teams/{id}/members",
-      "/ticket-charges",
-      "/ticket-types",
-      "/ticket-types/{id}",
-      "/ticket-types/{id}/actions",
-      "/ticket-types/{id}/fields",
-      "/ticket-types/{id}/permissions",
-      "/tickets",
-      "/tickets/{id}",
-      "/tickets/{id}/assign",
-      "/tickets/{id}/comments",
-      "/tickets/{id}/complete",
-      "/tickets/{id}/events",
-      "/tickets/{id}/evidence",
-      "/tickets/{id}/hold",
-      "/tickets/{id}/reject",
-      "/tickets/{id}/reopen",
-      "/tickets/{id}/reply-with-evidence",
-      "/tickets/{id}/start",
-      "/tickets/{id}/wait",
-      "/unloading-stations",
-      "/unloading-stations/{id}",
-      "/unloading-stations/{id}/adjustments",
-      "/unloading-stations/{id}/fractions",
-      "/unloading-stations/{id}/stock",
-      "/unloads",
-      "/unloads/{id}",
-      "/unloads/{id}/approve",
-      "/unloads/{id}/correct",
-      "/unloads/{id}/reject",
-      "/unloads/{id}/reviews",
-      "/unloads/{id}/transfer-note",
-      "/users",
-      "/users/{id}",
-      "/users/{id}/deactivate",
-      "/users/{id}/make-primary-administrator",
-      "/users/{id}/reactivate",
-      "/vehicle-allocations",
-      "/vehicle-allocations/{id}",
-      "/vehicle-allocations/{id}/change",
-      "/vehicle-allocations/{id}/confirm",
-      "/vehicle-allocations/{id}/events",
-      "/vehicle-allocations/{id}/release",
-      "/vehicle-tares",
-      "/vehicle-tares/{id}",
-      "/vehicle-types",
-      "/vehicle-types/{id}",
-      "/vehicle-types/{id}/container-types",
-      "/vehicle-unavailability",
-      "/vehicle-unavailability/{id}",
-      "/vehicles",
-      "/vehicles/{id}",
-      "/vehicles/{id}/compartments",
-      "/visit-rules",
-      "/visit-rules/{id}",
-      "/warehouses",
-      "/warehouses/{id}",
-      "/warehouses/{id}/stock-minimums",
-      "/waste-fractions",
-      "/waste-fractions/{id}",
-      "/weighbridge-tickets",
-      "/weighbridge-tickets/{id}",
-      "/weighbridge-tickets/{id}/dismiss",
-      "/weighbridge-tickets/{id}/match",
-    ])
+    const lines: { path: string; method: string; line: string }[] = []
+    for (const [path, operations] of Object.entries(document.paths)) {
+      for (const [method, operation] of Object.entries(operations)) {
+        const security = operation.security === undefined ? "open" : JSON.stringify(operation.security) === JSON.stringify([{ bearerAuth: [] }]) ? "bearer" : JSON.stringify(operation.security)
+        const answers = Object.entries(operation.responses).map(([status, response]) => (response.headers?.Location === undefined ? status : `${status}+Location`))
+        lines.push({ path, method, line: `${method.toUpperCase()} ${path} ${operation.operationId} ${security} ${answers.join(" ")}` })
+      }
+    }
+    const byPath = lines.sort((a, b) => (a.path === b.path ? METHODS.indexOf(a.method) - METHODS.indexOf(b.method) : a.path < b.path ? -1 : 1))
+    t.assert.snapshot(byPath.map(({ line }) => line).join("\n"), { serializers: [String] })
+  })
+
+  test("declares Location on a 201 alone, saying what it names, and only a POST answers one", async () => {
+    const document = await spec()
+    for (const [path, operations] of Object.entries(document.paths)) {
+      for (const [method, operation] of Object.entries(operations)) {
+        for (const [status, response] of Object.entries(operation.responses)) {
+          const location = response.headers?.Location
+          const where = `${method.toUpperCase()} ${path} ${status}`
+          if (status === "201") assert.equal(method, "post", `${where}: only a POST creates or appends`)
+          if (location === undefined) continue
+          assert.equal(status, "201", `${where} declares no Location`)
+          assert.equal(location.schema?.type, "string", where)
+          assert.match(location.description ?? "", /\S/, `${where}: Location says what it names`)
+        }
+      }
+    }
+  })
+
+  test("registers a static segment before a parameter that would catch it: `/routes/live` before `/routes/:id`", () => {
+    // Hono runs a path's handlers in registration order, so `/routes/:id`
+    // registered first would answer `/routes/live` with its 400.
+    const registered = [...new Map(app.routes.filter((route) => route.method !== "ALL").map((route) => [`${route.method} ${route.path}`, route])).values()]
+    for (const [index, later] of registered.entries()) {
+      const segments = later.path.split("/")
+      for (const earlier of registered.slice(0, index)) {
+        if (earlier.method !== later.method || earlier.path === later.path) continue
+        const pattern = earlier.path.split("/")
+        const catches = pattern.length === segments.length && pattern.every((segment, at) => segment === segments[at] || segment.startsWith(":"))
+        assert.equal(catches, false, `${later.method} ${later.path} is registered after ${earlier.path}, which answers it first`)
+      }
+    }
+  })
+
+  test("documents /healthz's body: the status, the clock and the build", async () => {
+    const document = await spec()
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
     assert.deepEqual(health.required, ["status", "time", "build"])
@@ -532,78 +243,6 @@ describe("GET /openapi.json", () => {
     const document = await spec()
     assert.match(document.info.description ?? "", /`urn:waste:problem:no-active-account`/)
     assert.match(document.paths["/me"].get.responses["403"].description ?? "", /`urn:waste:problem:no-active-account`/)
-  })
-
-  test("requires the bearer token on every operation but the two probes, the document itself and the public door's reads (ADR-0010)", async () => {
-    const document = await spec()
-    const open = new Set(["/healthz", "/readyz", "/openapi.json", "/public/{slug}", "/public/{slug}/addresses", "/public/{slug}/addresses/{id}/collection-days", "/public/{slug}/addresses/{id}/collection-days.ics", "/public/{slug}/drop-off-points"])
-    let secured = 0
-    for (const [path, operations] of Object.entries(document.paths)) {
-      for (const [method, operation] of Object.entries(operations)) {
-        if (open.has(path)) {
-          assert.equal(operation.security, undefined, `${method.toUpperCase()} ${path} needs no token`)
-        } else {
-          assert.deepEqual(operation.security, [{ bearerAuth: [] }], `${method.toUpperCase()} ${path} must declare bearerAuth`)
-          secured += 1
-        }
-      }
-    }
-    assert.equal(
-      secured,
-      492,
-      "/me, the ten organisation routes, the twelve access routes, the audit log's one read (#291), the fifty-nine registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, agreements with their subscriptions, sixteen with the subscriptions listed across agreements (Issue #183), a subscription's change and an agreement's termination, and a subscription's pauses — the list, the read, the pause written under its subscription, the patch and the cancel (#291), and containers with their placements, eight —the twenty-four planning routes of part A: planning areas with their boundary versions, nine, collection calendars, four, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the twenty-two office routes of Execution's slice 3 (Issue #104): routes, eleven (the list, the read, assign, dispatch, reschedule, the hold's release (#226), cancel, the pickup order, the command log, the office's ad-hoc route (#111) and the bulk dispatch of a day or a selection (O5 of #290)), pickups, five (the list, the read, remove, correct-outcome and the office's stop added under its route (#111)), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's twenty-one (Issue #109): the fifteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the stop's evidence and the reply with it (M6 of #293), and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's fifty-three (Issue #112): price lists, ten (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, the resolve read, and Apply index over the list (#291 C8)), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, six (the list, the create, the read, the patch, the index command, which writes the next row of the chain, and Apply index over a provider's or an award's prices (#291 C8)), billable events, seven (the list, the manual create, the read, and the four commands reprice, cancel, hold and release (M14 of #293)), billing runs, four (the list, the run, the preview and the read), and invoices, four (the list, the read, the credit note and the document's PDF (#291 C5)), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews) — and Routing's five (#170, #171, #173): a route's Plans, one Plan with its legs, the optimise command, the quota read, and the guided setup's preview — and the four reports (#292): service, tickets, revenue and tonnage, and the waste-data report and its file (#291 slice 29) — and the CSV import's seven (#291 slice 12): a kind's template, the preview, the run's create, list and read, and its rows written a batch at a time and read back — and the proof objects' two (O1 of #290): the driver door's signed upload and the office's read URLs for a stop — and the ticket SLA's two (O4 of #290): a project's read and its set replacement — and the Drop-off Points' seven (Issue #293 M3): the list, the create, the read and the patch, and the three set replacements, fractions, hours and exceptions — and the ten of absences and unavailability (O6 of #290): a driver's absences and a vehicle's unavailability, five each, the list, the record, the read, the move and the removal — and the ticket charges' two (#291 C3): a project's set, read and replaced whole — and the holiday lists' six (2026-11-05): the list, the create, the read, the patch, the delete, and the days' set replaced whole — and the Pickup Exceptions' eleven (M5 of #293): contaminant codes, five (the list, the create, the read, the patch and the fractions' set), the charge rules, four (the list, the create, the read and the patch), and a property's and a shared collection point's exception history — and the Applications' nine (M7 of #293): the list, the create, the read and the patch, the four commands review, decide, withdraw and reopen, and the decisions — and the payments' seven (#291 C6): the list, the read, the registration, the match, the reversal, a bank statement's lines and a customer's statement — and bulky-waste booking's ten (O11 of #290): the schedules, four (the list, the create, the read and the patch), and the bookings, six (the list, a place's availability, the create, the read, the patch and the cancel) — and recycling-centre visits' seventeen (M4 of #293): the register's six (the list, the create, the read, the patch, block and unblock), the ledger's seven (the list, the check-in, the attendant's two lookups of the sites and the addresses, the likely trades, the read and the void), and the Visit Rules' four (the list, the create, the read and the patch) — and the three of moving stops (O23 of #290): move stops onto another route, split them onto a new one, and merge another route in — and a scheme's lifecycle's two (O21 of #290): the archive and the next version — and the two of balancing a day (O15 of #290): the preview and the apply — and a route's track and its estimates (O8 of #290) — and the address lookup's two (#291 C13): the search and one address whole — and the Service Provider Activities' nine (#474): the list, the open, the read and the correction, and the five commands approve, reject, withdraw, complete and cancel — and a warehouse's stock (O30 of #290): the balances, and its minimums read and replaced whole — and the decommission reasons' four (O30 of #290): the list, the create, the read and the patch — and the deployment's connections (#487) — and the ticket teams' seven (O30 of #290): the list, the create, the read, the patch and the members' set, and a project's defaults read and replaced whole — and the address → zone read's two (O29 of #290): a property's zones and a point's — and a customer's contact persons (#291 C14): the list and the create under the customer, and one contact's read and patch — and messaging's seven (#291 C15): the message templates, four (the list, the create, the read and the patch), and the delivery log, three (the list, the office's send and the read) — and an unload's waste transfer note (O18 of #290) — and the driver door's identify read (O19 of #290), which stop of a route a code read off a bin names — and a project's branding, replaced whole (M22 of #293) — and a property's move (#374) — and the fill-level sensors' ten (O26 of #290): the sensors' list, register, read and patch, a sensor's pairings listed and made, one pairing and its patch, a sensor's readings, and the ingest — and a staff member's own notices' three (O16 of #290): their preferences read and replaced whole, and the notices they were sent — and a project's customer notices' two (O16 of #290, part b): read and replaced whole — and vehicle maintenance's nine (O20 of #290): the plans, four (the list, the create, the read and the patch), and the Maintenance Orders, five (the list, the open, the read, complete and cancel) — and the weighbridge's five (O27 of #290): the ingest, the tickets' list and read, and the match and the dismissal — and the scale house's ten (M16a of #293): the tare register's list, create, read and patch, and the tickets' list, weigh-in, read, correction, completion and void, and what a ticket comes to at the window (M16b of #293) — and a route's messages' four (O24 of #290): the office's thread and its send, and the driver's — and field inspections' eight (M23 of #293): the list, the create, the read, the patch, the close, a photo's append, its signed upload and the read URLs — and right-sizing's five (M23b of #293): the list, a run now, the read, approve and dismiss — and the tank register's six (M11 of #293): the installations' list, create, read and patch, and a tank's inspections listed and recorded — and a transfer station's haul-out's eleven (M17 of #293): the outbound loads' list, create, read and patch, their four commands receive, reconcile, dispute and cancel, and a station's stock and its adjustments, listed and appended — and the ticket types' seven (#545 and #546 of #544): the list, the create, the read, the patch, and the fields', the permissions' and the actions' sets replaced whole — and the counting rules' six (#547 of #544): the list, the create, the read, the patch, the delete and the simulation",
-    )
-  })
-
-  test("declares the Location header on every 201 and Location on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
-    const document = await spec()
-    // The ledger's five commands (Issue #101) answer 201 as well — a Stock
-    // Movement is appended — and declare no Location: a movement is read on
-    // its container's ledger (`GET /containers/{id}/movements`) and on the
-    // ledger across containers, never at an address of its own, so there is
-    // nothing for the header to name. They were the one exception, counted;
-    // a ticket's comment (Issue #109, §7.22) joined them: a history row is
-    // read on `GET /tickets/{id}/events`, a list, and has no address of its
-    // own either. Weight control's three decisions (Issue #112, §5) are the
-    // same: a review is read on `GET /unloads/{id}/reviews`.
-    const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
-    const reviewCommands = new Set(["approve", "reject", "correct"].map((verb) => `POST /unloads/{id}/${verb}`))
-    // An import's batch (#291 slice 12) appends its rows' outcomes to the run's ledger, read on `GET /imports/{id}/rows`.
-    // A tank's inspection (M11 of #293) is a ledger row, read on `GET /tank-installations/{id}/inspections`.
-    // A reply with the stop's record (M6 of #293) is a comment too.
-    // A payment's match and its reversal (#291 C6) are read on the payment, and a statement's lines are payments read at their own addresses.
-    // An Apply index over many prices (#291 C8) makes a row per price, each read at its own address and named on its line.
-    // An inspection's photo (M23 of #293) is read on its inspection.
-    const appendsWithoutAddress = new Set(["POST /price-lists/{id}/index", "POST /service-provider-prices/index", ...ledgerCommands, "POST /tickets/{id}/comments", "POST /tickets/{id}/reply-with-evidence", ...reviewCommands, "POST /imports/{id}/rows", "POST /payments/{id}/allocations", "POST /payment-allocations/{id}/reverse", "POST /payments/bank-lines", "POST /routes/{id}/messages", "POST /driver/routes/{id}/messages", "POST /field-inspections/{id}/photos", "POST /tank-installations/{id}/inspections", "POST /unloading-stations/{id}/adjustments"])
-    let creates = 0
-    let appends = 0
-    for (const [path, operations] of Object.entries(document.paths)) {
-      for (const [method, operation] of Object.entries(operations)) {
-        for (const [status, response] of Object.entries(operation.responses)) {
-          const location = response.headers?.Location
-          const where = `${method.toUpperCase()} ${path} ${status}`
-          if (status === "201" && appendsWithoutAddress.has(`${method.toUpperCase()} ${path}`)) {
-            appends += 1
-            assert.equal(location, undefined, `${where}: an appended row has no address of its own to name`)
-          } else if (status === "201") {
-            creates += 1
-            assert.equal(method, "post", `${where}: only a POST creates`)
-            assert.equal(location?.schema?.type, "string", `${where} must declare Location`)
-            assert.match(location?.description ?? "", /\S/, `${where}: Location says what it names`)
-          } else {
-            // Only Location is this test's: a 401 will one day declare
-            // WWW-Authenticate, which the API already sends (RFC 6750).
-            assert.equal(location, undefined, `${where} declares no Location`)
-          }
-        }
-      }
-    }
-    assert.equal(appends, 21, "a route's two messages, the office's and the driver's (O24 of #290) — the ledger's five commands: receive, return, transfer, decommission and adjust — a ticket's comment and its reply with the stop's record — weight control's three decisions, approve, reject and correct — an import's batch — a payment's match, its reversal and a bank statement's lines — and the two Apply index over many prices — and an inspection\'s photo (M23 of #293), read on its inspection — and a tank\'s inspection (M11 of #293)")
-    assert.equal(
-      creates,
-      78,
-      "the seventy-eight creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container, and a subscription's change, which writes the one replacing it and so answers 201 with its address, and its pause, read at `/subscription-pauses/{id}` (#291); and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's three — the office's unload capture under its route (Issue #104, slice 3), read at `/unloads/{id}`, the office's ad-hoc route and its stop added under a route (#111), read at `/pickups/{id}`; and Resolution's two (Issue #109) — the ticket and the alert; and Finance's ten (Issue #112) — a price list and, under a list, a row read at `/price-list-rows/{id}`, a service area and, under an area, an assignment read at `/service-area-assignments/{id}`, a service provider price, and the index command on one, which makes the next row of the chain and so answers 201 with its address; the manual billable event, the billing run, and the credit note under its invoice, read at `/invoices/{id}`; and the settlement; and an import's run (#291 slice 12); and the Drop-off Point (Issue #293 M3); and a driver's absence and a vehicle's unavailability (O6 of #290); and the Pickup Exceptions' two (M5 of #293) — a contaminant code and a charge rule; and an application (M7 of #293); and a payment registered by hand (#291 C6); and a bulky schedule and a bulky booking (O11 of #290); and recycling-centre visits' three (M4 of #293) — an access credential, the attendant's check-in and a Visit Rule; and a split's new route (O23 of #290), read at `/routes/{id}`; and a scheme's next version (O21 of #290), read at `/route-schemes/{id}`; and a service provider activity (#474); and a decommission reason (O30 of #290); and a ticket team (O30 of #290); and a contact person under its customer (#291 C14), read at `/customer-contacts/{id}`; and messaging's two (#291 C15) — a message template and a message the office sends; and the fill-level sensors' two (O26 of #290) — a sensor and, under a sensor, a pairing read at `/sensor-pairings/{id}`; and vehicle maintenance's two (O20 of #290) — a maintenance plan and a Maintenance Order; and the scale house's two (M16a of #293) — a registered tare and a ticket weighed in; and a field inspection (M23 of #293); and a tank installation (M11 of #293); and an outbound load from a transfer station (M17 of #293); and a ticket type (#545 of #544); and a holiday list (2026-11-05); and a counting rule (#547 of #544)",
-    )
   })
 
   test("documents each alert route with its verbs, its problems and the rules a client must know (Issue #109)", async () => {
@@ -879,6 +518,9 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /each with its place joined — the `address` and `location`/)
     assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /the container's `label` \(null on an address-only stop the office added, which names no container\) and the waste fraction's `name`/)
     const door = document.paths["/driver/commands"].post.description ?? ""
+    // The kinds it counts are the vocabulary's, every one of them named.
+    assert.match(door, new RegExp(`The ${DRIVER_COMMAND_KINDS.length} kinds and their bodies`))
+    for (const kind of DRIVER_COMMAND_KINDS) assert.match(door, new RegExp(`\`${kind}\``), kind)
     assert.match(door, /applied in body order, each in its own savepoint/)
     assert.match(door, /`replayed` with the first outcome for an id this driver's devices already sent \(nothing written/)
     assert.match(door, /An id that another device's command already holds .* is refused \(409, `That command id belongs to another device's command`\) and never replayed/)

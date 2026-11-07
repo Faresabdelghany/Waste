@@ -30,11 +30,12 @@
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
-// are one atomic, fenced unit. One route is the exception, the guided
-// setup's preview (#173), which calls the routing provider: no transaction
-// may be held across that call (#124 §4), so its guard, `identify`, makes
-// the same checks through the same function and ends the transaction before
-// the handler runs. Hono answers a thrown error at the handler
+// are one atomic, fenced unit. A route that calls another service is the
+// exception, declared `transaction: false` (operation.ts): no transaction may
+// be held across that call (#124 §4), so its guard, `identify`, makes the
+// same checks through the same function and ends the transaction before the
+// handler runs, which opens short ones through `transact`, each fenced and
+// written by the Principal as the request's own would be. Hono answers a thrown error at the handler
 // (its compose catches the throw and calls the app's error handler there), so
 // the throw never reaches this middleware; what does is `c.error`, set on the
 // context when that happened. The transaction is therefore rolled back when
@@ -46,7 +47,7 @@ import type { Actor } from "@waste/db/commands/shared"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { driver } from "@waste/db/schema/fleet"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
-import { withCompany } from "@waste/db/tenant"
+import { actAs, withCompany } from "@waste/db/tenant"
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import type { Grant } from "@waste/domain/access/grants"
 import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
@@ -56,7 +57,7 @@ import type { MiddlewareHandler } from "hono"
 
 import { grantsOfRows } from "../access-shape"
 import { problem } from "../problem"
-import { writtenBy } from "./audit"
+import { writerOf, writtenBy } from "./audit"
 import { bearerToken, type VerifiedClaims, type Verifier } from "./verify"
 
 export type Principal = {
@@ -79,8 +80,11 @@ export type Principal = {
 /** The context variables an authenticated route reads: `c.get("principal")` and `c.get("tx")`, on a `Hono<AuthEnv>`. */
 export type AuthEnv = { Variables: { principal: Principal; tx: Tx } }
 
-/** What a route behind `identify` reads: the principal alone, since its transaction ended before the handler (#173). */
-export type IdentifiedEnv = { Variables: { principal: Principal } }
+/** Opens one transaction under the Principal's company fence, written by the Principal with the request's reason, as `authenticate` opens the request's. */
+export type Transact = <T>(work: (tx: Tx) => Promise<T>) => Promise<T>
+
+/** What a route behind `identify` reads: the principal, and `transact` for its short transactions, since the guard's ended before the handler (#173). */
+export type IdentifiedEnv = { Variables: { principal: Principal; transact: Transact } }
 
 /** Who a shared statement of `@waste/db/commands` acts for when the principal asks: its company, and its account recording the rows. */
 export const actorOf = (principal: Principal): Actor => ({ companyId: principal.companyId, userAccountId: principal.user.id })
@@ -270,12 +274,12 @@ export function authenticate(options: AuthenticateOptions): MiddlewareHandler<Au
 }
 
 /**
- * The guard of the one route that calls the routing provider, the guided
- * setup's preview (#173): the same checks, the Principal resolved in a
- * transaction that ends before the handler runs, so no transaction is held
- * open across the provider's call (#124 §4) and no pooled connection sits
- * idle through it. The handler reads `principal` and no `tx`, and opens the
- * short transactions it needs itself, none of them across the call.
+ * The guard of a route that calls another service (`transaction: false`):
+ * the same checks, the Principal resolved in a transaction that ends before
+ * the handler runs, so no transaction is held open across the call (#124 §4)
+ * and no pooled connection sits idle through it. The handler reads
+ * `principal` and no `tx`, and opens the short transactions it needs through
+ * `transact`, none of them across the call.
  */
 export function identify(options: AuthenticateOptions): MiddlewareHandler<IdentifiedEnv> {
   return async (c, next) => {
@@ -284,7 +288,16 @@ export function identify(options: AuthenticateOptions): MiddlewareHandler<Identi
       resolved = principal
     })
     if (resolved === undefined) throw new Error("identify: the guard answered without a principal")
-    c.set("principal", resolved)
+    const principal = resolved
+    // The reason is read before the handler, as `authenticate` reads it: one that will not do is the request's 400.
+    const writer = writerOf(principal, c.req.header(CHANGE_REASON_HEADER))
+    c.set("principal", principal)
+    c.set("transact", (work) =>
+      withCompany(options.pool.db, principal.companyId, async (tx) => {
+        await actAs(tx, writer)
+        return await work(tx)
+      }),
+    )
     await next()
   }
 }
