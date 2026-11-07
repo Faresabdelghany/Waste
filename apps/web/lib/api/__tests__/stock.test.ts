@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { StockMinimumsSet } from "@waste/contracts/stock"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { warehouseAdapter, warehousesModule } from "../records/places"
 import { actOnRecord, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
@@ -22,13 +22,13 @@ const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T0
 const bin: BusinessRecord = { id: `container-type-${BIN_ID}`, name: "240 L bin", status: "Active", recordKind: "Container type", facts: {}, submittedValues: {} } as BusinessRecord
 const record = warehouseAdapter.toRecord(
   { id: WAREHOUSE_ID, ...STAMPS, projectId: "01a0d2a4-a280-7002-8000-000000000001", code: "WH-WEST", name: "Warehouse West", address: "Sundkrogsgade 1", location: null, depotId: null, status: "active", notes: null },
-  { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW },
+  { resolve: NOTHING_RESOLVED, now: NOW },
 )
 const state: ServerRecordsState = new Map([
   ["configure.master", loaded({ records: [bin], serverIds: new Map([[bin.id, BIN_ID]]) }, 1)],
   ["resources.warehouses", loaded({ records: [record], serverIds: new Map([[record.id, WAREHOUSE_ID]]) }, 1)],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 describe("a warehouse's stock minimums (O30 of #290, row 9.8)", () => {
   test("are the drafts with a count, each type by its server id: a blank is no minimum and is left out", () => {
@@ -49,7 +49,7 @@ describe("a warehouse's stock minimums (O30 of #290, row 9.8)", () => {
     const { fetch, calls } = scripted([() => json(answer)])
     const current = state.get("resources.warehouses")
     assert.ok(current !== undefined)
-    const outcome = await actOnRecord(clientOver(fetch), warehousesModule, current, record, SET_STOCK_MINIMUMS, { minimums: [{ containerTypeId: bin.id, minimum: "12" }] }, { fixtures: [], state, now: NOW })
+    const outcome = await actOnRecord(clientOver(fetch), warehousesModule, current, record, SET_STOCK_MINIMUMS, { minimums: [{ containerTypeId: bin.id, minimum: "12" }] }, { state, now: NOW })
     assert.equal(outcome.kind, "done")
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url.replace("http://api.test", "")}`), [`PUT /warehouses/${WAREHOUSE_ID}/stock-minimums`])
     assert.deepEqual(bodyOf(calls[0]), { minimums: [{ containerTypeId: BIN_ID, minimum: 12 }] })

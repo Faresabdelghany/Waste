@@ -142,8 +142,6 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Price list",
             type: "select",
             description: "Managed in Settings → Commercial → Price lists; the lists in force or scheduled are offered here.",
-            // Fallback only — business-workspace.tsx replaces these with fixture
-            // mode's price lists (lib/data/commercial.ts, FIXTURE_PRICE_LISTS).
             options: [
               { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
               { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },

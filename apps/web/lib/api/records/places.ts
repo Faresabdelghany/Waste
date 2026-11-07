@@ -35,13 +35,13 @@ import type { Depot, UnloadingStation, Warehouse } from "@waste/contracts/places
 import { splitList } from "@waste/domain/record-values"
 import { DEPOT_OWNERSHIPS, DEPOT_STATUSES, UNLOADING_STATION_OWNERSHIPS, UNLOADING_STATION_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
 import {
   hasPrefix,
-  inheritedPresentation,
+  NO_PRESENTATION,
   isLocalRefusal,
   ofKind,
   patchOf,
@@ -269,12 +269,11 @@ export const depotAdapter: ResourceAdapter<Depot> = {
       name: depot.name,
       context: `Depot · ${project.name ?? "Project"}`,
       status: statusLabel(depot.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(depot, context.now),
       value: hours,
       description: depot.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       serviceProviderId: provider?.webId,
       recordKind: LOCATION_KIND,
@@ -407,12 +406,11 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
       name: station.name,
       context: `Unloading station · ${statusLabel(station.ownership).toLowerCase()}`,
       status: statusLabel(station.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(station, context.now),
       value: hours,
       description: station.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       // The company's: no project, so every scope shows it.
       serviceProviderId: provider?.webId,
       recordKind: LOCATION_KIND,
@@ -549,11 +547,10 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
       name: warehouse.name,
       context: `${project.name ?? "Project"} · ${warehouse.address}`,
       status: statusLabel(warehouse.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(warehouse, context.now),
       description: warehouse.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: "Warehouse",
       submittedValues: {

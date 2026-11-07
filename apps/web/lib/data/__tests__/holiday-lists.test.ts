@@ -3,11 +3,7 @@ import { describe, test } from "node:test"
 
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
-import {
-  FIXTURE_PROJECT_IDS,
-  businessWorkspaces,
-  type BusinessRecord,
-} from "../business-modules"
+import type { BusinessRecord } from "../business-modules"
 import { CSV_BOM } from "../csv"
 import {
   createHolidayListRecord,
@@ -18,19 +14,27 @@ import {
   withProjectCalendar,
 } from "../holiday-lists"
 
-const organisation = businessWorkspaces.configure.modules.find(
-  (module) => module.id === "organization",
-)?.records
-if (!organisation) throw new Error("the configure fixtures are missing")
-
-const fixture = (records: readonly BusinessRecord[], id: string): BusinessRecord => {
-  const record = records.find((candidate) => candidate.id === id)
-  if (!record) throw new Error(`no fixture ${id}`)
-  return record
-}
+/** A project record as the organisation module reads one: its language, its list and its weekend. */
+const project = (id: string, name: string, holidayList: string): BusinessRecord => ({
+  id,
+  name,
+  context: "Project · municipality",
+  status: "Active",
+  owner: "",
+  value: "",
+  updated: "Yesterday",
+  description: "",
+  facts: { Language: "Danish", "Holiday list": holidayList, Weekend: "Sat–Sun" },
+  related: [],
+  source: "Waste API",
+  freshness: "Yesterday",
+  projectIds: [id],
+  recordKind: "Project",
+  submittedValues: { name, language: "da", holidayList, weekend: "saturday, sunday" },
+})
 
 describe("withProjectCalendar — the project record's list name and weekend", () => {
-  const harbor = fixture(organisation, FIXTURE_PROJECT_IDS.harbor)
+  const harbor = project("project-harbor", "Harbor Commercial", "Danish public holidays")
 
   test("writes the typed values resolveProjectCalendar reads and the facts beside them", () => {
     const written = withProjectCalendar(harbor, {
@@ -49,7 +53,7 @@ describe("withProjectCalendar — the project record's list name and weekend", (
   })
 
   test("a blank name means no list: the value and the fact go, the weekend stays", () => {
-    const copenhagen = fixture(organisation, FIXTURE_PROJECT_IDS.copenhagen)
+    const copenhagen = project("project-copenhagen", "Copenhagen Central", "Danish public holidays")
     const written = withProjectCalendar(copenhagen, { holidayList: "  ", weekend: ["friday", "saturday"] })
     assert.equal("holidayList" in (written.submittedValues ?? {}), false)
     assert.equal("Holiday list" in written.facts, false)

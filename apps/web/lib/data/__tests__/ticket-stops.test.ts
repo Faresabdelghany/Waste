@@ -8,14 +8,14 @@ import { PickupAdd } from "@waste/contracts/pickups"
 
 import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
 import { addedStopBody } from "../../api/records/routes"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
+import { type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, NO_ROUTE_TO_BOOK_ON, offersBookAStop } from "../ticket-stops"
 
 const fieldsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields)
 const fieldOf = (schema: BusinessFormSchema, id: string) => fieldsOf(schema).find((field) => field.id === id)
 const ROUTES = [{ value: "route-1", label: "RC-1042 · 2026-10-05" }]
-const context: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: new Date("2026-10-05T10:00:00Z") }
+const context: MappingContext = { resolve: NOTHING_RESOLVED, now: new Date("2026-10-05T10:00:00Z") }
 
 const ticket = (kind: string, links: Record<string, string> = {}): Pick<BusinessRecord, "submittedValues"> => ({ submittedValues: { kind, status: "open", containerId: "", propertyId: "", sharedCollectionPointId: "", ...links } })
 

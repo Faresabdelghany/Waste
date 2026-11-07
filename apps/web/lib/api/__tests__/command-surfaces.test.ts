@@ -1,8 +1,7 @@
 // The command surfaces (Issue #181): how a switched module is operated on the
 // Pilot beyond its own create and edit forms — a dialog standing in for its
 // primary action, its rows' commands in their details. The workspace
-// consults one registry for them, and only with the adapter configured, so
-// fixture mode never reaches it and a module that is not switched has none.
+// consults one registry for them, and a module that is not switched has none.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -19,13 +18,12 @@ describe("the command surfaces", () => {
     for (const key of Object.keys(COMMAND_SURFACES)) assert.ok(SERVER_MODULE_KEYS.includes(key), `${key} is not in SERVER_MODULES`)
   })
 
-  test("are nobody's in fixture mode, nor a module the API does not back", () => {
+  test("are a switched module's own, never a module the API does not back", () => {
     for (const key of Object.keys(COMMAND_SURFACES)) {
       const [workspaceId, moduleId] = key.split(".") as [Parameters<typeof moduleKeyOf>[0], string]
-      assert.equal(commandSurfaceFor(workspaceId, moduleId, false), undefined, `${key} offers its surface without the adapter`)
-      assert.equal(commandSurfaceFor(workspaceId, moduleId, true), COMMAND_SURFACES[key])
+      assert.equal(commandSurfaceFor(workspaceId, moduleId), COMMAND_SURFACES[key])
     }
-    assert.equal(commandSurfaceFor("improve", "insights", true), undefined)
+    assert.equal(commandSurfaceFor("improve", "insights"), undefined)
   })
 })
 
@@ -42,13 +40,6 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.deepEqual(initialFiltersOf(surface), { ...emptyBusinessFilters, openness: ["Open"] })
     assert.deepEqual(initialFiltersOf({ primary: null }), emptyBusinessFilters, "a surface without a list opens unfiltered")
     assert.deepEqual(initialFiltersOf(undefined), emptyBusinessFilters)
-  })
-
-  test("is never consulted in fixture mode: every module opens unfiltered there", () => {
-    for (const key of Object.keys(COMMAND_SURFACES)) {
-      const [workspaceId, moduleId] = key.split(".") as [Parameters<typeof moduleKeyOf>[0], string]
-      assert.deepEqual(initialFiltersOf(commandSurfaceFor(workspaceId, moduleId, false)), emptyBusinessFilters, key)
-    }
   })
 
   test("shows every row, unless it says which: the rows of one shape where a module holds two (#185)", () => {
@@ -97,7 +88,7 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.equal(primaryOf(own, false, true), null, "never without the create grant")
     assert.equal(primaryOf({ primary: null }, true, true), null, "a module the wire only reads offers none")
     assert.equal(primaryOf({ primary: "form" }, true, true), "form")
-    assert.equal(primaryOf(undefined, true, true), "form", "fixture mode: the module's form")
+    assert.equal(primaryOf(undefined, true, true), "form", "a module without a surface: its form")
     assert.equal(primaryOf(undefined, true, false), null)
   })
 

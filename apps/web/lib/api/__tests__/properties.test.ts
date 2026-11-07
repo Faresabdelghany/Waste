@@ -29,10 +29,10 @@ import {
 } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecord, NO_ONE, PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE } from "../../data/properties"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { subscriptionAdapter } from "../records/agreements"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -44,9 +44,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const fixturesOf = (workspaceId: "customers" | "configure", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const propertyFixtures = fixturesOf("customers", PROPERTIES_MODULE.moduleId)
-
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts), in the seed's id scheme.
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const HARBOR = "01a0d2a4-a280-7002-8000-000000000002"
@@ -55,6 +52,9 @@ const osterbro: Customer = { ...mikkel, id: "01a0d2a4-a280-700b-8000-00000000000
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "KAB Bolig", registrationNumber: null, status: "inactive" }
 /** A customer the store has not loaded: named by its id chip. */
 const HARBOR_PROPERTIES = "01a0d2a4-a280-700b-8000-000000000009"
+const COPENHAGEN = webIdOf("project", copenhagen.id)
+const OSTERBRO = webIdOf("company", osterbro.id)
+const MIKKEL = webIdOf("contact", mikkel.id)
 
 const parkvej: Property = {
   id: "01a0d2a4-a280-700c-8000-000000000001",
@@ -130,14 +130,14 @@ const kongens: SharedCollectionPoint = {
 }
 
 // The organisation and the customers as the store has them when the properties load.
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { fixtures: fixturesOf("configure", "organization"), resolve: NOTHING_RESOLVED, now: NOW })
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const customers = [mikkel, osterbro, kab]
-const customerRecords = customers.map((customer) => customerAdapter.toRecord(customer, { fixtures: fixturesOf("customers", "contacts"), resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }))
+const customerRecords = customers.map((customer) => customerAdapter.toRecord(customer, { resolve: NOTHING_RESOLVED, now: NOW }))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: customerRecords, serverIds: new Map(customerRecords.map((record, index) => [record.id, customers[index].id])) }, 1)],
 ])
-const context = (resolver: Resolver = resolverOver(state), fixtures: readonly BusinessRecord[] = []): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ resolve: resolver, now: NOW })
 
 /** The properties module as the store holds it once loaded, for the groups, the points and the subscriptions that name its rows. */
 function withProperties(properties: readonly Property[], base: ServerRecordsState = state): ServerRecordsState {
@@ -151,7 +151,7 @@ const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 const MINTED = 1_700_000_000_000
 
 const PROPERTY_VALUES: Record<string, string> = {
-  projectId: FIXTURE_PROJECT_IDS.copenhagen,
+  projectId: COPENHAGEN,
   displayName: "Nørrebrogade 144",
   serviceAddress: "Nørrebrogade 144, 2200 København N",
   registryId: "",
@@ -159,11 +159,11 @@ const PROPERTY_VALUES: Record<string, string> = {
   latitude: "55.6961",
   longitude: "12.546",
   specialConditions: "",
-  ownerIds: "company-osterbro-housing",
-  payerIds: "company-osterbro-housing, contact-mikkel",
+  ownerIds: OSTERBRO,
+  payerIds: `${OSTERBRO}, ${MIKKEL}`,
   tenantIds: "",
   administratorIds: "",
-  serviceContactIds: "contact-mikkel",
+  serviceContactIds: MIKKEL,
 }
 
 describe("the three modules", () => {
@@ -193,26 +193,24 @@ describe("the three modules", () => {
 })
 
 describe("a property", () => {
-  test("loads from one list as `property-<uuid>`: no fixture lends its id, not even the one of its name and address", async () => {
+  test("loads from one list as `property-<uuid>`", async () => {
     const { fetch, calls } = scripted([() => pageOf([parkvej, dock4])])
-    const result = await loadModule(clientOver(fetch), propertiesModule, { fixtures: propertyFixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), propertiesModule, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/properties?limit=200"])
     assert.deepEqual(result.records.map((record) => record.id), [`property-${parkvej.id}`, `property-${dock4.id}`])
     assert.equal(result.serverIds.get(`property-${parkvej.id}`), parkvej.id)
-    assert.ok(propertyFixtures.some((record) => record.name === "Parkvej 18"), "the fixture of the same name is there to lend, and does not")
   })
 
   test("is the wire's fields, its parties by role through the switched contacts module, scoped to its project", () => {
-    const record = propertyAdapter.toRecord(parkvej, context(resolverOver(state), propertyFixtures))
+    const record = propertyAdapter.toRecord(parkvej, context())
     assert.equal(record.id, `property-${parkvej.id}`)
     assert.equal(record.name, "Parkvej 18")
     assert.equal(record.context, "Østerbro Housing · Payer Østerbro Housing")
     assert.equal(record.status, "Active")
-    assert.equal(record.owner, "", "nothing of the fixture is inherited")
+    assert.equal(record.owner, "")
     assert.equal(record.description, "Locked yard access.")
     assert.equal(record.recordKind, "Property")
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [COPENHAGEN])
     assert.equal(record.updated, "5 days ago")
     assert.deepEqual(record.facts, {
       "Property type": "Residential",
@@ -228,7 +226,7 @@ describe("a property", () => {
     assert.deepEqual(record.related, ["Østerbro Housing", "Mikkel Sørensen"])
     assert.deepEqual(record.allowedTransitions, ["Inactive"])
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       displayName: "Parkvej 18",
       serviceAddress: "Parkvej 18, 2100 København Ø",
       addressId: "",
@@ -240,11 +238,11 @@ describe("a property", () => {
       driverInstructions: "Gate code 4711; the bins stand behind the garage.",
       serviceWindowStart: "",
       serviceWindowEnd: "",
-      ownerIds: "company-osterbro-housing",
-      payerIds: "company-osterbro-housing",
+      ownerIds: OSTERBRO,
+      payerIds: OSTERBRO,
       tenantIds: "",
       administratorIds: "",
-      serviceContactIds: "contact-mikkel",
+      serviceContactIds: MIKKEL,
     })
     assert.ok(propertyAdapter.owns(record))
   })
@@ -331,7 +329,7 @@ describe("a property", () => {
     assert.deepEqual(made({ latitude: "" }), { path: "latitude", message: "Give both the latitude and the longitude, or neither" })
     assert.deepEqual(made({ longitude: "east" }), { path: "longitude", message: "A coordinate is a number" })
     assert.deepEqual(made({ ownerIds: "company-nowhere" }), { path: "ownerIds", message: "Pick customers the API holds" })
-    assert.deepEqual(made({ tenantIds: FIXTURE_PROJECT_IDS.copenhagen }), { path: "tenantIds", message: "Pick customers the API holds" }, "a row the store holds that is no customer is refused as one")
+    assert.deepEqual(made({ tenantIds: COPENHAGEN }), { path: "tenantIds", message: "Pick customers the API holds" }, "a row the store holds that is no customer is refused as one")
   })
 
   test("an address found in the register goes as its id, its designation the API's to write; typed over, the id goes as a null (#291 C13)", () => {
@@ -415,7 +413,7 @@ describe("a property", () => {
     const record = propertyAdapter.toRecord(parkvej, context())
     const edited: BusinessRecord = { ...record, name: "Parkvej 18A", submittedValues: { ...record.submittedValues, displayName: "Parkvej 18A", tenantIds: `company-${kab.id}` } }
     const current = loaded({ records: [record], serverIds: new Map([[record.id, parkvej.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, edited, { fixtures: propertyFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, edited, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.init.method), ["PATCH", "PUT"])
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
@@ -442,7 +440,7 @@ describe("a property", () => {
     const created: Property = { ...parkvej, id: "019995e0-0000-7000-8000-0000000000c1", name: "Nørrebrogade 144", address: "Nørrebrogade 144, 2200 København N" }
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/properties/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, made, { fixtures: propertyFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, made, { state, now: NOW })
     assert.equal(calls[0].init.method, "POST")
     assert.equal(calls[0].url, "http://api.test/properties")
     assert.ok(PropertyCreate.safeParse(bodyOf(calls[0])).success)
@@ -452,7 +450,7 @@ describe("a property", () => {
     assert.equal(outcome.record.name, "Nørrebrogade 144")
 
     const refused = scripted([() => problem(409, 'This project already has a property called "Nørrebrogade 144"')])
-    const answer = await writeRecord(clientOver(refused.fetch), propertiesModule, current, made, { fixtures: propertyFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), propertiesModule, current, made, { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), 'This project already has a property called "Nørrebrogade 144"')
@@ -462,7 +460,7 @@ describe("a property", () => {
 describe("a property group", () => {
   test("loads from one list as `group-<uuid>`, its members through the properties loaded before it, each with the role it holds", async () => {
     const { fetch, calls } = scripted([() => pageOf([osterbroEast])])
-    const result = await loadModule(clientOver(fetch), propertyGroupsModule, { fixtures: fixturesOf("customers", "groups"), state: withAll, now: NOW })
+    const result = await loadModule(clientOver(fetch), propertyGroupsModule, { state: withAll, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/property-groups?limit=200"])
     assert.deepEqual(result.records.map((record) => record.id), [`group-${osterbroEast.id}`])
     const record = result.records[0]
@@ -471,7 +469,7 @@ describe("a property group", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.value, "2 properties")
     assert.equal(record.recordKind, "Property Group")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [COPENHAGEN])
     assert.deepEqual(record.facts, {
       Purpose: "Administration",
       "Responsible customer": "Østerbro Housing",
@@ -483,10 +481,10 @@ describe("a property group", () => {
     assert.deepEqual(record.related, [])
     assert.deepEqual(record.allowedTransitions, ["Draft", "Inactive"])
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       name: "Østerbro East Portfolio",
       purpose: "administration",
-      responsibleCustomerId: "company-osterbro-housing",
+      responsibleCustomerId: OSTERBRO,
       memberPropertyIds: `property-${parkvej.id},property-${ryesgade.id}`,
       memberRole: "member",
       memberRoles: JSON.stringify({ [`property-${parkvej.id}`]: "member", [`property-${ryesgade.id}`]: "administrator" }),
@@ -502,7 +500,7 @@ describe("a property group", () => {
   })
 
   test("the form's record becomes a PropertyGroupCreate the contract accepts: the members by server id in the role new members join as", () => {
-    const values = { projectId: FIXTURE_PROJECT_IDS.copenhagen, name: "Valby Organic Service Group", purpose: "service", status: "draft", responsibleCustomerId: "", memberPropertyIds: `property-${parkvej.id}, property-${ryesgade.id}`, memberRole: "reporting" }
+    const values = { projectId: COPENHAGEN, name: "Valby Organic Service Group", purpose: "service", status: "draft", responsibleCustomerId: "", memberPropertyIds: `property-${parkvej.id}, property-${ryesgade.id}`, memberRole: "reporting" }
     const made = createPropertyGroupRecord(values, { now: MINTED })
     assert.ok(propertyGroupAdapter.owns(made))
     const body = propertyGroupAdapter.toCreateBody?.(made, contextAll())
@@ -517,21 +515,21 @@ describe("a property group", () => {
       ],
     })
     assert.ok(PropertyGroupCreate.safeParse(body).success)
-    const answered = propertyGroupAdapter.toCreateBody?.(createPropertyGroupRecord({ ...values, responsibleCustomerId: "company-osterbro-housing", memberPropertyIds: "", memberRole: "" }, { now: MINTED }), contextAll()) as Record<string, unknown>
+    const answered = propertyGroupAdapter.toCreateBody?.(createPropertyGroupRecord({ ...values, responsibleCustomerId: OSTERBRO, memberPropertyIds: "", memberRole: "" }, { now: MINTED }), contextAll()) as Record<string, unknown>
     assert.equal(answered.responsibleCustomerId, osterbro.id)
     assert.deepEqual(answered.members, [])
     assert.ok(PropertyGroupCreate.safeParse(answered).success)
   })
 
   test("is refused here, naming the field, for no name or purpose, a purpose or a role the wire lacks, a customer or a property the API does not hold", () => {
-    const values = { projectId: FIXTURE_PROJECT_IDS.copenhagen, name: "Group", purpose: "service", status: "draft", responsibleCustomerId: "", memberPropertyIds: "", memberRole: "member" }
+    const values = { projectId: COPENHAGEN, name: "Group", purpose: "service", status: "draft", responsibleCustomerId: "", memberPropertyIds: "", memberRole: "member" }
     const made = (over: Record<string, string>) => propertyGroupAdapter.toCreateBody?.(createPropertyGroupRecord({ ...values, ...over }, { now: MINTED }), contextAll())
     assert.deepEqual(made({ name: "" }), { path: "name", message: "A property group needs a name" })
     assert.deepEqual(made({ purpose: "" }), { path: "purpose", message: "A property group needs a purpose" })
     assert.deepEqual(made({ purpose: "fun" }), { path: "purpose", message: 'The API has no purpose "fun" for a property group; it knows administration, reporting, service, agreement' })
     assert.deepEqual(made({ status: "archived" }), { path: "status", message: 'The API has no status "archived" for a property group; it knows draft, active, inactive' })
     assert.deepEqual(made({ responsibleCustomerId: "company-nowhere" }), { path: "responsibleCustomerId", message: "Pick a customer the API holds" })
-    assert.deepEqual(made({ memberPropertyIds: "property-parkvej-18" }), { path: "memberPropertyIds", message: "Pick properties the API holds" }, "a fixture's id names no row of the API")
+    assert.deepEqual(made({ memberPropertyIds: "property-parkvej-18" }), { path: "memberPropertyIds", message: "Pick properties the API holds" }, "an id no row carries names no row of the API")
     assert.deepEqual(made({ memberPropertyIds: `property-${parkvej.id}`, memberRole: "boss" }), { path: "memberRole", message: 'The API has no role "boss" for a group member; it knows member, administrator, payer, reporting' })
   })
 
@@ -564,7 +562,7 @@ describe("a property group", () => {
 describe("a shared collection point", () => {
   test("loads from one list as `shared-point-<uuid>`, located always, its access, billing and eligibility as facts", async () => {
     const { fetch, calls } = scripted([() => pageOf([kongens])])
-    const result = await loadModule(clientOver(fetch), sharedPointsModule, { fixtures: fixturesOf("customers", "shared"), state: withAll, now: NOW })
+    const result = await loadModule(clientOver(fetch), sharedPointsModule, { state: withAll, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/shared-collection-points?limit=200"])
     assert.deepEqual(result.records.map((record) => record.id), [`shared-point-${kongens.id}`])
     const record = result.records[0]
@@ -586,7 +584,7 @@ describe("a shared collection point", () => {
     })
     assert.deepEqual(record.allowedTransitions, ["Draft", "Restricted", "Closed"])
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       name: "Kongens Nytorv Shared Point",
       pointType: "underground",
       address: "Kongens Nytorv, 1050 København K",
@@ -617,7 +615,7 @@ describe("a shared collection point", () => {
 
   test("the form's record becomes a SharedCollectionPointCreate the contract accepts", () => {
     const values = {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       name: "Nordhavn Dock Shared Cardboard",
       pointType: "surface",
       address: "Sandkaj, 2150 Nordhavn",
@@ -630,7 +628,7 @@ describe("a shared collection point", () => {
       accessConditions: "Invited members",
       driverInstructions: "Ring the caretaker at the gate",
       billingMode: "member-share",
-      responsibleCustomerId: "company-osterbro-housing",
+      responsibleCustomerId: OSTERBRO,
       status: "draft",
       memberPropertyIds: `property-${parkvej.id}`,
       memberRole: "service-member",
@@ -664,7 +662,7 @@ describe("a shared collection point", () => {
   })
 
   test("is refused here, naming the field, without its location, a model, an access mode or a billing mode, or with a distance that is no count of metres", () => {
-    const values = { projectId: FIXTURE_PROJECT_IDS.copenhagen, name: "Point", pointType: "surface", address: "Sandkaj, 2150 Nordhavn", latitude: "55.7085", longitude: "12.5965", eligibilityDistance: "", operatingModel: "municipal", availability: "", accessMode: "open", accessConditions: "", billingMode: "municipal", responsibleCustomerId: "", status: "draft", memberPropertyIds: "", memberRole: "service-member" }
+    const values = { projectId: COPENHAGEN, name: "Point", pointType: "surface", address: "Sandkaj, 2150 Nordhavn", latitude: "55.7085", longitude: "12.5965", eligibilityDistance: "", operatingModel: "municipal", availability: "", accessMode: "open", accessConditions: "", billingMode: "municipal", responsibleCustomerId: "", status: "draft", memberPropertyIds: "", memberRole: "service-member" }
     const made = (over: Record<string, string>) => sharedPointAdapter.toCreateBody?.(createSharedPointRecord({ ...values, ...over }, { now: MINTED }), contextAll())
     assert.deepEqual(made({ latitude: "", longitude: "" }), { path: "latitude", message: "A shared collection point has a location: give the latitude and longitude" })
     assert.deepEqual(made({ address: "" }), { path: "address", message: "A shared collection point needs an address" })

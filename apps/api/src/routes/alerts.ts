@@ -235,7 +235,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           })
           .returning(alertColumns)
         const answered = alertOf(row)
-        await emit(tx, principal, { aggregate: "alert", aggregateId: row.id, kind: "alert-raised", payload: answered, projectId: row.projectId, occurredAt: detectedAt })
+        await emit(tx, principal, { aggregateId: row.id, kind: "alert-raised", payload: answered, projectId: row.projectId, occurredAt: detectedAt })
         return created(c, "/alerts", answered)
       },
     )

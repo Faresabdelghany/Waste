@@ -1,7 +1,7 @@
 // Execution's closed lists (Issue #104): where a dated Route and its Pickups
 // stand, why a stop was not collected, what a Proof of Service is evidence
 // of, who recorded it, what a driver's device may say, what became of what it
-// said, and what the outbox tells the other contexts. Like the Registry's,
+// said. Like the Registry's,
 // Planning's and Resources' (registry/vocabulary.ts, planning/vocabulary.ts,
 // resources/vocabulary.ts), the database reads each list into its `CHECK`
 // (`oneOf` in packages/db/src/schema/checks.ts) and the contracts read the
@@ -48,15 +48,8 @@
 // `record-fill`, how full a stop's container was (M23 of #293), and
 // `record-volume`, the litres a tank was emptied of (M11 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
-// and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
-// the outbox carries and what each is about: the table is Execution's and its
-// vocabulary is the union of every context's news (#109 §7.20), so
-// Resolution's three kinds and its `ticket` aggregate grew here in place, and
-// Finance's two (Issue #112) — `invoice-issued` on an `invoice`, on every
-// invoice a run issues and every credit note, and `settlement-closed` on a
-// `settlement`, the two doors the e-conomic export consumes — after them, and
-// the Registry's `application-decided` on an `application` (M7 of #293), the
-// seam each kind's effect is consumed from in its owner's lane.
+// and is never stored. What the outbox carries is every context's news, and
+// its vocabulary is outbox/vocabulary.ts's.
 //
 // `CONTAMINANT_CODE_STATUSES` is a contaminant code's (M5 of #293): a
 // company's own codes for the wrong waste in a bin, which the office retires
@@ -103,10 +96,6 @@ export const WEIGHBRIDGE_TICKET_STATUSES = ["matched", "unmatched", "dismissed"]
 export const WEIGHBRIDGE_UNMATCHED_REASONS = ["unknown-vehicle", "no-route", "several-routes", "unknown-fraction", "fraction-not-accepted"] as const
 /** What a ticket of an ingest batch came to that is not kept (O27 of #290): a station not registered, or an instant ahead of the server's clock. */
 export const WEIGHBRIDGE_REFUSALS = ["unknown-station", "ahead-of-clock"] as const
-/** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads; the staff notices' two (O16 of #290, part a), and a Bulky Booking booked or cancelled, which the customer notices read (part b); and a reply the customer may read on a ticket (C18 of #291); then Finance's weight review (O28 of #290), and a Scale Ticket completed or voided, which Finance prices (M16b of #293). */
-export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"] as const
-/** What an outbox event is about; the payload is that resource on the wire. */
-export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert", "bulky-booking", "scale-ticket"] as const
 /** Who wrote a Route Message (O24 of #290): the office, to the route's driver, or the driver, to the office. */
 export const ROUTE_MESSAGE_AUTHORS = ["office", "driver"] as const
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
@@ -130,8 +119,6 @@ export type IdentificationMethod = (typeof IDENTIFICATION_METHODS)[number]
 export type FillLevel = (typeof FILL_LEVELS)[number]
 export type CommandOutcome = (typeof COMMAND_OUTCOMES)[number]
 export type UnloadRefusalReason = (typeof UNLOAD_REFUSAL_REASONS)[number]
-export type OutboxKind = (typeof OUTBOX_KINDS)[number]
-export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
 export type ContaminantCodeStatus = (typeof CONTAMINANT_CODE_STATUSES)[number]
 export type RouteMessageAuthor = (typeof ROUTE_MESSAGE_AUTHORS)[number]
 
@@ -226,8 +213,6 @@ export const EXECUTION_VOCABULARIES = {
   WEIGHBRIDGE_TICKET_STATUSES,
   WEIGHBRIDGE_UNMATCHED_REASONS,
   WEIGHBRIDGE_REFUSALS,
-  OUTBOX_KINDS,
-  OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,
   ROUTE_MESSAGE_AUTHORS,
   OUTBOUND_LOAD_STATUSES,

@@ -12,8 +12,11 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
-import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/execution/vocabulary"
+import { FINANCE_EVENT_KINDS } from "@waste/domain/finance/from-event"
+import { CUSTOMER_NOTICE_KINDS } from "@waste/domain/notifications/notices"
 import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
+import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/outbox/vocabulary"
+import { RESOLUTION_EVENT_KINDS } from "@waste/domain/resolution/from-event"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
@@ -23,22 +26,22 @@ import { countEmptyings } from "../jobs/count-emptyings"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
 import { planAheadJob } from "../jobs/plan-ahead"
 import { proposeRightSizingJob } from "../jobs/propose-right-sizing"
-import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
+import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { OUTBOX_CONSUMERS, OUTBOX_ROUTES, routesOf } from "../outbox/routes"
 import { purgePositionsJob } from "../jobs/purge-positions"
-import { CUSTOMER_NOTICE_KINDS, noticeCustomers } from "../jobs/customer-notices"
+import { noticeCustomers } from "../jobs/customer-notices"
 import { notifyStaff } from "../jobs/staff-notifications"
 import { purgeProofObjectsJob } from "../jobs/purge-proof-objects"
 import { sweepHorizonJob } from "../jobs/routing-horizon"
 import { runScheduledBilling } from "../jobs/run-billing"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedEvent, UNCONSUMED_RETENTION_SECONDS } from "../outbox/subscribe"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, UNCONSUMED_RETENTION_SECONDS } from "../outbox/subscribe"
 
 /** Resolution's and Finance's queues of their kinds, as the fan-out spells them (#339). */
-const resolutionQueues = RESOLUTION_KINDS.map((kind) => consumerQueue(kind, "resolution"))
+const resolutionQueues = RESOLUTION_EVENT_KINDS.map((kind) => consumerQueue(kind, "resolution"))
 const financeQueues = FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance"))
 const notificationQueues = NOTIFICATION_EVENTS.map((kind) => consumerQueue(kind, "notifications"))
 const customerNoticeQueues = CUSTOMER_NOTICE_KINDS.map((kind) => consumerQueue(kind, "customer-notices"))
@@ -108,7 +111,7 @@ describe("the job registry", () => {
   })
 
   test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>.resolution, not route-cancelled, with its retry policy over the seam's", () => {
-    assert.deepEqual([...RESOLUTION_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual([...RESOLUTION_EVENT_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
     assert.deepEqual(
       openTickets.map((job) => job.queue),
       ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.command-rejected.resolution"],
@@ -269,7 +272,7 @@ describe("the job registry", () => {
     )
     // What the consumers inherit is the consumed kinds' own queues, each published; the rest wait for a consumer under retention, and the dead-letter queue for an operator.
     const inherited = [...new Set(JOBS.flatMap((job) => (job.inherits === undefined ? [] : [job.inherits])))]
-    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS, ...NOTIFICATION_EVENTS, ...CUSTOMER_NOTICE_KINDS, "application-decided" as const])].map(outboxQueue).sort())
+    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_EVENT_KINDS, ...FINANCE_EVENT_KINDS, ...NOTIFICATION_EVENTS, ...CUSTOMER_NOTICE_KINDS, "application-decided" as const])].map(outboxQueue).sort())
     for (const queue of inherited) assert.ok(published.includes(queue), queue)
     assert.ok(published.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
     assert.ok(worked.has(ROUTING_OPTIMISE_QUEUE) && !published.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans (#170) to a queue with a worker of its own (#171), which nobody publishes to hold it open")
@@ -337,7 +340,15 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.equal(consumerQueue("pickup-failed", "finance"), "outbox.pickup-failed.finance")
   })
 
-  test("RelayedEvent is the contracts' OutboxEvent with the company: it parses a relayed row and refuses one without the company or with a kind the vocabulary lacks", () => {
+  test("every consumer takes outbox kinds alone, each context's from the list its domain rule declares against the outbox's", () => {
+    const kinds = new Set<string>(OUTBOX_KINDS)
+    for (const job of OUTBOX_CONSUMERS) assert.ok(job.inherits !== undefined && kinds.has(job.inherits.slice("outbox.".length)), `${job.queue} inherits ${job.inherits}, no outbox kind's queue`)
+    for (const [context, list] of Object.entries({ RESOLUTION_EVENT_KINDS, FINANCE_EVENT_KINDS, NOTIFICATION_EVENTS, CUSTOMER_NOTICE_KINDS })) {
+      for (const kind of list) assert.ok(kinds.has(kind), `${context} names ${kind}, no outbox kind`)
+    }
+  })
+
+  test("RelayedJob is the contracts' OutboxEvent with the company: it parses a relayed row and refuses one without the company or with a kind the vocabulary lacks; a relayed event is about an aggregate its kind is about, and its payload is read as the kind's resource", () => {
     const event = {
       id: "01a0d3a5-e5e0-7000-8000-000000000001",
       companyId: "01a0d3a5-e5e0-7000-8000-000000000002",
@@ -351,9 +362,14 @@ describe("the outbox queues and defineOutboxConsumer", () => {
       createdAt: "2026-10-05T06:00:00.000Z",
       updatedAt: "2026-10-05T06:00:05.000Z",
     }
-    assert.deepEqual(RelayedEvent.parse(event), event)
-    assert.equal(RelayedEvent.safeParse({ ...event, companyId: undefined }).success, false)
-    assert.equal(RelayedEvent.safeParse({ ...event, kind: "pickup.failed" }).success, false)
+    assert.deepEqual(RelayedJob.parse(event), event)
+    assert.equal(RelayedJob.safeParse({ ...event, companyId: undefined }).success, false)
+    assert.equal(RelayedJob.safeParse({ ...event, kind: "pickup.failed" }).success, false)
+    const relayed = relayedEventOf(event)
+    assert.deepEqual(relayed, event)
+    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "ticket" }), /a pickup-failed event is about pickup, never a ticket/)
+    if (relayed.kind !== "pickup-failed") assert.fail("the kind relayed")
+    assert.throws(() => payloadOf(relayed), /Invalid|expected/i, "a stop's event carries the whole Pickup, not three of its fields")
   })
 
   test("makes one job per kind, on the consumer's queue of the kind inheriting the kind's own, with the description and the options given over the seam's retry, dead letter and retention, and no schedule", async () => {

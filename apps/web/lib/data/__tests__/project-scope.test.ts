@@ -1,20 +1,15 @@
 // The workspace project scope is derived from the configure.organization
 // project records (issue #44): the vocabulary is whatever project records
-// exist, fixture or created, never a hard-coded union of two ids. These
-// tests hold the rules the workspace scopes by — which records are
-// projects, what a scope pins, which records it shows, which project ids a
-// record made under it carries, and how a scope is labelled — and hold the
-// fixture registry to `FIXTURE_PROJECT_IDS`.
+// exist, never a hard-coded union of two ids. These tests hold the rules the
+// workspace scopes by — which records are projects, what a scope pins, which
+// records it shows, which project ids a record made under it carries, and
+// how a scope is labelled.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
 
-import {
-  FIXTURE_PROJECT_IDS,
-  getModuleDefinition,
-  type BusinessRecord,
-} from "../business-modules"
+import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../business-modules"
 import {
   ALL_PROJECTS,
   isInProjectScope,
@@ -68,18 +63,6 @@ describe("projectRecordsOf", () => {
         (project) => project.id,
       ),
       [copenhagen.id, harbor.id, cairo.id, created.id],
-    )
-  })
-
-  test("the fixture organisation records are exactly FIXTURE_PROJECT_IDS", () => {
-    const organisation = getModuleDefinition({
-      workspaceId: "configure",
-      moduleId: "organization",
-    })
-    assert.ok(organisation, "configure.organization is a registered module")
-    assert.deepEqual(
-      projectRecordsOf(organisation.records).map((project) => project.id),
-      Object.values(FIXTURE_PROJECT_IDS),
     )
   })
 })

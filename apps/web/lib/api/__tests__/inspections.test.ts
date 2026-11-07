@@ -12,7 +12,7 @@ import { FieldInspectionCreate, FieldInspectionPatch, type FieldInspection } fro
 
 import { COMMAND_SURFACES, genericEditOffered } from "@/components/waste/commands/command-surfaces"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { mintedRecord } from "../../data/containers"
 import { FILL_LABELS } from "../../data/fill-levels"
 import { INSPECTION_RECORD_KIND, INSPECTIONS_MODULE } from "../../data/inspections"
@@ -31,7 +31,7 @@ const holding: Resolver = {
   byServerId: (serverId) => (serverId === PROJECT ? ({ id: `project-${PROJECT}`, name: "Copenhagen", submittedValues: { timezone: "Europe/Copenhagen" } } as unknown as BusinessRecord) : undefined),
   serverIdOf: (webId) => (webId === `project-${PROJECT}` ? PROJECT : undefined),
 }
-const context: MappingContext = { fixtures: [], resolve: holding, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: holding, now: NOW }
 
 const atTheBin: FieldInspection = {
   id: id(2),

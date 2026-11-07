@@ -28,13 +28,13 @@
 import type { ServiceArea, ServiceAreaAssignment, ServiceAreaCreated, ServiceAreaDetail } from "@waste/contracts/service-areas"
 import { splitList } from "@waste/domain/record-values"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { ASSIGNMENT_PREFIX, ASSIGNMENT_RECORD_KIND, isAssignmentRecord, isServiceAreaRecord, periodReading, SERVICE_AREA_PREFIX, SERVICE_AREA_RECORD_KIND, SERVICE_AREAS_MODULE } from "@/lib/data/provider-money"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, put } from "../client"
-import { inheritedPresentation, isLocalRefusal, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { serviceProviderAdapter } from "./organisation"
 import { planningAreaAdapter } from "./planning"
 import { projectDay } from "./pricing"
@@ -145,7 +145,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
       name: area.name,
       context: fractionNames === "" ? area.code : `${area.code} · ${fractionNames}`,
       status: periodReading(area.validFrom, area.validTo, day),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(area, context.now),
       value: periodLabel(area.validFrom, area.validTo),
       description: area.boundaryText,
@@ -164,7 +164,6 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
       // The holder in force: the provider page lists the areas it holds by it.
       ...(holder?.webId === undefined ? {} : { serviceProviderId: holder.webId }),
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: SERVICE_AREA_RECORD_KIND,
       submittedValues: {
@@ -276,7 +275,7 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
       name: `${code} · ${providerName}`,
       context: periodLabel(assignment.validFrom, assignment.validTo),
       status: periodReading(assignment.validFrom, assignment.validTo, projectDay(assignment.projectId, context)),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(assignment, context.now),
       value: periodLabel(assignment.validFrom, assignment.validTo),
       description: `${providerName} holds ${area?.name ?? code}.`,
@@ -289,7 +288,6 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
       },
       related: [area?.name ?? code, providerName],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: ASSIGNMENT_RECORD_KIND,
       submittedValues: {

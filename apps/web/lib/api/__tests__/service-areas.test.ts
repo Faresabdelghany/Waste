@@ -21,8 +21,8 @@ import {
   type ServiceAreaCreated,
 } from "@waste/contracts/service-areas"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { assignmentsOf, SERVICE_AREAS_MODULE } from "../../data/provider-money"
+import { type BusinessRecord } from "../../data/business-modules"
+import { assignmentsOf } from "../../data/provider-money"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
@@ -34,7 +34,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-const fixtures = getModuleDefinition(SERVICE_AREAS_MODULE)?.records ?? []
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const organic: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000002", ...STAMPS, key: "organic", name: "Organic", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
@@ -60,7 +59,7 @@ const area: ServiceArea = {
 const held: ServiceAreaAssignment = { id: "01a0d2a4-a280-7091-8000-000000000001", ...STAMPS, projectId: copenhagen.id, serviceAreaId: area.id, serviceProviderId: NORDREN, notes: null, validFrom: "2026-01-01", validTo: null }
 const before: ServiceAreaAssignment = { ...held, id: "01a0d2a4-a280-7091-8000-000000000000", serviceProviderId: CITYHAUL, validFrom: "2025-01-01", validTo: "2026-01-01" }
 
-const bare = (records: readonly BusinessRecord[] = []): MappingContext => ({ fixtures: records, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const bare = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const projectRecord = projectAdapter.toRecord(copenhagen, bare())
 const fractionRecords = [organic, paper].map((fraction) => wasteFractionAdapter.toRecord(fraction, bare()))
@@ -73,7 +72,7 @@ const state: ServerRecordsState = new Map([
   ["configure.areas", moduleOf(areaRecords, [OSTERBRO, NORDHAVN])],
   ["service-providers.service-providers", moduleOf(providerRecords, [NORDREN, CITYHAUL])],
 ])
-const context = (at: ServerRecordsState = state): MappingContext => ({ ...bare(fixtures), resolve: resolverOver(at) })
+const context = (at: ServerRecordsState = state): MappingContext => ({ ...bare(), resolve: resolverOver(at) })
 
 /** The module as the store holds it once loaded: the area, then its assignments. */
 function withAreas(at: ServerRecordsState = state): ServerRecordsState {
@@ -89,7 +88,7 @@ const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 const MINTED = "service-areas-service-area-1700000000000"
 
 function made(id: string, recordKind: string, values: Record<string, string>): BusinessRecord {
-  return { id, name: values.areaName ?? id, context: "", status: "Active", owner: "", value: "", updated: "Now", description: "", facts: {}, related: [], source: "Waste API", freshness: "Now", companyId: FIXTURE_COMPANY_ID, projectIds: ["project-copenhagen"], recordKind, submittedValues: values }
+  return { id, name: values.areaName ?? id, context: "", status: "Active", owner: "", value: "", updated: "Now", description: "", facts: {}, related: [], source: "Waste API", freshness: "Now", projectIds: ["project-copenhagen"], recordKind, submittedValues: values }
 }
 
 const AREA_FORM = {
@@ -116,7 +115,7 @@ describe("the service areas module", () => {
 
   test("reads the areas and the assignments once each, the areas holding the provider of the one in force, the assignments its second kind", async () => {
     const { fetch, calls } = scripted([() => pageOf([area]), () => pageOf([before, held])])
-    const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), serviceAreasModule, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/service-areas?limit=200", "http://api.test/service-area-assignments?limit=200"], "one read of the assignments serves both kinds")
     assert.deepEqual(result.records.map((record) => record.id), [`service-area-${area.id}`, `assignment-${before.id}`, `assignment-${held.id}`])
     assert.equal(result.records[0].facts["Service provider"], "NordRen ApS")
@@ -126,7 +125,7 @@ describe("the service areas module", () => {
     const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: MINTED }
     const before_ = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
     const { fetch } = scripted([() => pageOf([area]), () => pageOf([held])])
-    const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state: before_, now: NOW })
+    const result = await loadModule(clientOver(fetch), serviceAreasModule, { state: before_, now: NOW })
     assert.equal(result.records[0].id, MINTED)
     assert.equal(result.records[1].submittedValues?.serviceAreaId, MINTED, "never the adapter's id")
   })
@@ -200,7 +199,7 @@ describe("the service areas module", () => {
     assert.ok(ServiceAreaWasteFractionsSet.safeParse(fractionsOnly.wasteFractionIds).success)
 
     const { fetch, calls } = scripted([() => json({ ...area, name: "Østerbro award", validTo: null }), () => problem(409, "Planning area Nordhavn is named by a route scheme of this award")])
-    const outcome = await writeRecord(clientOver(fetch), serviceAreasModule, current, edited, { fixtures, state: loadedState, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), serviceAreasModule, current, edited, { state: loadedState, now: NOW })
     assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PATCH", `http://api.test/service-areas/${area.id}`], ["PUT", `http://api.test/service-areas/${area.id}/planning-areas`]])
     assert.equal(outcome.kind, "refused")
     if (outcome.kind === "refused") {
@@ -226,7 +225,7 @@ describe("the service areas module", () => {
     assert.deepEqual(assignmentAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, serviceProviderId: `service-provider-${CITYHAUL}` } }, context(loadedState)), { path: "serviceProviderId", message: "A transfer ends this assignment and adds another" })
 
     const { fetch, calls } = scripted([() => json({ ...held, id: "01a0d2a4-a280-7091-8000-000000000098", serviceProviderId: CITYHAUL, notes: "Interim", validFrom: "2029-01-01" }, 201, { location: "/service-area-assignments/x" })])
-    const outcome = await writeRecord(clientOver(fetch), serviceAreasModule, loadedState.get("service-providers.service-areas")!, made_, { fixtures, state: loadedState, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), serviceAreasModule, loadedState.get("service-providers.service-areas")!, made_, { state: loadedState, now: NOW })
     assert.equal(calls[0].url, `http://api.test/service-areas/${area.id}/assignments`)
     assert.equal(outcome.kind, "created")
     assert.ok(bodyOf(calls[0]))

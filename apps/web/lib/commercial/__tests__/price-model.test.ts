@@ -45,20 +45,49 @@ const requireModule = (moduleId: string) => {
 }
 const products = requireModule("products")
 const priceRows = requireModule("price-rows")
-const fixtureProducts = products.records
-const fixtureRowRecords = priceRows.records
-const fixtureRows = fixtureRowRecords
-  .map(recordToPriceRow)
-  .filter((row): row is PriceRowModel => row !== null)
 
-const productById = new Map(fixtureProducts.map((product) => [product.id, product]))
-const requireProduct = (productId: string) => {
-  const product = productById.get(productId)
-  if (!product) throw new Error(`no fixture product ${productId}`)
-  return product
+const residual: BusinessRecord = {
+  id: "product-res-240",
+  name: "Residual waste · 240L bin",
+  context: "Container collection",
+  status: "Active",
+  owner: "Pricing",
+  value: "Unpriced",
+  updated: "Now",
+  description: "Residual collection with a rented 240L bin.",
+  facts: {},
+  related: [],
+  source: "Price Engine",
+  freshness: "Now",
+  recordKind: "Product",
 }
-const productOf = (row: PriceRowModel) => requireProduct(row.productId)
-const residual = requireProduct("product-res-240")
+const bulky = { id: "product-bulky", name: "Bulky waste pickup" }
+
+// The residual bin's default row and its five variations, one of them a negotiated deal, beside another product's row.
+const residualRow = (id: string, amount: number, fields: Partial<PriceRowModel> = {}): PriceRowModel => ({
+  id,
+  productId: residual.id,
+  amount,
+  unit: "pickup",
+  conditions: {},
+  effectiveFrom: "2026-01-01",
+  ...fields,
+})
+const defaultRow = residualRow("price-row-res-default", 18.5, {
+  tag: "PL-Copenhagen-2026",
+  scheduled: { newAmount: 19.06, from: "2027-01-01", note: "Annual +3%" },
+})
+const rowRecords = [
+  ...[
+    defaultRow,
+    residualRow("price-row-res-centre", 21, { conditions: { zone: "City centre" } }),
+    residualRow("price-row-res-centre-com", 24.5, { conditions: { zone: "City centre", customerType: "Commercial" } }),
+    residualRow("price-row-res-com", 22, { conditions: { customerType: "Commercial" } }),
+    residualRow("price-row-res-north", 19.5, { conditions: { zone: "North" } }),
+    residualRow("price-row-res-osterbro", 16.5, { negotiatedCustomer: "Østerbro Housing Association" }),
+  ].map((row) => priceRowToRecord(row, residual)),
+  priceRowToRecord({ id: "price-row-bulky-default", productId: bulky.id, amount: 300, unit: "job", conditions: {}, effectiveFrom: "2026-01-01" }, bulky),
+]
 
 const withoutFact = (record: BusinessRecord, key: string): BusinessRecord => {
   const facts = { ...record.facts }
@@ -74,23 +103,9 @@ const deletion: SoftDeletion = {
 
 const rowsOfRecords = (records: readonly BusinessRecord[]) =>
   records.map(recordToPriceRow).filter((row): row is PriceRowModel => row !== null)
+const rows = rowsOfRecords(rowRecords)
 
 describe("recordToPriceRow ⇄ priceRowToRecord", () => {
-  test("every fixture price row reads as a live row", () => {
-    assert.equal(fixtureRows.length, fixtureRowRecords.length)
-  })
-
-  test("every fixture row survives the round trip unchanged", () => {
-    for (const row of fixtureRows) {
-      const product = productOf(row)
-      assert.deepEqual(
-        recordToPriceRow(priceRowToRecord(row, { id: product.id, name: product.name })),
-        row,
-        row.id,
-      )
-    }
-  })
-
   test("a row carrying every field survives the round trip unchanged", () => {
     const row: PriceRowModel = {
       id: "price-row-full",
@@ -116,9 +131,7 @@ describe("recordToPriceRow ⇄ priceRowToRecord", () => {
   })
 
   test("a record is written under the fact keys the model spells", () => {
-    const row = fixtureRows.find((candidate) => candidate.id === "price-row-res-default")
-    assert.ok(row)
-    const record = priceRowToRecord(row, { id: "product-res-240", name: "Residual waste · 240L bin" })
+    const record = priceRowToRecord(defaultRow, residual)
     assert.equal(record.context, "Residual waste · 240L bin")
     assert.equal(record.facts[ROW_FACTS.amount], "18.50")
     assert.equal(record.facts[ROW_FACTS.scheduledFrom], "2027-01-01")
@@ -129,7 +142,7 @@ describe("recordToPriceRow ⇄ priceRowToRecord", () => {
 describe("soft-deleted rows and the product-fact sync", () => {
   const product = residual
   const rowRecordsOf = (productId: string) =>
-    fixtureRowRecords.filter(
+    rowRecords.filter(
       (record) => record.relationRefs?.some((ref) => ref.recordId === productId) ?? false,
     )
 
@@ -139,8 +152,8 @@ describe("soft-deleted rows and the product-fact sync", () => {
     assert.equal(recordToPriceRow(softDeletedRecord(record, deletion)), null)
   })
 
-  test("the fixture product's facts already say what its rows say", () => {
-    const synced = syncProductPricingFacts(product, fixtureRows)
+  test("the sync derives the product's facts and value from its own rows", () => {
+    const synced = syncProductPricingFacts(product, rows)
     assert.equal(synced.facts[PRODUCT_FACTS.variations], "5")
     assert.equal(synced.facts[PRODUCT_FACTS.customer], "Østerbro Housing Association")
     assert.equal(synced.facts[PRODUCT_FACTS.priceList], "PL-Copenhagen-2026")
@@ -176,19 +189,6 @@ describe("soft-deleted rows and the product-fact sync", () => {
     assert.equal(synced.facts[PRODUCT_FACTS.customer], undefined)
     assert.equal(synced.facts[PRODUCT_FACTS.priceList], undefined)
   })
-})
-
-describe("the fixture products and their rows", () => {
-  for (const product of fixtureProducts) {
-    test(`${product.id} carries the facts, value and pricing sentence its rows derive`, () => {
-      const synced = syncProductPricingFacts(product, fixtureRows)
-      assert.equal(synced.value, product.value)
-      assert.equal(synced.description, product.description)
-      for (const key of [PRODUCT_FACTS.priceList, PRODUCT_FACTS.variations, PRODUCT_FACTS.customer]) {
-        assert.equal(synced.facts[key], product.facts[key], key)
-      }
-    })
-  }
 })
 
 describe("the pricing sentence of a product's description", () => {
@@ -327,17 +327,16 @@ describe("the history and indexation codecs", () => {
     )
   })
 
-  test("a fixture service provider price decodes its indexation history", () => {
-    const rates = requireModule("service-provider-prices").records
-    const indexed = rates.map(recordToServiceProviderPrice).filter((rate) => rate.indexation.length > 0)
-    assert.ok(indexed.length > 0)
-    for (const rate of indexed) {
-      for (const entry of rate.indexation) {
-        assert.match(entry.at, /^\d{4}-\d{2}-\d{2}$/)
-        assert.ok(entry.note.length > 0)
-        assert.ok(entry.from > 0 && entry.to > 0)
-      }
+  test("a service provider price decodes its indexation history from its record", () => {
+    const cpi: ServiceProviderPriceModel["indexation"][number] = { at: "2026-03-01", note: "CPI +5%", from: 11.2, to: 11.76, base: "bid" }
+    const fuel: ServiceProviderPriceModel["indexation"][number] = { at: "2026-06-01", note: "Fuel +3%", from: 11.76, to: 12.11, base: "current fee" }
+    const record: BusinessRecord = {
+      ...residual,
+      id: "rate-nordren-res-240",
+      recordKind: "Service provider price",
+      related: [encodeIndexation(cpi), "Deletion log audit-1", encodeIndexation(fuel)],
     }
+    assert.deepEqual(recordToServiceProviderPrice(record).indexation, [cpi, fuel])
   })
 })
 
@@ -432,7 +431,7 @@ describe("normalizePriceRowRecord", () => {
 
 describe("softDeletedPriceRowsOf", () => {
   test("marks every live row of the product and no other", () => {
-    const cascaded = softDeletedPriceRowsOf(fixtureRowRecords, "product-res-240", deletion)
+    const cascaded = softDeletedPriceRowsOf(rowRecords, "product-res-240", deletion)
     assert.deepEqual(
       cascaded.map((record) => record.id).sort(),
       [
@@ -453,7 +452,7 @@ describe("softDeletedPriceRowsOf", () => {
   })
 
   test("a row already soft-deleted is left alone", () => {
-    const records = fixtureRowRecords.map((record) =>
+    const records = rowRecords.map((record) =>
       record.id === "price-row-res-north" ? softDeletedRecord(record, deletion) : record,
     )
     const cascaded = softDeletedPriceRowsOf(records, "product-res-240", deletion)
@@ -462,7 +461,7 @@ describe("softDeletedPriceRowsOf", () => {
   })
 
   test("a product with no rows cascades nothing", () => {
-    assert.deepEqual(softDeletedPriceRowsOf(fixtureRowRecords, "product-nobody", deletion), [])
+    assert.deepEqual(softDeletedPriceRowsOf(rowRecords, "product-nobody", deletion), [])
   })
 })
 

@@ -6,6 +6,7 @@
  * where the records live.
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
+import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditApplication, type SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@waste/domain/route-schemes/groups"
 import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
@@ -13,6 +14,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
+import { count } from "@waste/domain/text"
 
 import { typed } from "@/lib/api/records/adapter"
 import { dayIn } from "@/lib/api/records/clock"
@@ -22,6 +24,22 @@ import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
 export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
+
+/** Where a scheme keeps how many days from tomorrow the nightly job plans it (O21 of #290): a whole number of days, as text. */
+export const PLAN_AHEAD_DAYS_KEY = "planAheadDays"
+
+/** The scheme's Plan Ahead window in days, as the record carries it; the week where it says none. */
+export function planAheadDaysOf(record: BusinessRecord): number {
+  const days = Number(record.submittedValues?.[PLAN_AHEAD_DAYS_KEY])
+  return planAheadDaysAllowed(days) ? days : PLAN_AHEAD_DAYS_DEFAULT
+}
+
+/** What turning a scheme's Plan Ahead on or off says, wherever it is turned: on, the scheme's own window. */
+export function planAheadToggledSentence(scheme: BusinessRecord, enabled: boolean): string {
+  return enabled
+    ? `${scheme.name} keeps its next ${count(planAheadDaysOf(scheme), "day")} planned through the nightly plan-ahead run.`
+    : `${scheme.name} stops auto-generating; already-generated routes remain.`
+}
 
 /**
  * "1 route", "1.5 routes", "0.3 routes": the guided setup's routes a week

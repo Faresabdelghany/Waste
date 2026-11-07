@@ -6,23 +6,17 @@
 //
 // Two rules run through every adapter:
 //
-//   Ids. The prototype's ids stay the web's handles. A seeded row is the
-//   fixture record the seed derived it from (packages/db/src/seed: the demo
-//   company's rows were built from `apps/web/lib/data/business-modules.ts`,
-//   by name), so a resource whose name is a fixture's takes that fixture's id
-//   — `project-copenhagen` stays `project-copenhagen`, and every fixture of a
-//   module not yet switched that names it still finds it. A resource no
-//   fixture names is `<prefix>-<uuid>`, the same shape the organisation store
-//   mints in the browser (`project-<randomUUID>`), which is what
-//   `lib/data/project-scope.ts` reads a project record by. The server's own
-//   id is kept beside the record by the store (`serverIds`), never on it.
+//   Ids. The prototype's ids stay the web's handles: a resource is
+//   `<prefix>-<uuid>`, the same shape the workspace mints in the browser
+//   (`project-<randomUUID>`), which is what `lib/data/project-scope.ts` reads
+//   a project record by. The server's own id is kept beside the record by
+//   the store (`serverIds`), never on it.
 //
 //   Fields. What the wire carries comes from the wire, on every read; what
-//   the wire does not carry — a fixture's owner, value, description, related
-//   chips, transitions, deep link — is inherited from the matched fixture
-//   and is "" or [] for a resource with none. A change the workspace makes
-//   to a field the wire does not carry is therefore not kept: the server is
-//   the truth, and a fact that is only presentation has nowhere to go.
+//   the wire does not carry — an owner, a value, a description, related
+//   chips — is "" or [] (`NO_PRESENTATION`). A change the workspace makes to
+//   a field the wire does not carry is therefore not kept: the server is the
+//   truth, and a fact that is only presentation has nowhere to go.
 //
 // The typed form payload (`submittedValues`) is keyed by the module's form
 // field ids where the module has a form (the edit dialog seeds from them) and
@@ -64,12 +58,8 @@ export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverI
 
 /** What a mapping may look at beside the resource itself. */
 export type MappingContext = {
-  /** The module's fixture records, the seed's origin, matched by name. */
-  fixtures: readonly BusinessRecord[]
   /** The other records the mapping may name or be named by. */
   resolve: Resolver
-  /** The web id of the caller's company record, once the organisation module has loaded. */
-  companyRecordId?: string
   /** The clock, for "Today" and "3 days ago"; a test pins it. */
   now?: Date
 }
@@ -209,15 +199,15 @@ export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
 /** `${workspaceId}.${moduleId}`, the key every store, link and relation uses. */
 export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string) => `${workspaceId}.${moduleId}`
 
-/** `<prefix>-<uuid>`: the id of a resource no fixture names. */
+/** `<prefix>-<uuid>`: a resource's web id. */
 export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`
 
-/** True for a record whose id carries the prefix — a fixture's, a browser-minted one or a `webIdOf`. */
+/** True for a record whose id carries the prefix — a browser-minted one or a `webIdOf`. */
 export const hasPrefix = (prefix: string) => (record: Pick<BusinessRecord, "id">) => record.id.startsWith(`${prefix}-`)
 
 /**
  * The rule every adapter's `owns` follows: a record is of a kind when its id
- * carries the kind's prefix — a fixture's id, a `webIdOf` — or, for a record
+ * carries the kind's prefix — a `webIdOf` — or, for a record
  * the workspace has just made (whose id is `<moduleId>-<slug of the form's
  * recordKind>-<clock>`, `organization-project-1700000000000`), when its
  * `recordKind` is the kind's. A form's `recordKind` is the one word the
@@ -228,35 +218,8 @@ export const hasPrefix = (prefix: string) => (record: Pick<BusinessRecord, "id">
 export const ofKind = (prefix: string, recordKinds: readonly string[]) => (record: Pick<BusinessRecord, "id" | "recordKind">) =>
   hasPrefix(prefix)(record) || (record.recordKind !== undefined && recordKinds.includes(record.recordKind))
 
-/**
- * The fixture record a resource is: the one of the prefix whose name is the
- * resource's, the seed's own derivation. `names` lists what the resource
- * may be called, first match wins, since a company is spelled by its legal
- * name in one place and its short name in another.
- */
-export function fixtureNamed(fixtures: readonly BusinessRecord[], prefix: string, names: readonly string[]): BusinessRecord | undefined {
-  const ofKind = fixtures.filter(hasPrefix(prefix))
-  for (const name of names) {
-    const found = ofKind.find((record) => record.name === name)
-    if (found) return found
-  }
-  return undefined
-}
-
-/**
- * The presentation a matched fixture lends a resource: everything the wire
- * does not carry. Nothing here is read back into a write body.
- */
-export function inheritedPresentation(fixture: BusinessRecord | undefined): Pick<BusinessRecord, "owner" | "value" | "description" | "related" | "allowedTransitions" | "deepLink"> {
-  return {
-    owner: fixture?.owner ?? "",
-    value: fixture?.value ?? "",
-    description: fixture?.description ?? "",
-    related: fixture?.related ?? [],
-    allowedTransitions: fixture?.allowedTransitions,
-    deepLink: fixture?.deepLink,
-  }
-}
+/** What the wire does not carry, the same for every resource: nothing here is read back into a write body. */
+export const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
 
 /** `active` → `Active`, `service-contact` → `Service contact`: a wire token as a status or a fact reads. */
 export function statusLabel(token: string): string {
@@ -272,7 +235,7 @@ export function statusToken(label: string): string {
 const DAY_MS = 86_400_000
 
 /**
- * How long ago an instant was, as the fixtures spell it: "Just now" inside
+ * How long ago an instant was, as a record's Updated says it: "Just now" inside
  * the hour, "Today", "Yesterday", "N days ago", then weeks and months. Days
  * are counted on the calendar of the clock's own timezone — the browser's,
  * not a project's: a stamp is presentation only, and every date rule proper

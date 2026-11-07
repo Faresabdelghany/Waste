@@ -22,16 +22,12 @@ import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/wa
 import { useCommandOffered, useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "@/lib/api/records/organisation"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { getModuleDefinition } from "@/lib/data/business-modules"
 import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/data/provider-workspace"
-
-const NO_RECORDS: never[] = []
-const fixturesOf = (location: typeof TEAM_MODULE) => getModuleDefinition(location)?.records ?? NO_RECORDS
 
 /** Add user: a provider's account invites into its own team. */
 export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
-  const team = useModuleRecords(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId, fixturesOf(TEAM_MODULE))
+  const team = useModuleRecords(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)
   const workspace = useProviderWorkspace()
   const ownProvider = useProviderWebId(workspace?.providerId)
   const openRecord = useOpenRecord(TEAM_MODULE.moduleId)

@@ -39,7 +39,6 @@ export type BusinessRecord = {
    * temporary, client-created records can be introduced before persistence
    * assigns their canonical scope.
    */
-  companyId?: string
   projectIds?: string[]
   serviceProviderId?: string
   /**

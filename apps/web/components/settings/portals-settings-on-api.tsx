@@ -18,7 +18,7 @@ import { useState } from "react"
 import { ArrowSquareOut, PencilSimple } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -30,17 +30,15 @@ import { allows } from "@/lib/api/grants"
 import { problemSentence } from "@/lib/api/problem"
 import { BRANDING_MODULE, replaceBranding } from "@/lib/api/project-branding"
 import { problemOfError } from "@/lib/api/records/server-records"
-import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "@/lib/data/portals"
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
-const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-const DRIVER_FIXTURES = getModuleDefinition({ workspaceId: "fleet", moduleId: "drivers" })?.records ?? []
 
 export function PortalsSettingsOnApi() {
-  const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
-  const drivers = useModuleRecords("fleet", "drivers", DRIVER_FIXTURES)
+  const organisation = useModuleRecords("configure", "organization")
+  const drivers = useModuleRecords("fleet", "drivers")
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-")).sort((a, b) => a.name.localeCompare(b.name))
   const [publishing, setPublishing] = useState<BusinessRecord | null>(null)
   const [branding, setBranding] = useState<BusinessRecord | null>(null)
@@ -90,7 +88,7 @@ export function PortalsSettingsOnApi() {
             </TableHeader>
             <TableBody>
               {projects.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint="Projects are created under Company & projects." />
+                <EmptyRow colSpan={5} message={emptyMessage} />
               ) : (
                 projects.map((project) => {
                   const slug = publicSlugOf(project)

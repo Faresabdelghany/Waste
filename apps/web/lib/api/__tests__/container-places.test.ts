@@ -21,8 +21,8 @@ import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
 import { containerLocation } from "@waste/domain/map-planning/positions"
 import { resolveStopMatches, servingReadingOf } from "@waste/domain/route-schemes/matching"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
+import type { BusinessRecord } from "../../data/business-modules"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
 import { agreementAdapter, subscriptionAdapter } from "../records/agreements"
 import { containerAdapter, type ContainerResource } from "../records/containers"
 import { SERVED_PUBLICLY, SHARED_POINTS } from "../../data/containers"
@@ -76,14 +76,14 @@ const agrEnded: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000
 const underEnded: Subscription = { ...atParkvej, id: "01a0d2a4-a280-7013-8000-000000000005", agreementId: agrEnded.id, validFrom: "2025-01-01", validTo: null }
 
 // The store as it stands when the containers load: every module a placement's place is read through, loaded before them in SERVER_MODULES' order.
-const bare: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 let state: ServerRecordsState = new Map()
-function load<R extends Resource>(key: string, adapter: ResourceAdapter<R>, resources: readonly R[], fixtures: readonly BusinessRecord[] = []) {
-  const context: MappingContext = { ...bare, fixtures, resolve: resolverOver(state) }
+function load<R extends Resource>(key: string, adapter: ResourceAdapter<R>, resources: readonly R[]) {
+  const context: MappingContext = { ...bare, resolve: resolverOver(state) }
   const records = resources.map((resource) => adapter.toRecord(resource, context))
   state = new Map([...state, [key, loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, resources[index].id])) }, 1)]])
 }
-load("configure.organization", projectAdapter, [copenhagen], getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [])
+load("configure.organization", projectAdapter, [copenhagen])
 load("configure.areas", planningAreaAdapter, [
   { ...harborArea, boundaries: [boundaryOf(harborArea, "01a0d2a4-a280-7017-8000-000000000004")] },
   { ...osterbroArea, boundaries: [boundaryOf(osterbroArea, "01a0d2a4-a280-7017-8000-000000000002")] },
@@ -152,7 +152,7 @@ describe("a container placed today", () => {
     const record = placed("BIN-91008", 8, atParkvej, "2026-01-01")
     assert.equal(record.status, "No stock record", "no movement yet, as every seeded container")
     for (const area of [areaId, blockId]) {
-      const preview = resolveStopMatches({ rule: { fractions: ["Residual"], containerTypes: ["Two-wheel bin · 240 L"], vehicleType: "Rear loader" }, areaId: area, projectIds: [FIXTURE_PROJECT_IDS.copenhagen], containers: [record] })
+      const preview = resolveStopMatches({ rule: { fractions: ["Residual"], containerTypes: ["Two-wheel bin · 240 L"], vehicleType: "Rear loader" }, areaId: area, projectIds: [webIdOf("project", copenhagen.id)], containers: [record] })
       assert.deepEqual([preview.scopeTotal, preview.matched.map((profile) => profile.name), preview.excluded], [1, ["BIN-91008"], []], area)
     }
   })

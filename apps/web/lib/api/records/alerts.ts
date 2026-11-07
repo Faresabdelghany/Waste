@@ -19,11 +19,11 @@
 import type { Alert } from "@waste/contracts/alerts"
 import { ALERT_KINDS, ALERT_SEVERITIES } from "@waste/domain/resolution/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter, vehicleAdapter } from "./fleet"
@@ -90,14 +90,13 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
     // An overdue ticket's alert is about the ticket alone: its context is the ticket.
     context: subjects.length === 0 ? (ticketName ?? "") : subjects.map((subject) => subject.name).join(" · "),
     status: statusLabel(alert.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(alert, context.now),
     owner: alert.acknowledgedBy === null ? "Unacknowledged" : nameVia(context, "user", alert.acknowledgedBy),
     value: statusLabel(alert.severity),
     description: alert.details,
     related: [...subjects.map((subject) => `${subject.fact} ${subject.name}`), ...(ticketName === undefined ? [] : [`Ticket ${ticketName}`])],
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: "Alert",
     submittedValues: {

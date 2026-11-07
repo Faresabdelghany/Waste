@@ -486,6 +486,6 @@ export async function recordVisit(tx: Tx, input: RecordVisitInput): Promise<Reco
     await tx.insert(siteVisitFraction).values(input.wasteFractionIds.map((wasteFractionId) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, visitId: row.id, wasteFractionId })))
   }
   const visit = siteVisitOf(row, input.wasteFractionIds)
-  await emit(tx, scope, { aggregate: "site-visit", aggregateId: row.id, kind: "site-visit-recorded", payload: visit, projectId: scope.projectId, occurredAt: input.occurredAt })
+  await emit(tx, scope, { aggregateId: row.id, kind: "site-visit-recorded", payload: visit, projectId: scope.projectId, occurredAt: input.occurredAt })
   return { row, visit, replayed: false }
 }

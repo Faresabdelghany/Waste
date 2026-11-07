@@ -23,10 +23,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { keptOnApi } from "@/lib/api/records/server-records"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
-import { getModuleDefinition } from "@/lib/data/business-modules"
 import { mayView as mayViewImports } from "@/lib/imports/import-file"
 import { dayIn } from "@/lib/api/records/clock"
 import { timezoneOfProject } from "@/lib/data/route-schemes"
@@ -67,9 +67,8 @@ export function DashboardOnApi() {
   const projectName = (id: string) => projects.find((candidate) => candidate.id === id)?.name ?? id
 
   // Today on the project's clock where the store holds its timezone — the one asked for, else the person's first — and the browser's otherwise.
-  const organisation = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
   const clockProject = projects.find((candidate) => candidate.id === projectId) ?? projects[0]
-  const timezone = clockProject === undefined ? undefined : timezoneOfProject(getRecords("configure", "organization", organisation), projectWebIdOf(clockProject, organisation))
+  const timezone = clockProject === undefined ? undefined : timezoneOfProject(getRecords("configure", "organization"), projectWebIdOf(clockProject))
   const today = dayIn(new Date(), timezone)
 
   const range = rangeOf(rangeId)
@@ -156,7 +155,7 @@ export function DashboardOnApi() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         {!onApi ? (
-          <ReportNotice empty="The Dashboard is kept on the API: sign in on the Pilot to read it." />
+          <ReportNotice empty={keptOnApi("The Dashboard")} />
         ) : me === null ? (
           <ReportNotice />
         ) : tab === undefined ? (

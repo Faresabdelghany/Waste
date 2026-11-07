@@ -8,7 +8,7 @@ import { HolidayListCreate, HolidayListHolidaysSet, HolidayListPatch, type Holid
 import { holidayListEntries, isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { createHolidayListRecord, nextYearEntries, withHolidayListDraft, withHolidayListEntries } from "../../data/holiday-lists"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { holidayListAdapter } from "../records/holiday-lists"
@@ -16,7 +16,7 @@ import { collectionCalendarsModule } from "../records/planning"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-11-05T12:00:00Z")
-const context: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 
 const danish: HolidayList = {
   id: "01a0d2a4-a280-702f-8000-000000000001",

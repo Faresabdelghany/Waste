@@ -102,13 +102,13 @@
 // asks (the probe, #97 B's docs slice), and the count is information and not
 // a failure, since an event nobody could publish is still an event.
 //
-// The payload on the wire is `RelayedEvent` (outbox/subscribe.ts): the
+// The payload on the wire is `RelayedJob` (outbox/subscribe.ts): the
 // contracts' `OutboxEvent` as the API would answer the row — instants as ISO
 // strings, `publishedAt` the instant this transaction stamps — plus
 // `companyId`, since a consumer opens its own writes with `withCompany` and no
 // request carries the claim for it. Which the consumer parses with the
 // contracts, so a drift between the row and the wire fails there and loudly.
-import { OutboxAggregate, OutboxKind } from "@waste/contracts/execution"
+import { OutboxAggregate, OutboxKind } from "@waste/contracts/outbox"
 import type { Database, Tx } from "@waste/db/client"
 import { inTransaction } from "@waste/db/jobs"
 import { outboxEvent } from "@waste/db/schema/execution"
@@ -117,7 +117,7 @@ import { and, asc, eq, inArray, isNull, lt, lte, sql } from "drizzle-orm"
 import type { SendOptions } from "pg-boss"
 
 import { OUTBOX_ROUTES } from "../outbox/routes"
-import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
+import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedJob } from "../outbox/subscribe"
 import { defineJob, type JobContext } from "./definition"
 
 /** The relay's own queue. */
@@ -151,8 +151,8 @@ export type RelayOutcome = {
   published: number
 }
 
-/** The stamped row as a queue carries it: `RelayedEvent`, the contracts' `OutboxEvent` with the tenant. */
-function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: Date; updatedAt: Date }): RelayedEvent {
+/** The stamped row as a queue carries it: `RelayedJob`, the contracts' `OutboxEvent` with the tenant. */
+function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: Date; updatedAt: Date }): RelayedJob {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -162,7 +162,7 @@ function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: D
     aggregateId: row.aggregateId,
     occurredAt: row.occurredAt.toISOString(),
     // The column is jsonb, read back as the JSON the API wrote; the consumer parses it with its kind's schema.
-    payload: row.payload as RelayedEvent["payload"],
+    payload: row.payload as RelayedJob["payload"],
     publishedAt: stamp.publishedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: stamp.updatedAt.toISOString(),

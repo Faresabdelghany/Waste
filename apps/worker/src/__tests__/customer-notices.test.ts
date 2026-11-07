@@ -10,6 +10,8 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { routeLabel } from "@waste/contracts/execution"
+import type { Route } from "@waste/contracts/routes"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
@@ -24,14 +26,15 @@ import { notificationRule, notificationRuleArea } from "@waste/db/schema/notific
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
+import { CUSTOMER_NOTICE_KINDS, type CustomerNoticeKind } from "@waste/domain/notifications/notices"
 import type { CustomerNoticeEvent } from "@waste/domain/notifications/vocabulary"
+import { aggregateOf, type OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { alertOfRule } from "@waste/domain/resolution/alert-rules"
 import { and, eq, sql } from "drizzle-orm"
 
-import { CUSTOMER_NOTICE_KINDS, noticeCustomerFor } from "../jobs/customer-notices"
+import { noticeCustomerFor } from "../jobs/customer-notices"
 import type { JobContext } from "../jobs/definition"
-import type { RelayedEvent } from "../outbox/subscribe"
+import type { RelayedEvent, RelayedJob } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "./finance-tenant"
 
@@ -118,19 +121,20 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
     await ownerPool?.close()
   })
 
-  const event = <Kind extends (typeof CUSTOMER_NOTICE_KINDS)[number]>(kind: Kind, payload: unknown): RelayedEvent<Kind> => ({
-    id: testId(),
-    companyId: tenant.companyId,
-    projectId: tenant.projects.copenhagen.id,
-    kind,
-    aggregateKind: kind.startsWith("pickup") ? "pickup" : "bulky-booking",
-    aggregateId: testId(),
-    occurredAt: NOON.toISOString(),
-    payload: payload as RelayedEvent["payload"],
-    publishedAt: null,
-    createdAt: NOON.toISOString(),
-    updatedAt: NOON.toISOString(),
-  })
+  const event = <Kind extends CustomerNoticeKind>(kind: Kind, payload: unknown): RelayedEvent<Kind> =>
+    ({
+      id: testId(),
+      companyId: tenant.companyId,
+      projectId: tenant.projects.copenhagen.id,
+      kind,
+      aggregateKind: aggregateOf(kind),
+      aggregateId: testId(),
+      occurredAt: NOON.toISOString(),
+      payload: payload as RelayedJob["payload"],
+      publishedAt: null,
+      createdAt: NOON.toISOString(),
+      updatedAt: NOON.toISOString(),
+    }) as RelayedEvent<Kind>
   /** The booking's payload, enough of `BulkyBooking` for the consumer, which reads its id and the rest from the table. */
   const bookingPayload = () => ({
     id: booking.id,
@@ -261,7 +265,33 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual((await noticeCustomerFor(event("ticket-replied", await replyTo(nobodys.id, "Thanks")), context())).messageIds, [], "a ticket naming no customer tells nobody")
   })
 
-  const cancelledPayload = (cancelReasonCode: string) => ({ id: planned.id, operatingDate: FIXTURE_DAY, cancelReasonCode, status: "cancelled" })
+  /** The cancelled route as the API answers it: the consumer reads its id, its day and its code, and the customers from the tables. */
+  const cancelledPayload = (cancelReasonCode: NonNullable<Route["cancelReasonCode"]>): Route => ({
+    id: planned.id,
+    createdAt: NOON.toISOString(),
+    updatedAt: NOON.toISOString(),
+    projectId: tenant.projects.copenhagen.id,
+    routeSchemeId: tenant.scheme.id,
+    collectionGroupId: null,
+    serviceDate: FIXTURE_DAY,
+    operatingDate: FIXTURE_DAY,
+    number: planned.number,
+    label: routeLabel(planned.number),
+    status: "cancelled",
+    note: null,
+    cancelReasonCode,
+    cancelledByGeneration: cancelReasonCode === "regeneration",
+    generationRunId: null,
+    plannedStartTime: null,
+    planned: { vehicleId: null, trailerId: null, driverId: null, serviceProviderId: null, depotId: null, unloadingStationId: null },
+    heldAt: null,
+    actual: { vehicleId: null, trailerId: null, driverId: null },
+    dispatchedAt: null,
+    startedAt: null,
+    completedAt: null,
+    cancelledAt: NOON.toISOString(),
+    progress: { planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 },
+  })
 
   test("a route cancelled goes to every customer its owed stops serve, or those in the rule's areas, and a regeneration's to nobody", async () => {
     const everyone = await noticeCustomerFor(event("route-cancelled", cancelledPayload("weather")), context())

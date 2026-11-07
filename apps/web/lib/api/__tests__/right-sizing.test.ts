@@ -11,7 +11,7 @@ import { RightSizingApprove, RightSizingDismiss, type RightSizingProposal } from
 
 import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { RIGHT_SIZING_MODULE } from "../../data/right-sizing"
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -28,7 +28,7 @@ const holding: Resolver = {
   byServerId: (serverId) => (serverId === PROJECT ? ({ id: `project-${PROJECT}`, name: "Copenhagen", submittedValues: { timezone: "Europe/Copenhagen" } } as unknown as BusinessRecord) : undefined),
   serverIdOf: (webId) => (webId.startsWith("product-") ? webId.slice("product-".length) : webId === `project-${PROJECT}` ? PROJECT : undefined),
 }
-const context: MappingContext = { fixtures: [], resolve: holding, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: holding, now: NOW }
 
 const smaller: RightSizingProposal = {
   id: id(2),

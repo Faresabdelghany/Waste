@@ -21,7 +21,7 @@ import { TicketDefaultTeamsSettings } from "@/components/settings/ticket-teams-s
 import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
 import type { ProjectPick } from "@/components/settings/use-project-setting"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { settingsTabsOffered, type SettingsTabOf } from "@/lib/data/settings-panes"
+import { settingsTabsOf, type SettingsTabOf } from "@/lib/data/settings-panes"
 
 type TicketsTab = SettingsTabOf<"tickets">
 
@@ -37,7 +37,7 @@ export function TicketsSettings({ params, onParamsChange, onOpenPane }: Settings
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs value={tab} onValueChange={(value) => onParamsChange({ tab: value })}>
         <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket settings">
-          {settingsTabsOffered("tickets", true).map((option) => (
+          {settingsTabsOf("tickets").map((option) => (
             <TabsTrigger key={option.value} value={option.value} className="whitespace-nowrap rounded-full px-3">
               {option.label}
             </TabsTrigger>

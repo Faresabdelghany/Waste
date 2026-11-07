@@ -391,7 +391,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     await appendTicketEvent(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, event)
     // The news of a close, then the type's actions on the status reached (#546 of #544); the ticket is answered as they leave it.
     if (transition.to === "completed" || transition.to === "rejected") {
-      await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(row), projectId: row.projectId, occurredAt: row.closedAt ?? now() })
+      await emit(tx, principal, { aggregateId: row.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(row), projectId: row.projectId, occurredAt: row.closedAt ?? now() })
     }
     const reached = triggerOf(transition.to)
     if (reached === undefined) return { row, wrote: true }
@@ -663,7 +663,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           { kind: "assigned", status: row.status as TicketStatus, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: note ?? null, visibility: "internal", objectKey: null, recordedBy: principal.user.id, sourceEventId: null },
         )
         const answered = ticketOf(row)
-        if (row.assigneeUserAccountId !== null) await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-assigned", payload: answered, projectId: row.projectId, occurredAt: now() })
+        if (row.assigneeUserAccountId !== null) await emit(tx, principal, { aggregateId: row.id, kind: "ticket-assigned", payload: answered, projectId: row.projectId, occurredAt: now() })
         return c.json(answered)
       },
     )

@@ -26,7 +26,7 @@ import { problemOfError, type CommandOutcome, type WriteOutcome } from "@/lib/ap
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
@@ -85,8 +85,6 @@ export function useCommandRunner(module: ModuleLocation, recordId: string): {
   return { busy, version, run, save }
 }
 
-const NO_RECORDS: readonly BusinessRecord[] = []
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 
 /** Which master-data kind a field picks, by its id. */
@@ -119,18 +117,18 @@ export type RelationPickers = {
 
 /** The pickers the containers', the allocations', the places' and the routes' dialogs read. */
 export function useRelationPickers(): RelationPickers {
-  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
-  const warehouses = useModuleRecords(WAREHOUSES_MODULE.workspaceId, WAREHOUSES_MODULE.moduleId, fixturesOf(WAREHOUSES_MODULE))
-  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, fixturesOf(VEHICLES_MODULE))
-  const drivers = useModuleRecords(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId, fixturesOf(DRIVERS_MODULE))
-  const depots = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId, fixturesOf(DEPOTS_MODULE))
-  const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, fixturesOf(CONTACTS_MODULE))
-  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
-  const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId, fixturesOf(CONTAINERS_MODULE))
-  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
-  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId, fixturesOf(SERVICE_PROVIDERS_MODULE))
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
+  const warehouses = useModuleRecords(WAREHOUSES_MODULE.workspaceId, WAREHOUSES_MODULE.moduleId)
+  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
+  const drivers = useModuleRecords(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId)
+  const depots = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId)
+  const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId)
+  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId)
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
+  const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId)
+  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId)
+  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId)
   // A role that does not view the organisation picks from `/me`'s projects (Issue #217).
   const meProjects = useMeProjects()
   const byKey = new Map([
@@ -213,7 +211,7 @@ export function useRelationPickers(): RelationPickers {
 
 /** A project's timezone, read from the organisation module alone: for a surface that shows times on the project's clock and picks no rows (`useRelationPickers` reads every module a picker may name). */
 export function useProjectTimezone(projectId: string | undefined): string | undefined {
-  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
   const project = projectId === undefined ? undefined : organisation.records.find((record) => record.id === projectId)
   const timezone = project?.submittedValues?.timezone
   return typeof timezone === "string" && timezone !== "" ? timezone : undefined
@@ -221,7 +219,7 @@ export function useProjectTimezone(projectId: string | undefined): string | unde
 
 /** Whether a surface's own module reads the API's rows now: on the Pilot, nothing is written or commanded through it before, nor after its load failed. */
 export function useModuleReady(location: ModuleLocation): boolean {
-  return useModuleRecords(location.workspaceId, location.moduleId, fixturesOf(location)).ready
+  return useModuleRecords(location.workspaceId, location.moduleId).ready
 }
 
 /** The name a switched module's row goes by, from its server id; its id chip where the module has not loaded it. */

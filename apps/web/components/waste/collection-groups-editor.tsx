@@ -30,8 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { usePickableRecords } from "@/components/waste/pickable-records"
-import { useStoreRecords } from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/waste/business-record-store"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
@@ -542,14 +541,12 @@ export function CollectionGroupsEditor({
   /** Live validation issues — the ones naming a group show on its row. */
   issues?: readonly string[]
 }) {
-  const containers = useStoreRecords("resources", "containers")
-  // The pickers offer only rows the store reads from the API on the Pilot (pickable-records.ts); the rule preview still reads every container.
-  const pickableContainers = usePickableRecords("resources", "containers", containers)
-  const vehicles = usePickableRecords("fleet", "vehicles", useStoreRecords("fleet", "vehicles"))
-  const drivers = usePickableRecords("fleet", "drivers", useStoreRecords("fleet", "drivers"))
-  const serviceProviders = useStoreRecords("service-providers", "service-providers")
-  const areas = useStoreRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
-  const projects = useStoreRecords("configure", "organization")
+  const containers = useModuleRecords("resources", "containers").records
+  const vehicles = useModuleRecords("fleet", "vehicles").records
+  const drivers = useModuleRecords("fleet", "drivers").records
+  const serviceProviders = useModuleRecords("service-providers", "service-providers").records
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId).records
+  const projects = useModuleRecords("configure", "organization").records
   const days = sortServiceDays(serviceDays)
   const [selectedId, setSelectedId] = useState<string | null>(groups[0]?.id ?? null)
 
@@ -725,7 +722,7 @@ export function CollectionGroupsEditor({
           group={selected}
           days={days}
           containers={containers}
-          pickableContainers={pickableContainers}
+          pickableContainers={containers}
           vehicles={vehicles}
           drivers={drivers}
           serviceProviders={serviceProviders}
@@ -983,10 +980,10 @@ function CollectionGroupsEditorDialogBody({
   onClose: () => void
   onSave: (groups: CollectionGroup[]) => void
 }) {
-  const schemes = useStoreRecords("route-studio", "schemes")
-  const allocations = useStoreRecords("fleet", "vehicle-planning")
-  const containers = useStoreRecords("resources", "containers")
-  const vehicles = useStoreRecords("fleet", "vehicles")
+  const schemes = useModuleRecords("route-studio", "schemes").records
+  const allocations = useModuleRecords("fleet", "vehicle-planning").records
+  const containers = useModuleRecords("resources", "containers").records
+  const vehicles = useModuleRecords("fleet", "vehicles").records
   const values = scheme.submittedValues ?? {}
   const serviceDays = useMemo(() => serviceDaysFromValues(values), [values])
   const [groups, setGroups] = useState<CollectionGroup[]>(() =>

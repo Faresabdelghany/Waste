@@ -1,8 +1,7 @@
 // Pickups on the adapter (#179, slice 6 of #81): a route's stops as the
 // records of `route-studio.pickups`, which the Pickups table, the route's
-// stops and the map read — the map placing an API route's stops through the
-// fixture containers by label until #184 gives a server container its place
-// — and the dispatcher's two commands on a stop, `remove` and
+// stops and the map read — the map placing an API route's stops where the
+// API's containers stand (#184) — and the dispatcher's two commands on a stop, `remove` and
 // `correct-outcome`, whose bodies are held here against the contracts' own
 // zod schemas and sent through the store's seam over a scripted `fetch`. A
 // pickup is never created or edited here: generation writes it, the driver
@@ -19,7 +18,7 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"
 import { routesInWindow } from "@waste/domain/map-planning/routes"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"
 import { contaminantCodeOptions } from "../../data/routes"
 import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
@@ -37,14 +36,11 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
 
-const fixturesOf = (workspaceId: "configure" | "resources" | "route-studio", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const fixtures = fixturesOf("route-studio", "pickups")
-
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const container = (id: string, label: string): Container => ({ id, ...STAMPS, projectId: copenhagen.id, label, containerTypeId: bin240.id, barcode: null, rfid: null, serialNumber: null, ownership: "company", notes: null, assetState: null })
-// Three seeded containers the fixtures place on the map (packages/db/src/seed/registry.ts, EXPLICIT_CONTAINERS).
+// Three seeded containers (packages/db/src/seed/registry.ts, EXPLICIT_CONTAINERS).
 const bin82014 = container("01a0d2a4-a280-7014-8000-000000000001", "BIN-82014")
 const bin66420 = container("01a0d2a4-a280-7014-8000-000000000002", "BIN-66420")
 const bin44831 = container("01a0d2a4-a280-7014-8000-000000000003", "BIN-44831")
@@ -105,23 +101,25 @@ const second = pickupOf("01a0d2a4-a280-7033-8000-000000000002", bin66420.id, 2)
 const third = pickupOf("01a0d2a4-a280-7033-8000-000000000003", bin44831.id, 3)
 
 // What the store has loaded when the pickups load: the organisation, the master data, the containers, the routes.
-const noResolve = (moduleFixtures: readonly BusinessRecord[], resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: moduleFixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const noResolve = (resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve: resolver, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
-const projectRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const masterRecords = [wasteFractionAdapter.toRecord(residual, noResolve(fixturesOf("configure", "master"))), containerTypeAdapter.toRecord(bin240, noResolve(fixturesOf("configure", "master")))]
+const projectRecord = projectAdapter.toRecord(copenhagen, noResolve())
+const masterRecords = [wasteFractionAdapter.toRecord(residual, noResolve()), containerTypeAdapter.toRecord(bin240, noResolve())]
 const before: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
   ["configure.master", loaded({ records: masterRecords, serverIds: serverIdsOf(masterRecords, [residual.id, bin240.id]) }, 1)],
 ])
-const containerRecords = [bin82014, bin66420, bin44831].map((row) => containerAdapter.toRecord({ ...row, placements: [] }, noResolve(fixturesOf("resources", "containers"), resolverOver(before))))
-const routeRecord = routeAdapter.toRecord(route, noResolve(fixturesOf("route-studio", "routes"), resolverOver(before)))
+const containerRecords = [bin82014, bin66420, bin44831].map((row) => containerAdapter.toRecord({ ...row, placements: [] }, noResolve(resolverOver(before))))
+const routeRecord = routeAdapter.toRecord(route, noResolve(resolverOver(before)))
 const state: ServerRecordsState = new Map([
   ...before,
   ["resources.containers", loaded({ records: containerRecords, serverIds: serverIdsOf(containerRecords, [bin82014.id, bin66420.id, bin44831.id]) }, 1)],
   ["route-studio.routes", loaded({ records: [routeRecord], serverIds: serverIdsOf([routeRecord], [route.id]) }, 1)],
 ])
-const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
-const options = { fixtures, state, now: NOW }
+const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ resolve: resolver, now: NOW })
+/** The containers as the map reads them once today's placement places each: the point it stands at among its values. */
+const placedContainers = containerRecords.map((record, index) => ({ ...record, submittedValues: { ...record.submittedValues, latitude: (55.6761 + index * 0.001).toFixed(4), longitude: "12.5683" } }))
+const options = { state, now: NOW }
 const pageOf = (items: unknown[], nextCursor: string | null = null) => json({ items, nextCursor })
 
 describe("the pickups module", () => {
@@ -234,13 +232,12 @@ describe("a pickup", () => {
     assert.equal(record.facts.Route, `route-${route.id}`)
     assert.equal(record.submittedValues?.routeId, `route-${route.id}`)
     assert.equal(record.submittedValues?.containerId, `asset-${bin66420.id}`)
-    assert.equal(record.facts["Container ID"], undefined, "no label to link a fixture container by")
+    assert.equal(record.facts["Container ID"], undefined, "no label to link a container by")
   })
 
-  test("the map draws an API route through the fixture containers, by the seeded containers' labels (#184)", () => {
+  test("the map draws an API route through the API's containers where they stand, each stop under its container's label (#184)", () => {
     const pickups = [first, second, third].map((pickup) => pickupAdapter.toRecord(pickup, context()))
-    const mapContainers = fixturesOf("resources", "containers")
-    const [drawn] = routesInWindow([routeRecord], pickups, mapContainers, null, FIXTURE_GAZETTEER)
+    const [drawn] = routesInWindow([routeRecord], pickups, placedContainers, null, FIXTURE_GAZETTEER)
     assert.ok(drawn, "the route is drawable")
     assert.equal(drawn.id, routeRecord.id)
     assert.equal(drawn.bucket, "in-progress")
@@ -269,7 +266,7 @@ describe("a pickup", () => {
         ["1", "3", "1"],
       ],
     )
-    const [drawn] = routesInWindow([routeRecord], records, fixturesOf("resources", "containers"), null, FIXTURE_GAZETTEER)
+    const [drawn] = routesInWindow([routeRecord], records, placedContainers, null, FIXTURE_GAZETTEER)
     assert.deepEqual(
       drawn.stops.map((stop) => [stop.index, stop.label]),
       [

@@ -18,11 +18,8 @@ import { problemSentence } from "@/lib/api/problem"
 import { APPROVE_PROPOSAL, approveChangesTheProduct, DISMISS_PROPOSAL, proposalCommandsOffered, runRightSizing } from "@/lib/api/records/right-sizing"
 import { problemOfError } from "@/lib/api/records/server-records"
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
-import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { APPROVE_SIZE_FORM, DISMISS_FORM, RIGHT_SIZING_MODULE } from "@/lib/data/right-sizing"
-
-const NO_PRODUCTS: readonly BusinessRecord[] = []
 
 /** Propose now: the run over the person's projects. */
 export function ProposeRightSizingSurface({ label }: PrimarySurfaceProps) {
@@ -54,7 +51,7 @@ export function RightSizingSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(RIGHT_SIZING_MODULE)
   const { busy, run } = useCommandRunner(RIGHT_SIZING_MODULE, record.id)
   const [open, setOpen] = useState<"approve" | "dismiss" | null>(null)
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_PRODUCTS)
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const offered = proposalCommandsOffered(record)
   const sized = approveChangesTheProduct(record)
   const project = record.projectIds?.[0]

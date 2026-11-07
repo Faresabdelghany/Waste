@@ -4,8 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_KINDS } from "../../execution/vocabulary"
-import { alertNotice, countingTicketNotice, customerNoticeOf, NOTICE_VALUES, REMINDER_BATCH, REMINDER_DAILY_CAP, REMINDER_HOUR, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
+import { alertNotice, countingTicketNotice, CUSTOMER_NOTICE_KINDS, customerNoticeOf, NOTICE_VALUES, REMINDER_BATCH, REMINDER_DAILY_CAP, REMINDER_HOUR, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
 import { CUSTOMER_NOTICE_EVENTS } from "../vocabulary"
 
 describe("an alert's severity against a person's threshold", () => {
@@ -59,12 +58,12 @@ describe("the customer notice an outbox event is", () => {
     assert.equal(customerNoticeOf("alert-raised"), null, "an alert raised by hand")
   })
 
-  test("a stop that collects no booking, and every other kind, is no notice", () => {
+  test("a stop that collects no booking is no notice, and a notice comes from eight kinds alone", () => {
     assert.equal(customerNoticeOf("pickup-completed", { bulkyBookingId: null }), null)
     assert.equal(customerNoticeOf("pickup-failed"), null)
-    const quiet = OUTBOX_KINDS.filter((kind) => customerNoticeOf(kind, { ...booking, alertRule: "route-not-started" }) === null)
-    assert.equal(quiet.length, OUTBOX_KINDS.length - 8)
-    assert.ok(quiet.includes("pickup-skipped"), "a skipped stop was never tried: the office books it again")
+    for (const kind of CUSTOMER_NOTICE_KINDS) assert.notEqual(customerNoticeOf(kind, { ...booking, alertRule: "route-not-started" }), null, kind)
+    assert.deepEqual([...CUSTOMER_NOTICE_KINDS], ["bulky-booking-booked", "bulky-booking-cancelled", "pickup-completed", "pickup-failed", "ticket-replied", "ticket-completed", "route-cancelled", "alert-raised"])
+    assert.ok(!(CUSTOMER_NOTICE_KINDS as readonly string[]).includes("pickup-skipped"), "a skipped stop was never tried: the office books it again")
   })
 })
 

@@ -215,9 +215,9 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   )
   if (draft.alertId !== null) await linkAlert(tx, { companyId, projectId: row.projectId }, draft.alertId, row.id)
   const opened = ticketOf(row)
-  await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-opened", payload: opened, projectId: row.projectId, occurredAt: input.now() })
+  await emit(tx, { companyId }, { aggregateId: row.id, kind: "ticket-opened", payload: opened, projectId: row.projectId, occurredAt: input.now() })
   // The draft's assignee hears of it as it opened, before any action of its type hands it on (O16 of #290).
-  if (row.assigneeUserAccountId !== null) await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-assigned", payload: opened, projectId: row.projectId, occurredAt: input.now() })
+  if (row.assigneeUserAccountId !== null) await emit(tx, { companyId }, { aggregateId: row.id, kind: "ticket-assigned", payload: opened, projectId: row.projectId, occurredAt: input.now() })
   // Its type's actions on opening (#546 of #544), after the news of its opening; the ticket is answered as they leave it.
   await runTicketAutomation(tx, { ...input.automation, companyId, newId: input.newId, now: input.now, dueBySla: draft.dueAt === BY_SLA }, row.id, "opened")
   const [latest] = await tx

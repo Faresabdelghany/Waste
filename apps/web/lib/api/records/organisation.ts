@@ -6,15 +6,13 @@
 // reaches the bundle; the routes are apps/api/src/routes/{company,projects,
 // service-providers,users,roles}.ts.
 //
-// What each record carries from the wire, and what it inherits from its
-// fixture, is set out per adapter. The organisation module's project records
-// are what the workspace scopes by (lib/data/project-scope.ts): a project's
-// web id is its fixture's when the seed derived it from one and
-// `project-<uuid>` otherwise, so both spell the `project-` prefix that
-// `isProjectRecordId` reads; and `weekend` and `holidayList` land on
-// `submittedValues` exactly as the Holiday lists pane writes them
-// (lib/data/holiday-lists.ts), so `resolveProjectCalendar` reads a server
-// project as it read a fixture one. A role's web id is `role-<key>` for a
+// What each record carries from the wire is set out per adapter. The
+// organisation module's project records are what the workspace scopes by
+// (lib/data/project-scope.ts): a project's web id is `project-<uuid>`, the
+// `project-` prefix that `isProjectRecordId` reads; and `weekend` and
+// `holidayList` land on `submittedValues` exactly as the Holiday lists pane
+// writes them (lib/data/holiday-lists.ts), which `resolveProjectCalendar`
+// reads. A role's web id is `role-<key>` for a
 // seeded role, since that is how lib/data/role-permissions.ts keys the
 // charter defaults and how the restricted shells name the role they run as.
 //
@@ -28,7 +26,7 @@ import type { Company, Project, ServiceProvider } from "@waste/contracts/organis
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { BRANDING_KEY } from "@/lib/data/project-branding"
 import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
@@ -37,12 +35,11 @@ import { command, create, get, listAll, patch, put } from "../client"
 import {
   countryCode,
   countryName,
-  fixtureNamed,
   hasPrefix,
-  inheritedPresentation,
   isLocalRefusal,
   ofKind,
   languageName,
+  NO_PRESENTATION,
   patchOf,
   stampFacts,
   statusLabel,
@@ -88,7 +85,6 @@ export const companyAdapter: ResourceAdapter<Company> = {
   statuses: undefined,
   list: async (client) => [await get<Company>(client, "/company")],
   toRecord: (company, context) => {
-    const fixture = fixtureNamed(context.fixtures, "company", [company.legalName, company.name])
     // The invoice identity (#291 C4): a fact and a typed value each where it is set, none where it is not.
     const identityFacts: Record<string, string> = {}
     const identityValues: Record<string, string> = {}
@@ -103,29 +99,21 @@ export const companyAdapter: ResourceAdapter<Company> = {
       identityFacts["Postal address"] = company.postalAddress.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== "").join(", ")
       identityValues.postalAddress = company.postalAddress
     }
-    // The caller's company is the one the fixtures call the tenant, whatever
-    // it is named: every fixture record's `companyId` is this id, and the
-    // organisation store's tenant is it too.
-    const id = fixture?.id ?? FIXTURE_COMPANY_ID
     return {
-      id,
+      id: webIdOf("company", company.id),
       name: company.legalName,
       context: "Company · tenant",
       status: statusLabel(company.status),
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(company, context.now),
       facts: {
-        ...fixture?.facts,
         Name: company.name,
         CVR: company.registrationNumber,
         Country: countryName(company.country),
         ...identityFacts,
       },
-      companyId: id,
-      projectIds: fixture?.projectIds,
       recordKind: "Company",
       submittedValues: {
-        ...fixture?.submittedValues,
         name: company.name,
         legalName: company.legalName,
         registrationNumber: company.registrationNumber,
@@ -173,10 +161,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
   statuses: PROJECT_STATUSES,
   list: (client) => listAll<Project>(client, "/projects"),
   toRecord: (project, context) => {
-    const fixture = fixtureNamed(context.fixtures, "project", [project.name])
-    const id = projectWebIdOf(project, context.fixtures)
+    const id = projectWebIdOf(project)
     const facts: Record<string, string> = {
-      ...fixture?.facts,
       Language: languageName(project.language),
       Currency: project.currency,
       Timezone: project.timezone,
@@ -212,10 +198,9 @@ export const projectAdapter: ResourceAdapter<Project> = {
       name: project.name,
       context: projectContext(project.kind),
       status: statusLabel(project.status),
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(project, context.now),
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       // A project record scopes itself: the one project it is.
       projectIds: [id],
       recordKind: "Project",
@@ -344,28 +329,23 @@ export const serviceProviderAdapter: ResourceAdapter<ServiceProvider> = {
   statuses: undefined,
   list: (client) => listAll<ServiceProvider>(client, "/service-providers"),
   toRecord: (provider, context) => {
-    const fixture = fixtureNamed(context.fixtures, "service-provider", [provider.legalName])
-    const id = fixture?.id ?? webIdOf("service-provider", provider.id)
+    const id = webIdOf("service-provider", provider.id)
     return {
       id,
       name: provider.legalName,
-      context: fixture?.context ?? `${countryName(provider.country)} · ${provider.registrationNumber}`,
-      status: fixture?.status ?? "Active",
-      ...inheritedPresentation(fixture),
+      context: `${countryName(provider.country)} · ${provider.registrationNumber}`,
+      status: "Active",
+      ...NO_PRESENTATION,
       ...stampFacts(provider, context.now),
       facts: {
-        ...fixture?.facts,
         CVR: provider.registrationNumber,
         Country: countryName(provider.country),
         "Primary contact": provider.contactName,
         "Contact email": provider.contactEmail,
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
-      projectIds: fixture?.projectIds,
       serviceProviderId: id,
       recordKind: "Service provider company",
       submittedValues: {
-        ...fixture?.submittedValues,
         legalName: provider.legalName,
         registrationNumber: provider.registrationNumber,
         country: provider.country,
@@ -443,19 +423,17 @@ export const roleAdapter: ResourceAdapter<Role> = {
   statuses: undefined,
   list: (client) => listAll<Role>(client, "/roles"),
   toRecord: (role, context) => {
-    const fixture = fixtureNamed(context.fixtures, "role", [role.name])
     const grantCount = role.grants.reduce((total, grant) => total + grant.actions.length, 0)
     return {
       id: roleWebIdOf(role),
       name: role.name,
       context: `Role · ${role.scope.toLowerCase()} scope`,
       status: "Active",
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(role, context.now),
       value: `${grantCount} permissions`,
       description: role.description,
       facts: {
-        ...fixture?.facts,
         Identity: "Role",
         Type: role.system ? "System" : "Custom",
         Scope: role.scope,
@@ -463,8 +441,6 @@ export const roleAdapter: ResourceAdapter<Role> = {
         Roles: role.name,
         Permissions: String(grantCount),
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
-      projectIds: fixture?.projectIds,
       recordKind: "Role",
       submittedValues: {
         name: role.name,
@@ -531,7 +507,6 @@ export const userAdapter: ResourceAdapter<User> = {
   statuses: undefined,
   list: (client) => listAll<User>(client, "/users"),
   toRecord: (user, context) => {
-    const fixture = fixtureNamed(context.fixtures, "user", [user.fullName])
     const role = context.resolve.byServerId(user.roleId)
     const roleName = role?.name ?? "Role"
     const projectName = (projectId: string) => context.resolve.byServerId(projectId)?.name ?? projectId
@@ -539,14 +514,13 @@ export const userAdapter: ResourceAdapter<User> = {
     const provider = user.serviceProviderId === null ? undefined : context.resolve.byServerId(user.serviceProviderId)
     const projectWebIds = user.projectIds.map((projectId) => context.resolve.byServerId(projectId)?.id ?? projectId)
     return {
-      id: fixture?.id ?? webIdOf("user", user.id),
+      id: webIdOf("user", user.id),
       name: user.fullName,
       context: `${provider?.name ?? "Company"} · ${access.toLowerCase()}`,
       status: statusLabel(user.status),
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(user, context.now),
       facts: {
-        ...fixture?.facts,
         Identity: user.status === "invited" ? "Invitation pending" : "Login bound",
         Email: user.email,
         Roles: roleName,
@@ -554,11 +528,9 @@ export const userAdapter: ResourceAdapter<User> = {
         ...(provider === undefined ? {} : { "Service provider": provider.name }),
         ...(user.primaryAdministrator ? { "Primary administrator": "Yes" } : {}),
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       // A user with Project Access is scoped to those projects by web id. One
       // with every project, none yet, or a provider is company-wide: no
-      // project at all, which `isInProjectScope` shows in every scope —
-      // whatever two projects the fixture happened to be filed under.
+      // project at all, which `isInProjectScope` shows in every scope.
       projectIds: user.allProjects || user.projectIds.length === 0 ? undefined : projectWebIds,
       serviceProviderId: provider?.id,
       recordKind: "User",
@@ -673,10 +645,5 @@ export const teamModule: ServerModule = {
   providersOnly: true,
 }
 
-/** The mapping context a module's fixtures and a resolver make. */
-export const contextOf = (fixtures: readonly BusinessRecord[], resolve: MappingContext["resolve"], companyRecordId?: string, now?: Date): MappingContext => ({
-  fixtures,
-  resolve,
-  companyRecordId,
-  now,
-})
+/** The mapping context a resolver makes. */
+export const contextOf = (resolve: MappingContext["resolve"], now?: Date): MappingContext => ({ resolve, now })

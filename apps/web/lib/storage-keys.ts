@@ -42,9 +42,6 @@ export const SAVED_SELECTIONS_STORAGE_KEY = "waste-map-selections-v1"
 /** The Settings dialog's control values. */
 export const SETTINGS_STORAGE_KEY = "waste.settings.v1"
 
-/** The organization store: tenant, users, roles, access. */
-export const ORGANIZATION_STORAGE_KEY = "waste.organization.v1"
-
 /** The asset-management settings store. */
 export const ASSET_MANAGEMENT_STORAGE_KEY = "waste.asset-management.v1"
 
@@ -93,7 +90,6 @@ export const LEGACY_STORAGE_KEYS: Readonly<
   [ROAD_GEOMETRY_STORAGE_KEY]: ["wastehero-map-road-geometry-v1"],
   [SAVED_SELECTIONS_STORAGE_KEY]: ["wastehero-map-selections-v1"],
   [SETTINGS_STORAGE_KEY]: ["wastehero.settings.v1"],
-  [ORGANIZATION_STORAGE_KEY]: ["wastehero.organization.v1"],
   [ASSET_MANAGEMENT_STORAGE_KEY]: ["wastehero.asset-management.v1"],
   [APP_THEME_SELECTION_STORAGE_KEY]: ["wastehero.theme.selection.v1"],
   [CUSTOM_THEME_STORAGE_KEY]: ["wastehero.theme.custom.v1"],

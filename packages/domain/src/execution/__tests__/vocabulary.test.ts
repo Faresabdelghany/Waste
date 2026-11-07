@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 23, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 21, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -66,10 +66,5 @@ describe("the Execution vocabulary's own rules", () => {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }
     assert.deepEqual([...vocabulary.COMMAND_OUTCOMES], ["applied", "rejected"], "replayed is the wire's word and is never stored")
-  })
-
-  test("the outbox carries Execution's twelve kinds, Resolution's three and Finance's two, the Registry's one, the visits' two (#393), the notices' five (O16 of #290, C18 of #291) Finance's weight review (O28 of #290) and the scale house's two (M16b of #293), about twelve aggregates: the table is Execution's and its vocabulary the union of every context's news", () => {
-    assert.deepEqual([...vocabulary.OUTBOX_KINDS], ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
-    assert.deepEqual([...vocabulary.OUTBOX_AGGREGATES], ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert", "bulky-booking", "scale-ticket"])
   })
 })

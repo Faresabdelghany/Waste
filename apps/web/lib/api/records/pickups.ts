@@ -31,13 +31,13 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { FILL_LABELS } from "@/lib/data/fill-levels"
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 import { NO_ONE } from "@/lib/data/properties"
 
 import { command, get, listAll } from "../client"
-import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, wallClockIn } from "./clock"
 import { LIVE_MODULE } from "./live"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
@@ -137,7 +137,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
     name: `Stop ${stop} · ${container === undefined ? (place?.name ?? fraction.name ?? fraction.webId) : (label ?? container.webId)}`,
     context: [route?.name ?? routeWebId, fraction.name ?? fraction.webId].join(" · "),
     status,
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(pickup, context.now),
     value: pickup.status === "planned" || pickup.outcomeAt === null ? status : `${clockOn(pickup.outcomeAt, timezone)} · ${status}`,
     description: byTheOffice
@@ -145,7 +145,6 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
       : "A stop of a dated route: generation wrote it, the driver decides it, the dispatcher may remove it or correct its outcome.",
     facts,
     deepLink: `/route-studio?module=routes&record=${routeWebId}`,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: "Pickup",
     submittedValues: {

@@ -13,7 +13,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { LiveRoute, type Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "../records/live"
@@ -26,7 +26,6 @@ const NOW = new Date("2026-10-01T07:20:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-10-01T07:04:00.000Z" }
 
 const fixturesOf = (workspaceId: "configure" | "fleet" | "route-studio", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const fixtures = fixturesOf("route-studio", "live")
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: "01a0d2a4-a280-7008-8000-000000000001", ownership: "company", serviceProviderId: null, status: "active", capacityKg: 18_000, requiredLicenceClass: "c", homeDepotId: null, fuel: "hvo", telematicsDeviceId: null, notes: null, compartments: [] }
@@ -63,7 +62,7 @@ const session: Session = { id: "01a0d2a4-a280-7035-8000-000000000001", ...STAMPS
 const live: LiveRoute = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.568337, 55.676098] }, lastPosition: null, eta: null, lastSeenAt: session.lastSeenAt, paused: false }
 const dueToday: LiveRoute = { ...route, id: "01a0d2a4-a280-7030-8000-000000000002", number: 1043, label: "RC-1043", status: "ready", startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null }, progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 }, activePlan: null, session: null, lastLocation: null, lastPosition: null, eta: null, lastSeenAt: null, paused: false }
 
-const noResolve = (moduleFixtures: readonly BusinessRecord[], resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: moduleFixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const noResolve = (moduleFixtures: readonly BusinessRecord[], resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve: resolver, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const projectRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
 const vehicleRecords = [wh24, wh31, tr12].map((vehicle) => vehicleAdapter.toRecord(vehicle, noResolve(fixturesOf("fleet", "vehicles"))))
@@ -73,7 +72,7 @@ const state: ServerRecordsState = new Map([
   ["fleet.vehicles", loaded({ records: vehicleRecords, serverIds: serverIdsOf(vehicleRecords, [wh24.id, wh31.id, tr12.id]) }, 1)],
   ["fleet.drivers", loaded({ records: [driverRecord], serverIds: serverIdsOf([driverRecord], [mads.id]) }, 1)],
 ])
-const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ resolve: resolver, now: NOW })
 
 describe("the live module", () => {
   test("is switched, after the fleet and the schemes its rows name, and ahead of the routes and the stops, the long windowed reads", () => {
@@ -105,7 +104,7 @@ describe("the live module", () => {
 
   test("reads the routes running or due today from /routes/live", async () => {
     const { fetch, calls } = scripted([() => json({ items: [live, dueToday], nextCursor: null })])
-    const result = await loadModule(clientOver(fetch), liveModule, { fixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), liveModule, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => call.url),
       ["http://api.test/routes/live?limit=200"],
@@ -168,8 +167,8 @@ describe("a live route", () => {
     const record = liveRouteAdapter.toRecord(live, context())
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, live.id]]) }, 1)
-    assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, status: "Completed" }, { fixtures, state, now: NOW })).kind, "refused")
-    assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, name: "RC-9" }, { fixtures, state, now: NOW })).kind, "refused")
+    assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, status: "Completed" }, { state, now: NOW })).kind, "refused")
+    assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, name: "RC-9" }, { state, now: NOW })).kind, "refused")
     assert.equal(calls.length, 0)
   })
 

@@ -75,11 +75,11 @@ import {
   SUBSCRIPTION_PREFIX,
   SUBSCRIPTION_RECORD_KIND,
 } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { command, create, listAll, patch, post } from "../client"
-import { inheritedPresentation, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
@@ -289,7 +289,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
       name: `${agreement.number} · ${customer.name}`,
       context: `${customer.name} · ${samePayer ? "same payer" : `payer ${payer.name}`}`,
       status: statusLabel(agreement.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(agreement, context.now),
       value: period,
       description: `Agreement of ${customer.name}${samePayer ? "" : `, billed to ${payer.name}`}.`,
@@ -309,7 +309,6 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
       },
       related: samePayer ? [customer.name] : [customer.name, payer.name],
       allowedTransitions: [...TRANSITIONS[agreement.status]],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: AGREEMENT_RECORD_KIND,
       submittedValues: {
@@ -414,7 +413,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
       name: `${number} · ${product.name}`,
       context: agreement?.context ?? number,
       status: SUBSCRIPTION_STATUS[periodOn(subscription, day)],
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(subscription, context.now),
       value: periodLabel(subscription.validFrom, subscription.validTo),
       description: `One product delivered at one place under ${number}.`,
@@ -429,7 +428,6 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
         ...(lastDay === undefined ? {} : { "Valid to": lastDay }),
       },
       related: [agreement?.name ?? agreementWebId, product.name, ...(place === undefined ? [] : [place.name])],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: SUBSCRIPTION_RECORD_KIND,
       submittedValues: {

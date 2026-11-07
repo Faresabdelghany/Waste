@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 import type { Project } from "@waste/contracts/organisation"
 import { StopEvidence, Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEvidence, TicketHold, TicketPatch, TicketReject, TicketReopen, TicketReplyWithEvidence, TicketStart, TicketWait } from "@waste/contracts/tickets"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { defaultFactColumns } from "../../data/business-view-kinds"
 import { NO_ONE } from "../../data/properties"
 import { replyWithEvidenceForm, ticketStopOptions } from "../../data/tickets"
@@ -42,11 +42,9 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
-const fixturesOf = (workspaceId: "configure" | "operate", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const fixtures = fixturesOf("operate", "tickets")
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: fixturesOf("configure", "organization"), resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
 const routeId = "01a0d2a4-a280-7030-8000-000000000001"
@@ -77,8 +75,8 @@ const state: ServerRecordsState = new Map([
   ["route-studio.routes", loaded({ records: [rc1042, rc1040], serverIds: serverIdsOf([rc1042, rc1040], [routeId, endedRouteId]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
-const options = { fixtures, state, now: NOW }
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
+const options = { state, now: NOW }
 const pageOf = (items: unknown[], nextCursor: string | null = null) => json({ items, nextCursor })
 
 const NO_LINKS = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }

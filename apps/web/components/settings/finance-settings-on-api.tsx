@@ -15,7 +15,7 @@ import { useState } from "react"
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -26,7 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
 import { isCompanyRecord } from "@/lib/api/records/organisation"
-import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
   COMPANY_IDENTITY_FIELDS,
   identityRefusalOf,
@@ -38,15 +38,13 @@ import {
 import { PAYMENT_REFERENCE_SCHEMES, type PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
-const ORGANISATION_FIXTURES = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-
 const typedOf = (record: BusinessRecord, key: string): string => {
   const value = record.submittedValues?.[key]
   return typeof value === "string" ? value : ""
 }
 
 export function FinanceSettingsOnApi() {
-  const organisation = useModuleRecords("configure", "organization", ORGANISATION_FIXTURES)
+  const organisation = useModuleRecords("configure", "organization")
   const company = organisation.records.find(isCompanyRecord) ?? null
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-")).sort((a, b) => a.name.localeCompare(b.name))
   const [editing, setEditing] = useState<BusinessRecord | null>(null)

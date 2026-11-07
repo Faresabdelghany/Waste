@@ -48,12 +48,12 @@ import { displayLicenceClass, isLicenceClassToken } from "@waste/domain/resource
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { isIsoDate } from "@waste/domain/days"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { VEHICLE_MAINTENANCE_ACTIONS } from "./maintenance"
 import { userAdapter } from "./organisation"
@@ -276,12 +276,11 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
       name: vehicle.callsign === null ? vehicle.registration : `${vehicle.callsign} · ${vehicle.registration}`,
       context: [`${typeName}${capacity === undefined ? "" : ` ${capacity}`}`, depot?.name].filter(Boolean).join(" · "),
       status: statusLabel(vehicle.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(vehicle, context.now),
       owner: provider?.name ?? "",
       description: vehicle.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       serviceProviderId: provider?.webId,
       recordKind: "Vehicle or trailer",
@@ -503,12 +502,11 @@ export const driverAdapter: ResourceAdapter<Driver> = {
       name: driver.name,
       context: `${employer} · ${statusLabel(driver.employment).toLowerCase()}`,
       status: statusLabel(driver.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(driver, context.now),
       owner: provider?.name ?? "",
       description: driver.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       serviceProviderId: provider?.webId,
       recordKind: "Driver workforce profile",

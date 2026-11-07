@@ -13,7 +13,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction } from "@waste/contracts/ticket-types"
 import { TicketCreate, TicketPatch, type Ticket } from "@waste/contracts/tickets"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { createTicketRecord, ticketFormFor, updateTicketRecord } from "../../data/tickets"
 import {
   actionKindsFor,
@@ -44,7 +44,7 @@ const NOW = new Date("2026-11-05T10:00:00Z")
 const STAMPS = { createdAt: "2026-11-05T08:00:00.000Z", updatedAt: "2026-11-05T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const handlerId = "01a0d2a4-a280-7004-8000-000000000001"
 const bulkyId = "01a0d2a4-a280-7043-8000-000000000001"
@@ -54,7 +54,7 @@ const baseState: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["configure.access", loaded({ records: [handler], serverIds: new Map([[handler.id, handlerId]]) }, 1)],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(baseState), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(baseState), now: NOW }
 
 const bulky: TicketType = {
   id: bulkyId,
@@ -119,7 +119,7 @@ describe("a ticket type", () => {
 
     const answered: TicketType = { ...bulky, name: "Bulky waste", description: "Kerbside", isDefault: true, fields, permissions: [{ command: "reject", roleIds: [handlerId] }] }
     const { fetch, calls } = scripted([() => json(answered), () => json(answered), () => json(answered)])
-    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, typesState, edited, { fixtures: [], state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, typesState, edited, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => [call.init.method, call.url]),
       [
@@ -135,7 +135,7 @@ describe("a ticket type", () => {
   test("retiring it is an edit the store sends: the type's patch carries the status, and the row reads the API's answer", async () => {
     const retired = updatedTicketTypeRecord(bulkyRecord, { name: bulky.name, description: "", status: "Inactive", isDefault: false, fields: bulky.fields, permissions: typePermissionsOf(bulkyRecord) })
     const { fetch, calls } = scripted([() => json({ ...bulky, status: "inactive" })])
-    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, typesState, retired, { fixtures: [], state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, typesState, retired, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => [call.init.method, call.url, bodyOf(call)]),
       [["PATCH", `http://api.test/ticket-types/${bulkyId}`, { status: "inactive" }]],
@@ -177,7 +177,7 @@ describe("a ticket type's automation (#546 of #544)", () => {
 
     const { fetch, calls } = scripted([() => json({ ...bulky, actions: wire.slice(1) })])
     const automatedState = loaded({ records: [automated], serverIds: new Map([[automated.id, bulkyId]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, automatedState, edited, { fixtures: [], state: new Map([...baseState, ["configure.templates", automatedState]]), now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, automatedState, edited, { state: new Map([...baseState, ["configure.templates", automatedState]]), now: NOW })
     assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PUT", `http://api.test/ticket-types/${bulkyId}/actions`]])
     assert.equal(outcome.kind, "updated")
   })

@@ -14,10 +14,10 @@ import { AgreementCreate, AgreementPatch, SubscriptionCreate, SubscriptionPatch,
 import type { Customer } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { AGREEMENTS_MODULE, ONE_PLACE, PROJECT_DEFAULT_LIST, SUBSCRIPTION_RECORD_KIND } from "../../data/agreements"
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { ONE_PLACE, PROJECT_DEFAULT_LIST, SUBSCRIPTION_RECORD_KIND } from "../../data/agreements"
+import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { AGREEMENT_STATUSES, agreementAdapter, agreementsModule, INITIAL_SUBSCRIPTION_REFUSAL, subscriptionAdapter } from "../records/agreements"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -27,12 +27,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-
-const module = getModuleDefinition(AGREEMENTS_MODULE)
-if (!module) throw new Error("no module customers.agreements")
-const agreementFixtures = module.records
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts), in the seed's id scheme.
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -51,16 +45,18 @@ const agrCancelled: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-00000
 const sub1: Subscription = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, agreementId: agr2408.id, productId: PRODUCT, propertyId: PROPERTY, sharedCollectionPointId: null, quantity: 1, validFrom: "2026-01-01", validTo: "2027-01-01" }
 const sub2: Subscription = { ...sub1, id: "01a0d2a4-a280-7013-8000-000000000002", propertyId: null, sharedCollectionPointId: POINT, quantity: 2, validFrom: "2026-11-01", validTo: null }
 const subEnded: Subscription = { ...sub1, id: "01a0d2a4-a280-7013-8000-000000000003", validFrom: "2025-01-01", validTo: "2026-01-01" }
+const COPENHAGEN = webIdOf("project", copenhagen.id)
+const OSTERBRO = webIdOf("company", osterbro.id)
 
 // The organisation and the customers as the store has them when the agreements load.
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const customerRecords = [mikkel, osterbro, kab].map((customer) => customerAdapter.toRecord(customer, { fixtures: customerFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }))
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const customerRecords = [mikkel, osterbro, kab].map((customer) => customerAdapter.toRecord(customer, { resolve: NOTHING_RESOLVED, now: NOW }))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: customerRecords, serverIds: new Map(customerRecords.map((record, index) => [record.id, [mikkel, osterbro, kab][index].id])) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures: agreementFixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
 
 /** The agreements module as the store holds it once loaded, for the subscriptions that name an agreement and for a write's context. */
 function withAgreements(agreements: readonly Agreement[], base: ServerRecordsState = state): ServerRecordsState {
@@ -93,19 +89,18 @@ function madeAgreement(values: Record<string, string>, status = "Draft"): Busine
     related: [],
     source: "Office workspace",
     freshness: "Now",
-    companyId: FIXTURE_COMPANY_ID,
-    projectIds: [FIXTURE_PROJECT_IDS.copenhagen],
+    projectIds: [COPENHAGEN],
     recordKind: "Agreement",
     submittedValues: values,
   }
 }
 
 const AGREEMENT_FORM: Record<string, string> = {
-  projectId: FIXTURE_PROJECT_IDS.copenhagen,
+  projectId: COPENHAGEN,
   source: "manual",
   agreementNumber: "AGR-3001",
-  customerId: "company-osterbro-housing",
-  payerId: "company-osterbro-housing",
+  customerId: OSTERBRO,
+  payerId: OSTERBRO,
   effectiveFrom: "2026-10-01",
   effectiveTo: "2026-12-31",
   billingCadence: "monthly",
@@ -139,9 +134,9 @@ describe("the agreements module", () => {
     assert.deepEqual(agreementsModule.resources, [agreementAdapter, subscriptionAdapter], "the agreements before the subscriptions that name them")
   })
 
-  test("loads the agreements and the subscriptions across them in two lists, files each under its own prefix, the agreements `agreement-<uuid>` from the start: no fixture lends its id (#182)", async () => {
+  test("loads the agreements and the subscriptions across them in two lists, files each under its own prefix, the agreements `agreement-<uuid>` from the start (#182)", async () => {
     const { fetch, calls } = scripted([() => pageOf([agr2408, agr2512, agr2188]), () => pageOf([sub1, sub2])])
-    const result = await loadModule(clientOver(fetch), agreementsModule, { fixtures: agreementFixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), agreementsModule, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => call.url),
       ["http://api.test/agreements?limit=200", "http://api.test/subscriptions?limit=200"],
@@ -161,7 +156,7 @@ describe("the agreements module", () => {
 })
 
 describe("an agreement", () => {
-  test("is the wire's fields alone — no fixture lends its id or its presentation — scoped to its project", () => {
+  test("is the wire's fields alone, scoped to its project", () => {
     const record = agreementAdapter.toRecord(agr2408, context())
     assert.equal(record.id, `agreement-${agr2408.id}`)
     assert.equal(record.name, "AGR-2408 · Østerbro Housing")
@@ -169,9 +164,8 @@ describe("an agreement", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.value, "2026-01-01 – 2026-12-31", "the form's last day in force, not the wire's first day out")
     assert.equal(record.recordKind, "Agreement")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
-    assert.equal(record.owner, "", "no fixture's presentation is inherited")
+    assert.deepEqual(record.projectIds, [COPENHAGEN])
+    assert.equal(record.owner, "")
     assert.equal(record.facts.Template, undefined, "a fact the wire does not carry is not shown as the API's")
     assert.deepEqual(record.facts, {
       Kind: "Agreement",
@@ -187,10 +181,10 @@ describe("an agreement", () => {
     assert.deepEqual(record.related, ["Østerbro Housing"])
     assert.deepEqual(record.allowedTransitions, ["Cancelled"])
     assert.deepEqual(record.submittedValues, {
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       agreementNumber: "AGR-2408",
-      customerId: "company-osterbro-housing",
-      payerId: "company-osterbro-housing",
+      customerId: OSTERBRO,
+      payerId: OSTERBRO,
       effectiveFrom: "2026-01-01",
       effectiveTo: "2026-12-31",
       billingCadence: "monthly",
@@ -214,7 +208,7 @@ describe("an agreement", () => {
     assert.equal(record.facts["Valid to"], undefined)
     assert.deepEqual(record.related, ["Mikkel Sørensen", "KAB Bolig"])
     assert.equal(record.owner, "")
-    assert.equal(record.submittedValues?.customerId, "contact-mikkel")
+    assert.equal(record.submittedValues?.customerId, webIdOf("contact", mikkel.id))
     assert.equal(record.submittedValues?.payerId, `company-${kab.id}`)
     assert.equal(record.submittedValues?.effectiveTo, undefined)
   })
@@ -351,7 +345,7 @@ describe("an agreement", () => {
     const created: Agreement = { ...agrDraft, id: "019995e0-0000-7000-8000-0000000000a1", number: "AGR-3001", notes: "Signed at the housing fair", priceListId: null, validTo: "2027-01-01" }
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/agreements/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), agreementsModule, current, made, { fixtures: agreementFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), agreementsModule, current, made, { state, now: NOW })
     assert.equal(calls[0].init.method, "POST")
     assert.equal(calls[0].url, "http://api.test/agreements")
     assert.ok(AgreementCreate.safeParse(bodyOf(calls[0])).success)
@@ -362,7 +356,7 @@ describe("an agreement", () => {
     assert.equal(outcome.record.status, "Draft")
 
     const refused = scripted([() => problem(409, "The customer is inactive; an agreement needs an active customer")])
-    const answer = await writeRecord(clientOver(refused.fetch), agreementsModule, current, made, { fixtures: agreementFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), agreementsModule, current, made, { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), "The customer is inactive; an agreement needs an active customer")
@@ -386,7 +380,7 @@ describe("a subscription", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.value, "2026-01-01 – 2026-12-31")
     assert.equal(record.recordKind, SUBSCRIPTION_RECORD_KIND)
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [COPENHAGEN])
     assert.deepEqual(record.facts, {
       Kind: "Subscription",
       Agreement: "AGR-2408",
@@ -399,7 +393,7 @@ describe("a subscription", () => {
     assert.deepEqual(record.related, ["AGR-2408 · Østerbro Housing", `product-${PRODUCT}`, `property-${PROPERTY}`])
     assert.deepEqual(record.submittedValues, {
       agreementId: `agreement-${agr2408.id}`,
-      projectId: FIXTURE_PROJECT_IDS.copenhagen,
+      projectId: COPENHAGEN,
       productId: `product-${PRODUCT}`,
       // What the edit form shows the product and the place by (lib/data/agreements.ts): their names, never a picker.
       productName: `product-${PRODUCT}`,
@@ -522,7 +516,7 @@ describe("a subscription", () => {
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/subscriptions/${created.id}` })])
     const current = loadedState.get("customers.agreements")
     if (current === undefined) throw new Error("the agreements are not loaded")
-    const outcome = await writeRecord(clientOver(fetch), agreementsModule, current, made, { fixtures: agreementFixtures, state: loadedState, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), agreementsModule, current, made, { state: loadedState, now: NOW })
     assert.equal(calls[0].init.method, "POST")
     assert.equal(calls[0].url, `http://api.test/agreements/${agr2408.id}/subscriptions`)
     assert.deepEqual(bodyOf(calls[0]), { productId: PRODUCT, propertyId: PROPERTY, quantity: 2, validFrom: "2026-10-01", validTo: "2027-01-01" })
@@ -533,7 +527,7 @@ describe("a subscription", () => {
     assert.equal(outcome.record.facts.Quantity, "2")
 
     const refused = scripted([() => problem(409, "The product is draft; only an active product can be subscribed to")])
-    const answer = await writeRecord(clientOver(refused.fetch), agreementsModule, current, made, { fixtures: agreementFixtures, state: loadedState, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), agreementsModule, current, made, { state: loadedState, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), "The product is draft; only an active product can be subscribed to")

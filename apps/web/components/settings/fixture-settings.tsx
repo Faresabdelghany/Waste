@@ -9,10 +9,8 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react"
 import { CheckCircle, Gear, Warning } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { AssetPanelShell } from "@/components/settings/asset-management-settings"
-import { CommercialDefaultsExtras } from "@/components/settings/commercial-settings"
+import { AssetPanelShell } from "@/components/settings/settings-pane-kit"
 import { FIXTURE_SETTINGS_GROUPS, fixtureSettingDefaults, type SettingControl, type SettingsGroup } from "@/components/settings/fixture-settings-controls"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { ThemeCustomizer } from "@/components/settings/theme-customizer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -97,8 +95,8 @@ function save() {
   toast.success("Settings saved", { description: `${controls.length} change${controls.length === 1 ? "" : "s"} saved on this device.` })
 }
 
-/** A fixture pane's groups of controls, under the pane's frame, with `before` and `after` around them and a bar saving them on this device where one can be set. */
-function FixtureSettingsForm({ groups, action, before, after }: { groups: readonly SettingsGroup[]; action?: ReactNode; before?: ReactNode; after?: ReactNode }) {
+/** The account's groups of controls, under the pane's frame, with `before` above them and a bar saving them on this device where one can be set. */
+function FixtureSettingsForm({ groups, action, before }: { groups: readonly SettingsGroup[]; action?: ReactNode; before?: ReactNode }) {
   const { values, dirty, saved } = useFormState()
   // A pane of read lines alone — the Pilot's account profile — has nothing to save on this device.
   const editable = groups.some((group) => group.controls.some((control) => control.type === "input" || control.type === "select" || control.type === "switch"))
@@ -118,7 +116,6 @@ function FixtureSettingsForm({ groups, action, before, after }: { groups: readon
           {index < groups.length - 1 && <Separator />}
         </div>
       ))}
-      {after}
       {editable && (
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
           <p className="text-xs text-muted-foreground">
@@ -198,16 +195,6 @@ function StatusIndicator({ tone, value }: { tone: Extract<SettingControl, { type
       {value}
     </span>
   )
-}
-
-/** A fixture pane that is its groups alone. */
-export function FixtureSettingsPane({ paneId }: SettingsPaneProps) {
-  return <FixtureSettingsForm groups={FIXTURE_SETTINGS_GROUPS[paneId] ?? []} />
-}
-
-/** Commercial defaults: its groups, then the registries and parameters the fixtures' products carry. */
-export function CommercialDefaultsSettings() {
-  return <FixtureSettingsForm groups={FIXTURE_SETTINGS_GROUPS.pricing ?? []} after={<CommercialDefaultsExtras />} />
 }
 
 /**

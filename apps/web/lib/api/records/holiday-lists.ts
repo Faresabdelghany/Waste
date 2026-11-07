@@ -13,11 +13,11 @@ import type { HolidayList, HolidayListHoliday } from "@waste/contracts/holiday-l
 import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, HOLIDAY_LIST_PREFIX, holidayListEntries } from "@waste/domain/route-schemes/holiday-list-records"
 import { holidayEntryValues } from "@waste/domain/route-schemes/holiday-lists"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 
 import { create, get, listAll, patch, put, remove } from "../client"
-import { inheritedPresentation, ofKind, patchOf, stampFacts, typed, webIdOf, type LocalRefusal, type RecordAction, type ResourceAdapter } from "./adapter"
+import { NO_PRESENTATION, ofKind, patchOf, stampFacts, typed, webIdOf, type LocalRefusal, type RecordAction, type ResourceAdapter } from "./adapter"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
@@ -55,11 +55,10 @@ export const holidayListAdapter: ResourceAdapter<HolidayList> = {
       name: list.name,
       context: `${list.country} · ${projects}`,
       status: "Active",
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(list, context.now),
       value: "—",
       facts: { Country: list.country, Holidays: String(list.holidays.length), Projects: String(list.projectCount) },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [],
       recordKind: HOLIDAY_LIST_KIND,
       submittedValues: {

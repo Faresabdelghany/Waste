@@ -22,7 +22,6 @@ import type {
   BusinessFormValues,
 } from "./business-form-types"
 import {
-  FIXTURE_COMPANY_ID,
   FIXTURE_PROJECT_IDS,
   getModuleDefinition,
   type BusinessRecord,
@@ -317,7 +316,6 @@ export function createPlanningAreaRecord(
     source: "Settings",
     freshness: "Now",
     allowedTransitions: module.lifecycle.slice(1, 3),
-    companyId: FIXTURE_COMPANY_ID,
     projectIds: derived.projectIds,
     recordKind: schema.recordKind,
     submittedValues: values,

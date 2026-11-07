@@ -12,7 +12,7 @@ import { Team, TeamCreate, TeamMembersSet, TeamPatch, TicketTeamDefaultsSet } fr
 import { TicketPatch, type Ticket } from "@waste/contracts/tickets"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"
 import { createTicketTeamRecord, NO_TEAM, PICK_A_HELD_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, updateTicketTeamRecord } from "../../data/ticket-teams"
 import { ticketListReaders, updateTicketRecord } from "../../data/tickets"
@@ -28,7 +28,7 @@ const NOW = new Date("2026-10-28T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-28T08:00:00.000Z", updatedAt: "2026-10-28T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
 const larsId = "01a0d2a4-a280-7004-8000-000000000002"
@@ -47,7 +47,7 @@ const baseState: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["configure.access", accessState],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(baseState), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(baseState), now: NOW }
 
 const deskRecord = ticketTeamAdapter.toRecord(desk, context)
 const yardRecord = ticketTeamAdapter.toRecord(yard, context)
@@ -96,7 +96,7 @@ describe("a ticket team", () => {
 
     const answered: Team = { ...desk, name: "Containers", status: "inactive", memberUserAccountIds: [oliviaId, larsId] }
     const { fetch, calls } = scripted([() => json({ ...answered, memberUserAccountIds: [oliviaId] }), () => json(answered)])
-    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, teamsState, edited, { fixtures: [], state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), ticketTeamsModule, teamsState, edited, { state, now: NOW })
     assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [
       ["PATCH", `http://api.test/teams/${deskId}`],
       ["PUT", `http://api.test/teams/${deskId}/members`],

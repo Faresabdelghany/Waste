@@ -13,10 +13,10 @@ import type { WasteFraction } from "@waste/contracts/catalogue"
 import type { Project } from "@waste/contracts/organisation"
 import { allocationConflictSourceFromValues } from "@waste/domain/route-schemes/validation"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { allocationAdapter, allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, VEHICLE_PLANNING_MODULE, vehiclePlanningModule } from "../records/allocations"
+import { allocationAdapter, allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, vehiclePlanningModule } from "../records/allocations"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -26,9 +26,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const fixtures = getModuleDefinition(VEHICLE_PLANNING_MODULE)?.records ?? []
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-const masterFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "master" })?.records ?? []
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
@@ -57,8 +54,8 @@ const planned: VehicleAllocation = {
 // What the store has loaded when allocations load: the organisation, master
 // data, and the fleet as 5a's modules answer it (a vehicle and a driver by
 // their web ids); the depot is not loaded, so it stays an id chip.
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW })
-const residualRecord = wasteFractionAdapter.toRecord(residual, { fixtures: masterFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const residualRecord = wasteFractionAdapter.toRecord(residual, { resolve: NOTHING_RESOLVED, now: NOW })
 const fleetRecord = (id: string, name: string): BusinessRecord => ({ ...projectRecord, id, name, recordKind: undefined, submittedValues: {} })
 const wh24Record = fleetRecord("vehicle-wh24", "WH-24")
 const wh31Record = fleetRecord("vehicle-wh31", "WH-31")
@@ -70,9 +67,9 @@ const state: ServerRecordsState = new Map([
   ["fleet.drivers", loaded({ records: [madsRecord], serverIds: new Map([[madsRecord.id, mads]]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
-const options = { fixtures, state, now: NOW }
+const options = { state, now: NOW }
 
 /** A record the allocate dialog makes: the generic create path's id and kind, its values by the form's field ids. */
 const allocateRecord = (values: Record<string, string>): BusinessRecord => ({
@@ -95,7 +92,7 @@ describe("the vehicle planning module", () => {
 
   test("lists the allocations, every row allocation-<uuid>", async () => {
     const { fetch, calls } = scripted([() => pageOf([planned])])
-    const result = await loadModule(clientOver(fetch), vehiclePlanningModule, { fixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), vehiclePlanningModule, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/vehicle-allocations?limit=200"])
     assert.deepEqual(result.records.map((record) => record.id), [`allocation-${planned.id}`])
   })

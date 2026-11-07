@@ -227,7 +227,7 @@ async function assignPerson(tx: Tx, run: AutomationRun, row: TicketRow, userAcco
     .returning(ticketColumns)
   const said = `assigned to ${found.name}.`
   await appendTicketEvent(tx, refOf(run.companyId, assigned), { kind: "assigned", status: assigned.status as TicketStatus, assigneeUserAccountId: userAccountId, resolution: null, body: line(said), visibility: "internal", objectKey: null, recordedBy: null, sourceEventId: null }, run.newId)
-  await emit(tx, run, { aggregate: "ticket", aggregateId: assigned.id, kind: "ticket-assigned", payload: ticketOf(assigned), projectId: assigned.projectId, occurredAt: run.now() })
+  await emit(tx, run, { aggregateId: assigned.id, kind: "ticket-assigned", payload: ticketOf(assigned), projectId: assigned.projectId, occurredAt: run.now() })
   return { said, recorded: true }
 }
 
@@ -275,7 +275,7 @@ async function setStatus(tx: Tx, run: AutomationRun, depth: number, row: TicketR
     run.newId,
   )
   if (transition.to === "completed" || transition.to === "rejected") {
-    await emit(tx, run, { aggregate: "ticket", aggregateId: moved.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(moved), projectId: moved.projectId, occurredAt: at })
+    await emit(tx, run, { aggregateId: moved.id, kind: transition.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(moved), projectId: moved.projectId, occurredAt: at })
   }
   const reached = triggerOf(transition.to)
   if (reached !== undefined) await runTicketAutomation(tx, { ...run, depth: depth + 1 }, moved.id, reached)

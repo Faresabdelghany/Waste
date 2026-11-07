@@ -16,7 +16,7 @@ import { resolverOver, type ModuleState } from "@/lib/api/records/server-records
 import type { Resolver } from "@/lib/api/records/adapter"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { INVOICES_MODULE, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { commercialRowsFor } from "@/lib/data/commercial-pickers"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
@@ -29,24 +29,22 @@ import { CONTACTS_MODULE, NO_ONE } from "@/lib/data/properties"
 import { useModuleRecords, useServerModuleState } from "../business-record-store"
 import { useRelationPickers, type RelationPickers } from "./use-command-support"
 
-const NO_RECORDS: readonly BusinessRecord[] = []
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
 
 /** The pickers the Price Engine's dialogs read: the command surfaces' own, and the chain's rows by field. */
 export function useCommercialPickers(): RelationPickers {
   const base = useRelationPickers()
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE))
-  const priceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, fixturesOf(PRICE_ROWS_MODULE))
-  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, fixturesOf(PLANNING_AREAS_MODULE))
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
+  const priceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
   // The provider-money chain's (#186).
-  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId, fixturesOf(SERVICE_PROVIDERS_MODULE))
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
-  const serviceAreas = useModuleRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, fixturesOf(SERVICE_AREAS_MODULE))
+  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
+  const serviceAreas = useModuleRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
   // The invoices a payment pays (#291 C6).
-  const invoices = useModuleRecords(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId, fixturesOf(INVOICES_MODULE))
+  const invoices = useModuleRecords(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)
   const byKey = new Map([
     [keyOf(PRODUCTS_MODULE), products],
     [keyOf(PRICE_ROWS_MODULE), priceRows],

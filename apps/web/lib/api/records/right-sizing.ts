@@ -10,11 +10,11 @@ import type { RightSizingProposal, RightSizingRun } from "@waste/contracts/right
 import { changesTheProduct } from "@waste/domain/inspections/right-sizing"
 
 import { AGREEMENTS_MODULE, PRODUCT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { DIRECTION_LABELS, evidenceSentence, RIGHT_SIZING_MODULE, RIGHT_SIZING_PREFIX, RIGHT_SIZING_RECORD_KIND, STATUS_LABELS } from "@/lib/data/right-sizing"
 
 import { command, get, listAll, post, type ApiClient } from "../client"
-import { inheritedPresentation, said, stampFacts, webIdOf, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, said, stampFacts, webIdOf, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, shownOn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
@@ -47,7 +47,7 @@ export function toProposalRecord(proposal: RightSizingProposal, context: Mapping
     name: `${subscription} · ${direction.toLowerCase()}`,
     context: suggested === undefined ? direction : `${product} → ${suggested}`,
     status: STATUS_LABELS[proposal.status],
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(proposal, context.now),
     value: evidenceSentence(proposal.evidence),
     description:
@@ -72,7 +72,6 @@ export function toProposalRecord(proposal: RightSizingProposal, context: Mapping
     },
     related: [subscription],
     allowedTransitions: [],
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: RIGHT_SIZING_RECORD_KIND,
     submittedValues: {

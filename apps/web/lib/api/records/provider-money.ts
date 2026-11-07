@@ -36,7 +36,7 @@ import { INDEX_BASES, SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabula
 import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isProductRecord, PRODUCT_PREFIX, UNIT_SUFFIX } from "@/lib/data/commercial"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import {
@@ -55,7 +55,7 @@ import {
 } from "@/lib/data/provider-money"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"
@@ -150,7 +150,7 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
       name: `${productName} · ${assignment.provider}`,
       context: assignment.name,
       status: periodReading(price.validFrom, price.validTo, projectDay(price.projectId, context)),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(price, context.now),
       value: `${money(price.unitPriceMinor)}${unit === undefined ? "" : UNIT_SUFFIX[unit]}`,
       description: `What ${assignment.provider} is paid per ${unit ?? "unit"} of ${productName} under ${assignment.name}.`,
@@ -168,7 +168,6 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
       },
       related: [assignment.name, productName],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       // Its assignment's provider: the provider page lists its prices by it.
       ...(providerWebId === undefined ? {} : { serviceProviderId: providerWebId }),
@@ -336,7 +335,7 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
       name: `${assignment.provider} · ${period}`,
       context: assignment.name,
       status: statusLabel(settlement.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(settlement, context.now),
       value: money(settlement.netMinor),
       description: `What ${assignment.provider} is paid for ${assignment.name} over ${period}.`,
@@ -353,7 +352,6 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
       },
       related: [assignment.name],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: SETTLEMENT_RECORD_KIND,
       submittedValues: { serviceAreaAssignmentId: assignmentWebId, status: settlement.status, validFrom: settlement.validFrom, validTo: lastDay, [SETTLEMENT_DAY_KEY]: projectDay(settlement.projectId, context) },

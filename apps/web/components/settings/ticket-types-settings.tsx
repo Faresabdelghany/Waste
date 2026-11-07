@@ -22,7 +22,7 @@ import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "@waste/domain/resolution/vocabulary"
 import { RecordPageHeader } from "@/components/page-layout"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -68,8 +68,6 @@ import {
 } from "@/lib/data/ticket-types"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
-const NO_RECORDS: readonly BusinessRecord[] = []
-
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.
  * `openTypeId` is the type whose own page stands in the list's place, by the API's id, or null for the list; `onOpenType` opens one, or the list with null.
@@ -80,10 +78,10 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   const access = ticketTypesAccessOf(me?.role.grants)
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
   const resolver = useServerResolver()
-  const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId, NO_RECORDS)
-  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, NO_RECORDS)
+  const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId)
+  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)
   const roles = users.records.filter((record) => roleAdapter.owns(record) && !isSoftDeleted(record))
-  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, NO_RECORDS)
+  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
   // The kinds' defaults first, then the company's own, each in the order they were made.
   const rows = types.records.filter((record) => isTicketTypeRecord(record) && !isSoftDeleted(record)).sort((a, b) => Number(b.submittedValues?.isDefault === true) - Number(a.submittedValues?.isDefault === true))
   // What the Automation tab's pickers offer: the active teams, people, types and the vehicles, each by its web id.

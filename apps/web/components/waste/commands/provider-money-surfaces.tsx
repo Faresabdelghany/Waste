@@ -601,8 +601,6 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
 // Weight review
 // ---------------------------------------------------------------------------
 
-const NO_ROUTES: readonly BusinessRecord[] = []
-
 /** The routes an unload is recorded on: those that ran, active or completed, the latest first. */
 export function ranRoutes(routes: readonly BusinessRecord[]): BusinessRecord[] {
   return routes.filter((route) => ["active", "completed"].includes(typed(route, "status") ?? "")).toSorted((a, b) => (typed(b, "operatingDate") ?? "").localeCompare(typed(a, "operatingDate") ?? ""))
@@ -611,7 +609,7 @@ export function ranRoutes(routes: readonly BusinessRecord[]): BusinessRecord[] {
 /** Record unload: the office's capture of a weighbridge ticket, on a route that ran (O9 of #290). */
 export function RecordUnloadSurface() {
   const base = useRelationPickers()
-  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, NO_ROUTES)
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const pickers: RelationPickers = {
     ...base,
     readyFor: (schema) => base.readyFor(schema) && (routes.ready || routes.notGranted),

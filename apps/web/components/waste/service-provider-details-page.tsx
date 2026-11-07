@@ -11,7 +11,6 @@ import type {
   WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
-import { useApiConfigured } from "@/components/waste/api-session-store"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { PageTopBar } from "@/components/page-layout"
@@ -282,7 +281,6 @@ export function ServiceProviderDetailsPage({
   ) => void
 }) {
   // On the Pilot the door makes an award to this provider (#186), not an assignment of an existing one.
-  const apiConfigured = useApiConfigured()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header>
@@ -380,7 +378,7 @@ export function ServiceProviderDetailsPage({
             contextLabel="Service scope"
             valueLabel="Effective period"
             emptyLabel="No assigned service areas"
-            actionLabel={apiConfigured ? "Award service area" : "Assign service area"}
+            actionLabel="Award service area"
             onCreate={() => onCreate("service-area")}
             workspaceId="service-providers"
             moduleId="service-areas"

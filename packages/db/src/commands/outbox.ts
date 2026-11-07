@@ -11,7 +11,10 @@
 // The payload is the wire resource as the caller would answer it at that
 // instant — a `Route`, a `PickupDetail` with the proof the command made, an
 // `Unload`, a `DriverCommandReceipt`, a `Ticket` — so a consumer reads what
-// the API would have answered and never the tables. `occurredAt` is the
+// the API would have answered and never the tables; which resource each kind
+// carries is `OUTBOX_PAYLOADS`' (@waste/contracts/outbox), which the draft is
+// typed by, and what it is about is the kind's (@waste/domain/outbox), which
+// a draft names only where the kind is about several. `occurredAt` is the
 // command's instant and not the request's: the day a cancelled route was
 // cancelled, the instant a pickup left `planned`, when the truck tipped.
 // `projectId` travels with the event because every row here is a project's
@@ -30,7 +33,8 @@
 // `Principal` satisfies and a job's event carries: the API's routes pass what
 // they passed, the commands pass the company alone, and the worker's jobs pass
 // the event's.
-import type { OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
+import type { OutboxPayloadInput } from "@waste/contracts/outbox"
+import { aggregateOf, type AggregateOf, type OutboxKind, type SoleAggregateKind } from "@waste/domain/outbox/vocabulary"
 
 import type { Tx } from "../client"
 import { newId } from "../ids"
@@ -39,20 +43,22 @@ import { outboxEvent } from "../schema/execution"
 /** Whose event it is: the tenant, which is all the row needs of the caller. A Principal is one; so is the worker's job. */
 export type Tenant = { companyId: string }
 
-/** One event as a route, the applier or a shared statement hands it in: what it is about, what happened, the resource as answered, and when. */
-export type OutboxEventDraft = {
-  /** What the event is about: a route, a pickup, an unload, a command, a ticket, an invoice, a settlement. */
-  aggregate: OutboxAggregate
-  /** The id of that route, pickup, unload, command, ticket, invoice or settlement; a soft id, joined by nobody. */
-  aggregateId: string
-  kind: OutboxKind
-  /** The wire resource as the write left it. */
-  payload: unknown
-  /** The project the aggregate belongs to. */
-  projectId: string
-  /** The command's instant, not the request's. */
-  occurredAt: Date
-}
+/** One event of the kind about one of its aggregates: what happened, the aggregate's id and wire resource as the write left it; the aggregate named only where the kind is about several. */
+type DraftAbout<K extends OutboxKind> = {
+  [A in AggregateOf<K>]: {
+    kind: K
+    /** The id of what the event is about; a soft id, joined by nobody. */
+    aggregateId: string
+    payload: OutboxPayloadInput<K, A>
+    /** The project the aggregate belongs to. */
+    projectId: string
+    /** The command's instant, not the request's. */
+    occurredAt: Date
+  } & (K extends SoleAggregateKind ? { aggregate?: A } : { aggregate: A })
+}[AggregateOf<K>]
+
+/** One event as a route, the applier or a shared statement hands it in, typed by its kind. */
+export type OutboxEventDraft<K extends OutboxKind = OutboxKind> = K extends OutboxKind ? DraftAbout<K> : never
 
 /** Inserts one `outbox_event` row, server-minted id, unpublished, in the caller's transaction. */
 export async function emit(tx: Tx, tenant: Tenant, event: OutboxEventDraft): Promise<void> {
@@ -61,7 +67,7 @@ export async function emit(tx: Tx, tenant: Tenant, event: OutboxEventDraft): Pro
     companyId: tenant.companyId,
     projectId: event.projectId,
     kind: event.kind,
-    aggregateKind: event.aggregate,
+    aggregateKind: aggregateOf(event.kind, event.aggregate),
     aggregateId: event.aggregateId,
     occurredAt: event.occurredAt,
     payload: event.payload,

@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { WeighbridgeTicketDismiss, WeighbridgeTicketMatch, type WeighbridgeTicket } from "@waste/contracts/weighbridge"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { UNMATCHED_LABELS, WEIGHBRIDGE_MODULE } from "../../data/weighbridge"
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
@@ -52,7 +52,7 @@ const state: ServerRecordsState = new Map([
   ["resources.depots", moduleOf([plain(`station-${STATION}`, "ARC Amager")], [STATION])],
   ["configure.master", moduleOf([plain(`fraction-${RESIDUAL}`, "Residual", { submittedValues: { kind: "waste-fraction" } })], [RESIDUAL])],
 ])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 describe("Route Studio › Weighbridge", () => {
   test("is a module on the API", () => {

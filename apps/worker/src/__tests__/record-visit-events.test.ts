@@ -27,13 +27,13 @@ import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-po
 import { billableEvent, invoiceLine, priceListRow } from "@waste/db/schema/finance"
 import { accessCredential, siteVisit, visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
+import type { OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
 
 import type { JobContext } from "../jobs"
-import { recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
-import { consumerQueue } from "../outbox/subscribe"
+import { recordBillableEvents, type Recorded } from "../jobs/record-billable-events"
+import { consumerQueue, type RelayedJob } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropFinanceTenant, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
@@ -110,7 +110,7 @@ describe("finance.record-billable-events over a Site Visit's events (M4 of #293)
       return found.visit
     })
 
-  const published = (kind: OutboxKind, payload: SiteVisit, id = testId()): PublishedEvent => ({
+  const published = (kind: OutboxKind, payload: SiteVisit, id = testId()): RelayedJob => ({
     id,
     companyId: tenant.companyId,
     projectId: copenhagen,
@@ -124,10 +124,10 @@ describe("finance.record-billable-events over a Site Visit's events (M4 of #293)
     updatedAt: NOON.toISOString(),
   })
 
-  const handle = async (event: PublishedEvent): Promise<Recorded["did"]> => {
+  const handle = async (event: RelayedJob): Promise<Recorded["did"]> => {
     const consumer = recordBillableEvents.find((job) => job.queue === consumerQueue(event.kind, "finance"))
     assert.ok(consumer, `${event.kind}: no Finance entry`)
-    const job: Job<PublishedEvent> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
+    const job: Job<RelayedJob> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     await consumer.handler([job], context())
     const line = lines.findLast((candidate) => candidate.includes(` ${event.id} → `))
     assert.ok(line, "the consumer logged the event")

@@ -17,12 +17,13 @@ import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, typ
 import {
   adapterFor,
   commandRecord,
-  companyRecordIdOf,
   dayTurned,
   dayTurnRereads,
   derivedFromChanged,
   derivedSourcesNow,
   IDLE,
+  KEPT_ON_API,
+  keptOnApi,
   loadFailed,
   loadModule,
   loaded,
@@ -33,7 +34,6 @@ import {
   paneAnswerOf,
   projectTimezonesOf,
   readModuleInto,
-  recordsOf,
   refusalProblem,
   rereadsOf,
   resolverOver,
@@ -102,14 +102,12 @@ function thingAdapter(prefix: string, things: Thing[], calls: string[] = []): Re
 }
 
 const NOW = new Date("2026-09-25T12:00:00Z")
-const options = (state: ServerRecordsState = new Map(), fixtures: BusinessRecord[] = []) => ({ fixtures, state, now: NOW })
+const options = (state: ServerRecordsState = new Map()) => ({ state, now: NOW })
 
 describe("a module's state", () => {
-  test("a module the store has not been asked for is idle and answers its fixtures", () => {
-    const fixtures = [record("f-1", "Fixture")]
+  test("a module the store has not been asked for is idle, with no rows", () => {
     assert.equal(moduleState(new Map(), "configure", "organization"), IDLE)
-    assert.deepEqual(recordsOf(IDLE, fixtures), fixtures)
-    assert.notEqual(recordsOf(IDLE, fixtures), fixtures, "a copy, never the fixture array itself")
+    assert.deepEqual([IDLE.records, IDLE.serverIds.size, IDLE.loadedAt], [[], 0, null])
   })
 
   test("loading keeps a ready module ready and moves an idle one to loading, clearing the problem", () => {
@@ -119,21 +117,18 @@ describe("a module's state", () => {
     assert.equal(loading({ ...ready, problem: genericProblem(500) }).problem, null)
   })
 
-  test("a ready module answers the server's records and never the fixtures", () => {
+  test("a ready module holds the server's records, at the clock of the read", () => {
     const ready = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 5)
-    assert.deepEqual(
-      recordsOf(ready, [record("f-1", "Fixture")]).map((candidate) => candidate.id),
-      ["t-1"],
-    )
+    assert.deepEqual(ready.records.map((candidate) => candidate.id), ["t-1"])
     assert.equal(ready.loadedAt, 5)
   })
 
-  test("a failed first read is failed and answers fixtures; a failed re-read keeps the rows and notes the problem", () => {
+  test("a failed first read is failed with no rows; a failed re-read keeps the rows and notes the problem", () => {
     const problem = genericProblem(503)
     const failed = loadFailed(loading(IDLE), problem)
     assert.equal(failed.status, "failed")
     assert.equal(failed.problem, problem)
-    assert.deepEqual(recordsOf(failed, [record("f-1", "Fixture")]).map((candidate) => candidate.id), ["f-1"])
+    assert.deepEqual(failed.records, [])
     const ready = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 5)
     const stillReady = loadFailed(ready, problem)
     assert.equal(stillReady.status, "ready")
@@ -141,12 +136,10 @@ describe("a module's state", () => {
     assert.equal(stillReady.problem, problem)
   })
 
-  test("a module the person's role does not view is not granted: its fixtures, as an idle one answers, and the sentence a pane shows, with nothing read", () => {
-    const fixtures = [record("f-1", "Fixture")]
+  test("a module the person's role does not view is not granted: no rows, and the sentence a pane shows, with nothing read", () => {
     const withheld = notGranted("configure.master")
     assert.equal(withheld.status, "not-granted")
     assert.deepEqual(withheld.problem, { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.master" })
-    assert.deepEqual(recordsOf(withheld, fixtures), fixtures)
     assert.deepEqual([withheld.records, withheld.serverIds.size, withheld.loadedAt], [[], 0, null])
   })
 
@@ -211,6 +204,10 @@ describe("what a pane reading its own module is told on the Pilot", () => {
       problem: { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.organization" },
     })
   })
+
+  test("a module kept on the API where none is configured: no rows, nothing to wait for, and the store's sentence in their place", () => {
+    assert.deepEqual(paneAnswerOf(KEPT_ON_API), { records: [], ready: false, pending: false, notGranted: false, problem: genericProblem(UNREACHABLE_STATUS, keptOnApi("This list")) })
+  })
 })
 
 describe("loading a module", () => {
@@ -233,12 +230,11 @@ describe("loading a module", () => {
     assert.equal(result.records[0].facts.Parent, "Parent")
   })
 
-  test("a fixture lends its id to one row: a second row mapped onto the same fixture keeps the server's id, so no two rows share a web id", async () => {
+  test("a second row mapped onto an id another row holds keeps the server's id, so no two rows share a web id", async () => {
     const twins = thingAdapter("t", [
       { id: "1", createdAt: "", updatedAt: "", name: "Olivia Larsen" },
       { id: "2", createdAt: "", updatedAt: "", name: "Olivia Larsen" },
     ])
-    // The way fixtureNamed maps: both rows are "the fixture" by name.
     const aliasing: ResourceAdapter<Thing> = { ...twins, toRecord: (thing) => record("t-olivia", thing.name) }
     const module: ServerModule = { workspaceId: "configure", moduleId: "access", resources: [aliasing] }
     const result = await loadModule(client, module, options())
@@ -257,7 +253,6 @@ describe("loading a module", () => {
 describe("reading a module into the store", () => {
   const things: Thing[] = [{ id: "1", createdAt: "", updatedAt: "", name: "One" }, { id: "2", createdAt: "", updatedAt: "", name: "Two" }]
   const oldRows = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
-  const fixtures = [record("f-1", "Fixture")]
 
   /** A module whose one list answers when the test lets it, so the store can be looked at while the read is out. */
   function heldModule(answer: () => Promise<Thing[]>): ServerModule {
@@ -271,7 +266,7 @@ describe("reading a module into the store", () => {
       whileOut = store.getSnapshot().get("resources.inventory")?.status
       return things
     })
-    const problem = await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 7 })
+    const problem = await readModuleInto(store, client, module, { alive: () => true, now: () => 7 })
     assert.equal(problem, null)
     assert.equal(whileOut, "loading")
     const read = store.getSnapshot().get("resources.inventory")
@@ -286,7 +281,7 @@ describe("reading a module into the store", () => {
       whileOut = held?.status === "ready" ? held.records.map((candidate) => candidate.id) : []
       return things
     })
-    await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 8 })
+    await readModuleInto(store, client, module, { alive: () => true, now: () => 8 })
     assert.deepEqual(whileOut, ["t-1"], "ready with its old rows while the read is out")
     assert.deepEqual(store.getSnapshot().get("resources.inventory")?.records.map((candidate) => candidate.id), ["t-1", "t-2"])
   })
@@ -297,11 +292,11 @@ describe("reading a module into the store", () => {
       throw new ApiProblem(problem)
     })
     const ready = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
-    assert.deepEqual(await readModuleInto(ready, client, failing, { fixtures, alive: () => true, retryDelaysMs: [] }), problem)
+    assert.deepEqual(await readModuleInto(ready, client, failing, { alive: () => true, retryDelaysMs: [] }), problem)
     const kept = ready.getSnapshot().get("resources.inventory")
     assert.deepEqual([kept?.status, kept?.records, kept?.problem], ["ready", oldRows.records, problem])
     const first = createExternalStore<ServerRecordsState>(new Map())
-    await readModuleInto(first, client, failing, { fixtures, alive: () => true, retryDelaysMs: [] })
+    await readModuleInto(first, client, failing, { alive: () => true, retryDelaysMs: [] })
     assert.equal(first.getSnapshot().get("resources.inventory")?.status, "failed")
   })
 
@@ -324,7 +319,7 @@ describe("reading a module into the store", () => {
       for (const failure of [reset, unreachable]) {
         const { module, calls } = flaky([failure])
         const store = createExternalStore<ServerRecordsState>(new Map())
-        assert.equal(await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 9, retryDelaysMs: [0, 0] }), null)
+        assert.equal(await readModuleInto(store, client, module, { alive: () => true, now: () => 9, retryDelaysMs: [0, 0] }), null)
         assert.equal(calls(), 2)
         assert.equal(store.getSnapshot().get("resources.inventory")?.status, "ready")
       }
@@ -333,7 +328,7 @@ describe("reading a module into the store", () => {
     test("asked once per delay, then the failure stands", async () => {
       const { module, calls } = flaky([reset, reset, reset, reset])
       const store = createExternalStore<ServerRecordsState>(new Map())
-      assert.deepEqual(await readModuleInto(store, client, module, { fixtures, alive: () => true, retryDelaysMs: [0, 0] }), reset)
+      assert.deepEqual(await readModuleInto(store, client, module, { alive: () => true, retryDelaysMs: [0, 0] }), reset)
       assert.equal(calls(), 3, "the first read and one per delay")
       assert.equal(store.getSnapshot().get("resources.inventory")?.status, "failed")
     })
@@ -341,7 +336,7 @@ describe("reading a module into the store", () => {
     test("a refusal the API answered is never asked again: a 4xx says the same twice", async () => {
       const { module, calls } = flaky([genericProblem(403, "This account's role does not allow view on resources.inventory")])
       const store = createExternalStore<ServerRecordsState>(new Map())
-      await readModuleInto(store, client, module, { fixtures, alive: () => true, retryDelaysMs: [0, 0] })
+      await readModuleInto(store, client, module, { alive: () => true, retryDelaysMs: [0, 0] })
       assert.equal(calls(), 1)
       assert.equal(store.getSnapshot().get("resources.inventory")?.status, "failed")
     })
@@ -350,7 +345,7 @@ describe("reading a module into the store", () => {
       let alive = true
       const { module, calls } = flaky([reset])
       const store = createExternalStore<ServerRecordsState>(new Map())
-      const read = readModuleInto(store, client, module, { fixtures, alive: () => alive, retryDelaysMs: [20] })
+      const read = readModuleInto(store, client, module, { alive: () => alive, retryDelaysMs: [20] })
       alive = false
       assert.equal(await read, null)
       assert.equal(calls(), 1)
@@ -364,7 +359,7 @@ describe("reading a module into the store", () => {
       throw new ApiProblem(refusal)
     })
     const store = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
-    assert.deepEqual(await readModuleInto(store, client, refused, { fixtures, alive: () => true }), refusal)
+    assert.deepEqual(await readModuleInto(store, client, refused, { alive: () => true }), refusal)
     const kept = store.getSnapshot().get("resources.inventory")
     assert.deepEqual([kept?.status, kept?.records, kept?.problem], ["ready", oldRows.records, null])
   })
@@ -376,7 +371,7 @@ describe("reading a module into the store", () => {
       return things
     })
     const store = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
-    await readModuleInto(store, client, outlived, { fixtures, alive: () => alive })
+    await readModuleInto(store, client, outlived, { alive: () => alive })
     assert.deepEqual(store.getSnapshot().get("resources.inventory")?.records.map((candidate) => candidate.id), ["t-1"], "the old rows, not the answer")
 
     let asked = false
@@ -385,7 +380,7 @@ describe("reading a module into the store", () => {
       return things
     })
     const before = store.getSnapshot()
-    assert.equal(await readModuleInto(store, client, unasked, { fixtures, alive: () => false }), null)
+    assert.equal(await readModuleInto(store, client, unasked, { alive: () => false }), null)
     assert.equal(asked, false)
     assert.equal(store.getSnapshot(), before, "not even a loading mark: it would land in the next session's store")
   })
@@ -452,21 +447,6 @@ describe("the resolver", () => {
     const names = resolverOver(state, extra).filter((candidate) => candidate.id.startsWith("x-")).map((candidate) => candidate.name)
     assert.deepEqual(names, ["X", "X2", "X4"])
     assert.deepEqual(NOTHING_RESOLVED.filter(() => true), [])
-  })
-
-  test("the company record's id is read off the organisation module once it is ready, by kind and not by the prefix a customer organisation shares", () => {
-    const tenant = record("company-kystbyen-dk", "K", { recordKind: "Company" })
-    const state: ServerRecordsState = new Map([[
-      "configure.organization",
-      loaded({ records: [record("project-x", "X", { recordKind: "Project" }), tenant], serverIds: new Map() }, 1),
-    ]])
-    assert.equal(companyRecordIdOf(state), "company-kystbyen-dk")
-    assert.equal(companyRecordIdOf(new Map()), undefined)
-    const customerFirst: ServerRecordsState = new Map([[
-      "configure.organization",
-      loaded({ records: [record("company-osterbro-housing", "Østerbro Housing", { recordKind: "Contact or Customer Organization" }), tenant], serverIds: new Map() }, 1),
-    ]])
-    assert.equal(companyRecordIdOf(customerFirst), "company-kystbyen-dk", "a customer organisation's company- record is not the tenant")
   })
 })
 
@@ -647,11 +627,11 @@ describe("a module read through others", () => {
       store.set((state) => new Map(state).set("customers.agreements", ready(written)))
       return []
     })
-    await readModuleInto(store, client, module, { fixtures: [], alive: () => true })
+    await readModuleInto(store, client, module, { alive: () => true })
     const derived = store.getSnapshot().get("resources.containers")
     assert.equal(derived?.mappedAgainst?.get("customers.agreements"), agreementRows, "the rows the read began with: the answer is no newer")
     assert.deepEqual(derivedFromChanged(derived, store.getSnapshot()), ["customers.agreements"], "so it is read again")
-    await readModuleInto(store, client, derivedModule(async () => []), { fixtures: [], alive: () => true })
+    await readModuleInto(store, client, derivedModule(async () => []), { alive: () => true })
     assert.deepEqual(derivedFromChanged(store.getSnapshot().get("resources.containers"), store.getSnapshot()), [], "and once it is, it is current")
   })
 
@@ -731,7 +711,7 @@ describe("a module read again", () => {
     return new Map([["resources.inventory", withCreated(ready, "mint-1", record("t-new-1", "New"), "new-1")]])
   }
   const ids = (result: { serverIds: ReadonlyMap<string, string> }) => [...result.serverIds].map(([webId, serverId]) => `${serverId}:${webId}`).sort()
-  /** Rows whose mapped id the test names by thing name, as a fixture lends its id by name. */
+  /** Rows whose mapped id the test names by thing name. */
   const named = (things: Thing[], idOf: Record<string, string>): ResourceAdapter<Thing> => ({ ...thingAdapter("t", things), toRecord: (candidate) => record(idOf[candidate.name] ?? `t-${candidate.id}`, candidate.name) })
   /** Children naming their parent by the web id the resolver answers for its server id. */
   const children = (things: Thing[]): ResourceAdapter<Thing> => ({
@@ -751,7 +731,7 @@ describe("a module read again", () => {
   })
 
   test("an id held for one row is never lent to another: the row it names keeps it, and a row the mapping now matches onto it takes the server's", async () => {
-    // Row 1 was the fixture's by name, and is renamed; row 2 is now named as the fixture is.
+    // Row 1 was f-1 by its name, and is renamed; row 2 is now named as row 1 was.
     const held = holding([record("f-1", "Fixture")], [["f-1", "1"]])
     for (const order of [[thing("1", "Renamed"), thing("2", "Fixture")], [thing("2", "Fixture"), thing("1", "Renamed")]]) {
       const result = await loadModule(client, inventory(named(order, { Fixture: "f-1" })), options(held))
@@ -760,7 +740,7 @@ describe("a module read again", () => {
   })
 
   test("which id a row keeps never hangs on the list's order", async () => {
-    // A swap: row 1 now maps to row 2's id, and row 2 to row 1's fixture id.
+    // A swap: row 1 now maps to row 2's id, and row 2 to row 1's.
     const held = holding([record("f-1", "A"), record("t-2", "B")], [["f-1", "1"], ["t-2", "2"]])
     for (const order of [[thing("1", "B"), thing("2", "A")], [thing("2", "A"), thing("1", "B")]]) {
       const result = await loadModule(client, inventory(named(order, { A: "f-1", B: "t-2" })), options(held))
@@ -787,7 +767,7 @@ describe("a module read again", () => {
         return [thing("p1", "One"), thing("p2", "Two")]
       },
     }
-    await readModuleInto(store, client, inventory(parents, children([thing("c1", "Child", "p2")])), { fixtures: [], alive: () => true })
+    await readModuleInto(store, client, inventory(parents, children([thing("c1", "Child", "p2")])), { alive: () => true })
     const read = store.getSnapshot().get("resources.inventory")
     assert.deepEqual(read?.records.map((row) => row.id), ["p-p1", "mint-p2", "c-c1"])
     assert.equal(read?.records[2].submittedValues?.parentId, "mint-p2")
@@ -802,7 +782,7 @@ describe("a module read again", () => {
 
   test("after a create and a read again, the row is found by its minted id and a link naming it resolves", async () => {
     const store = createExternalStore<ServerRecordsState>(minted())
-    await readModuleInto(store, client, inventory(thingAdapter("t", [thing("1", "One"), thing("new-1", "New")])), { fixtures: [], alive: () => true })
+    await readModuleInto(store, client, inventory(thingAdapter("t", [thing("1", "One"), thing("new-1", "New")])), { alive: () => true })
     const state = store.getSnapshot()
     assert.deepEqual(state.get("resources.inventory")?.records.map((row) => row.id), ["t-1", "mint-1"])
     const resolve = resolverOver(state)

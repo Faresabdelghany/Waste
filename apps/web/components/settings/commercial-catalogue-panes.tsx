@@ -1,19 +1,14 @@
 "use client"
-// Settings › Commercial on the Pilot, and its price lists in both modes
-// (Issue #185, slice 10 of #81, for #148). The pane keeps two tabs: the
-// products, which on the Pilot are `commercial.products` as the API holds them
-// (fixture mode keeps its own pane, commercial-settings.tsx), and the price
-// lists, the kind of `commercial.price-rows` the API grants `/price-lists`
-// under — or, in fixture mode, a browser bucket of their own seeded with the
-// prototype's four lists (`FIXTURE_PRICE_LISTS_BUCKET`): one source by mode,
-// never both. The zones, service levels, customer types and surcharge rules
-// the prototype kept beside them are gone with their browser store: a zone is
-// a planning area, a customer type is a customer's kind, and a service level
-// and a surcharge have no home on the wire (#127).
+// Settings › Commercial (Issue #185, slice 10 of #81, for #148): the
+// products, `commercial.products` as the API holds them, and the price lists,
+// the kind of `commercial.price-rows` the API grants `/price-lists` under.
+// The zones, service levels, customer types and surcharge rules the prototype
+// kept beside them are gone with their browser store: a zone is a planning
+// area, a customer type is a customer's kind, and a service level and a
+// surcharge have no home on the wire (#127).
 //
-// On the Pilot nothing is shown until the module has answered — a fixture row
-// shown there is a row that does not exist — and a write waits on the API's
-// answer with the dialog open, its refusal the store's toast (`whenSaved`).
+// Nothing is shown until the module has answered, and a write waits on the
+// API's answer with the dialog open, its refusal the store's toast (`whenSaved`).
 // The forms are lib/data/commercial-forms.ts', their fields the adapters'
 // keys. A list is never deleted: it ends on its last day in force.
 //
@@ -30,8 +25,8 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { AssetPanelShell, AssetToolbar, EmptyRow, RecordsSection, defaultAssetView, sortByView, type AssetView } from "@/components/settings/asset-management-settings"
-import { useApiClient, useApiConfigured } from "@/components/waste/api-session-store"
+import { AssetPanelShell, AssetToolbar, EmptyRow, RecordsSection, defaultAssetView, sortByView, type AssetView } from "@/components/settings/settings-pane-kit"
+import { useApiClient } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { recordStatusTone } from "@/components/waste/business-record-views"
@@ -41,15 +36,13 @@ import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/compo
 import { typed } from "@/lib/api/records/adapter"
 import { indexPriceList } from "@/lib/api/records/indexation"
 import { dayIn } from "@/lib/api/records/clock"
-import { PRICING_REFERENCE_DATE, recordToPriceRow } from "@/lib/commercial/price-model"
+
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
-import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
-import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import type { BusinessRecord } from "@/lib/data/business-modules"
+import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
 
-const fixturesOf = (moduleId: string) => businessWorkspaces.commercial.modules.find((module) => module.id === moduleId)?.records ?? []
-
-/** What a Pilot pane says in place of rows: still reading, not the role's to see, a read refused, or nothing to show. */
+/** What a pane says in place of rows: still reading, not the role's to see, a read refused, or nothing to show. */
 function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: string, filtered: boolean): { message: string; hint?: string } {
   if (answer.pending) return { message: `Reading the ${noun} from the API…` }
   if (answer.notGranted) return { message: `The ${noun} are not shown to your role.`, hint: answer.problem?.detail }
@@ -64,14 +57,14 @@ const PRODUCT_STATUS_OPTIONS = ["Draft", "Active", "Inactive"] as const
 const PRODUCT_TYPE_OPTIONS = Object.values(PRODUCT_KIND_LABELS)
 
 // ---------------------------------------------------------------------------
-// Products, on the Pilot
+// Products
 // ---------------------------------------------------------------------------
 
-/** Settings › Commercial › Products on the Pilot: the catalogue as the API holds it, created and edited here. */
-export function ProductsOnApiPane() {
+/** Settings › Commercial › Products: the catalogue as the API holds it, created and edited here. */
+export function ProductsPane() {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useCommercialPickers()
-  const answer = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE.moduleId))
+  const answer = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [types, setTypes] = useState<string[]>([])
@@ -238,40 +231,30 @@ function ApplyListIndex({ list, onClose }: { list: BusinessRecord; onClose: () =
   )
 }
 
-/** Settings › Commercial › Price lists: the Pilot's from the API, fixture mode's from the browser's bucket; one form for both. */
+/** Settings › Commercial › Price lists: the lists the API holds, read from the price rows' module. */
 export function PriceListsPane() {
-  const configured = useApiConfigured()
-  const { getRecords, upsertRecord } = useBusinessRecordStore()
+  const { upsertRecord } = useBusinessRecordStore()
   const pickers = useCommercialPickers()
-  const location = configured ? PRICE_ROWS_MODULE : FIXTURE_PRICE_LISTS_BUCKET
-  const answer = useModuleRecords(location.workspaceId, location.moduleId, configured ? fixturesOf(PRICE_ROWS_MODULE.moduleId) : FIXTURE_PRICE_LISTS)
-  const fixtureRows = getRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, fixturesOf(PRICE_ROWS_MODULE.moduleId))
+  const answer = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [view, setView] = useState<AssetView>(defaultAssetView)
   const [editing, setEditing] = useState<Editing | null>(null)
   const [indexing, setIndexing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
-  // Fixture mode reads every period on the prototype's day; the Pilot's statuses are the adapter's, read on each project's.
-  const day = configured ? dayIn(new Date(), undefined) : PRICING_REFERENCE_DATE
+  // The statuses are the adapter's, read on each project's day.
+  const day = dayIn(new Date(), undefined)
 
   const lists = answer.records.filter(isPriceListRecord)
-  // How many rows each list holds: on the Pilot the rows that name it, in fixture mode the rows tagged with its name.
+  // How many rows each list holds: the rows that name it.
   const usage = useMemo(() => {
     const counts = new Map<string, number>()
-    if (configured) {
-      for (const row of answer.records.filter(isPriceRowRecord)) {
-        const listId = row.submittedValues?.priceListId
-        if (typeof listId === "string") counts.set(listId, (counts.get(listId) ?? 0) + 1)
-      }
-    } else {
-      for (const row of fixtureRows.map(recordToPriceRow)) {
-        const list = row === null ? undefined : FIXTURE_PRICE_LISTS.find((candidate) => candidate.name === row.tag)
-        if (list !== undefined) counts.set(list.id, (counts.get(list.id) ?? 0) + 1)
-      }
+    for (const row of answer.records.filter(isPriceRowRecord)) {
+      const listId = row.submittedValues?.priceListId
+      if (typeof listId === "string") counts.set(listId, (counts.get(listId) ?? 0) + 1)
     }
     return counts
-  }, [answer.records, configured, fixtureRows])
+  }, [answer.records])
 
   const filtered = sortByView(
     lists
@@ -288,7 +271,7 @@ export function PriceListsPane() {
     const record = editing.record === null ? createPriceListRecord(values, { now: Date.now(), day }) : updatePriceListRecord(editing.record, values, day)
     setSaving(true)
     whenSaved(
-      upsertRecord(location.workspaceId, location.moduleId, record),
+      upsertRecord(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, record),
       () => {
         setEditing(null)
         toast.success(editing.record === null ? "Price list created" : "Price list updated", { description: `${record.name} ${editing.record === null ? "takes rows from Add price in Price Engine" : "was updated"}.` })
@@ -298,7 +281,7 @@ export function PriceListsPane() {
   }
 
   const narrowed = lists.length > 0
-  const empty = configured ? emptyMessageOf(answer, "price lists", narrowed) : { message: narrowed ? "No price lists match this search." : "No price lists yet." }
+  const empty = emptyMessageOf(answer, "price lists", narrowed)
 
   return (
     <AssetPanelShell
@@ -352,7 +335,7 @@ export function PriceListsPane() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
                         {/* An ended list has no price to index: the bulk index is offered while it runs or before it starts, as a price's own is (#281). */}
-                        {configured && list.status !== "Expired" && (
+                        {list.status !== "Expired" && (
                           <Button variant="ghost" size="icon" className="h-8 w-8" disabled={saving || !answer.ready} onClick={() => setIndexing(list)} aria-label={`Apply index to ${list.name}`} title="Apply index">
                             <Percent className="h-4 w-4" />
                           </Button>

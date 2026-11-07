@@ -14,7 +14,6 @@ import { projectAdapter } from "../../api/records/organisation"
 import { propertyAdapter, propertyGroupAdapter, sharedPointAdapter } from "../../api/records/properties"
 import { customerAdapter } from "../../api/records/registry"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
-import { FIXTURE_COMPANY_ID, getModuleDefinition } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import {
   createPropertyGroupRecord,
@@ -37,10 +36,9 @@ const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STA
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", addressId: null, addressParts: null, registryId: null, kind: "residential", location: null, notes: null, driverInstructions: null, serviceWindow: null, status: "active", parties: [{ customerId: osterbro.id, role: "owner", validFrom: "2026-01-01", validTo: null }] }
 
-const fixtures = (moduleId: string, workspaceId: "configure" | "customers" = "customers") => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const bare: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
-const projectRecord = projectAdapter.toRecord(copenhagen, { ...bare, fixtures: fixtures("organization", "configure") })
-const osterbroRecord = customerAdapter.toRecord(osterbro, { ...bare, fixtures: fixtures("contacts") })
+const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
+const projectRecord = projectAdapter.toRecord(copenhagen, { ...bare})
+const osterbroRecord = customerAdapter.toRecord(osterbro, { ...bare})
 const base: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: [osterbroRecord], serverIds: new Map([[osterbroRecord.id, osterbro.id]]) }, 1)],

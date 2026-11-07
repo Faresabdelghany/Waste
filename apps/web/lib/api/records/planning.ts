@@ -56,14 +56,7 @@
 // company's Holiday List it names (holiday-lists.ts), so the record carries
 // the calendar's name and period alone and an edit is one request.
 //
-// Ids. A seeded area keeps its fixture's id (`area-indreby`), matched by the
-// reference it quotes — the fixture's Code fact, set once — and by name only
-// for a fixture without one, since the fixtures of modules still on the
-// browser's path — containers, schemes, service areas — name areas by id;
-// the mapping goes when those switch. A calendar is `calendar-<uuid>` from
-// the start: nothing names a calendar by id — a project's calendars are
-// found by project — so the fixture-id mapping retires here, as the plan on
-// #81 has it.
+// Ids. An area is `area-<uuid>` and a calendar `calendar-<uuid>`.
 import type { CollectionCalendar } from "@waste/contracts/collection-calendars"
 import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
@@ -71,16 +64,14 @@ import { PLANNING_AREA_GEOMETRY_KEY } from "@waste/domain/map-planning/areas"
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 import { firstDayOut, inForceOn, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/planning-areas"
 
 import { create, get, listAll, patch } from "../client"
 import { holidayListAdapter } from "./holiday-lists"
 import {
-  fixtureNamed,
-  hasPrefix,
-  inheritedPresentation,
+  NO_PRESENTATION,
   ofKind,
   patchOf,
   stampFacts,
@@ -235,9 +226,6 @@ const isPurpose = (value: string): value is PlanningAreaPurpose => (PLANNING_ARE
 /** `Route planning`, the form's own label for the wire's token. */
 const purposeLabel = (purpose: string) => planningAreaPurposeOptions().find((option) => option.value === purpose)?.label ?? purpose
 
-/** The fixture area that quotes the reference: its Code fact, the seed's own code, which a rename does not touch. */
-const fixtureCoded = (fixtures: readonly BusinessRecord[], code: string) => fixtures.filter(hasPrefix("area")).find((record) => record.facts.Code === code)
-
 /** A version to add — the first, or the next after one that ended: the polygon, its start, and its end as the first day out. */
 function boundaryCreateOf(polygon: FlatPolygon, from: string | undefined, to: string | undefined): { boundary: FlatPolygon; validFrom: string; validTo?: string } | LocalRefusal {
   if (!from) return refusal("effectiveFrom", "A drawn area needs the day its boundary comes into force")
@@ -284,7 +272,6 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     return areas.map((area) => ({ ...area, boundaries: boundaries.filter((version) => version.planningAreaId === area.id) }))
   },
   toRecord: (area, context) => {
-    const fixture = fixtureCoded(context.fixtures, area.code) ?? fixtureNamed(context.fixtures, "area", [area.name])
     const project = context.resolve.byServerId(area.projectId)
     const projectWebId = project?.id ?? webIdOf("project", area.projectId)
     const day = dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
@@ -292,13 +279,13 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     const purpose = purposeLabel(area.purpose)
     const effectiveTo = version === null || version.validTo === null ? undefined : lastDayIn(version.validTo)
     return {
-      id: fixture?.id ?? webIdOf("area", area.id),
+      id: webIdOf("area", area.id),
       name: area.name,
       context: `${purpose} · ${project?.name ?? "Project"}`,
       status,
-      ...inheritedPresentation(fixture),
+      ...NO_PRESENTATION,
       ...stampFacts(area, context.now),
-      // Nothing measures coverage; the fixture's figure is not the API's.
+      // Nothing measures coverage.
       value: "—",
       facts: {
         Code: area.code,
@@ -307,7 +294,6 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
         ...(version === null ? {} : { "Effective from": version.validFrom }),
         ...(effectiveTo === undefined ? {} : { "Effective to": effectiveTo }),
       },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Operational Planning Area version",
       submittedValues: {
@@ -445,11 +431,10 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
       name: calendar.name,
       context: `${projectName} · ${validity}`,
       status: "Active",
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(calendar, context.now),
       value: "—",
       facts: { Project: projectName, Validity: validity },
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Collection Calendar",
       submittedValues: {

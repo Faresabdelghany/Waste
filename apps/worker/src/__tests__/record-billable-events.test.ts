@@ -41,13 +41,14 @@ import { project } from "@waste/db/schema/organisation"
 import { ticket, ticketType } from "@waste/db/schema/resolution"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
+import { FINANCE_EVENT_KINDS } from "@waste/domain/finance/from-event"
+import type { OutboxKind } from "@waste/domain/outbox/vocabulary"
 import type { Job } from "pg-boss"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { JobContext } from "../jobs"
-import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
-import { consumerQueue } from "../outbox/subscribe"
+import { recordBillableEvents, type Recorded } from "../jobs/record-billable-events"
+import { consumerQueue, type RelayedJob } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
@@ -87,7 +88,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   })
 
   /** One published event as the relay would hand it to the queue: the outbox row on the wire with the tenant beside it, the payload the resource as the API answers it (the ids are all the consumer reads of it). */
-  const published = (kind: OutboxKind, aggregateId: string, payload: PublishedEvent["payload"], id = testId()): PublishedEvent => ({
+  const published = (kind: OutboxKind, aggregateId: string, payload: RelayedJob["payload"], id = testId()): RelayedJob => ({
     id,
     companyId: tenant.companyId,
     projectId: tenant.projects.copenhagen.id,
@@ -154,16 +155,16 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   }
 
   /** Runs the handler over one published event, as pg-boss would hand it in on the kind's queue — over the suite's context, or another worker's — and answers what it did. */
-  const handle = async (event: PublishedEvent, on: JobContext = context()): Promise<Recorded> => {
+  const handle = async (event: RelayedJob, on: JobContext = context()): Promise<Recorded> => {
     const consumer = consumerOf(event.kind)
-    const job: Job<PublishedEvent> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
+    const job: Job<RelayedJob> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     const output = (await consumer.handler([job], on)) as { events: string[] }
     assert.deepEqual(output.events, [event.id], "the seam answers the events it handled")
     const line = lines.findLast((candidate) => candidate.includes(` ${event.id} → `))
     assert.ok(line, "the consumer logged the event")
     // Every action the event came to, in order (a tagged collection is two, #293 M5); the first is the job's answer.
     const actions = [...line.slice(line.indexOf(" → ")).matchAll(/(recorded|cancelled|reversed|nothing|replayed)(?: \(billable event ([0-9a-f-]{36})\))?/g)].map(([, did, id]) => ({ did: did as Recorded["did"], billableEventId: id ?? null }))
-    return { event: event.id, kind: event.kind, ...actions[0], actions: actions[0]?.did === "nothing" ? [] : actions }
+    return { event: event.id, kind: event.kind as Recorded["kind"], ...actions[0], actions: actions[0]?.did === "nothing" ? [] : actions }
   }
 
   /** The billable events of a pickup, as the API reads them, oldest first. */
@@ -263,6 +264,15 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const [extraDone] = moves.pickupIds
     assert.equal((await handle(published("pickup-completed", extraDone, { ...pickupPayload(moves.id, extraDone, bin.containerId), origin: "office", movedFromPickupId: extra.pickupIds[0] }))).did, "nothing")
     assert.deepEqual(await eventsOfPickup(extraDone), [])
+  })
+
+  test("a stop a route's cancellation closed, whose event carries the bare Pickup with no proofs, is read as any skip: nothing to charge, and the job completes rather than failing to a dead letter", async () => {
+    const bin = await placeBin(pool, tenant, "BIN-CXL-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+    const cancelled = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, status: "skipped", reason: "route-cancelled" }])
+    const [closed] = cancelled.pickupIds
+    const { proofs: _none, ...bare } = { ...pickupPayload(cancelled.id, closed, bin.containerId, "skipped"), reason: "route-cancelled" }
+    const outcome = await handle(published("pickup-skipped", closed, bare))
+    assert.deepEqual([outcome.did, await eventsOfPickup(closed)], ["nothing", []])
   })
 
   test("the negotiated row wins for its customer, whatever the conditions score", async () => {
@@ -663,7 +673,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     await assert.rejects(handle({ ...published("ticket-completed", testId(), ticketPayload(testId(), 9, "recollected", NOON)) }), /which is not in company/)
     // The relayed envelope itself is parsed first, by the seam: a job whose data is not an event fails before any read, and so does an event of another kind on this queue.
     const consumer = consumerOf("pickup-completed")
-    const job: Job<PublishedEvent> = { id: testId(), name: consumer.queue, data: { nothing: true } as unknown as PublishedEvent, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
+    const job: Job<RelayedJob> = { id: testId(), name: consumer.queue, data: { nothing: true } as unknown as RelayedJob, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     await assert.rejects(consumer.handler([job], context()))
     await assert.rejects(consumer.handler([{ ...job, data: published("ticket-completed", testId(), ticketPayload(testId(), 9, "recollected", NOON)) }], context()), /carries a ticket-completed event/)
     assert.equal((await allEvents()).length, before)

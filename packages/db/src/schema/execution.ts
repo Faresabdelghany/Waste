@@ -135,7 +135,8 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
+import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 

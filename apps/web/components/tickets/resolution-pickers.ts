@@ -31,7 +31,7 @@ import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
@@ -39,8 +39,6 @@ import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE, recollectionStopOptions, ticketFormFor, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
-const NO_RECORDS: readonly BusinessRecord[] = []
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 const keyOf = (location: ModuleLocation) => moduleKeyOf(location.workspaceId, location.moduleId)
 
 /** A route has ended once it is completed or cancelled: no re-collection rides on it. */
@@ -61,23 +59,23 @@ const inProject = (records: readonly BusinessRecord[], projectId: string | undef
 
 /** New ticket with the company's active types' fields (#545 of #544), read from the teams' module: each type's shown while it is the one picked. */
 export function useTicketForm(): BusinessFormSchema {
-  const types = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  const types = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   return ticketFormFor(types.records.filter((record) => isTicketTypeRecord(record) && record.status === "Active"))
 }
 
 /** The Resolution dialogs' pickers: the command surfaces' own, and the rows a ticket and an alert name beside them. */
 export function useResolutionPickers(): RelationPickers {
   const base = useRelationPickers()
-  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId, fixturesOf(ACCESS_MODULE))
-  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, fixturesOf(ROUTES_MODULE))
-  const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId, fixturesOf(CONTAINERS_MODULE))
-  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
-  const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, fixturesOf(TICKETS_MODULE))
-  const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, fixturesOf(PICKUPS_MODULE))
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE))
+  const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
+  const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId)
+  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId)
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
+  const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
+  const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId)
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   // The ticket teams (O30 of #290) and the ticket types (#545 of #544), one module: the API's alone, so no fixture stands in for one.
-  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   // The modules a dialog waits on. Not the stops: the re-collection's stop is
   // optional and a recollected completion's alone, so a Complete answering
   // otherwise is never held back by the stops' read — before it lands the

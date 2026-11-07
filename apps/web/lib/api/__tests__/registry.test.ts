@@ -1,23 +1,20 @@
 // The Customer mapping (Issue #81): the prototype's two customer prefixes,
-// the fixture matched by name, and the create and patch bodies held against
-// the contracts' `CustomerCreate` and `CustomerPatch`.
+// and the create and patch bodies held against the contracts'
+// `CustomerCreate` and `CustomerPatch`.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { CustomerCreate, CustomerPatch, type Customer } from "@waste/contracts/customers"
 
-import { getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope } from "../../data/project-scope"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
 import { CUSTOMER_PREFIXES, customerAdapter, customerKindOf, customersModule } from "../records/registry"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const module = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })
-if (!module) throw new Error("customers.contacts is not a registered module")
-const fixtures = module.records
-const context: MappingContext = { fixtures, resolve: NOTHING_RESOLVED, companyRecordId: "company-kystbyen-dk", now: NOW }
+const context: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts).
 const mikkel: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Mikkel Sørensen", registrationNumber: null, email: "mikkel.sorensen@example.dk", phone: "+45 20 11 88 04", billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
@@ -25,33 +22,32 @@ const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAM
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "KAB Bolig", registrationNumber: null, email: null, status: "inactive" }
 
 describe("a customer on the prototype's record", () => {
-  test("a seeded person is the contact- fixture, by name, with the wire's fields over the fixture's facts", () => {
+  test("a seeded person is a contact- record under its server id, with the wire's fields as its facts", () => {
     const record = customerAdapter.toRecord(mikkel, context)
-    assert.equal(record.id, "contact-mikkel")
+    assert.equal(record.id, webIdOf("contact", mikkel.id))
     assert.equal(record.name, "Mikkel Sørensen")
+    assert.equal(record.context, "Person · customer")
     assert.equal(record.status, "Active")
     assert.equal(record.facts.Kind, "Person")
     assert.equal(record.facts.Email, "mikkel.sorensen@example.dk")
     assert.equal(record.facts.Phone, "+45 20 11 88 04")
-    assert.equal(record.facts.CVR, undefined, "a null on the wire clears the fact")
-    assert.equal(record.facts.Portal, "Enabled", "a fact only the fixture knows stays")
-    assert.equal(record.owner, "Østerbro Housing")
+    assert.equal(record.facts.CVR, undefined, "a null on the wire names no fact")
     assert.equal(record.submittedValues?.partyType, "person")
     assert.equal(record.updated, "Today")
     assert.ok(isInProjectScope(record, "project-copenhagen"))
     assert.ok(isInProjectScope(record, "project-cairo"), "the company's customer shows in every scope")
   })
 
-  test("a seeded organisation is the company- fixture", () => {
+  test("a seeded organisation is a company- record under its server id", () => {
     const record = customerAdapter.toRecord(osterbro, context)
-    assert.equal(record.id, "company-osterbro-housing")
+    assert.equal(record.id, webIdOf("company", osterbro.id))
     assert.equal(record.facts.CVR, "38112009")
     assert.equal(record.facts.Kind, "Organisation")
     assert.equal(record.submittedValues?.partyType, "company")
     assert.equal(record.submittedValues?.organizationId, "38112009")
   })
 
-  test("a customer no fixture names takes its kind's prefix and no fixture presentation", () => {
+  test("a customer takes its kind's prefix, and no owner or project of its own", () => {
     const record = customerAdapter.toRecord(kab, context)
     assert.equal(record.id, `${CUSTOMER_PREFIXES.organisation}-${kab.id}`)
     assert.equal(record.status, "Inactive")

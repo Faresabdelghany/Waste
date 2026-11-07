@@ -14,13 +14,13 @@ import { normaliseCredentialValue } from "@waste/domain/visits/charges"
 import { ACCESS_CREDENTIAL_KINDS, type AccessCredentialKind } from "@waste/domain/visits/vocabulary"
 
 import { AGREEMENT_PREFIX, isAgreementRecord, PROPERTY_PREFIX } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord } from "@/lib/data/properties"
 import { CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CREDENTIAL_VALUE_KEY, credentialStatusOf, SITE_ACCESS_MODULE } from "@/lib/data/site-visits"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, wallClockIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -61,12 +61,11 @@ export function toAccessCredentialRecord(credential: AccessCredential, context: 
     name: credential.label === null ? credential.value : `${credential.value} · ${credential.label}`,
     context: `${kind} · ${holder}`,
     status: credentialStatusOf(credential, todayOf(projectWebId, context)),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(credential, context.now),
     value: period,
     description: business ? "A business's: its visits are charged to the agreement" : "A household's: its visits are counted against the property's year",
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: CREDENTIAL_RECORD_KIND,
     submittedValues: {

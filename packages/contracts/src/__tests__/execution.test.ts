@@ -6,8 +6,6 @@ import {
   DRIVER_COMMAND_KINDS,
   DRIVER_PICKUP_REASONS,
   EXECUTION_SOURCES,
-  OUTBOX_AGGREGATES,
-  OUTBOX_KINDS,
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PICKUP_STATUSES,
@@ -24,8 +22,6 @@ import {
   OBJECT_KEY,
   OBJECT_KEY_SHAPE,
   ObjectKey,
-  OutboxAggregate,
-  OutboxKind,
   PickupOutcome,
   PickupReason,
   PickupStatus,
@@ -51,8 +47,6 @@ describe("the Execution enums", () => {
     assert.deepEqual(ExecutionSource.options, [...EXECUTION_SOURCES])
     assert.deepEqual(DriverCommandKind.options, [...DRIVER_COMMAND_KINDS])
     assert.deepEqual(CommandOutcome.options, [...COMMAND_OUTCOMES])
-    assert.deepEqual(OutboxKind.options, [...OUTBOX_KINDS])
-    assert.deepEqual(OutboxAggregate.options, [...OUTBOX_AGGREGATES])
   })
 
   test("refuse the prototype's display strings and the readings that are never stored", () => {

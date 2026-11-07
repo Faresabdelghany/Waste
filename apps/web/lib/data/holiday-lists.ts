@@ -92,7 +92,7 @@ function holidayListFacts(record: BusinessRecord, country: string, entries: read
 export function createHolidayListRecord(
   draft: HolidayListDraft,
   entries: readonly HolidayEntry[],
-  context: { actorName: string; companyId?: string; now?: number },
+  context: { actorName: string; now?: number },
 ): BusinessRecord {
   const now = context.now ?? Date.now()
   const { holidayDates, holidayNames } = holidayEntryValues(entries)
@@ -110,7 +110,6 @@ export function createHolidayListRecord(
     related: [],
     source: "Settings",
     freshness: "Now",
-    companyId: context.companyId,
     projectIds: [],
     recordKind: HOLIDAY_LIST_KIND,
     submittedValues: {

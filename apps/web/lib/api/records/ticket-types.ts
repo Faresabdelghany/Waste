@@ -17,12 +17,12 @@
 import type { TicketType, TicketTypeAction, TicketTypeActionBody, TicketTypeCreate, TicketTypeField, TicketTypePatch, TicketTypePermission } from "@waste/contracts/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { TICKET_TYPE_ACTIONS_KEY, TICKET_TYPE_FIELDS_KEY, TICKET_TYPE_PERMISSIONS_KEY, TICKET_TYPE_PREFIX, typeActionsOf, typeFieldsOf, typePermissionsOf } from "@/lib/data/ticket-types"
 
 import { create, listAll, patch, put } from "../client"
-import { inheritedPresentation, ofKind, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter } from "./adapter"
+import { NO_PRESENTATION, ofKind, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter } from "./adapter"
 import { vehicleAdapter } from "./fleet"
 import { roleAdapter, userAdapter } from "./organisation"
 import { isTicketTeamRecord } from "./ticket-teams"
@@ -69,7 +69,7 @@ export function toTicketTypeRecord(type: TicketType, context: MappingContext): B
     name: type.name,
     context: type.isDefault ? `${statusLabel(type.kind)} · default` : statusLabel(type.kind),
     status: statusLabel(type.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(type, context.now),
     description: type.description ?? "A type of case the company keeps.",
     facts: {
@@ -79,7 +79,6 @@ export function toTicketTypeRecord(type: TicketType, context: MappingContext): B
       Automation: type.actions.length === 0 ? "None" : `${type.actions.length} action${type.actions.length === 1 ? "" : "s"}`,
       Status: statusLabel(type.status),
     },
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [],
     recordKind: "Ticket type",
     submittedValues: {
@@ -129,7 +128,7 @@ function permissionServerIds(record: BusinessRecord, context: MappingContext): T
 export function typeLetsRole(type: Pick<BusinessRecord, "submittedValues"> | undefined, command: string, roleServerId: string | undefined, resolve: Resolver): boolean {
   const ticked = type === undefined ? [] : (typePermissionsOf(type).find((entry) => entry.command === command)?.roleIds ?? [])
   if (ticked.length === 0 || roleServerId === undefined) return true
-  return ticked.some((webId) => referencedServerId(webId, "role", { fixtures: [], resolve }) === roleServerId)
+  return ticked.some((webId) => referencedServerId(webId, "role", { resolve }) === roleServerId)
 }
 
 /** An edit's four parts: the type's own fields, the whole list of fields, the whole set of permissions, the whole automation — each where the edit changed it. */
