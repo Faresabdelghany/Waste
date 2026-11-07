@@ -57,13 +57,13 @@ export const plan = wms.table(
     ...timestamps,
     routeId: uuid().notNull(),
     /** Who ordered it: `optimiser`, `manual` or `baseline` (#124 §1). */
-    solver: text().notNull(),
+    solver: text({ enum: PLAN_SOLVERS }).notNull(),
     /** Where the measurement stands; a `manual` or `baseline` Plan is active while `calculating`, dashed and unmeasured. */
-    status: text().notNull().default("calculating"),
+    status: text({ enum: PLAN_STATUSES }).notNull().default("calculating"),
     /** The request-inputs key of idempotency, deduplication and the cache (#132 §6): the canonical string @waste/domain/routing/fingerprint spells. */
     fingerprint: text().notNull(),
     /** What was measured: the whole trip, or the stops alone when the Route names no depot or no station. */
-    trip: text().notNull(),
+    trip: text({ enum: PLAN_TRIPS }).notNull(),
     /** The totals, the sum of the legs; written with `ready` and never before. */
     distanceMetres: integer(),
     durationSeconds: integer(),
@@ -84,9 +84,9 @@ export const plan = wms.table(
     projectReference(t, [t.routeId], route),
     // What route.active_plan_id, plan_stop and plan_leg point at: a plan of the route they name, and no other's.
     projectKey(t, t.routeId),
-    oneOf(t.solver, PLAN_SOLVERS),
-    oneOf(t.status, PLAN_STATUSES),
-    oneOf(t.trip, PLAN_TRIPS),
+    oneOf(t.solver),
+    oneOf(t.status),
+    oneOf(t.trip),
     // Totals belong to `ready` alone, whole and non-negative there, absent otherwise.
     check(
       tableObjectName(t.id.table, "totals_shape", "plan"),
@@ -111,7 +111,7 @@ export const planStop = wms.table(
     routeId: uuid().notNull(),
     planId: uuid().notNull(),
     /** A pickup of the Route, or an unload visit on the way at its Unloading Station (O15 of #290). */
-    kind: text().notNull().default("pickup"),
+    kind: text({ enum: PLAN_STOP_KINDS }).notNull().default("pickup"),
     /** The pickup a `pickup` stop is; null on an unload visit. */
     pickupId: uuid(),
     /** The station an `unload` visit empties at, the Route's as the Plan was asked; null on a pickup. */
@@ -119,7 +119,7 @@ export const planStop = wms.table(
     /** The execution order the Plan holds, 1..n over the Route's pickups and the unload visits between them. */
     position: integer().notNull(),
     /** Why the optimiser ordered this stop outside its Service Window (O14 of #290), or null for a stop it kept inside one, or that has none. */
-    windowWarning: text(),
+    windowWarning: text({ enum: PLAN_STOP_WARNINGS }),
   },
   (t) => [
     companyReference(t, company),
@@ -132,8 +132,8 @@ export const planStop = wms.table(
     tenantUnique(t, t.planId, t.position),
     tenantUnique(t, t.planId, t.pickupId),
     positive(t.position),
-    oneOf(t.kind, PLAN_STOP_KINDS),
-    oneOf(t.windowWarning, PLAN_STOP_WARNINGS),
+    oneOf(t.kind),
+    oneOf(t.windowWarning),
     // A pickup names its pickup, an unload visit its station, and only a pickup has a window to warn of.
     check(
       tableObjectName(t.id.table, "kind_shape", "planStop"),
@@ -188,7 +188,7 @@ export const routingQuota = wms.table(
     /** The provider the reading is of: `fake`, `openrouteservice`. */
     provider: text().notNull(),
     /** `directions` or `optimisation`: each family has its own daily quota (#132 §1). */
-    family: text().notNull(),
+    family: text({ enum: ROUTING_QUOTA_FAMILIES }).notNull(),
     /** The provider's `x-ratelimit-remaining` and `x-ratelimit-limit`; null where it enforces none (the fake). */
     remaining: integer(),
     limit: integer(),
@@ -202,7 +202,7 @@ export const routingQuota = wms.table(
   (t) => [
     companyReference(t, company),
     tenantUnique(t, t.provider, t.family),
-    oneOf(t.family, ROUTING_QUOTA_FAMILIES),
+    oneOf(t.family),
     check(tableObjectName(t.id.table, "counts_shape", "routingQuota"), sql`(${t.remaining} is null or ${t.remaining} >= 0) and (${t.limit} is null or ${t.limit} >= 0)`),
   ],
 )

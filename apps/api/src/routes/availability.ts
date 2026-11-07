@@ -29,8 +29,6 @@ import {
   VehicleUnavailabilityCreate,
   VehicleUnavailabilityListQuery,
   VehicleUnavailabilityPatch,
-  type DriverAbsenceReason,
-  type VehicleUnavailabilityReason,
 } from "@waste/contracts/availability"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
@@ -104,7 +102,7 @@ const absenceOf = (row: AbsenceRow): DriverAbsence => ({
   driverId: row.driverId,
   validFrom: row.validFrom,
   validTo: row.validTo,
-  reason: row.reason as DriverAbsenceReason,
+  reason: row.reason,
   note: row.note,
   ...stampsOf(row),
 })
@@ -150,7 +148,7 @@ const unavailabilityOf = (row: UnavailabilityRow): VehicleUnavailability => ({
   vehicleId: row.vehicleId,
   validFrom: row.validFrom,
   validTo: row.validTo,
-  reason: row.reason as VehicleUnavailabilityReason,
+  reason: row.reason,
   note: row.note,
   ...stampsOf(row),
 })

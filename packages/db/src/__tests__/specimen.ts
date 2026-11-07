@@ -86,6 +86,9 @@ export const sqlstate = (error: unknown): string | undefined => {
   return typeof cause === "string" ? cause : undefined
 }
 
+/** A value outside a column's vocabulary, which the column's type refuses: what a test of the column's CHECK writes, to see the database refuse it too. */
+export const outside = (value: string): never => value as never
+
 /** For `assert.rejects`: the statement failed with this SQLSTATE and a message matching. */
 export const refusedWith =
   (code: string, message: RegExp) =>

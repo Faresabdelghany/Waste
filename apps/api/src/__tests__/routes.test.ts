@@ -263,7 +263,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         const planId = testId()
         await ownerPool.db.insert(plan).values({ id: planId, companyId: a.companyId, projectId: route.projectId, routeId: route.id, solver: "manual", status: "ready", fingerprint: "o15", trip: "full", provider: "fake", distanceMetres: 9_000, durationSeconds: 2_400 })
         const [first, second, third] = route.pickupIds
-        const row = (position: number, stop: { pickupId: string; windowWarning?: "window-unreachable" } | "unload") => ({
+        const row = (position: number, stop: { pickupId: string; windowWarning?: "window-unreachable" } | "unload"): typeof planStop.$inferInsert => ({
           companyId: a.companyId,
           projectId: route.projectId,
           routeId: route.id,
@@ -382,7 +382,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
 
       const retired = await refused(await command(seeded.id, "assign", { vehicleId: fleet.vehicles.retired.id }), 409)
       assert.equal(retired.detail, "WH-99 is retired; a route needs a vehicle in service")
-      // A truck in the workshop today: an allocation for next month takes it (routes/statuses.ts), a route going out does not.
+      // A truck in the workshop today: an allocation for next month takes it (@waste/domain/status-gates), a route going out does not.
       const shop = testId()
       await withCompany(pool.db, a.companyId, async (tx: Tx) => {
         const [{ vehicleTypeId }] = await tx.select({ vehicleTypeId: vehicle.vehicleTypeId }).from(vehicle).where(eq(vehicle.id, fleet.vehicles.wh24.id))

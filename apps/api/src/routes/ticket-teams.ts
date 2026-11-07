@@ -29,12 +29,14 @@
 // `operate.tickets` too, since the people working tickets read which team a
 // ticket waits with.
 import { Page } from "@waste/contracts/pagination"
-import { Team, TeamCreate, TeamListQuery, TeamMembersSet, TeamPatch, TicketTeamDefaults, TicketTeamDefaultsSet, type TeamStatus } from "@waste/contracts/ticket-teams"
+import { Team, TeamCreate, TeamListQuery, TeamMembersSet, TeamPatch, TicketTeamDefaults, TicketTeamDefaultsSet } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { team, teamMember, ticketTeamDefault } from "@waste/db/schema/resolution"
 import type { Action } from "@waste/domain/access/modules"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
-import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { ACTIVE_TEAM_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { retiredTeam } from "@waste/domain/resolution/teams"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock, refuseDuplicate } from "@waste/db/commands/shared"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -49,7 +51,6 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
 import { NOT_A_TEAM, requireUserAccount } from "./references"
-import { refuseRetiredTeam } from "./statuses"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { requireSetTypes } from "./ticket-type-rules"
 
@@ -76,7 +77,7 @@ const members: IdSet<typeof teamMember> = {
   },
 }
 
-const teamOf = (row: Row, memberUserAccountIds: readonly string[]): Team => ({ id: row.id, name: row.name, status: row.status as TeamStatus, memberUserAccountIds: [...memberUserAccountIds], ...stampsOf(row) })
+const teamOf = (row: Row, memberUserAccountIds: readonly string[]): Team => ({ id: row.id, name: row.name, status: row.status, memberUserAccountIds: [...memberUserAccountIds], ...stampsOf(row) })
 
 /** `unique (company_id, name)`: a name is one team's inside a company. */
 const NAME_TAKEN = "team_name_key"
@@ -359,7 +360,7 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (unknown.length > 0) throw invalidRequest("body", unknown)
         for (const entry of defaults) {
           const named = teams.get(entry.teamId)
-          if (named !== undefined && current.get(kindOrTypeKey(entry))?.teamId !== entry.teamId) refuseRetiredTeam(named.status as TeamStatus, named.name)
+          if (named !== undefined && current.get(kindOrTypeKey(entry))?.teamId !== entry.teamId) refuseUnless(named.status, ACTIVE_TEAM_STATUSES, retiredTeam(named.name))
         }
         refuseRetiredTypes()
         const kept = new Set<string>(defaults.map(kindOrTypeKey))

@@ -37,6 +37,7 @@
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `RESOURCES_VOCABULARIES`
 // names them all for the test that walks them.
+import { without } from "../lists"
 
 /** A vehicle drives itself or is towed: the prototype's `resourceKind`. */
 export const VEHICLE_KINDS = ["powered-vehicle", "trailer"] as const
@@ -129,6 +130,32 @@ export type SensorNetwork = (typeof SENSOR_NETWORKS)[number]
 export type SensorStatus = (typeof SENSOR_STATUSES)[number]
 export type MaintenancePlanStatus = (typeof MAINTENANCE_PLAN_STATUSES)[number]
 export type MaintenanceOrderStatus = (typeof MAINTENANCE_ORDER_STATUSES)[number]
+
+// The statuses that take a new reference (`@waste/domain/status-gates`). A
+// vehicle in the workshop today is planned with for next month, so an
+// allocation or a collection group takes any vehicle not retired, while a
+// route goes out with an active one; a driver is named while active; a
+// warehouse takes and issues stock while active or restricted; an allocation
+// reserves while planned or confirmed, the way the exclusion constraints read
+// it; a decommission reason, a sensor and a maintenance plan are named while
+// active.
+
+/** A vehicle or a trailer an allocation or a collection group names. */
+export const PLANNABLE_VEHICLE_STATUSES = without(VEHICLE_STATUSES, "retired")
+/** A vehicle or a trailer a route goes out with. */
+export const ACTIVE_VEHICLE_STATUSES = ["active"] as const satisfies readonly VehicleStatus[]
+/** A driver an allocation, a collection group or a route names. */
+export const ACTIVE_DRIVER_STATUSES = ["active"] as const satisfies readonly DriverStatus[]
+/** A warehouse a stock movement arrives at or leaves. */
+export const STOCKING_WAREHOUSE_STATUSES = without(WAREHOUSE_STATUSES, "draft", "closed")
+/** An allocation that reserves its vehicle, trailer and driver; `released` reserves nothing. */
+export const LIVE_ALLOCATION_STATUSES = without(ALLOCATION_STATUSES, "released")
+/** A decommission reason a new decommission gives. */
+export const ACTIVE_DECOMMISSION_REASON_STATUSES = ["active"] as const satisfies readonly DecommissionReasonStatus[]
+/** A sensor a reading comes from or a container is paired to. */
+export const ACTIVE_SENSOR_STATUSES = ["active"] as const satisfies readonly SensorStatus[]
+/** A maintenance plan an order is raised under. */
+export const ACTIVE_MAINTENANCE_PLAN_STATUSES = ["active"] as const satisfies readonly MaintenancePlanStatus[]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {

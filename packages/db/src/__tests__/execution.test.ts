@@ -40,7 +40,7 @@ import { depot, unloadingStation } from "../schema/places"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -508,7 +508,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await refuse({ status: "failed", outcomeAt: at(7) }, /pickup_reason_shape/, "failed without a reason")
       await refuse({ status: "completed", outcomeAt: at(7), reason: "other" }, /pickup_reason_shape/, "completed with a reason")
       await refuse({ reason: "route-ended" }, /pickup_reason_shape/, "planned with a reason")
-      await refuse({ status: "skipped", outcomeAt: at(7), reason: "lunch" }, /pickup_reason_one_of/, "a reason outside the vocabulary")
+      await refuse({ status: "skipped", outcomeAt: at(7), reason: outside("lunch") }, /pickup_reason_one_of/, "a reason outside the vocabulary")
       await refuse({ propertyId: null }, /pickup_place_exactly_one/, "no place")
       await refuse({ sharedCollectionPointId: a.point }, /pickup_place_exactly_one/, "two places")
       await refuse({ position: 0 }, /pickup_position_positive/, "the first stop is number one")
@@ -533,7 +533,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       const [origin] = await tx.insert(pickup).values(stop({ routeId: a.spare, position: 1 })).returning({ origin: pickup.origin })
       assert.equal(origin.origin, "generation", "the default, which backfilled every pickup before 0016")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, containerId: null }))), refusedWith("23514", /pickup_container_shape/), "generation always plans a container")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, origin: "planner" }))), refusedWith("23514", /pickup_origin_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, origin: outside("planner") }))), refusedWith("23514", /pickup_origin_one_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, containerId: null, origin: "office", propertyId: null }))), refusedWith("23514", /pickup_place_exactly_one/), "an address-only stop still names its address")
       await tx.insert(pickup).values([
         stop({ id: a.third, routeId: a.spare, containerId: null, origin: "office", position: 2 }),
@@ -546,7 +546,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ pickupId: null }))), refusedWith("23514", /proof_of_service_pickup_shape/), "a completion on the route alone")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ sessionId: null }))), refusedWith("23514", /proof_of_service_session_shape/), "the driver's row without a session")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ source: "dispatch" }))), refusedWith("23514", /proof_of_service_session_shape/), "the office's row with a session")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "gps" }))), refusedWith("23514", /proof_of_service_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: outside("gps") }))), refusedWith("23514", /proof_of_service_kind_one_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "weight", weightKg: 0 }))), refusedWith("23514", /proof_of_service_weight_kg_positive/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "volume", volumeLitres: 0 }))), refusedWith("23514", /proof_of_service_volume_litres_positive/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ location: { type: "Point", coordinates: [200, 55] } }))), refusedWith("23514", /proof_of_service_location_valid/))
@@ -608,7 +608,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await refuse({ netKg: 0 }, /unload_net_kg_positive/, "nothing tipped is not an unload")
       await refuse({ sessionId: a.session }, /unload_session_shape/, "the office's row with a session")
       await refuse({ source: "driver-app" }, /unload_session_shape/, "the driver's row without one")
-      await refuse({ source: "weighbridge" }, /unload_source_one_of/, "a source outside the vocabulary")
+      await refuse({ source: outside("weighbridge") }, /unload_source_one_of/, "a source outside the vocabulary")
       await tx.insert(unload).values([tipped({}), tipped({ id: a.other, grossKg: 12_400, tareKg: 8_200, netKg: 4_200 }), tipped({ id: a.third, source: "driver-app", sessionId: a.session })])
     }))
 
@@ -616,8 +616,8 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ outcome: "rejected" }))), refusedWith("23514", /driver_command_problem_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ problem: { status: 409 } }))), refusedWith("23514", /driver_command_problem_shape/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ outcome: "replayed" }))), refusedWith("23514", /driver_command_outcome_one_of/), "replayed is the wire's word and is never stored")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ kind: "retry-sync" }))), refusedWith("23514", /driver_command_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ outcome: outside("replayed") }))), refusedWith("23514", /driver_command_outcome_one_of/), "replayed is the wire's word and is never stored")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ kind: outside("retry-sync") }))), refusedWith("23514", /driver_command_kind_one_of/))
       const refusedCompletion = { type: "about:blank", title: "Conflict", status: 409, detail: "Pickup 1 is already completed" }
       await tx.insert(driverCommand).values(receipt({ outcome: "rejected", problem: refusedCompletion, sessionId: null, pickupId: null }))
       // The receipt's id is the client's: a second command with the same id is a replay the API answers, and the key refuses the row (23505 driver_command_pkey).
@@ -633,8 +633,8 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       const log = await tx.select({ id: driverCommand.id, routeId: driverCommand.routeId }).from(driverCommand).where(and(eq(driverCommand.companyId, a.company), eq(driverCommand.driverId, a.driver))).orderBy(driverCommand.id)
       assert.deepEqual(log.map((row) => row.routeId), [a.route, a.route, null], "the seeded arrival, the refused completion, the route nobody assigned")
       const event = { id: a.other, companyId: a.company, projectId: a.project, kind: "pickup-completed", aggregateKind: "pickup", aggregateId: a.pickup, occurredAt: at(6, 25), payload: { id: a.pickup, status: "completed" } } as const
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, kind: "route.started" })), refusedWith("23514", /outbox_event_kind_one_of/), "kebab, not dotted")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, aggregateKind: "warehouse" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/), "a warehouse has no event of its own; a ticket has since 0009, and an alert since 0083")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, kind: outside("route.started") })), refusedWith("23514", /outbox_event_kind_one_of/), "kebab, not dotted")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, aggregateKind: outside("warehouse") })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/), "a warehouse has no event of its own; a ticket has since 0009, and an alert since 0083")
       const [written] = await tx.insert(outboxEvent).values(event).returning({ publishedAt: outboxEvent.publishedAt })
       assert.equal(written.publishedAt, null, "unpublished until the relay stamps it")
     }))
@@ -686,8 +686,8 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       // The stamps CASE ends in `else false`, and Postgres checks constraints by name, so an unknown status is refused by the stamps check before the vocabulary's; either way it is refused, and the API never writes a status a body gave.
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(route).values(planned({ status: "draft" as RouteStatus }))), refusedWith("23514", /route_stamps_shape/), "the prototype's Draft folds into planned")
       await assert.rejects(tx.transaction((savepoint) => savepoint.execute(sql`alter table wms.route drop constraint route_stamps_shape`).then(() => savepoint.insert(route).values(planned({ status: "draft" as RouteStatus })))), refusedWith("23514", /route_status_one_of/), "and the vocabulary's check stands behind it")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ status: "rescheduled", outcomeAt: at(7) }))), refusedWith("23514", /pickup_status_one_of/), "a Ticket's outcome, not a pickup status")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "correction", source: "dispatch", sessionId: null, outcome: "rescheduled", note: "x" }))), refusedWith("23514", /proof_of_service_outcome_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ status: outside("rescheduled"), outcomeAt: at(7) }))), refusedWith("23514", /pickup_status_one_of/), "a Ticket's outcome, not a pickup status")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "correction", source: "dispatch", sessionId: null, outcome: outside("rescheduled"), note: "x" }))), refusedWith("23514", /proof_of_service_outcome_one_of/))
     }))
 })
 

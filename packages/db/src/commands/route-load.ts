@@ -6,7 +6,6 @@
 // fraction's density where it loads waste — against the payload of the
 // route's planned vehicle. Whether those loads send the vehicle to its station
 // on the way is the domain's rule (`reloadOf`, @waste/domain/routing/reloads).
-import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { stopLoadKg } from "@waste/domain/execution/workload"
 import { reloadOf, type Reload } from "@waste/domain/routing/reloads"
 import type { PlanTrip } from "@waste/domain/routing/vocabulary"
@@ -41,7 +40,7 @@ export async function routeLoad(tx: Tx, companyId: string, routeRow: { plannedVe
           .where(and(eq(vehicle.companyId, companyId), eq(vehicle.id, routeRow.plannedVehicleId)))
           .limit(1),
   ])
-  const kg = new Map(rows.map((row) => [row.id, stopLoadKg({ service: row.service as PickupService, volumeLitres: row.volumeLitres, densityKgPerCubicMetre: row.densityKgPerCubicMetre })] as const))
+  const kg = new Map(rows.map((row) => [row.id, stopLoadKg({ service: row.service, volumeLitres: row.volumeLitres, densityKgPerCubicMetre: row.densityKgPerCubicMetre })] as const))
   return { capacityKg: planned?.capacityKg ?? null, kg }
 }
 

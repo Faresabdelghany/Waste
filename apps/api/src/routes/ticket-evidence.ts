@@ -20,9 +20,9 @@ import type { StopEvidence } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { pickup } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
-import type { PickupReason, PickupService, PickupStatus, ProofKind } from "@waste/domain/execution/vocabulary"
+import type { ProofKind } from "@waste/domain/execution/vocabulary"
 import { replyFromRecord, stopEvidenceOf, answeredByRecord, type Coordinates } from "@waste/domain/resolution/evidence"
-import type { TicketKind, TicketStatus } from "@waste/domain/resolution/vocabulary"
+import type { TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { timeInTimezone } from "@waste/domain/clock"
 import { and, eq } from "drizzle-orm"
 
@@ -56,7 +56,7 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
     .limit(1)
   const proofs = (await proofsOfPickup(tx, companyId, stop.id)).map(proofOf)
   const evidence = stopEvidenceOf(
-    { status: stop.status as PickupStatus, reason: stop.reason as PickupReason | null, service: stop.service as PickupService, arrivedAt: stop.arrivedAt?.toISOString() ?? null, outcomeAt: stop.outcomeAt?.toISOString() ?? null },
+    { status: stop.status, reason: stop.reason, service: stop.service, arrivedAt: stop.arrivedAt?.toISOString() ?? null, outcomeAt: stop.outcomeAt?.toISOString() ?? null },
     proofs.map((proof) => ({ id: proof.id, kind: proof.kind as ProofKind, occurredAt: proof.occurredAt, location: (proof.location?.coordinates as Coordinates | undefined) ?? null, objectKey: proof.objectKey })),
   )
   return {
@@ -70,7 +70,7 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
     location: evidence.location === null ? null : { type: "Point", coordinates: [evidence.location[0], evidence.location[1]] },
     proofs: proofs.map(({ id, kind, source, occurredAt, reason, outcome, objectKey }) => ({ id, kind, source, occurredAt, reason, outcome, objectKey })),
     reply: replyFromRecord(evidence, evidence.at === null ? null : whenOn(evidence.at, clock?.timezone ?? "UTC")),
-    answeredByRecord: answeredByRecord(row.kind as TicketKind, evidence),
+    answeredByRecord: answeredByRecord(row.kind, evidence),
   }
 }
 

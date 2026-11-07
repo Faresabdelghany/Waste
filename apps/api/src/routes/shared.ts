@@ -36,7 +36,7 @@
 //                    rule and which parent).
 //   a status       — where the row a body names carries one, the lookup that
 //                    proves it is there answers it too (`requireStatus`), so
-//                    the gate a new reference passes (routes/statuses.ts,
+//                    the gate a new reference passes (@waste/domain/status-gates,
 //                    Issue #79) costs no second statement.
 //   a command      — a write the worker runs as well as a route (Issue #109
 //                    part B's `openTicket`, Issue #112 part B's
@@ -190,7 +190,7 @@ export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusa
 /**
  * The same lookup for a table whose rows carry a status, answering it: one
  * statement proves the row is there and says what state it is in, so a route
- * that gates a new reference on that state (routes/statuses.ts) asks once,
+ * that gates a new reference on that state (@waste/domain/status-gates) asks once,
  * and a row that is not there is still the 400 above, before any 409. The
  * caller names the vocabulary the column's check holds the value to. A
  * `query` target refuses on the query string, for a list filter that names a

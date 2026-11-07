@@ -22,7 +22,7 @@
 // `ticketEventShapeIssue` says which column disagrees, for the API's sentence
 // before the check's code.
 import type { Presence } from "../presence"
-import type { TicketEventKind, TicketStatus, TicketVisibility } from "./vocabulary"
+import type { TicketEventKind, TicketResolution, TicketStatus, TicketVisibility } from "./vocabulary"
 
 /** What one kind of history row carries. */
 export type TicketEventShape = {
@@ -41,7 +41,7 @@ export type TicketEventRow = {
   body: string | null
   objectKey: string | null
   visibility: TicketVisibility
-  resolution: string | null
+  resolution: TicketResolution | null
 }
 
 /** A row of the office's own: internal, no attachment, no resolution. */

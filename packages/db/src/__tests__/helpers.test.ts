@@ -21,7 +21,7 @@ import { retentionPurge } from "../sql/retention-purge"
 import { TABLES } from "../table-policies"
 import { statementsFor } from "./specimen"
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
 
 // How drizzle-kit spells what these helpers make.
 const ID = '"id" uuid PRIMARY KEY DEFAULT wms.uuidv7() NOT NULL'
@@ -44,14 +44,24 @@ describe("every check of the schema", () => {
 })
 
 describe("the check helpers", () => {
-  test("oneOf spells the listed values as literals, quotes doubled, named <table>_<column>_one_of", () => {
-    const specimen = wms.table("specimen_one_of", { ...id, ...tenant, kind: text().notNull() }, (t) => [oneOf(t.kind, ["plain", "it's"])])
+  test("oneOf spells the values the column declares as literals, quotes doubled, named <table>_<column>_one_of", () => {
+    const specimen = wms.table("specimen_one_of", { ...id, ...tenant, kind: text({ enum: ["plain", "it's"] }).notNull() }, (t) => [oneOf(t.kind)])
     assert.deepEqual([...checksOf(specimen)], [["specimen_one_of_kind_one_of", `"wms"."specimen_one_of"."kind" in ('plain', 'it''s')`]])
   })
 
-  test("oneOf refuses an empty list, which would be a syntax error in the migration", () => {
-    const empty = wms.table("specimen_one_of_empty", { ...id, ...tenant, kind: text().notNull() }, (t) => [oneOf(t.kind, [])])
-    assert.throws(() => getTableConfig(empty), /oneOf: "specimen_one_of_empty"\."kind" has no values to be one of/)
+  test("oneOf refuses a column that declares no values, which would be a syntax error in the migration and a row typed string", () => {
+    const empty = wms.table("specimen_one_of_empty", { ...id, ...tenant, kind: text().notNull() }, (t) => [oneOf(t.kind)])
+    assert.throws(() => getTableConfig(empty), /oneOf: "specimen_one_of_empty"\."kind" declares no values to be one of/)
+  })
+
+  test("a declared column reads out as its values and stays text in SQL", () => {
+    const specimen = wms.table("specimen_one_of_type", { ...id, ...tenant, kind: text({ enum: ["plain", "fancy"] }).notNull() }, (t) => [oneOf(t.kind)])
+    type Kind = (typeof specimen.$inferSelect)["kind"]
+    const declared: Kind[] = ["plain", "fancy"]
+    // @ts-expect-error a value the column does not declare is not one a row reads out
+    const undeclared: Kind = "other"
+    assert.deepEqual([...declared, undeclared], ["plain", "fancy", "other"])
+    assert.equal(getTableConfig(specimen).columns.find((column) => column.name === "kind")?.getSQLType(), "text")
   })
 
   test("lowercase holds the column equal to its lower(), named <table>_<column>_lowercase", () => {
@@ -60,7 +70,7 @@ describe("the check helpers", () => {
   })
 
   test("subsetOf holds every element of an array to the list, as literals, named <table>_<column>_subset_of", () => {
-    const specimen = wms.table("specimen_subset", { ...id, ...tenant, days: text().array().notNull() }, (t) => [subsetOf(t.days, ["monday", "it's tuesday"])])
+    const specimen = wms.table("specimen_subset", { ...id, ...tenant, days: text({ enum: ["monday", "it's tuesday"] }).array().notNull() }, (t) => [subsetOf(t.days)])
     assert.deepEqual([...checksOf(specimen)], [["specimen_subset_days_subset_of", `"wms"."specimen_subset"."days" <@ ARRAY['monday', 'it''s tuesday']::text[]`]])
   })
 
@@ -69,9 +79,9 @@ describe("the check helpers", () => {
     assert.deepEqual([...checksOf(specimen)], [["specimen_non_empty_days_non_empty", `cardinality("wms"."specimen_non_empty"."days") > 0`]])
   })
 
-  test("subsetOf refuses an empty list, which would refuse every non-empty array and say nothing about why", () => {
-    const empty = wms.table("specimen_subset_empty", { ...id, ...tenant, days: text().array() }, (t) => [subsetOf(t.days, [])])
-    assert.throws(() => getTableConfig(empty), /subsetOf: "specimen_subset_empty"\."days" has no values to be a subset of/)
+  test("subsetOf refuses an array whose elements declare no values, which would refuse every non-empty array and say nothing about why", () => {
+    const empty = wms.table("specimen_subset_empty", { ...id, ...tenant, days: text().array() }, (t) => [subsetOf(t.days)])
+    assert.throws(() => getTableConfig(empty), /subsetOf: "specimen_subset_empty"\."days" declares no values to be a subset of/)
   })
 
   test("positive holds a count above zero, named <table>_<column>_positive", () => {
@@ -102,7 +112,7 @@ describe("the check helpers", () => {
 
   test("refuse a check name Postgres would truncate, at definition time", () => {
     const name = `specimen_check_${"o".repeat(40)}`
-    const long = wms.table(name, { ...id, ...tenant, days: text().array() }, (t) => [subsetOf(t.days, DAYS)])
+    const long = wms.table(name, { ...id, ...tenant, days: text({ enum: DAYS }).array() }, (t) => [subsetOf(t.days)])
     assert.throws(() => getTableConfig(long), new RegExp(`subsetOf: "${name}_days_subset_of" is 70 bytes; Postgres would truncate it to 63 silently`))
     const longer = wms.table(`${name}_too`, { ...id, ...tenant, days: text().array() }, (t) => [nonEmpty(t.days)])
     assert.throws(() => getTableConfig(longer), new RegExp(`nonEmpty: "${name}_too_days_non_empty" is 74 bytes; Postgres would truncate it to 63 silently`))

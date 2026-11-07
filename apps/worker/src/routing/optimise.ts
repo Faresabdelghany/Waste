@@ -57,7 +57,6 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { OPTIMISER_MAX_PARTS, sweepParts } from "@waste/domain/routing/parts"
 import { isSuperseded, optimiserMaxStops } from "@waste/domain/routing/plans"
 import { shipsReload, unloadsAlong, withUnloads } from "@waste/domain/routing/reloads"
@@ -98,7 +97,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   if (!ends) return { kind: "done", status: "without its route" }
   // The route has moved past this request: the later order wins, and no call is spent on the earlier one.
   if (isSuperseded({ solver: "optimiser", planId, activePlanId: ends.activePlanId })) return { kind: "refused", sentence: SUPERSEDED }
-  if (!orderIsOpen(ends.status as RouteStatus)) return { kind: "refused", sentence: ends.status === "active" ? "the route has started, so its order is frozen" : `the route is ${ends.status}, so its order does not change` }
+  if (!orderIsOpen(ends.status)) return { kind: "refused", sentence: ends.status === "active" ? "the route has started, so its order is frozen" : `the route is ${ends.status}, so its order does not change` }
   const home = positionOf(ends.depot)
   if (!home) return { kind: "refused", sentence: "the optimiser orders the stops from the route's depot, and the route names none" }
   const station = positionOf(ends.station)
@@ -113,7 +112,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
   // Above one request's size the stops are ordered in parts (O15 of #290), each a request; a full trip's station is a location of each, so its parts take one stop fewer.
-  const most = OPTIMISER_MAX_PARTS * optimiserMaxStops(found.trip as PlanTrip)
+  const most = OPTIMISER_MAX_PARTS * optimiserMaxStops(found.trip)
   if (stops.length > most) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and the optimiser takes at most ${most} in ${OPTIMISER_MAX_PARTS} requests` }
   const points: Position2D[] = []
   for (const stop of stops) {
@@ -124,7 +123,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read, and its load (O15).
   const pickupIds = stops.map((stop) => stop.id)
   const [timing, load] = await Promise.all([routeTiming(tx, keys.companyId, ends, pickupIds), routeLoad(tx, keys.companyId, ends, pickupIds)])
-  const reload = reloadOver(load, { trip: found.trip as PlanTrip, pickupIds })
+  const reload = reloadOver(load, { trip: found.trip, pickupIds })
   const warnings = new Map<number, PlanStopWarning>()
   const timeWindows = stops.map((stop, index) => {
     const window = timing.stops.get(stop.id)?.window ?? null
@@ -261,7 +260,7 @@ export const routingOptimise = definePlanJob({
         routeId: locked.routeId,
         planId,
         position: index + 1,
-        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId, windowWarning: warningOf.get(stop.pickupId) ?? null } : { kind: "unload", unloadingStationId: gathered.unloadingStationId }),
+        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId, windowWarning: warningOf.get(stop.pickupId) ?? null } : { kind: "unload" as const, unloadingStationId: gathered.unloadingStationId }),
       })),
     )
     if (legs.length > 0) {
@@ -279,8 +278,8 @@ export const routingOptimise = definePlanJob({
         graphDate: provenance.graphDate,
       })
       .where(eq(plan.id, planId))
-    if (!orderIsOpen(current.status as RouteStatus) || isSuperseded({ solver: "optimiser", planId, activePlanId: current.activePlanId })) {
-      log(`${ROUTING_OPTIMISE_QUEUE}: plan ${planId} is ready but not activated: the route ${orderIsOpen(current.status as RouteStatus) ? "has a newer order" : `is ${current.status}`}`)
+    if (!orderIsOpen(current.status) || isSuperseded({ solver: "optimiser", planId, activePlanId: current.activePlanId })) {
+      log(`${ROUTING_OPTIMISE_QUEUE}: plan ${planId} is ready but not activated: the route ${orderIsOpen(current.status) ? "has a newer order" : `is ${current.status}`}`)
       return
     }
     await activateSolved(tx, { companyId, routeId: locked.routeId, planId })

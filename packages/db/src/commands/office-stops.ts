@@ -18,8 +18,7 @@
 // is a savepoint of the caller's transaction, so a stop the vehicle cannot
 // take, or one a unique index refuses (a container a work order holds), is
 // taken back and the caller's transaction goes on.
-import { ROUTE_STATUSES, type PickupService } from "@waste/domain/execution/vocabulary"
-import { orderIsOpen } from "@waste/domain/execution/transitions"
+import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { and, eq, max, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -27,8 +26,6 @@ import { newId } from "../ids"
 import { pickup, route } from "../schema/execution"
 import { misfitOf, pickupFitStops } from "./fleet-fit"
 
-/** The statuses a route takes an office stop in, for a statement: its order still open. */
-export const ORDER_OPEN_STATUSES = ROUTE_STATUSES.filter(orderIsOpen)
 
 /** The office's stop as its door judged it: the work, where and what it collects, what a work order books, the bulky booking it collects, the stop it was moved from, and the driver's note. */
 export type OfficeStopDraft = {

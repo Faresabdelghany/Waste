@@ -9,7 +9,7 @@
 // whole, by position — and the end, under the rule's row lock. A step names a
 // product of the rule's project that is an additional service sold per job
 // (400 at `ladder.N`), and an active one where the step is new (409, the
-// status gate of routes/statuses.ts); a code names one of the company's
+// status gate of @waste/domain/status-gates); a code names one of the company's
 // (400), and an active one (409).
 //
 // The history reads a Property's or a Shared Collection Point's exceptions
@@ -22,8 +22,7 @@
 // longest window reaches. Nothing is charged here: the charge is M5b's, judged
 // once at the stop's event and never re-stepped by a later correction.
 import { Page } from "@waste/contracts/pagination"
-import { PickupException, PickupExceptionHistory, PickupExceptionHistoryQuery, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRuleListQuery, PickupExceptionRulePatch, type PickupExceptionReason } from "@waste/contracts/pickup-exceptions"
-import type { ProductStatus } from "@waste/contracts/catalogue"
+import { PickupException, PickupExceptionHistory, PickupExceptionHistoryQuery, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRuleListQuery, PickupExceptionRulePatch } from "@waste/contracts/pickup-exceptions"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
 import { exceptionRulesOf, laddersOf, latestOutcomeProofs, pickupExceptionRows } from "@waste/db/commands/pickup-exceptions"
@@ -34,10 +33,13 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import type { Action } from "@waste/domain/access/modules"
-import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
+import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, retiredCode, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
 import { addDays } from "@waste/domain/days"
 import { dayInTimezone } from "@waste/domain/clock"
-import { type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
+import { ACTIVE_CONTAMINANT_CODE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { unofferedStep } from "@waste/domain/registry/catalogue"
+import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, desc, eq, gt, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -51,7 +53,6 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
-import { refuseRetiredCode, unofferedStep } from "./statuses"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "commercial.price-rows"
@@ -81,8 +82,8 @@ function ruleOf(row: Row, ladder: readonly string[]): PickupExceptionRule {
   return {
     id: row.id,
     projectId: row.projectId,
-    outcome: row.outcome as PickupOutcome,
-    reason: row.reason as PickupExceptionReason | null,
+    outcome: row.outcome,
+    reason: row.reason,
     contaminantCodeId: row.contaminantCodeId,
     freeCount: row.freeCount,
     windowDays: row.windowDays,
@@ -135,8 +136,7 @@ async function requireLadder(tx: Tx, companyId: string, projectId: string, ladde
   })
   if (wrong.length > 0) throw invalidRequest("body", wrong)
   ladder.forEach((id, index) => {
-    const status = byId.get(id)?.status as ProductStatus | undefined
-    if (status !== undefined && status !== "active" && kept[index] !== id) throw problem(409, { detail: unofferedStep(index + 1, status) })
+    if (kept[index] !== id) refuseUnless(byId.get(id)?.status, OFFERED_PRODUCT_STATUSES, (status) => unofferedStep(index + 1, status))
   })
 }
 
@@ -148,14 +148,14 @@ async function codeNamed(tx: Tx, companyId: string, id: string): Promise<{ code:
     .where(and(eq(contaminantCode.companyId, companyId), eq(contaminantCode.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "contaminantCodeId", message: NOT_A_CODE }])
-  return { code: found.code, status: found.status as ContaminantCodeStatus }
+  return { code: found.code, status: found.status }
 }
 
 /** Holds a code a new rule names to the company's, and an active one. */
 async function requireRuleCode(tx: Tx, companyId: string, id: string | null | undefined): Promise<void> {
   if (id == null) return
   const found = await codeNamed(tx, companyId, id)
-  refuseRetiredCode(found.status, found.code, "a rule")
+  refuseUnless(found.status, ACTIVE_CONTAMINANT_CODE_STATUSES, retiredCode(found.code, "a rule"))
 }
 
 /** Writes a rule's ladder, position 1 first. */
@@ -208,11 +208,11 @@ async function historyAt(tx: Tx, companyId: string, projectId: string, place: Pl
   const rows = read.slice(0, HISTORY_READ_MAX)
   const history: PickupExceptionStop[] = rows.map((row) => ({
     id: row.id,
-    status: row.status as PickupStatus,
-    reason: row.reason as PickupReason | null,
+    status: row.status,
+    reason: row.reason,
     contaminantCodeId: row.contaminantCodeId,
-    origin: row.origin as PickupOrigin,
-    service: row.service as PickupService,
+    origin: row.origin,
+    service: row.service,
     serviceDate: row.serviceDate,
     place: place.id,
   }))
@@ -514,5 +514,5 @@ export async function requireTag(tx: Tx, companyId: string, stop: { contaminantC
   if (fractions.length > 0 && !fractions.some((row) => row.wasteFractionId === stop.wasteFractionId)) {
     throw invalidRequest("body", [{ path: "contaminantCodeId", message: CODE_NOT_FOR_FRACTION }])
   }
-  refuseRetiredCode(found.status, found.code, "a tag")
+  refuseUnless(found.status, ACTIVE_CONTAMINANT_CODE_STATUSES, retiredCode(found.code, "a tag"))
 }

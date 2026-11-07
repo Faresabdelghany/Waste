@@ -179,8 +179,8 @@ const eventOf = (row: EventRow): SettlementEvent => ({
   id: row.id,
   recordedAt: row.recordedAt.toISOString(),
   settlementId: row.settlementId,
-  kind: row.kind as SettlementEventKind,
-  status: row.status as SettlementStatus,
+  kind: row.kind,
+  status: row.status,
   lineCount: row.lineCount,
   netMinor: row.netMinor,
   reason: row.reason,
@@ -220,7 +220,7 @@ async function setStatus(tx: Tx, principal: Principal, current: SettlementRow, s
 /** The machine's answer for a command on the row as read, on the project's day: the 409 in its words, `stay`, or the status to move to. */
 async function transitionOf(tx: Tx, principal: Principal, current: SettlementRow, command: SettlementCommand, now: () => Date): Promise<{ kind: "stay" } | { kind: "move"; to: SettlementStatus }> {
   const today = await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)()
-  const state = { status: current.status as SettlementStatus, label: labelOf(current), firstDay: current.validFrom, lastDay: lastDayOf(current) }
+  const state = { status: current.status, label: labelOf(current), firstDay: current.validFrom, lastDay: lastDayOf(current) }
   const transition = settlementTransition(state, command, today)
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   return transition

@@ -44,7 +44,7 @@
 // counts run under the driver's row lock, and a driver already out of service
 // is not asked again when moved between the two. The other half is the doors
 // that name a driver afresh, which refuse one who is not active
-// (routes/statuses.ts; #79: a status gates a new reference and never an
+// (@waste/domain/status-gates; #79: a status gates a new reference and never an
 // existing one).
 //
 // The grant is `fleet.drivers` throughout: `view` to read, `create` to add,
@@ -56,8 +56,8 @@ import { shiftColumns, shiftOf } from "@waste/db/commands/stop-timing"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
-import { PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
-import type { DriverStatus, EmploymentType, LicenceClass } from "@waste/domain/resources/vocabulary"
+import { liveAllocationsName } from "@waste/domain/resources/allocations"
+import { groupsName, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -74,8 +74,8 @@ import { refuseStranded } from "./periods"
 import { requireDepot, requireProviderAccount, requireServiceProvider, requireUserAccount, type Scope } from "./references"
 import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireProviderShape } from "./shared"
-import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 import { shiftValues } from "./time-windows"
+import { liveAllocationsNaming } from "./vehicle-allocations"
 
 const MODULE = "fleet.drivers"
 const DriverPage = Page(Driver)
@@ -108,14 +108,14 @@ function driverOf(row: Row): Driver {
     projectId: row.projectId,
     name: row.name,
     workforceReference: row.workforceReference,
-    employment: row.employment as EmploymentType,
+    employment: row.employment,
     serviceProviderId: row.serviceProviderId,
     homeDepotId: row.homeDepotId,
-    licenceClass: row.licenceClass as LicenceClass | null,
+    licenceClass: row.licenceClass,
     licenceNumber: row.licenceNumber,
     licenceExpiry: row.licenceExpiry,
     userAccountId: row.userAccountId,
-    status: row.status as DriverStatus,
+    status: row.status,
     notes: row.notes,
     shift: shiftOf(row),
     ...stampsOf(row),
@@ -145,7 +145,7 @@ const OUT_OF_SERVICE: readonly string[] = ["inactive", "suspended"]
 const liveAllocationsNameThis = liveAllocationsName("driver")
 const groupsNameThis = groupsName("driver")
 
-/** The allocations the change would strand: the live ones naming the driver (routes/statuses.ts spells the rest). */
+/** The allocations the change would strand: the live ones naming the driver (@waste/domain/status-gates spells the rest). */
 const liveAllocations = (companyId: string, driverId: string) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId))
 
 /** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every driver statement is bounded by. */

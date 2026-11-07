@@ -30,7 +30,6 @@ import { message } from "@waste/db/schema/messaging"
 import { messageWithoutStatement } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { needsConsent } from "@waste/domain/messaging/template"
-import type { MessageChannel, MessagePurpose } from "@waste/domain/messaging/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "../runtime/definition"
@@ -69,7 +68,7 @@ export async function sendMessage(data: SendMessageData, context: Pick<JobContex
       .limit(1)
       .for("no key update")
     if (row === undefined) return { kind: "settled" as const }
-    if (needsConsent(row.purpose as MessagePurpose) && !(await allowsServiceMessages(tx, data.companyId, row.customerId))) {
+    if (needsConsent(row.purpose) && !(await allowsServiceMessages(tx, data.companyId, row.customerId))) {
       await tx.update(message).set({ status: "withheld", reason: NO_CONSENT }).where(fence())
       return { kind: "withheld" as const }
     }
@@ -80,7 +79,7 @@ export async function sendMessage(data: SendMessageData, context: Pick<JobContex
 
   const { row, attempts } = begun
   try {
-    const receipt = await provider.send({ id: data.messageId, channel: row.channel as MessageChannel, to: row.recipient, subject: row.subject, body: row.body })
+    const receipt = await provider.send({ id: data.messageId, channel: row.channel, to: row.recipient, subject: row.subject, body: row.body })
     await withCompany(context.api.db, data.companyId, (tx) =>
       tx.update(message).set({ status: "sent", provider: provider.name, providerMessageId: receipt.providerMessageId, sentAt: context.now(), reason: null }).where(fence()),
     )

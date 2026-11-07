@@ -8,7 +8,6 @@
 // (@waste/documents) make the same file of it whenever they are asked.
 import type { InvoiceDocumentInput } from "@waste/domain/finance/invoice-document"
 import { documentLanguageOf } from "@waste/domain/document-text"
-import type { CreditReason } from "@waste/domain/finance/vocabulary"
 import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -29,7 +28,7 @@ export async function invoiceDocumentInputOf(tx: Tx, companyId: string, row: Inv
   if (frozen === undefined || scope === undefined) throw new Error(`invoiceDocumentInputOf: ${labelOf(row)} has no row or no project under company ${companyId}`)
   const [original] = credited
   return {
-    kind: row.kind as InvoiceDocumentInput["kind"],
+    kind: row.kind,
     label: labelOf(row),
     language: documentLanguageOf(scope.language),
     currency: row.currency,
@@ -38,7 +37,7 @@ export async function invoiceDocumentInputOf(tx: Tx, companyId: string, row: Inv
     periodFrom: row.periodFrom,
     periodTo: row.periodTo,
     paymentReference: row.paymentReference,
-    credits: original === undefined ? null : { label: labelOf(original), reason: row.creditReason as CreditReason | null, note: row.creditNote },
+    credits: original === undefined ? null : { label: labelOf(original), reason: row.creditReason, note: row.creditNote },
     netMinor: row.netMinor,
     vatMinor: row.vatMinor,
     grossMinor: row.grossMinor,

@@ -23,6 +23,7 @@ import { priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 import { ONE_HOLDER } from "@waste/domain/visits/charges"
+import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
@@ -75,7 +76,7 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     fx = await seedBilling(pool, a, ex)
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       await tx.insert(wasteFraction).values({ id: garden, companyId: a.companyId, key: "garden", name: "Garden waste" })
-      const sold = (id: string, name: string, unit: "visit" | "month") => ({ id, companyId: a.companyId, projectId: copenhagen, name, kind: "additional-service", status: "active", unit, vatPercent: 25 })
+      const sold = (id: string, name: string, unit: "visit" | "month"): typeof product.$inferInsert => ({ id, companyId: a.companyId, projectId: copenhagen, name, kind: "additional-service", status: "active", unit, vatPercent: 25 })
       await tx.insert(product).values([sold(visit70, "Visit 70", "visit"), sold(visit620, "Visit 620", "visit"), sold(businessVisit, "Business visit", "visit"), sold(annualAccess, "Annual access", "month")])
       const row = (productId: string, unitPriceMinor: number) => ({ id: testId(), companyId: a.companyId, projectId: copenhagen, priceListId: fx.priceLists.default.id, productId, unitPriceMinor, validFrom: "2026-01-01" })
       await tx.insert(priceListRow).values([row(visit70, 7_000), row(visit620, 62_000), row(businessVisit, 15_000)])
@@ -250,7 +251,7 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     const dormantsAgreement = testId()
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       await tx.insert(customer).values({ id: dormant, companyId: a.companyId, kind: "organisation", name: "Dormant Builders", status: "inactive" })
-      const signed = (id: string, number: string, customerId: string, values: { status?: string; validTo?: string } = {}) => ({ id, companyId: a.companyId, projectId: copenhagen, number, customerId, payerCustomerId: customerId, status: values.status ?? "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01", validTo: values.validTo ?? null })
+      const signed = (id: string, number: string, customerId: string, values: { status?: AgreementStatus; validTo?: string } = {}): typeof agreement.$inferInsert => ({ id, companyId: a.companyId, projectId: copenhagen, number, customerId, payerCustomerId: customerId, status: values.status ?? "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01", validTo: values.validTo ?? null })
       await tx.insert(agreement).values([signed(ended, "AGR-ENDS", fx.customers.anna.id, { validTo: "2026-07-01" }), signed(cancelled, "AGR-CANC", fx.customers.anna.id, { status: "cancelled" }), signed(dormantsAgreement, "AGR-DORM", dormant)])
     })
     const body = (values: Record<string, unknown>) => ({ projectId: copenhagen, validFrom: "2026-01-01", kind: "plate", value: `B${testId().slice(-6)}`, customerId: fx.customers.anna.id, ...values })

@@ -78,7 +78,7 @@ export const outboundLoad = wms.table(
     /** In the project's currency, integer minor units; recorded, never billed or settled. */
     haulCostMinor: integer(),
     disposalCostMinor: integer(),
-    status: text().notNull(),
+    status: text({ enum: OUTBOUND_LOAD_STATUSES }).notNull(),
     /** Why a load is disputed or cancelled; a note on any other. */
     note: text(),
   },
@@ -92,7 +92,7 @@ export const outboundLoad = wms.table(
     tenantReference(t, [t.serviceProviderId], serviceProvider),
     // What an alert about the load points at (part 2): the load of the alert's own project.
     projectKey(t),
-    oneOf(t.status, OUTBOUND_LOAD_STATUSES),
+    oneOf(t.status),
     positive(t.grossKg),
     positive(t.tareKg),
     positive(t.netKg),

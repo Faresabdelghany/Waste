@@ -4,7 +4,6 @@
 // `site-visit-voided` with it, and the worker's Finance consumer reads a
 // visit through `visitById`.
 import type { SiteVisit, VisitChargeQuoted } from "@waste/contracts/site-visits"
-import type { SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -49,16 +48,16 @@ export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]):
     siteId: row.siteId,
     occurredAt: row.occurredAt.toISOString(),
     serviceDate: row.serviceDate,
-    source: row.source as SiteVisitSource,
+    source: row.source,
     externalId: row.externalId,
-    identification: row.identification as SiteVisitIdentification,
+    identification: row.identification,
     identifierValue: row.identifierValue,
     credentialId: row.credentialId,
     propertyId: row.propertyId,
     customerId: row.customerId,
     agreementId: row.agreementId,
-    outcome: row.outcome as SiteVisitOutcome,
-    refusalReason: row.refusalReason as SiteVisitRefusalReason | null,
+    outcome: row.outcome,
+    refusalReason: row.refusalReason,
     recordedBy: row.recordedBy,
     note: row.note,
     wasteFractionIds: [...wasteFractionIds],
@@ -72,7 +71,7 @@ export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]):
 
 /** What a visit's row says it was charged at when it was recorded; null for a refused one. */
 export const quotedOf = (row: Pick<VisitRow, "chargeBasis" | "chargeN" | "chargeProductId">): VisitChargeQuoted | null =>
-  row.chargeBasis === null ? null : { basis: row.chargeBasis as VisitChargeBasis, n: row.chargeN, productId: row.chargeProductId }
+  row.chargeBasis === null ? null : { basis: row.chargeBasis, n: row.chargeN, productId: row.chargeProductId }
 
 /** The fractions of each visit asked, by visit, in the order they were written. */
 export async function fractionsOf(tx: Tx, companyId: string, visitIds: readonly string[]): Promise<Map<string, string[]>> {

@@ -29,7 +29,7 @@
 //
 // The pairing's rules: the sensor is the path's and the container must be of
 // its project (400); a retired sensor is paired to nothing new (409, a status
-// gating a new reference, routes/statuses.ts); one sensor measures one
+// gating a new reference, @waste/domain/status-gates); one sensor measures one
 // container at a time and one container is measured by one sensor at a time,
 // the database's two exclusion constraints (23P01, `refuseOverlap`). A
 // sensor is retired only once no pairing of it is open on or after today
@@ -56,8 +56,6 @@ import {
   SensorPairingPatch,
   SensorPatch,
   type FillReadingOutcome,
-  type SensorNetwork,
-  type SensorStatus,
 } from "@waste/contracts/sensors"
 import type { Tx } from "@waste/db/client"
 import type { Action } from "@waste/domain/access/modules"
@@ -67,6 +65,8 @@ import { project } from "@waste/db/schema/organisation"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { inForceOn } from "@waste/domain/periods"
+import { ACTIVE_SENSOR_STATUSES, type SensorStatus } from "@waste/domain/resources/vocabulary"
+import { refuseUnless, takesReference } from "@waste/domain/status-gates"
 import { Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
@@ -234,8 +234,8 @@ async function sensorsOf(tx: Tx, companyId: string, rows: readonly SensorRow[], 
       id: row.id,
       projectId: row.projectId,
       identifier: row.identifier,
-      network: row.network as SensorNetwork,
-      status: row.status as SensorStatus,
+      network: row.network,
+      status: row.status,
       notes: row.notes,
       pairing: inForce === undefined ? null : pairingOf(inForce),
       lastReading: reading === undefined ? null : readingOf(reading),
@@ -272,7 +272,7 @@ async function openPairings(tx: Tx, companyId: string, sensorId: string, day: st
 }
 
 /** A reading of the batch with what the ingest resolved for it. */
-type Known = { id: string; projectId: string; status: string }
+type Known = { id: string; projectId: string; status: SensorStatus }
 
 /**
  * The ingest: each reading judged alone, in the body's order. The sensors are
@@ -292,7 +292,7 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
   const byIdentifier = new Map<string, Known>(sensors.map((row) => [row.identifier, row]))
   const zones = await timezonesOf(tx, companyId, sensors.map((row) => row.projectId))
   const dayOf = (known: Known, measuredAt: string) => dayInTimezone(new Date(measuredAt), zones.get(known.projectId) ?? "UTC")
-  const active = sensors.filter((row) => row.status === "active").map((row) => row.id)
+  const active = sensors.filter((row) => takesReference(row.status, ACTIVE_SENSOR_STATUSES)).map((row) => row.id)
   const pairings =
     active.length === 0
       ? []
@@ -307,7 +307,7 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
       outcomes.push({ outcome: "refused", reason: "unknown-sensor", detail: `No sensor ${JSON.stringify(reading.sensorIdentifier)} in the projects this account works in` })
       continue
     }
-    if (known.status !== "active") {
+    if (!takesReference(known.status, ACTIVE_SENSOR_STATUSES)) {
       outcomes.push({ outcome: "refused", reason: "retired-sensor", detail: `The sensor ${JSON.stringify(reading.sensorIdentifier)} is retired; its readings are not recorded` })
       continue
     }
@@ -578,8 +578,8 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const found = (await findSensor(tx, principal, id))!
         const within = { companyId: principal.companyId, projectId: found.projectId }
         await requireContainer(tx, within, values.containerId)
-        // Every 400 above, every 409 below (routes/statuses.ts).
-        if (found.status !== "active") throw problem(409, { detail: RETIRED_SENSOR })
+        // Every 400 above, every 409 below (`@waste/domain/status-gates`).
+        refuseUnless(found.status, ACTIVE_SENSOR_STATUSES, RETIRED_SENSOR)
         const [row] = await refuseOverlap(OVERLAPS, () =>
           tx
             .insert(sensorPairing)

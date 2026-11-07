@@ -57,7 +57,7 @@ export const vehicleAllocation = wms.table(
     /** What it is planned to carry. */
     wasteFractionId: uuid(),
     requiredCapacityKg: integer(),
-    status: text().notNull().default("planned"),
+    status: text({ enum: ALLOCATION_STATUSES }).notNull().default("planned"),
     note: text(),
   },
   (t) => [
@@ -70,7 +70,7 @@ export const vehicleAllocation = wms.table(
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     projectKey(t),
     orderedWindow(t),
-    oneOf(t.status, ALLOCATION_STATUSES),
+    oneOf(t.status),
     positive(t.requiredCapacityKg),
     tenantIndex(t, t.vehicleId),
     tenantIndex(t, t.trailerId),
@@ -91,9 +91,9 @@ export const vehicleAllocationEvent = wms.table(
     ...projectScoped,
     ...recorded,
     vehicleAllocationId: uuid().notNull(),
-    action: text().notNull(),
+    action: text({ enum: ALLOCATION_ACTIONS }).notNull(),
     /** The allocation's status after the action. */
-    status: text().notNull(),
+    status: text({ enum: ALLOCATION_STATUSES }).notNull(),
     /** The snapshot after the action: what the allocation then reserved, and when. */
     vehicleId: uuid().notNull(),
     driverId: uuid(),
@@ -113,8 +113,8 @@ export const vehicleAllocationEvent = wms.table(
     projectReference(t, [t.driverId], driver),
     projectReference(t, [t.depotId], depot),
     tenantReference(t, [t.recordedBy], userAccount),
-    oneOf(t.action, ALLOCATION_ACTIONS),
-    oneOf(t.status, ALLOCATION_STATUSES),
+    oneOf(t.action),
+    oneOf(t.status),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.vehicleAllocationId),
     tenantIndex(t, t.vehicleId),

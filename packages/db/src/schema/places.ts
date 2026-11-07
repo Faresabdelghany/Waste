@@ -62,7 +62,7 @@ export const depot = wms.table(
     address: text().notNull(),
     /** A route departs from a point, so a depot is always located. */
     location: geometry.point().notNull(),
-    ownership: text().notNull(),
+    ownership: text({ enum: DEPOT_OWNERSHIPS }).notNull(),
     /** The owning provider, given exactly when the ownership says so. */
     serviceProviderId: uuid(),
     /** Opening hours as two times on the project's clock, both or neither; an overnight window is allowed. */
@@ -70,7 +70,7 @@ export const depot = wms.table(
     closesAt: time(),
     /** How many vehicles the yard holds. */
     vehicleCapacity: integer(),
-    status: text().notNull(),
+    status: text({ enum: DEPOT_STATUSES }).notNull(),
     notes: text(),
   },
   (t) => [
@@ -80,8 +80,8 @@ export const depot = wms.table(
     tenantUnique(t, t.projectId, t.code),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.ownership, DEPOT_OWNERSHIPS),
-    oneOf(t.status, DEPOT_STATUSES),
+    oneOf(t.ownership),
+    oneOf(t.status),
     validGeometry(t.location),
     positive(t.vehicleCapacity),
     // Two rules the table alone has, each named for itself: a provider's depot names its provider and no other does; the hours are both given or neither.
@@ -107,7 +107,7 @@ export const warehouse = wms.table(
     location: geometry.point(),
     /** The depot this warehouse shares a yard with, if any: colocation is one pointer. */
     depotId: uuid(),
-    status: text().notNull(),
+    status: text({ enum: WAREHOUSE_STATUSES }).notNull(),
     notes: text(),
   },
   (t) => [
@@ -117,7 +117,7 @@ export const warehouse = wms.table(
     tenantUnique(t, t.projectId, t.code),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.status, WAREHOUSE_STATUSES),
+    oneOf(t.status),
     validGeometry(t.location),
     tenantIndex(t, t.depotId),
   ],
@@ -137,7 +137,7 @@ export const unloadingStation = wms.table(
     address: text().notNull(),
     /** A route empties at a point, so a station is always located. */
     location: geometry.point().notNull(),
-    ownership: text().notNull(),
+    ownership: text({ enum: UNLOADING_STATION_OWNERSHIPS }).notNull(),
     serviceProviderId: uuid(),
     opensAt: time(),
     closesAt: time(),
@@ -145,7 +145,7 @@ export const unloadingStation = wms.table(
     weighbridge: boolean().notNull().default(false),
     /** A Transfer Station (M17 of #293): it holds what is tipped there and sends it on in Outbound Loads; off for a site that treats or disposes of it. */
     transfer: boolean().notNull().default(false),
-    status: text().notNull(),
+    status: text({ enum: UNLOADING_STATION_STATUSES }).notNull(),
     notes: text(),
   },
   (t) => [
@@ -154,8 +154,8 @@ export const unloadingStation = wms.table(
     tenantUnique(t, t.code),
     tenantUnique(t, t.name),
     tenantKey(t),
-    oneOf(t.ownership, UNLOADING_STATION_OWNERSHIPS),
-    oneOf(t.status, UNLOADING_STATION_STATUSES),
+    oneOf(t.ownership),
+    oneOf(t.status),
     validGeometry(t.location),
     check(tableObjectName(t.id.table, "provider_shape", "unloadingStation"), sql`(${t.ownership} = 'service-provider') = (${t.serviceProviderId} is not null)`),
     check(tableObjectName(t.id.table, "hours_shape", "unloadingStation"), sql`(${t.opensAt} is null) = (${t.closesAt} is null)`),

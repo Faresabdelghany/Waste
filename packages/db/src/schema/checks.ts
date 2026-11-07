@@ -2,14 +2,18 @@
 // through names.ts (`<table>_<column>_<rule>`, refused past 63 bytes) and
 // spelled once here so no two tables spell one differently.
 //
-// `oneOf(column, values)`: a status is text with a listed value, not a Postgres
+// `oneOf(column)`: a status is text with a listed value, not a Postgres
 // enum. An enum would make every new value a migration (`ALTER TYPE ... ADD
 // VALUE`, which cannot run inside the migrator's transaction before Postgres
 // 12 and cannot be undone at all); a check is one constraint to replace. The
 // contracts' zod enum is the vocabulary the API checks first; this is the
-// database's copy of it. drizzle-kit writes a check's SQL into the migration
-// file as text, and a bound parameter would go in as `$1`, so the values are
-// spelled as literals with their quotes doubled.
+// database's copy of it. The column declares the domain's tuple
+// (`text({ enum: TUPLE })`), which types what a row reads out and changes no
+// SQL, and the check reads its values off the column, so the type a row
+// carries and the values the database holds it to are one declaration.
+// drizzle-kit writes a check's SQL into the migration file as text, and a
+// bound parameter would go in as `$1`, so the values are spelled as literals
+// with their quotes doubled.
 //
 // `lowercase(column)`: the column equals its own lower(), so an address is
 // stored the way it is compared and a unique constraint over it means what it
@@ -26,7 +30,7 @@
 // columns are two ways of saying, so the refusal reads as the rule
 // (`subscription_location_exactly_one`) and not as a list of columns.
 //
-// `subsetOf(column, values)` and `nonEmpty(column)` are `oneOf` for a set
+// `subsetOf(column)` and `nonEmpty(column)` are `oneOf` for a set
 // (Issue #97): a closed vocabulary that a row holds several of — the days a
 // scheme serves, the days a project rests on — is a `text[]` and not a child
 // table, since a weekday is not a row anyone references, and Postgres has no
@@ -47,8 +51,8 @@
 // the start — a stop's access hours, an agreement's promise, a driver's
 // shift. A window across midnight is not one, since every time here is read
 // against a single operating date.
-import { getTableName, sql } from "drizzle-orm"
-import { check, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
+import { getTableColumns, getTableName, is, sql } from "drizzle-orm"
+import { check, PgArray, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 
 import { columnName, quoted, tableObjectName } from "../names"
 import type { TenantColumns } from "./references"
@@ -56,12 +60,24 @@ import type { TenantColumns } from "./references"
 /** A SQL string literal: single quotes, quotes inside doubled. The one spelling for every value this package writes into SQL text — a check's, a predicate's, a CASE's. */
 export const literal = (value: string): string => `'${value.replaceAll("'", "''")}'`
 
-/** `CHECK (<column> in ('a', 'b', ...))`, named `<table>_<column>_one_of`. */
-export function oneOf(column: PgColumn, values: readonly string[]): CheckBuilder {
+/**
+ * The table's own column a check is built over: the column a row reads out
+ * through, which carries what it declares. A table's checks are handed
+ * stand-ins that carry neither the row type nor the declaration, so the
+ * column is found again on the table by its name.
+ */
+const declaring = (column: PgColumn): PgColumn => Object.values(getTableColumns(column.table)).find((own) => own.name === column.name) ?? column
+
+/** The values a text column declares, `text({ enum: TUPLE })`, which types its rows as the tuple's members; none for a column that declares no vocabulary. */
+const declaredValues = (column: PgColumn): readonly string[] => column.enumValues ?? []
+
+/** `CHECK (<column> in ('a', 'b', ...))` over the values the column declares, named `<table>_<column>_one_of`. */
+export function oneOf(column: PgColumn): CheckBuilder {
   const helper = "oneOf"
+  const values = declaredValues(declaring(column))
   if (values.length === 0) {
     // The table's name, not its config: this runs inside the builder getTableConfig would run again.
-    throw new Error(`${helper}: ${quoted(getTableName(column.table))}.${quoted(columnName(column))} has no values to be one of`)
+    throw new Error(`${helper}: ${quoted(getTableName(column.table))}.${quoted(columnName(column))} declares no values to be one of: declare them, text({ enum: TUPLE })`)
   }
   return check(tableObjectName(column.table, `${columnName(column)}_one_of`, helper), sql`${column} in (${sql.raw(values.map(literal).join(", "))})`)
 }
@@ -76,11 +92,13 @@ export function positive(column: PgColumn): CheckBuilder {
   return check(tableObjectName(column.table, `${columnName(column)}_positive`, "positive"), sql`${column} > 0`)
 }
 
-/** `CHECK (<column> <@ ARRAY['a', 'b', ...]::text[])`, named `<table>_<column>_subset_of`: every element is one of the values. An empty array passes; `nonEmpty` is the other rule. */
-export function subsetOf(column: PgColumn, values: readonly string[]): CheckBuilder {
+/** `CHECK (<column> <@ ARRAY['a', 'b', ...]::text[])` over the values its elements declare, named `<table>_<column>_subset_of`: every element is one of the values. An empty array passes; `nonEmpty` is the other rule. */
+export function subsetOf(column: PgColumn): CheckBuilder {
   const helper = "subsetOf"
+  const own = declaring(column)
+  const values = is(own, PgArray) ? declaredValues(own.baseColumn) : []
   if (values.length === 0) {
-    throw new Error(`${helper}: ${quoted(getTableName(column.table))}.${quoted(columnName(column))} has no values to be a subset of`)
+    throw new Error(`${helper}: ${quoted(getTableName(column.table))}.${quoted(columnName(column))} declares no values to be a subset of: declare them, text({ enum: TUPLE }).array()`)
   }
   return check(
     tableObjectName(column.table, `${columnName(column)}_subset_of`, helper),

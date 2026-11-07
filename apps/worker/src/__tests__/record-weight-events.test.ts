@@ -73,7 +73,7 @@ describe("finance.record-billable-events over an Unload's weight review (O28 of 
       { containerId: perPickup.containerId, propertyId: perPickup.propertyId },
     ])
     await withCompany(pool.db, companyId, async (tx: Tx) => {
-      const weighed = (pickupId: string | undefined, weightKg: number) => ({ id: testId(), companyId, projectId: copenhagen, routeId: served.id, pickupId, kind: "weight", source: "dispatch", occurredAt: at(FIXTURE_DAY, "06:46"), recordedBy: tenant.users.olivia.id, weightKg })
+      const weighed = (pickupId: string | undefined, weightKg: number): typeof proofOfService.$inferInsert => ({ id: testId(), companyId, projectId: copenhagen, routeId: served.id, pickupId, kind: "weight", source: "dispatch", occurredAt: at(FIXTURE_DAY, "06:46"), recordedBy: tenant.users.olivia.id, weightKg })
       await tx.insert(proofOfService).values([weighed(served.pickupIds[0], 300), weighed(served.pickupIds[1], 600)])
       await tx.insert(unload).values({ id: tipped, companyId, projectId: copenhagen, routeId: served.id, unloadingStationId: station, wasteFractionId: tenant.fractions.residual.id, source: "dispatch", occurredAt: at(FIXTURE_DAY, "09:00"), recordedBy: tenant.users.olivia.id, netKg: 1_000 })
     })
@@ -96,7 +96,7 @@ describe("finance.record-billable-events over an Unload's weight review (O28 of 
         .insert(weightReview)
         .values({ id: testId(), companyId: tenant.companyId, projectId: copenhagen, unloadId, decision, note: decision === "approved" ? null : "Ticket says otherwise", correctionUnloadId, reviewedBy: tenant.users.olivia.id })
         .returning()
-      return { id: row.id, recordedAt: row.recordedAt.toISOString(), projectId: row.projectId, unloadId: row.unloadId, decision: row.decision as WeightReviewDecision, note: row.note, correctionUnloadId: row.correctionUnloadId, reviewedBy: row.reviewedBy }
+      return { id: row.id, recordedAt: row.recordedAt.toISOString(), projectId: row.projectId, unloadId: row.unloadId, decision: row.decision, note: row.note, correctionUnloadId: row.correctionUnloadId, reviewedBy: row.reviewedBy }
     })
 
   const published = (payload: WeightReview, id = testId()): RelayedJob => ({

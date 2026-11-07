@@ -129,7 +129,7 @@ async function ledgerStop(tx: Tx, companyId: string, pickupId: string): Promise<
     .where(and(eq(pickup.companyId, companyId), eq(pickup.id, pickupId)))
     .limit(1)
   if (stop === undefined) throw new Error(`pickup ${pickupId} decided and then not there`)
-  const service = stop.service as PickupService
+  const service = stop.service
   return isLedgerService(service) ? { ...stop, service } : undefined
 }
 

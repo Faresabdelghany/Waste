@@ -24,7 +24,7 @@
 // status after every 400 (#79's rule: a status gates a new reference and
 // never an existing one, so a group whose vehicle later retires is patched,
 // renamed and moved like any other; `requireFleetInService`,
-// routes/statuses.ts) — and a
+// @waste/domain/status-gates) — and a
 // group naming both names a driver who may take that vehicle on the day the
 // scheme starts or today on the project's clock, whichever is later — a 400
 // at `driverId` in the licence rule's words, whatever the scheme's status

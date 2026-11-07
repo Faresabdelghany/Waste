@@ -45,7 +45,7 @@ export const planningArea = wms.table(
     /** The stable reference a person quotes: `OP-CEN-01`. Set once; unique per project. */
     code: text().notNull(),
     name: text().notNull(),
-    purpose: text().notNull(),
+    purpose: text({ enum: PLANNING_AREA_PURPOSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -53,7 +53,7 @@ export const planningArea = wms.table(
     tenantUnique(t, t.projectId, t.code),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.purpose, PLANNING_AREA_PURPOSES),
+    oneOf(t.purpose),
   ],
 )
 

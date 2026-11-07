@@ -199,12 +199,12 @@ async function seedA(tx: Tx): Promise<void> {
   ])
   const hospitalIndices = Array.from({ length: HOSPITAL_BINS }, (_, index) => index + 1)
   await tx.insert(container).values([
-    { id: a.bin1, ...scoped, label: "BIN-1001", containerTypeId: a.containerType, ownership: "company" },
-    { id: a.bin2, ...scoped, label: "BIN-1002", containerTypeId: a.containerType, ownership: "company" },
-    { id: a.bin3, ...scoped, label: "BIN-1003", containerTypeId: a.containerType, ownership: "company" },
-    { id: a.bin4, ...scoped, label: "BIN-1004", containerTypeId: a.containerType, ownership: "company" },
-    { id: a.farBin, ...scoped, label: "BIN-1009", containerTypeId: a.containerType, ownership: "company" },
-    ...hospitalIndices.map((index) => ({ id: a.hospitalBin(index), ...scoped, label: `GLS-${String(index).padStart(3, "0")}`, containerTypeId: a.containerType, ownership: "company" })),
+    { id: a.bin1, ...scoped, label: "BIN-1001", containerTypeId: a.containerType, ownership: "company" as const },
+    { id: a.bin2, ...scoped, label: "BIN-1002", containerTypeId: a.containerType, ownership: "company" as const },
+    { id: a.bin3, ...scoped, label: "BIN-1003", containerTypeId: a.containerType, ownership: "company" as const },
+    { id: a.bin4, ...scoped, label: "BIN-1004", containerTypeId: a.containerType, ownership: "company" as const },
+    { id: a.farBin, ...scoped, label: "BIN-1009", containerTypeId: a.containerType, ownership: "company" as const },
+    ...hospitalIndices.map((index) => ({ id: a.hospitalBin(index), ...scoped, label: `GLS-${String(index).padStart(3, "0")}`, containerTypeId: a.containerType, ownership: "company" as const })),
   ])
   // BIN-1003 at Nørrebro waits unplaced until a test places it.
   await tx.insert(containerServicePlacement).values([
@@ -399,7 +399,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
           position: index + 1,
           propertyId: stop.propertyId,
           wasteFractionId: stop.fractionId,
-          ...(stop.open === false ? { status: "skipped", reason: "route-ended", outcomeAt: early } : { status: "planned" }),
+          ...(stop.open === false ? { status: "skipped" as const, reason: "route-ended" as const, outcomeAt: early } : { status: "planned" as const }),
         })),
       )
     })

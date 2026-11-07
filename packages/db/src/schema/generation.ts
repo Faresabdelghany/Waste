@@ -54,11 +54,11 @@ export const generationRun = wms.table(
     ...timestamps,
     routeSchemeId: uuid().notNull(),
     /** What started the run: the office's button, or the nightly cron. */
-    trigger: text().notNull(),
+    trigger: text({ enum: GENERATION_TRIGGERS }).notNull(),
     /** The window asked for, both days inclusive; the walk is capped past the start, which the counts then show. */
     windowFrom: date().notNull(),
     windowTo: date().notNull(),
-    status: text().notNull().default("queued"),
+    status: text({ enum: GENERATION_RUN_STATUSES }).notNull().default("queued"),
     /** pg-boss's job id, where a job carried the run. */
     jobId: text(),
     startedAt: instant(),
@@ -81,8 +81,8 @@ export const generationRun = wms.table(
     projectReference(t, [t.routeSchemeId], routeScheme),
     // A route names the run that last wrote it.
     projectKey(t),
-    oneOf(t.trigger, GENERATION_TRIGGERS),
-    oneOf(t.status, GENERATION_RUN_STATUSES),
+    oneOf(t.trigger),
+    oneOf(t.status),
     // A window is a day or more; an inverted one is nothing to walk. No helper spells it because no other table has it.
     check(tableObjectName(t.id.table, "window_ordered", "generationRun"), sql`${t.windowTo} >= ${t.windowFrom}`),
     tenantIndex(t, t.routeSchemeId),

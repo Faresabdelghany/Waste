@@ -111,20 +111,20 @@ export const routeScheme = wms.table(
     name: text().notNull(),
     /** Optional while a draft; a validated scheme with a rule group needs one (the API's rule). */
     planningAreaId: uuid(),
-    serviceType: text().notNull(),
-    frequency: text().notNull(),
+    serviceType: text({ enum: SERVICE_TYPES }).notNull(),
+    frequency: text({ enum: RECURRENCE_FREQUENCIES }).notNull(),
     /** The weekdays the scheme serves, one or more of the seven. */
-    serviceDays: text().array().notNull(),
+    serviceDays: text({ enum: SERVICE_DAYS }).array().notNull(),
     /** Which ISO-week parity an `every-2-weeks` scheme serves; given with that frequency and with nothing else. */
-    weekRotation: text(),
+    weekRotation: text({ enum: WEEK_ROTATIONS }),
     /** A time on the project's clock (`06:30`); carried, not used in the date math. */
     plannedStartTime: time(),
-    holidayPolicy: text().notNull().default("skip"),
+    holidayPolicy: text({ enum: HOLIDAY_POLICIES }).notNull().default("skip"),
     /** Stored so the choice survives; nothing consumes it yet (#38). */
-    editPolicy: text().notNull().default("ask"),
+    editPolicy: text({ enum: SCHEME_EDIT_POLICIES }).notNull().default("ask"),
     /** Whether the nightly job keeps the coming week planned. */
     planAhead: boolean().notNull().default(true),
-    status: text().notNull().default("draft"),
+    status: text({ enum: ROUTE_SCHEME_STATUSES }).notNull().default("draft"),
     /** Where the routes depart from; one of the project's depots, null while unsaid (Issue #101). */
     depotId: uuid(),
     /** Where the routes empty; one of the company's stations, null while unsaid (Issue #101). */
@@ -142,14 +142,14 @@ export const routeScheme = wms.table(
     tenantReference(t, [t.unloadingStationId], unloadingStation),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.serviceType, SERVICE_TYPES),
-    oneOf(t.frequency, RECURRENCE_FREQUENCIES),
-    subsetOf(t.serviceDays, SERVICE_DAYS),
+    oneOf(t.serviceType),
+    oneOf(t.frequency),
+    subsetOf(t.serviceDays),
     nonEmpty(t.serviceDays),
-    oneOf(t.weekRotation, WEEK_ROTATIONS),
-    oneOf(t.holidayPolicy, HOLIDAY_POLICIES),
-    oneOf(t.editPolicy, SCHEME_EDIT_POLICIES),
-    oneOf(t.status, ROUTE_SCHEME_STATUSES),
+    oneOf(t.weekRotation),
+    oneOf(t.holidayPolicy),
+    oneOf(t.editPolicy),
+    oneOf(t.status),
     // The rotation belongs to the fortnightly cadence and to no other: given
     // exactly when the frequency is every-2-weeks. No helper spells it because
     // no other table has it; the label names the check itself.
@@ -195,8 +195,8 @@ export const collectionGroup = wms.table(
     /** Group order: the first rule group wins a container on a shared day. Not unique; ties order by id. */
     position: integer().notNull(),
     /** The scheme's service days this group runs on; empty for a group that no longer runs. */
-    days: text().array().notNull(),
-    stopSource: text().notNull(),
+    days: text({ enum: SERVICE_DAYS }).array().notNull(),
+    stopSource: text({ enum: STOP_SOURCES }).notNull(),
     /** The vehicle type a rule asks for, a row of the company's; null for a manual group, and optional for a rule. */
     ruleVehicleTypeId: uuid(),
     /** The planning area a rule matches within instead of the scheme's (O30 of #290, row 2.17): one of the project's; null is the scheme's, and a manual group has none. */
@@ -218,8 +218,8 @@ export const collectionGroup = wms.table(
     projectReference(t, [t.driverId], driver),
     tenantUnique(t, t.routeSchemeId, t.name),
     projectKey(t),
-    subsetOf(t.days, SERVICE_DAYS),
-    oneOf(t.stopSource, STOP_SOURCES),
+    subsetOf(t.days),
+    oneOf(t.stopSource),
     positive(t.position),
     // A vehicle type is part of a rule; a manual group has no rule to carry one in.
     check(tableObjectName(t.id.table, "rule_shape", "collectionGroup"), sql`${t.stopSource} = 'rule' or ${t.ruleVehicleTypeId} is null`),
@@ -348,17 +348,17 @@ export const routeSchemeSeason = wms.table(
     startsOn: text().notNull(),
     /** The first day out of the season every year, `mm-dd`; before `starts_on` for a season over the new year. */
     endsOn: text().notNull(),
-    frequency: text().notNull(),
+    frequency: text({ enum: SEASON_FREQUENCIES }).notNull(),
     /** Which ISO-week parity an `every-2-weeks` season serves; given with that cadence and with nothing else. */
-    weekRotation: text(),
+    weekRotation: text({ enum: WEEK_ROTATIONS }),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.routeSchemeId], routeScheme),
     tenantUnique(t, t.routeSchemeId, t.name),
-    oneOf(t.frequency, SEASON_FREQUENCIES),
-    oneOf(t.weekRotation, WEEK_ROTATIONS),
+    oneOf(t.frequency),
+    oneOf(t.weekRotation),
     check(tableObjectName(t.id.table, "starts_on_shape", "routeSchemeSeason"), sql`${t.startsOn} ~ ${sql.raw(literal(MONTH_DAY_SOURCE))}`),
     check(tableObjectName(t.id.table, "ends_on_shape", "routeSchemeSeason"), sql`${t.endsOn} ~ ${sql.raw(literal(MONTH_DAY_SOURCE))}`),
     // A season that ends where it starts would be the whole year, which is the scheme's own cadence.

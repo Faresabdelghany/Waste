@@ -24,7 +24,7 @@
 // driver door tells each event its command made, this one among them.
 import type { Unload } from "@waste/contracts/unloads"
 import { doesNotTake, takesNoneSet } from "@waste/domain/execution/unloads"
-import type { ExecutionSource } from "@waste/domain/execution/vocabulary"
+import type { ExecutionSource, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -68,7 +68,7 @@ export type OfficeUnload = {
   weighbridgeTicket: string | null
   note: string | null
   /** Why the station refused the load (O9 of #290), null for one it took; a correction copies its original's. */
-  refusalReason: string | null
+  refusalReason: UnloadRefusalReason | null
   refusalNote: string | null
   /** Whose reading it is: the office's, `dispatch`, unless a weighbridge's ticket is written as it (`integration`, O27 of #290). */
   source?: "dispatch" | "integration"

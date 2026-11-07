@@ -33,14 +33,15 @@ import { routeLabel } from "@waste/domain/numbering"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import { stopMismatch } from "@waste/domain/resolution/ticket-stops"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { OfficeStopService, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { NOT_STARTED_ROUTE_STATUSES, type OfficeStopService, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, notPlannable, plannedService, triggerOf, type TicketActionParameters } from "@waste/domain/resolution/automation"
 import { addDays } from "@waste/domain/days"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import type { PropertyPartyRole } from "@waste/domain/registry/vocabulary"
 import { Refused } from "@waste/domain/refusal"
-import { isClosedTicketStatus, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketSource, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { ACTIVE_TEAM_STATUSES, ACTIVE_TICKET_TYPE_STATUSES, isClosedTicketStatus, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -56,7 +57,7 @@ import { LOCK_NOT_AVAILABLE, sqlstate } from "../sqlstate"
 import { queueMessage, type Queued } from "./messaging"
 import { placementInForce } from "../query/placement-in-force"
 import { vehicleLabel } from "./fleet-fit"
-import { addOfficeStop, ORDER_OPEN_STATUSES } from "./office-stops"
+import { addOfficeStop } from "./office-stops"
 import { appendTicketEvent, BY_SLA, dueWithin, openTicket, slaHoursOf, ticketRefOf } from "./open-ticket"
 import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
@@ -81,7 +82,7 @@ type Done = { said: string; recorded: boolean }
 /** An internal comment of the system's, the ticket as it stands. */
 const commentOf = (row: TicketRow, body: string) => ({
   kind: "comment" as const,
-  status: row.status as TicketStatus,
+  status: row.status,
   assigneeUserAccountId: row.assigneeUserAccountId,
   resolution: null,
   body,
@@ -131,7 +132,7 @@ export async function runTicketAutomation(tx: Tx, run: AutomationRun, ticketId: 
     .from(ticketType)
     .where(and(eq(ticketType.companyId, run.companyId), eq(ticketType.id, first.ticketTypeId)))
     .limit(1)
-  const typeName = named?.name ?? DEFAULT_TICKET_TYPE_NAMES[first.kind as TicketKind]
+  const typeName = named?.name ?? DEFAULT_TICKET_TYPE_NAMES[first.kind]
   for (const action of actions as Action[]) {
     if (budget.left === 0) {
       await appendTicketEvent(tx, ticketRefOf(run.companyId, first), commentOf(await currentTicket(tx, run.companyId, ticketId), AUTOMATION_SPENT), run.newId)
@@ -223,7 +224,7 @@ export async function moveTicket(tx: Tx, run: AutomationRun, current: TicketRow,
       kind: "status-changed",
       status: move.to,
       assigneeUserAccountId: row.assigneeUserAccountId,
-      resolution: move.to === "completed" ? (row.resolution as TicketResolution) : null,
+      resolution: move.to === "completed" ? row.resolution : null,
       body: move.note,
       visibility: "internal",
       objectKey: null,
@@ -246,8 +247,8 @@ async function assignTeam(tx: Tx, run: AutomationRun, row: TicketRow, teamId: st
     .from(team)
     .where(and(eq(team.companyId, run.companyId), eq(team.id, teamId)))
     .limit(1)
-  if (found === undefined || found.status !== "active") throw Refused.conflict(`not handed to team ${JSON.stringify(found?.name ?? teamId)}, which is retired.`)
-  if (isClosedTicketStatus(row.status as TicketStatus)) throw Refused.conflict(`not handed to team ${found.name}: the ticket is ${row.status} and keeps its team.`)
+  if (found === undefined || !takesReference(found.status, ACTIVE_TEAM_STATUSES)) throw Refused.conflict(`not handed to team ${JSON.stringify(found?.name ?? teamId)}, which is retired.`)
+  if (isClosedTicketStatus(row.status)) throw Refused.conflict(`not handed to team ${found.name}: the ticket is ${row.status} and keeps its team.`)
   if (row.teamId === teamId) return { said: `already with team ${found.name}.`, recorded: false }
   await tx
     .update(ticket)
@@ -261,7 +262,7 @@ async function assignPerson(tx: Tx, run: AutomationRun, row: TicketRow, userAcco
   const found = await assigneeOf(tx, { companyId: run.companyId, projectId: row.projectId }, userAccountId)
   if (found === undefined || found.serviceProvider) throw Refused.conflict(`not assigned to ${found?.name ?? "the person named"}, who no longer works tickets here.`)
   if (!found.worksInProject) throw Refused.conflict(`not assigned to ${found.name}, who does not work in this ticket's project.`)
-  if (isClosedTicketStatus(row.status as TicketStatus)) throw Refused.conflict(`not assigned to ${found.name}: the ticket is ${row.status} and keeps its assignee.`)
+  if (isClosedTicketStatus(row.status)) throw Refused.conflict(`not assigned to ${found.name}: the ticket is ${row.status} and keeps its assignee.`)
   if (row.assigneeUserAccountId === userAccountId) return { said: `already assigned to ${found.name}.`, recorded: false }
   const said = `assigned to ${found.name}.`
   await assignTicket(tx, row, userAccountId, { companyId: run.companyId, by: null, note: line(said), at: run.now(), newId: run.newId })
@@ -271,9 +272,9 @@ async function assignPerson(tx: Tx, run: AutomationRun, row: TicketRow, userAcco
 /** Sets the ticket's priority; as it opens with its SLA's due date, the due date by the new priority's target too. */
 async function setPriority(tx: Tx, run: AutomationRun, row: TicketRow, priority: TicketPriority): Promise<Done> {
   const words = priority.replaceAll("-", " ")
-  if (isClosedTicketStatus(row.status as TicketStatus)) throw Refused.conflict(`priority not set to ${words}: the ticket is ${row.status} and keeps its priority.`)
+  if (isClosedTicketStatus(row.status)) throw Refused.conflict(`priority not set to ${words}: the ticket is ${row.status} and keeps its priority.`)
   if (row.priority === priority) return { said: `priority already ${words}.`, recorded: false }
-  const hours = run.dueBySla === true ? await slaHoursOf(tx, run.companyId, { projectId: row.projectId, kind: row.kind as TicketKind, ticketTypeId: row.ticketTypeId, priority }) : undefined
+  const hours = run.dueBySla === true ? await slaHoursOf(tx, run.companyId, { projectId: row.projectId, kind: row.kind, ticketTypeId: row.ticketTypeId, priority }) : undefined
   const dueAt = hours === undefined ? row.dueAt : dueWithin(row.occurredAt, hours)
   await tx
     .update(ticket)
@@ -293,7 +294,7 @@ async function setPriority(tx: Tx, run: AutomationRun, row: TicketRow, priority:
  * too.
  */
 async function setStatus(tx: Tx, run: AutomationRun, depth: number, row: TicketRow, command: TicketActionCommand, resolution: string | null, line: (said: string) => string): Promise<Done> {
-  const transition = ticketTransition(row.status as TicketStatus, command, labelOf(row))
+  const transition = ticketTransition(row.status, command, labelOf(row))
   if (transition.kind === "refuse") throw Refused.conflict(`${transition.sentence}.`)
   const words = (status: string) => status.replaceAll("-", " ")
   if (transition.kind === "stay") return { said: `already ${words(row.status)}.`, recorded: false }
@@ -357,16 +358,16 @@ async function openFollowUp(tx: Tx, run: AutomationRun, depth: number, row: Tick
     .from(ticketType)
     .where(and(eq(ticketType.companyId, run.companyId), eq(ticketType.id, typeId)))
     .limit(1)
-  if (type === undefined || type.status !== "active") throw Refused.conflict(`no follow-up opened: the ticket type ${JSON.stringify(type?.name ?? typeId)} is retired.`)
+  if (type === undefined || !takesReference(type.status, ACTIVE_TICKET_TYPE_STATUSES)) throw Refused.conflict(`no follow-up opened: the ticket type ${JSON.stringify(type?.name ?? typeId)} is retired.`)
   const subject = `Follow-up of ${labelOf(row)}: ${row.subject}`
   const { row: opened } = await openTicket(tx, {
     companyId: run.companyId,
     draft: {
       projectId: row.projectId,
-      kind: type.kind as TicketKind,
+      kind: type.kind,
       ticketTypeId: typeId,
-      priority: row.priority as TicketPriority,
-      source: row.source as TicketSource,
+      priority: row.priority,
+      source: row.source,
       subject: subject.length > SUBJECT_MAX ? `${subject.slice(0, SUBJECT_MAX - 1)}…` : subject,
       description: row.description,
       occurredAt: run.now(),
@@ -402,7 +403,7 @@ const serviceWords = (service: OfficeStopService): string => `${/^[aeiou]/.test(
  * container, and answered by no stop still planned is what it takes.
  */
 async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: { projectId: string; id: string }, daysAhead: number, line: (said: string) => string): Promise<Done> {
-  const kind = row.kind as TicketKind
+  const kind = row.kind
   const service = plannedService(kind)
   if (service === undefined) throw Refused.conflict(`not planned: ${notPlannable(kind).replace(/^A/, "a")}.`)
   const [truck] = await tx
@@ -412,7 +413,7 @@ async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: 
     .limit(1)
   const truckLabel = truck === undefined ? planned.id : vehicleLabel(truck)
   if (planned.projectId !== row.projectId) throw Refused.conflict(`not planned: vehicle ${truckLabel} works in another project.`)
-  if (isClosedTicketStatus(row.status as TicketStatus)) throw Refused.conflict(`not planned: the ticket is ${row.status}, and a stop answers an open ticket.`)
+  if (isClosedTicketStatus(row.status)) throw Refused.conflict(`not planned: the ticket is ${row.status}, and a stop answers an open ticket.`)
   if (row.containerId === null) throw Refused.conflict(`not planned: the ticket names no container for ${serviceWords(service)}.`)
   const containerId = row.containerId
   const answering = await plannedStopAnswering(tx, run.companyId, row)
@@ -423,7 +424,7 @@ async function planInRoute(tx: Tx, run: AutomationRun, row: TicketRow, planned: 
   const [next] = await tx
     .select({ id: route.id })
     .from(route)
-    .where(and(eq(route.companyId, run.companyId), eq(route.projectId, row.projectId), eq(route.plannedVehicleId, planned.id), inArray(route.status, ORDER_OPEN_STATUSES), gte(route.operatingDate, from)))
+    .where(and(eq(route.companyId, run.companyId), eq(route.projectId, row.projectId), eq(route.plannedVehicleId, planned.id), inArray(route.status, [...NOT_STARTED_ROUTE_STATUSES]), gte(route.operatingDate, from)))
     .orderBy(asc(route.operatingDate), asc(route.id))
     .limit(1)
   if (next === undefined) throw Refused.conflict(`not planned: vehicle ${truckLabel} has no route from ${from} that has not started.`)

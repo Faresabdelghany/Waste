@@ -20,7 +20,7 @@
 // consumers, a pause and a shared bin's split by 65's), which M7 does not
 // apply itself. A status gates nothing here: an Application about a closed
 // place or an inactive customer is still theirs to make, a fee correction
-// most of all (statuses.ts records the exemption). What it names hangs
+// most of all (@waste/domain/status-gates records the exemption). What it names hangs
 // together instead (`subjectRefusal`): the customer a party of the property,
 // the subscription one of the customer's agreements at the place named.
 import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch, DecisionHistory } from "@waste/contracts/applications"
@@ -32,7 +32,8 @@ import { propertyParty } from "@waste/db/schema/customers"
 import { company } from "@waste/db/schema/organisation"
 import type { Action } from "@waste/domain/access/modules"
 import { moveOf, moveRefusal, ONE_PLACE, type ApplicationCommand } from "@waste/domain/registry/applications"
-import type { ApplicationStatus } from "@waste/domain/registry/vocabulary"
+import { isOneOf } from "@waste/domain/lists"
+import { UNDECIDED_APPLICATION_STATUSES } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, gt, max, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -133,8 +134,8 @@ async function moved(tx: Tx, principal: Principal, id: string, command: Applicat
   if (current === undefined) throw noSuchApplication(id)
   // A withdrawal from review after an appeal withdraws the appeal: back to the Decision the Application has.
   const decided = command === "withdraw" && (await latestDecisions(tx, principal.companyId, [id])).has(id)
-  const next = moveOf(current.status as ApplicationStatus, command, decided)
-  if (next === null) throw problem(409, { detail: moveRefusal(labelOf(current), current.status as ApplicationStatus, command) })
+  const next = moveOf(current.status, command, decided)
+  if (next === null) throw problem(409, { detail: moveRefusal(labelOf(current), current.status, command) })
   const [row] = await tx
     .update(application)
     .set({ status: next })
@@ -310,7 +311,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         await lockRow(tx, application, { companyId: principal.companyId, id })
         const current = await findApplication(tx, principal, id)
         if (current === undefined) throw noSuchApplication(id)
-        if (current.status !== "received" && current.status !== "in-review") throw problem(409, { detail: `${labelOf(current)} is ${current.status}; a correction takes one received or in review` })
+        if (!isOneOf(current.status, UNDECIDED_APPLICATION_STATUSES)) throw problem(409, { detail: `${labelOf(current)} is ${current.status}; a correction takes one received or in review` })
         // The place the row ends with is one place at most, whichever field the patch moves.
         const propertyId = patch.propertyId === undefined ? current.propertyId : patch.propertyId
         const sharedCollectionPointId = patch.sharedCollectionPointId === undefined ? current.sharedCollectionPointId : patch.sharedCollectionPointId

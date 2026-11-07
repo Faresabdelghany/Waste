@@ -32,8 +32,6 @@ import {
   PropertyGroupPatch,
   type PropertyGroupMember,
   type PropertyGroupMemberRole,
-  type PropertyGroupPurpose,
-  type PropertyGroupStatus,
 } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
@@ -98,7 +96,7 @@ const members: MemberSet<typeof propertyGroupMember> = {
 
 /** The two spellings of one member: the wire's, and the set mechanics' (routes/members.ts). */
 const memberOf = (entry: Entry): PropertyGroupMember => ({ propertyId: entry.id, role: entry.role as PropertyGroupMemberRole })
-const entryOf = (member: PropertyGroupMember): Entry => ({ id: member.propertyId, role: member.role })
+const entryOf = (member: PropertyGroupMember): Entry<PropertyGroupMemberRole> => ({ id: member.propertyId, role: member.role })
 
 /** The row on the wire, with the members the page loaded for it. `purpose` and `status` are text with a CHECK in the database and an enum here. */
 function groupOf(row: Row, gathered: readonly Entry[]): PropertyGroup {
@@ -106,9 +104,9 @@ function groupOf(row: Row, gathered: readonly Entry[]): PropertyGroup {
     id: row.id,
     projectId: row.projectId,
     name: row.name,
-    purpose: row.purpose as PropertyGroupPurpose,
+    purpose: row.purpose,
     responsibleCustomerId: row.responsibleCustomerId,
-    status: row.status as PropertyGroupStatus,
+    status: row.status,
     members: gathered.map(memberOf),
     ...stampsOf(row),
   }

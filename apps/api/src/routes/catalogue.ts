@@ -43,7 +43,6 @@ import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { ONE_CADENCE, serviceFrequencyShape } from "@waste/domain/registry/catalogue"
-import type { WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { HAZARDOUS_CODE, hazardousOf, isHazardousCode } from "@waste/domain/registry/waste-code"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -80,7 +79,7 @@ const fractionColumns = {
 type FractionRow = Pick<typeof wasteFraction.$inferSelect, keyof typeof fractionColumns>
 
 function fractionOf(row: FractionRow): WasteFraction {
-  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, densityKgPerCubicMetre: row.densityKgPerCubicMetre, hazardous: row.hazardous, ...stampsOf(row) }
+  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment, densityKgPerCubicMetre: row.densityKgPerCubicMetre, hazardous: row.hazardous, ...stampsOf(row) }
 }
 
 /** `unique (company_id, key)` and `unique (company_id, name)`: each is one fraction's inside a company, and free in the next. */

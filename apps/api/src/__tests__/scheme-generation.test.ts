@@ -16,6 +16,7 @@ import { RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { withCompany } from "@waste/db/tenant"
+import type { GenerationRunStatus } from "@waste/domain/planning/vocabulary"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -105,7 +106,7 @@ describe("a scheme's generation reading", { skip: database.skip }, () => {
   }
 
   /** A run of the scheme in the status given, finished at the instant given, as the worker leaves it. */
-  async function run(tenant: Tenant, of: RouteScheme, status: string, finishedAt: string | null): Promise<string> {
+  async function run(tenant: Tenant, of: RouteScheme, status: GenerationRunStatus, finishedAt: string | null): Promise<string> {
     const id = testId()
     await withCompany(pool.db, tenant.companyId, (tx) =>
       tx.insert(generationRun).values({

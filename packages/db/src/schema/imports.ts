@@ -47,7 +47,7 @@ export const importRun = wms.table(
     ...timestamps,
     /** The project the records were imported into; null for the company's Customers. */
     projectId: uuid(),
-    kind: text().notNull(),
+    kind: text({ enum: IMPORT_KINDS }).notNull(),
     /** The file's name as the browser read it. */
     fileName: text().notNull(),
     /** How many rows the file held; the run is complete when its counts reach it. */
@@ -65,7 +65,7 @@ export const importRun = wms.table(
     tenantReference(t, [t.requestedBy], userAccount),
     // A run's rows name it.
     tenantKey(t),
-    oneOf(t.kind, IMPORT_KINDS),
+    oneOf(t.kind),
     positive(t.rowCount),
     // A project's kinds name their project, the company's — its Customers and its catalogue (O30 of #290) — none.
     check(tableObjectName(t.id.table, "project_shape", "importRun"), sql`(${t.kind} in (${sql.raw(COMPANY_IMPORT_KINDS.map(literal).join(", "))})) = (${t.projectId} is null)`),
@@ -92,7 +92,7 @@ export const importRunRow = wms.table(
     importRunId: uuid().notNull(),
     /** The spreadsheet's row number: the header is row 1. */
     rowNumber: integer().notNull(),
-    outcome: text().notNull(),
+    outcome: text({ enum: IMPORT_ROW_OUTCOMES }).notNull(),
     /** What the row was matched on, as a person reads it. */
     key: text(),
     /** The record the row made or matched, of the run's kind: a soft uuid. */
@@ -105,7 +105,7 @@ export const importRunRow = wms.table(
     tenantReference(t, [t.importRunId], importRun),
     // A row is recorded once per run; leading with the run, it is the reference's index and the run's list too.
     tenantUnique(t, t.importRunId, t.rowNumber),
-    oneOf(t.outcome, IMPORT_ROW_OUTCOMES),
+    oneOf(t.outcome),
     check(tableObjectName(t.id.table, "row_number_shape", "importRunRow"), sql`${t.rowNumber} >= 2`),
     // A refusal says why and names no record; every other outcome names its record and says nothing.
     check(

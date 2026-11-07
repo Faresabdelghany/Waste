@@ -14,7 +14,6 @@ import { route } from "@waste/db/schema/execution"
 import { plan } from "@waste/db/schema/routing"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
-import type { PlanSolver } from "@waste/domain/routing/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "../runtime/definition"
@@ -82,7 +81,7 @@ async function recoverPlan(context: Pick<JobContext, "api" | "send">, aged: Aged
       .where(and(eq(plan.companyId, aged.companyId), eq(plan.id, aged.planId)))
       .for("update")
     if (locked?.status !== "calculating") return false
-    const queue = routingQueueOf(locked.solver as PlanSolver)
+    const queue = routingQueueOf(locked.solver)
     if (await routingJobHeld(tx, queue, aged.planId)) return false
     const [ofRoute] = await tx
       .select({ operatingDate: route.operatingDate })

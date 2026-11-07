@@ -70,18 +70,18 @@ export const vehicle = wms.table(
     registration: text().notNull(),
     /** What the yard calls it, `WH-24`; unique per company where given. */
     callsign: text(),
-    kind: text().notNull(),
+    kind: text({ enum: VEHICLE_KINDS }).notNull(),
     vehicleTypeId: uuid().notNull(),
-    ownership: text().notNull(),
+    ownership: text({ enum: VEHICLE_OWNERSHIPS }).notNull(),
     /** The owning provider, given exactly when the ownership says so. */
     serviceProviderId: uuid(),
-    status: text().notNull(),
+    status: text({ enum: VEHICLE_STATUSES }).notNull(),
     /** The rated payload. */
     capacityKg: integer(),
     /** The class a driver needs to take it out; never unknown, since unknown passes nobody. */
-    requiredLicenceClass: text().notNull(),
+    requiredLicenceClass: text({ enum: LICENCE_CLASSES }).notNull(),
     homeDepotId: uuid(),
-    fuel: text(),
+    fuel: text({ enum: FUEL_TYPES }),
     /** The telematics unit's own identifier; what it reports is Execution's. */
     telematicsDeviceId: text(),
     notes: text(),
@@ -94,11 +94,11 @@ export const vehicle = wms.table(
     projectReference(t, [t.homeDepotId], depot),
     tenantUnique(t, t.registration),
     projectKey(t),
-    oneOf(t.kind, VEHICLE_KINDS),
-    oneOf(t.ownership, VEHICLE_OWNERSHIPS),
-    oneOf(t.status, VEHICLE_STATUSES),
-    oneOf(t.requiredLicenceClass, LICENCE_CLASSES),
-    oneOf(t.fuel, FUEL_TYPES),
+    oneOf(t.kind),
+    oneOf(t.ownership),
+    oneOf(t.status),
+    oneOf(t.requiredLicenceClass),
+    oneOf(t.fuel),
     positive(t.capacityKg),
     check(tableObjectName(t.id.table, "provider_shape", "vehicle"), sql`(${t.ownership} = 'service-provider') = (${t.serviceProviderId} is not null)`),
     // Most vehicles have a callsign and some do not, and a null is not a duplicate of another null: a partial index, not a constraint.
@@ -174,18 +174,18 @@ export const driver = wms.table(
     name: text().notNull(),
     /** The payroll or workforce system's reference; unique per company where given. */
     workforceReference: text(),
-    employment: text().notNull(),
+    employment: text({ enum: EMPLOYMENT_TYPES }).notNull(),
     /** The employing provider, given exactly when the employment says so. */
     serviceProviderId: uuid(),
     homeDepotId: uuid(),
     /** The highest class held; null is not on record, which is eligible for nothing. */
-    licenceClass: text(),
+    licenceClass: text({ enum: LICENCE_CLASSES }),
     licenceNumber: text(),
     /** The last day the licence holds. */
     licenceExpiry: date(),
     /** The login the driver app uses; one profile per login where given. */
     userAccountId: uuid(),
-    status: text().notNull(),
+    status: text({ enum: DRIVER_STATUSES }).notNull(),
     notes: text(),
     /** The working day on the project's clock (O14 of #290), both ends or neither. */
     shiftStart: time(),
@@ -211,9 +211,9 @@ export const driver = wms.table(
     tenantReference(t, [t.userAccountId], userAccount),
     projectReference(t, [t.homeDepotId], depot),
     projectKey(t),
-    oneOf(t.employment, EMPLOYMENT_TYPES),
-    oneOf(t.licenceClass, LICENCE_CLASSES),
-    oneOf(t.status, DRIVER_STATUSES),
+    oneOf(t.employment),
+    oneOf(t.licenceClass),
+    oneOf(t.status),
     check(tableObjectName(t.id.table, "provider_shape", "driver"), sql`(${t.employment} = 'service-provider') = (${t.serviceProviderId} is not null)`),
     // Both unique where given, so both are partial indexes over the rows that
     // have one. The login's doubles as the index its reference needs: a

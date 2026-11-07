@@ -22,11 +22,9 @@
 // place one it serves that day, then the day itself — each a conflict but
 // the first, in the domain's sentence, thrown as `Refused`.
 import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
-import type { RecurrenceFrequency } from "@waste/domain/planning/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
-import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
-import type { WeekRotation } from "@waste/domain/route-schemes/recurrence"
-import { addDays, type ServiceDay } from "@waste/domain/days"
+import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import { addDays } from "@waste/domain/days"
 import { inForceOn } from "@waste/domain/periods"
 import { Refused } from "@waste/domain/refusal"
 import { and, asc, count, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
@@ -89,7 +87,7 @@ async function calendarNear(tx: Tx, scope: Scope, window: { from: string; to: st
     from: addDays(window.from, -2 * SHIFT_SEARCH_DAYS),
     to: addDays(window.to, 2 * SHIFT_SEARCH_DAYS),
   })
-  return { weekend: row.weekend as ServiceDay[], holidays: holidayListOf(holidays, row.holidayList) }
+  return { weekend: row.weekend, holidays: holidayListOf(holidays, row.holidayList) }
 }
 
 /** A day of the place with what a booking of it freezes: its schedule's product too. */
@@ -170,10 +168,10 @@ async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from
     const { schedule } = reaching.find((row) => row.schedule.id === id)!
     const booked = new Map(counted.filter((row) => row.scheduleId === id).map((row) => [row.day, row.booked]))
     const recurring: BulkySchedule = {
-      frequency: schedule.frequency as RecurrenceFrequency,
-      serviceDays: schedule.serviceDays as ServiceDay[],
-      weekRotation: schedule.weekRotation as WeekRotation | null,
-      holidayPolicy: schedule.holidayPolicy as HolidayPolicy,
+      frequency: schedule.frequency,
+      serviceDays: schedule.serviceDays,
+      weekRotation: schedule.weekRotation,
+      holidayPolicy: schedule.holidayPolicy,
       validFrom: schedule.validFrom,
       validTo: schedule.validTo,
       slotsPerDay: schedule.slotsPerDay,

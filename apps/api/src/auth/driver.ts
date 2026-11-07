@@ -60,7 +60,7 @@ export async function resolveDriver(tx: Tx, principal: Principal): Promise<Drive
     .limit(1)
   if (row === undefined || row.status !== "active") throw problem(403, { detail: NOT_A_DRIVERS_LOGIN })
   // The coded columns are text with a CHECK in the database and a vocabulary here.
-  return { ...row, status: row.status as DriverStatus, licenceClass: row.licenceClass as LicenceClass | null }
+  return { ...row, status: row.status as DriverStatus, licenceClass: row.licenceClass }
 }
 
 /**

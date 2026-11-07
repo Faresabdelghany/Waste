@@ -65,7 +65,7 @@ import { REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/
 import type { ReportInterval as Interval } from "@waste/domain/insight/vocabulary"
 import { isMunicipality, wasteDataCsv, wasteDataWarningSentence, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
 import type { ModuleKey } from "@waste/domain/access/modules"
-import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery, type MissedReason, type PickupStandings, type PickupWeightRow, type ReportWindow, type RevenueInterval, type RevenueProduct, type RevenueTotals, type RouteCounts, type ServiceRates, type ServiceScheme, type TicketKindCounts, type TonnageRow, type WasteDataRow, type WasteDataWarning } from "@waste/contracts/reports"
 import type { Tx } from "@waste/db/client"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
@@ -262,8 +262,8 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
   }
   const missed = new Map<PickupReason, MissedReason>()
   for (const group of pickupGroups) {
-    const status = group.status as PickupStatus
-    const reason = group.reason as PickupReason | null
+    const status = group.status
+    const reason = group.reason
     // Every pickup's route is in the route groups, since both statements read the same window: its scheme is there already.
     const scheme = schemes.get(schemeKey(group))
     for (const tally of [pickups, inSeries(series, group.operatingDate, window, query.interval).pickups, ...(scheme === undefined ? [] : [scheme.pickups])]) addPickups(tally, status, reason, group.n)
@@ -350,7 +350,7 @@ async function ticketReport(tx: Tx, principal: Principal, query: TicketReportQue
   const tally = { closed: 0, completed: 0, rejected: 0, closedWithDue: 0, closedWithinDue: 0 }
   for (const group of closedGroups) {
     tally.closed += group.n
-    if ((group.status as TicketStatus) === "completed") tally.completed += group.n
+    if (group.status === "completed") tally.completed += group.n
     else tally.rejected += group.n
     tally.closedWithDue += group.withDue
     tally.closedWithinDue += group.withinDue

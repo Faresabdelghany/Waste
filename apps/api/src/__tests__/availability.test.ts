@@ -80,7 +80,7 @@ describe("driver absences and vehicle unavailability", { skip: database.skip || 
     ex = await seedExecution(pool, a, fleet)
     theirFleet = await seedFleet(pool, b, await seedPlanning(pool, b))
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-      const scoped = { companyId: a.companyId, projectId: a.projects.copenhagen.id, vehicleTypeId: planning.vehicleTypes.rearLoader.id, ownership: "company", status: "active" }
+      const scoped = { companyId: a.companyId, projectId: a.projects.copenhagen.id, vehicleTypeId: planning.vehicleTypes.rearLoader.id, ownership: "company", status: "active" } as const
       await tx.insert(vehicle).values([
         { id: nr12.id, ...scoped, registration: "CK 74 305", callsign: nr12.label, kind: "powered-vehicle", requiredLicenceClass: "c" },
         { id: trailer.id, ...scoped, registration: trailer.label, callsign: null, kind: "trailer", requiredLicenceClass: "b" },

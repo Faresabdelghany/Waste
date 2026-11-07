@@ -5,7 +5,6 @@
 // and `settlement-closed` carries.
 import type { Settlement, SettlementDetail, SettlementLine } from "@waste/contracts/settlements"
 import { addDays } from "@waste/domain/days"
-import type { SettlementStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -51,7 +50,7 @@ export function settlementOf(row: SettlementRow): Settlement {
     id: row.id,
     projectId: row.projectId,
     serviceAreaAssignmentId: row.serviceAreaAssignmentId,
-    status: row.status as SettlementStatus,
+    status: row.status,
     currency: row.currency,
     calculatedAt: instantOf(row.calculatedAt),
     closedAt: instantOf(row.closedAt),

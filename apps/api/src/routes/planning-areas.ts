@@ -50,7 +50,6 @@
 // is a version of an area and not a surface of its own.
 import type { FlatPolygon } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
-import type { PlanningAreaPurpose } from "@waste/contracts/planning"
 import {
   PlanningArea,
   PlanningAreaBoundary,
@@ -109,7 +108,7 @@ export function areaOf(row: Row): PlanningArea {
     projectId: row.projectId,
     code: row.code,
     name: row.name,
-    purpose: row.purpose as PlanningAreaPurpose,
+    purpose: row.purpose,
     ...stampsOf(row),
   }
 }

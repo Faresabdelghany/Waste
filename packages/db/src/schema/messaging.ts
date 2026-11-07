@@ -47,21 +47,21 @@ export const messageTemplate = wms.table(
     ...projectScoped,
     ...timestamps,
     name: text().notNull(),
-    purpose: text().notNull(),
-    channel: text().notNull(),
+    purpose: text({ enum: MESSAGE_TEMPLATE_PURPOSES }).notNull(),
+    channel: text({ enum: MESSAGE_CHANNELS }).notNull(),
     /** An e-mail's subject; a text message has none. */
     subject: text(),
     body: text().notNull(),
-    status: text().notNull(),
+    status: text({ enum: MESSAGE_TEMPLATE_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectKey(t),
     tenantUnique(t, t.projectId, t.name),
-    oneOf(t.purpose, MESSAGE_TEMPLATE_PURPOSES),
-    oneOf(t.channel, MESSAGE_CHANNELS),
-    oneOf(t.status, MESSAGE_TEMPLATE_STATUSES),
+    oneOf(t.purpose),
+    oneOf(t.channel),
+    oneOf(t.status),
     check(tableObjectName(t.id.table, "subject_shape", "messageTemplate"), sql`(${t.channel} = 'email') = (${t.subject} is not null)`),
   ],
 )
@@ -82,13 +82,13 @@ export const message = wms.table(
     userAccountId: uuid(),
     /** The outbox event it was sent for, where an event sent it: with the recipient, the consumer's idempotency key. */
     sourceEventId: uuid(),
-    channel: text().notNull(),
-    purpose: text().notNull(),
+    channel: text({ enum: MESSAGE_CHANNELS }).notNull(),
+    purpose: text({ enum: MESSAGE_PURPOSES }).notNull(),
     /** The address it went to, copied when it was queued: an e-mail address or a phone number. */
     recipient: text().notNull(),
     subject: text(),
     body: text().notNull(),
-    status: text().notNull(),
+    status: text({ enum: MESSAGE_STATUSES }).notNull(),
     /** How many times the provider was asked to send it. */
     attempts: integer().notNull().default(0),
     /** The provider that sent it (`log` for the log-only fake), and the id it answered with. */
@@ -120,9 +120,9 @@ export const message = wms.table(
     uniqueIndex(tableObjectName(t.id.table, "source_event_id_customer_id_idx", "message"))
       .on(t.companyId, t.sourceEventId, t.customerId)
       .where(sql`${t.sourceEventId} is not null and ${t.customerId} is not null`),
-    oneOf(t.channel, MESSAGE_CHANNELS),
-    oneOf(t.purpose, MESSAGE_PURPOSES),
-    oneOf(t.status, MESSAGE_STATUSES),
+    oneOf(t.channel),
+    oneOf(t.purpose),
+    oneOf(t.status),
     check(tableObjectName(t.id.table, "attempts_range", "message"), sql`${t.attempts} >= 0`),
     // A sent message names when and by whom, and only a sent one does.
     check(tableObjectName(t.id.table, "sent_shape", "message"), sql`(${t.status} = 'sent') = (${t.sentAt} is not null and ${t.provider} is not null)`),

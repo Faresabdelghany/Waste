@@ -27,14 +27,13 @@
 //
 // Four of the seven answer the row's status with the proof that it is there —
 // a Customer, a Product, a Property, a Shared Collection Point — because a new
-// reference is gated on it (routes/statuses.ts, Issue #79) and one statement
+// reference is gated on it (@waste/domain/status-gates, Issue #79) and one statement
 // that says both is better than two that say one each. The refusal for a row
 // that is not there is unchanged, and comes first: the state of a row is only
 // a question once the row is. The other three have no status to answer.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { ProblemFieldError } from "@waste/contracts/problem"
-import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { assigneeOf } from "@waste/db/commands/ticket-assignment"
 import { userAccount } from "@waste/db/schema/access"
@@ -52,16 +51,16 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { team, ticket } from "@waste/db/schema/resolution"
 import { NOT_A_FRACTION, NOT_A_POWERED_VEHICLE, NOT_A_STATION, NOT_A_TRAILER } from "@waste/domain/execution/commands"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { retiredTeam } from "@waste/domain/resolution/teams"
+import { ACTIVE_TEAM_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
-import { findAlert, NOT_AN_ALERT } from "@waste/db/commands/alert-links"
-import type { AlertRow } from "@waste/db/shapes/alerts"
 import type { TenantTable } from "@waste/db/commands/shared"
 import { NOT_A_SERVICE_FREQUENCY, NOT_A_WAREHOUSE } from "@waste/db/commands/stock-ledger"
 
 import { invalidRequest } from "../problem"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Target } from "./shared"
-import { refuseRetiredTeam } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -263,7 +262,7 @@ export async function requireWarehouse(
     .limit(1)
   if (found === undefined) throw refusal()
   // `status` is text with a CHECK in the database and the vocabulary's tuple here.
-  return { id: found.id, name: found.name, status: found.status as WarehouseStatus }
+  return { id: found.id, name: found.name, status: found.status }
 }
 
 // Resources, slice 3 (Issue #101): the other two places. A depot is a
@@ -307,7 +306,7 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 // `requireStatus` in routes/shared.ts — `requireRow`'s statement with one
 // column more, the same 400 at the field when there is no such row — so a
 // route naming a vehicle or a driver afresh can refuse a retired or an
-// unavailable one through routes/statuses.ts without a second statement, and
+// unavailable one through @waste/domain/status-gates without a second statement, and
 // a route that only touches a row already naming them asks nothing.
 
 /** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
@@ -324,7 +323,7 @@ export const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind ==
  * travel in one options object, since a caller that names the one usually
  * names the other (`trailerId` is a trailer). Answers the row's status, or
  * undefined for an id that named nothing, so the caller can hold a new
- * reference to it (routes/statuses.ts) with no second read.
+ * reference to it (@waste/domain/status-gates) with no second read.
  */
 export async function requireVehicle(
   tx: Tx,
@@ -429,24 +428,19 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 
 // Resolution (Issue #109): what a ticket names, and what names a ticket. A
 // ticket's nine links are the Registry's, Resources' and Execution's rows and
-// read the checks above; three are new here — a parent ticket, an alert and
-// an agreement, each the project's, since every ticket, alert and agreement
-// is a Project's, so all three are `inProject` — and one is a rule on an
-// account rather than a row: the assignee works in the ticket's project,
-// `all_projects` or a Project Access row, since a ticket assigned to someone
-// who cannot see it is a bug and not a choice (#109 §3). No status is
-// answered for a link: a ticket is about whatever it is about — a complaint
-// about an inactive customer's last collection, a defect on a retired
-// container — and #79's gate does not apply to it (§7.13); the one gate, the
-// re-collection route's, is the route's own, and an alert about a ticket
-// names it whatever state either is in. The alert's check answers the row and
-// not only its existence, since what names an alert judges it next: the one
-// function `POST /tickets` and `POST /alerts/:id/link-ticket` share
-// (@waste/db/commands/alert-links) reads its status and the ticket it already names
-// under the alert's lock, and one statement that says all three is better
-// than three. An id that is null or absent names nothing and is no issue, as
-// everywhere here; the overloads say so to the type checker, so a caller with
-// an id in hand reads the row without a guard.
+// read the checks above; two are new here — a parent ticket and an agreement,
+// each the project's, since every ticket and agreement is a Project's, so
+// both are `inProject` — and one is a rule on an account rather than a row:
+// the assignee works in the ticket's project, `all_projects` or a Project
+// Access row, since a ticket assigned to someone who cannot see it is a bug
+// and not a choice (#109 §3). No status is answered for a link: a ticket is
+// about whatever it is about — a complaint about an inactive customer's last
+// collection, a defect on a retired container — and #79's gate does not apply
+// to it (§7.13); the one gate, the re-collection route's, is the route's own.
+// An alert a ticket names is read under its lock by the one function
+// `POST /tickets` and `POST /alerts/:id/link-ticket` share
+// (@waste/db/commands/alert-links). An id that is null or absent names
+// nothing and is no issue, as everywhere here.
 
 /** What a body is told when it names a ticket of another project, or none. */
 export const NOT_A_TICKET = "Not a ticket of this project"
@@ -474,22 +468,7 @@ export async function requireTeam(tx: Tx, companyId: string, id: string, path = 
     .where(and(eq(team.companyId, companyId), eq(team.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_TEAM }])
-  refuseRetiredTeam(found.status as TeamStatus, found.name)
-}
-
-/**
- * An Alert a body names: the project's. Answers the row whole, as the link
- * rule reads it (@waste/db/commands/alert-links: its status, and the one ticket it is
- * linked to or null) and as the link command answers it once linked, so the
- * proof it is there is the one read; undefined for an id that named nothing.
- */
-export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: { path?: string }): Promise<AlertRow>
-export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRow | undefined>
-export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRow | undefined> {
-  if (id == null) return undefined
-  const found = await findAlert(tx, scope, id)
-  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_AN_ALERT }])
-  return found
+  refuseUnless(found.status, ACTIVE_TEAM_STATUSES, retiredTeam(found.name))
 }
 
 /** An Agreement a body names: the project's, since an agreement is made under one project's catalogue. */

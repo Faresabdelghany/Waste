@@ -66,6 +66,7 @@ import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/vocabulary"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
+import { refuseUnofferedProduct, unofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -84,7 +85,6 @@ import { eventScope, findEvent, noSuchEvent } from "./billing-shapes"
 import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import { refuseUnofferedProduct, unofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
 
 const MODULE = "commercial.events"
@@ -152,7 +152,7 @@ async function requireJobProduct(tx: Tx, scope: Scope, id: string): Promise<Prod
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
   if (found.unit !== "job") throw invalidRequest("body", [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
-  return found.status as ProductStatus
+  return found.status
 }
 
 /** A recurring charge as `reprice` prices it again: its stored period and charged days, never its agreement's cadence now (#291 C2). */
@@ -311,7 +311,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         const principal = c.get("principal")
         requireProject(principal, body.projectId)
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
-        // The 400s in body order, then the one gate (routes/statuses.ts).
+        // The 400s in body order, then the one gate (@waste/domain/status-gates).
         await requireAgreement(tx, scope, body.agreementId)
         const productStatus = await requireProduct(tx, scope, body.productId)
         // A hand price's amount is the body's alone: its 400 comes before every 409.
@@ -422,7 +422,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
                   : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
         // The quantity is the stored event's, so an amount past the columns is the row's 409.
         if (outcome.blockReason === "amount-too-large") throw problem(409, { detail: AMOUNT_TOO_LARGE })
-        const after: ComposedEvent = { ...current, productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), kind: current.kind as ComposedEvent["kind"] }
+        const after: ComposedEvent = { ...current, productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), kind: current.kind }
         const issue = billableEventShapeIssue(after)
         if (issue !== undefined) throw new Error(`billable event ${id}: ${issue}`)
         const [row] = await tx

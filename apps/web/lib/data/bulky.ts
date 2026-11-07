@@ -11,11 +11,12 @@ import type { BulkyAvailableDay, BulkySchedule, BulkyScheduleCreate, BulkySchedu
 import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX, isBulkyProductUnit } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
-import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
+import { OFFERED_PRODUCT_STATUSES, type ProductStatus, type ProductUnit } from "@waste/domain/registry/vocabulary"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/route-schemes/recurrence"
 import { addDays, formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAYS } from "@waste/domain/days"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
+import { takesReference } from "@waste/domain/status-gates"
 
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
@@ -43,7 +44,7 @@ type OfferedProduct = { id: string; name: string; unit: ProductUnit; status: Pro
 
 /** The products a schedule may charge: the project's active ones sold by the job or by the item (#449), and the one it charges now whatever it is. */
 export const bulkyProductsOffered = <P extends OfferedProduct>(products: readonly P[], kept: string | undefined): P[] =>
-  products.filter((candidate) => (isBulkyProductUnit(candidate.unit) && candidate.status === "active") || candidate.id === kept)
+  products.filter((candidate) => candidate.id === kept || (isBulkyProductUnit(candidate.unit) && takesReference(candidate.status, OFFERED_PRODUCT_STATUSES)))
 
 /** A product named with what a booking is charged of it: "Bulky collection · per item", charged the booking's item count, or "· per job", the booking once. */
 export const bulkyProductLabel = (product: Pick<OfferedProduct, "name" | "unit">): string => `${product.name} · per ${product.unit}`

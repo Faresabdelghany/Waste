@@ -5,7 +5,7 @@
 // contracts' one spelling of `INV-26007188` and `CN-26007189`.
 import type { Invoice, InvoiceDetail, InvoiceLine } from "@waste/contracts/invoices"
 import { invoicePayment, type InvoicePaymentStatus } from "@waste/domain/finance/payments"
-import type { CreditReason, InvoiceKind } from "@waste/domain/finance/vocabulary"
+import type { InvoiceKind } from "@waste/domain/finance/vocabulary"
 import { invoiceLabel } from "@waste/domain/numbering"
 import { and, asc, eq, inArray, sum } from "drizzle-orm"
 
@@ -95,7 +95,7 @@ export function invoiceOf(row: InvoiceRow, standing: InvoiceStanding = issueStan
     projectId: row.projectId,
     number: row.number,
     label: labelOf(row),
-    kind: row.kind as InvoiceKind,
+    kind: row.kind,
     customerId: row.customerId,
     currency: row.currency,
     issuedOn: row.issuedOn,
@@ -104,7 +104,7 @@ export function invoiceOf(row: InvoiceRow, standing: InvoiceStanding = issueStan
     periodTo: row.periodTo,
     billingRunId: row.billingRunId,
     creditsInvoiceId: row.creditsInvoiceId,
-    creditReason: row.creditReason as CreditReason | null,
+    creditReason: row.creditReason,
     creditNote: row.creditNote,
     netMinor: row.netMinor,
     vatMinor: row.vatMinor,

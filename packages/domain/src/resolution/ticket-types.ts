@@ -28,6 +28,9 @@
 import { eachOnceSentence } from "../requests"
 import { type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind } from "./vocabulary"
 
+/** What a new ticket, a patch moving a ticket's type or a rule naming a retired Ticket Type is told (#545 of #544, `ACTIVE_TICKET_TYPE_STATUSES`); the type a ticket already is of is kept whatever its status. */
+export const retiredTicketType = (name: string): string => `The ticket type ${JSON.stringify(name)} is retired; a ticket is of an active type`
+
 /** The name each kind's default type starts with, in the kinds' order. */
 export const DEFAULT_TICKET_TYPE_NAMES: Readonly<Record<TicketKind, string>> = {
   "missed-collection": "Missed collection",

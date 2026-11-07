@@ -62,7 +62,6 @@ import {
   ImportTemplateQuery,
   type ImportCounts,
   type ImportKind,
-  type ImportRowOutcome,
   type ImportRowResult,
   type ImportRowValues,
 } from "@waste/contracts/imports"
@@ -119,7 +118,7 @@ function runOf(row: RunRow): ImportRun {
   const recorded = counts.created + counts.updated + counts.unchanged + counts.refused
   return {
     id: row.id,
-    kind: row.kind as ImportKind,
+    kind: row.kind,
     projectId: row.projectId,
     fileName: row.fileName,
     rowCount: row.rowCount,
@@ -144,7 +143,7 @@ type RowRow = Pick<typeof importRunRow.$inferSelect, keyof typeof rowColumns>
 
 const resultOf = (row: RowRow): ImportRowResult => ({
   row: row.rowNumber,
-  outcome: row.outcome as ImportRowOutcome,
+  outcome: row.outcome,
   key: row.key,
   resourceId: row.resourceId,
   detail: row.detail,
@@ -403,7 +402,7 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await lockRow(tx, importRun, { companyId: principal.companyId, id })
         const run = await findRun(tx, principal, id)
         if (run === undefined) throw noSuchRun(id)
-        const kind = run.kind as ImportKind
+        const kind = run.kind
         const context = contextFor(tx, principal, kind, run.projectId, now)
         requireColumns(kind, rows, "rows")
         if (changeReasonOf(c.req.header(CHANGE_REASON_HEADER)) === null) await actAs(tx, { userAccountId: principal.user.id, reason: importReason(run.fileName) })

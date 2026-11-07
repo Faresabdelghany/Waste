@@ -17,7 +17,7 @@ import { ensurePlan as ensureCompanyPlan, type EnsuredPlan, type PlanRoute } fro
 import type { JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
-import type { PlanSolver, PlanStatus, PlanStopWarning, PlanTrip } from "@waste/domain/routing/vocabulary"
+import type { PlanSolver, PlanStopWarning } from "@waste/domain/routing/vocabulary"
 import { executionOrder, planIsStale } from "@waste/domain/routing/plans"
 import { DEFAULT_PROFILE, type RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, inArray, isNotNull, type SQL } from "drizzle-orm"
@@ -56,9 +56,9 @@ export function planOf(row: PlanRow): Plan {
     id: row.id,
     projectId: row.projectId,
     routeId: row.routeId,
-    solver: row.solver as PlanSolver,
-    status: row.status as PlanStatus,
-    trip: row.trip as PlanTrip,
+    solver: row.solver,
+    status: row.status,
+    trip: row.trip,
     distanceMetres: row.distanceMetres,
     durationSeconds: row.durationSeconds,
     deferredUntil: row.deferredUntil === null ? null : row.deferredUntil.toISOString(),
@@ -154,9 +154,9 @@ function planStopsReading(rows: readonly PlanStopRow[], present: ReadonlySet<str
 /** The `ActivePlan` reading over its row and the route's stops today: `stale` is a reading, never a status (#124 §2). */
 const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], { named, stopWarnings, unloads }: PlanStopsReading): ActivePlan => ({
   id: row.id,
-  solver: row.solver as PlanSolver,
-  status: row.status as PlanStatus,
-  trip: row.trip as PlanTrip,
+  solver: row.solver,
+  status: row.status,
+  trip: row.trip,
   distanceMetres: row.distanceMetres,
   durationSeconds: row.durationSeconds,
   stale: planIsStale({

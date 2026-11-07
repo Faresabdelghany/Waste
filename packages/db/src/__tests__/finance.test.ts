@@ -75,7 +75,7 @@ import { defaultTicketTypeOf } from "../commands/ticket-types"
 import { newId } from "../ids"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -719,7 +719,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refuse({ cancelReason: "duplicate" }, /billable_event_cancel_shape/, "a reason without its instant")
       await refuse({ cancelledBy: a.account }, /billable_event_cancel_shape/, "a person without a cancellation")
       await refuse({ quantity: 0, netMinor: 0, vatMinor: 0 }, /billable_event_quantity_positive/, "nothing of a product")
-      await refuse({ blockReason: "missing-payer", ...unpriced, priceListRowId: null }, /billable_event_block_reason_one_of|billable_event_override_shape/, "a reason outside the vocabulary")
+      await refuse({ blockReason: outside("missing-payer"), ...unpriced, priceListRowId: null }, /billable_event_block_reason_one_of|billable_event_override_shape/, "a reason outside the vocabulary")
       // The shapes that stand.
       await tx.insert(billableEvent).values([
         manual({ id: a.spare, ...consumers, sourceEventId: a.other, routeId: a.secondRoute, pickupId: a.secondPickup, serviceDate: "2026-10-12" }),
@@ -743,7 +743,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refused({}, "23505", /ticket_kind_product_project_id_ticket_kind_ticket_type_id_key/, "a kind charged twice in a project")
       // A charge names a kind or a ticket type, exactly one (#548 of #544).
       await refused({ ticketKind: null }, "23514", /ticket_kind_product_kind_or_type_exactly_one/, "a charge of nothing")
-      await refused({ ticketKind: "rescheduling" }, "23514", /ticket_kind_product_ticket_kind_one_of/, "a kind outside the vocabulary")
+      await refused({ ticketKind: outside("rescheduling") }, "23514", /ticket_kind_product_ticket_kind_one_of/, "a kind outside the vocabulary")
       await refused({ ticketKind: "complaint", productId: a.harborProduct }, "23503", /ticket_kind_product_product_id_fk/, "another project's product")
       // The same kind in another project is that project's charge.
       await tx.insert(ticketKindProduct).values(charge({ id: a.other, projectId: a.harbor, productId: a.harborProduct }))
@@ -825,7 +825,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       const projectSet = (values: Partial<typeof project.$inferInsert>) => (savepoint: Tx) => savepoint.update(project).set(values).where(eq(project.id, a.project))
       await refused(projectSet({ paymentTermsDays: 366 }), /project_payment_terms_range/, "past a year")
       await refused(projectSet({ paymentTermsDays: -1 }), /project_payment_terms_range/, "before issue")
-      await refused(projectSet({ paymentReferenceScheme: "kid" }), /project_payment_reference_scheme_one_of/, "a scheme outside the vocabulary")
+      await refused(projectSet({ paymentReferenceScheme: outside("kid") }), /project_payment_reference_scheme_one_of/, "a scheme outside the vocabulary")
       await tx.update(project).set({ paymentTermsDays: 0, paymentReferenceScheme: "fik-75" }).where(eq(project.id, a.project))
       await refused((savepoint) => savepoint.update(customer).set({ paymentTermsDays: 400 }).where(eq(customer.id, a.customer)), /customer_payment_terms_range/, "a customer's past a year")
       await tx.update(customer).set({ paymentTermsDays: 8 }).where(eq(customer.id, a.customer))
@@ -865,7 +865,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, amountMinor: 0 })), "23514", /payment_amount_positive/, "money that arrived is more than nothing")
       await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, source: "bank-file" })), "23514", /payment_bank_line_shape/, "a bank line carries its key")
       await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, bankLineKey: "[\"2026-11-12\",62500]" })), "23514", /payment_bank_line_shape/, "and only a bank line does")
-      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, source: "card" })), "23514", /payment_source_one_of/, "a source outside the vocabulary")
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, source: outside("card") })), "23514", /payment_source_one_of/, "a source outside the vocabulary")
       await tx.insert(payment).values(paid({ id: a.other, customerId: null, source: "bank-file", bankLineKey: "[\"2026-11-12\",62500]" }))
       await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.third, source: "bank-file", bankLineKey: "[\"2026-11-12\",62500]" })), "23505", /payment_bank_line_key_idx/, "a statement's line imported twice")
 
@@ -976,7 +976,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refuse({ kind: "invoice", billingRunId: a.run, creditsInvoiceId: null, creditReason: null, periodFrom: "2026-10-01", netMinor: 0, vatMinor: 0, grossMinor: 0 }, /invoice_period_shape/, "half a period")
       await refuse({ dueOn: "2026-11-14" }, /invoice_due_shape/, "due before issued")
       await refuse({ creditsInvoiceId: a.spare }, /invoice_credits_shape/, "crediting itself")
-      await refuse({ creditReason: "goodwill" }, /invoice_credit_reason_one_of/, "a reason outside the vocabulary")
+      await refuse({ creditReason: outside("goodwill") }, /invoice_credit_reason_one_of/, "a reason outside the vocabulary")
       // The zero credit note stands: a free line credited.
       await tx.insert(invoice).values(creditNote({ id: a.other, number: 1101, netMinor: 0, vatMinor: 0, grossMinor: 0 }))
       await tx.insert(invoice).values(creditNote({}))
@@ -1052,7 +1052,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refusePrice({ indexedFromId: a.spare, indexLabel: "CPI", indexBasisPoints: 500, indexBase: "bid" }, /service_provider_price_index_shape/, "indexed from itself")
       await refusePrice({ bidMinor: -1 }, /service_provider_price_bid_not_negative/, "a negative bid")
       await refusePrice({ unitPriceMinor: -1 }, /service_provider_price_unit_price_not_negative/, "a negative fee")
-      await refusePrice({ indexedFromId: a.providerPrice, indexLabel: "CPI", indexBasisPoints: -200, indexBase: "fee" }, /service_provider_price_index_base_one_of/, "a base outside the vocabulary")
+      await refusePrice({ indexedFromId: a.providerPrice, indexLabel: "CPI", indexBasisPoints: -200, indexBase: outside("fee") }, /service_provider_price_index_base_one_of/, "a base outside the vocabulary")
       await tx.insert(serviceProviderPrice).values(priced({ indexedFromId: a.providerPrice, indexLabel: "CPI", indexBasisPoints: -200, indexBase: "current-fee", unitPriceMinor: 7_840 }))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(priceListRow).values(row({ unitPriceMinor: -1 }))), refusedWith("23514", /price_list_row_unit_price_not_negative/))
       await tx.insert(priceListRow).values(row({ unitPriceMinor: 0 }))
@@ -1062,7 +1062,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refuseReview({ decision: "corrected" }, /weight_review_correction_shape/, "a correction names the new row")
       await refuseReview({ correctionUnloadId: a.spare }, /weight_review_correction_shape/, "an approval naming a correction")
       await refuseReview({ decision: "corrected", correctionUnloadId: a.unload }, /weight_review_correction_shape/, "a correction naming the reviewed row")
-      await refuseReview({ decision: "needs-review" }, /weight_review_decision_one_of|weight_review_correction_shape/, "the prototype's Needs review is captured")
+      await refuseReview({ decision: outside("needs-review") }, /weight_review_decision_one_of|weight_review_correction_shape/, "the prototype's Needs review is captured")
       await tx.insert(weightReview).values(reviewed({ decision: "rejected", note: "The ticket photo is unreadable" }))
       await assert.rejects(tx.transaction((savepoint) => savepoint.update(product).set({ vatPercent: 101 }).where(eq(product.id, a.product))), refusedWith("23514", /product_vat_percent_range/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.update(product).set({ vatPercent: -1 }).where(eq(product.id, a.product))), refusedWith("23514", /product_vat_percent_range/))
@@ -1178,8 +1178,8 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
         { ...event, id: a.spare, kind: "invoice-issued", aggregateKind: "invoice", aggregateId: a.invoice },
         { ...event, id: a.other, kind: "settlement-closed", aggregateKind: "settlement", aggregateId: a.settlement },
       ])
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.third, kind: "billing-run-completed", aggregateKind: "invoice", aggregateId: a.run })), refusedWith("23514", /outbox_event_kind_one_of/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.third, kind: "invoice-issued", aggregateKind: "billing-run", aggregateId: a.run })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.third, kind: outside("billing-run-completed"), aggregateKind: "invoice", aggregateId: a.run })), refusedWith("23514", /outbox_event_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.third, kind: "invoice-issued", aggregateKind: outside("billing-run"), aggregateId: a.run })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))
     }))
 })
 

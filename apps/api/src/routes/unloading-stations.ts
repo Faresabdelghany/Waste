@@ -58,7 +58,6 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { UnloadingStation, UnloadingStationCreate, UnloadingStationFractionsSet, UnloadingStationListQuery, UnloadingStationPatch } from "@waste/contracts/places"
-import type { UnloadingStationOwnership, UnloadingStationStatus } from "@waste/contracts/resources"
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -119,13 +118,13 @@ function stationOf(row: Row, wasteFractionIds: readonly string[]): UnloadingStat
     name: row.name,
     address: row.address,
     location: row.location as FlatPoint,
-    ownership: row.ownership as UnloadingStationOwnership,
+    ownership: row.ownership,
     serviceProviderId: row.serviceProviderId,
     opensAt: hourOf(row.opensAt),
     closesAt: hourOf(row.closesAt),
     weighbridge: row.weighbridge,
     transfer: row.transfer,
-    status: row.status as UnloadingStationStatus,
+    status: row.status,
     notes: row.notes,
     wasteFractionIds: [...wasteFractionIds],
     ...stampsOf(row),

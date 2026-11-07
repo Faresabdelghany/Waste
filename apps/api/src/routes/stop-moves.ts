@@ -55,7 +55,6 @@ import { route } from "@waste/db/schema/execution"
 import { ticket } from "@waste/db/schema/resolution"
 import { ANOTHER_ROUTE, emptiedAlready, emptiedThereAlready, leavesNoStop, mergedInto, movedTo, movingInOrder, NOT_A_ROUTE_OF_THE_PROJECT, notOpenStopsOf, openStopsInOrder, splitLeavesNone, strangersAmong, type MovingStop } from "@waste/domain/execution/stop-moves"
 import { routeTransition } from "@waste/domain/execution/transitions"
-import type { OfficeStopService, PickupService, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -79,7 +78,7 @@ import { created, describeCreated, describeJson, IdParam, stamp } from "./shared
 const PICKUPS = "route-studio.pickups"
 const ROUTES = "route-studio.routes"
 
-const asMoving = (row: PickupRow): MovingStop => ({ id: row.id, position: row.position, status: row.status as PickupStatus, containerId: row.containerId, service: row.service as PickupService })
+const asMoving = (row: PickupRow): MovingStop => ({ id: row.id, position: row.position, status: row.status, containerId: row.containerId, service: row.service })
 
 /**
  * The route path and body name together, both locked in id order and read:
@@ -111,7 +110,7 @@ function requireOpenStops(named: readonly string[], stops: readonly PickupRow[],
 
 /** The Add stop a moved stop is on the route it joins: the same work, at the same container or address, with what its service books and the note the driver reads, and the open ticket it answers. */
 function addedAs(row: PickupRow, ticketId: string | undefined): PickupAdd {
-  const service = row.service as OfficeStopService
+  const service = row.service
   const answers = ticketId === undefined ? {} : { ticketId }
   const note = { note: row.note }
   if (service === "bulky") return { service, bulkyBookingId: row.bulkyBookingId, ...note }
@@ -328,7 +327,7 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
         requireNotStarted(current, ORDER_IS_FROZEN)
         const merged = requireOther(current, routeId, other, "routeId")
         requireNotStarted(merged, ORDER_IS_FROZEN)
-        const transition = routeTransition(merged.status as RouteStatus, "cancel", labelOf(merged))
+        const transition = routeTransition(merged.status, "cancel", labelOf(merged))
         // A route that has not started is cancelled by its machine; a stay or a refusal here is a bug in the machine, not the client's.
         if (transition.kind !== "move") throw new Error(`route ${merged.id} is ${merged.status} and its cancel did not move`)
         const at = now()

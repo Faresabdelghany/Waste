@@ -335,7 +335,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     const annual = testId()
     const brakes = testId()
     const lift = testId()
-    const plan = (id: string, values: Partial<typeof vehicleMaintenancePlan.$inferInsert>) => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, vehicleId: tenant.vehicleId, name: "", lastDoneOn: "2026-06-01", status: "active", ...values })
+    const plan = (id: string, values: Partial<typeof vehicleMaintenancePlan.$inferInsert>): typeof vehicleMaintenancePlan.$inferInsert => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, vehicleId: tenant.vehicleId, name: "", lastDoneOn: "2026-06-01", status: "active", ...values })
     await withCompany(api.db, tenant.companyId, (tx) =>
       tx.insert(vehicleMaintenancePlan).values([
         // A week from its date: due soon.

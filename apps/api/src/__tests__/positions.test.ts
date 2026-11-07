@@ -99,7 +99,7 @@ describe("a route's track and estimates", { skip: database.skip || owner.skip },
     const planId = testId()
     await withCompany(pool.db, a.companyId, async (tx) => {
       await tx.insert(plan).values({ id: planId, companyId: a.companyId, projectId: running.projectId, routeId: running.id, solver: "manual", status: "ready", fingerprint: `test:${planId}`, trip: "full", distanceMetres: 12_000, durationSeconds: 65 * MINUTE, provider: "fake" })
-      await tx.insert(planStop).values(running.pickupIds.map((pickupId, index) => ({ companyId: a.companyId, projectId: running.projectId, routeId: running.id, planId, kind: "pickup", pickupId, position: index + 1 })))
+      await tx.insert(planStop).values(running.pickupIds.map((pickupId, index): typeof planStop.$inferInsert => ({ companyId: a.companyId, projectId: running.projectId, routeId: running.id, planId, kind: "pickup", pickupId, position: index + 1 })))
       const line = { type: "LineString" as const, coordinates: [[12.55, 55.67], [12.58, 55.69]] as [number, number][] }
       await tx.insert(planLeg).values([10, 10, 10, 20, 15].map((minutes, index) => ({ companyId: a.companyId, projectId: running.projectId, routeId: running.id, planId, position: index + 1, path: line, metres: 2_000, seconds: minutes * MINUTE })))
       await tx.update(route).set({ activePlanId: planId }).where(and(eq(route.companyId, a.companyId), eq(route.id, running.id)))

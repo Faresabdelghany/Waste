@@ -18,7 +18,7 @@
 // A stop the scheme no longer plans is `skipped` with `regeneration` as its
 // reason and the sentence as its note. Nothing is deleted.
 import type { SchemeEndingCounts } from "@waste/contracts/route-schemes"
-import { REGENERATION_CANCEL, type RouteStatus } from "@waste/domain/execution/vocabulary"
+import { REGENERATION_CANCEL } from "@waste/domain/execution/vocabulary"
 import { routesEndedFrom } from "@waste/domain/planning/lifecycle"
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm"
 
@@ -88,7 +88,7 @@ export async function endSchemeRoutes(tx: Tx, companyId: string, schemeId: strin
       collectionGroupId: row.collectionGroupId ?? "",
       serviceDate: row.serviceDate,
       operatingDate: row.operatingDate,
-      status: row.status as RouteStatus,
+      status: row.status,
       cancelledByGeneration: row.cancelledByGeneration,
       held: row.heldAt !== null,
       officeStops: officeStops.has(row.id),

@@ -59,7 +59,7 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
         { companyId, teamId, userAccountId: nora },
       ])
       await tx.insert(ticketType).values({ id: typeId, companyId, name: "Emptied too often", kind: "other" })
-      const rule = { companyId, ticketTypeId: typeId, teamId, status: "active" }
+      const rule = { companyId, ticketTypeId: typeId, teamId, status: "active" } as const
       await tx.insert(countingRule).values([
         // Three emptyings a month, the team told.
         { ...rule, id: rules.often, name: "Emptied often", period: "month", limit: 3, notifiesTeam: true },

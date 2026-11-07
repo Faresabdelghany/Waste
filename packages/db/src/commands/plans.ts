@@ -115,7 +115,7 @@ export async function createPlan(tx: Tx, input: NewPlan): Promise<string> {
         projectId: input.projectId,
         routeId: input.routeId,
         planId: created.id,
-        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId } : { kind: "unload", unloadingStationId: input.unloads?.unloadingStationId }),
+        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId } : { kind: "unload" as const, unloadingStationId: input.unloads?.unloadingStationId }),
         position: index + 1,
       })),
     )

@@ -54,7 +54,6 @@ import { plan } from "@waste/db/schema/routing"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
 import { answersRequest, horizonRequest, planIsStale } from "@waste/domain/routing/plans"
 import type { PlanSolver, PlanStatus } from "@waste/domain/routing/vocabulary"
@@ -87,7 +86,7 @@ async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<
     .from(plan)
     .where(and(eq(plan.companyId, companyId), eq(plan.id, planId)))
   if (row === undefined) return null
-  return { id: planId, solver: row.solver as PlanSolver, status: row.status as PlanStatus, fingerprint: row.fingerprint, named: await planStopIds(tx, { companyId, planId }) }
+  return { id: planId, solver: row.solver, status: row.status, fingerprint: row.fingerprint, named: await planStopIds(tx, { companyId, planId }) }
 }
 
 /** Whether an optimiser Plan asked after `planId` is still calculating on the route — Plan ids are UUIDv7, so asked later is a greater id: a dispatcher's Optimise after their reorder. */
@@ -127,7 +126,7 @@ export async function planRoute(context: RoutingContext, companyId: string, rout
       .from(route)
       .where(and(eq(route.companyId, companyId), eq(route.id, routeId)))
       .for("update")
-    if (row === undefined || !orderIsOpen(row.status as RouteStatus) || row.operatingDate < horizon.from || row.operatingDate > horizon.to) return "outside"
+    if (row === undefined || !orderIsOpen(row.status) || row.operatingDate < horizon.from || row.operatingDate > horizon.to) return "outside"
     // A project still onboarding spends no routing quota: the horizon is an active project's (#132 §2).
     const [owner] = await tx
       .select({ status: project.status })

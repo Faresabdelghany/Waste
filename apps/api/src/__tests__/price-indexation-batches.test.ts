@@ -42,7 +42,7 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
       await withCompany(pool.db, a.companyId, async (tx: Tx) => {
         for (let start = 0; start < count; start += 1_000) {
           const ids = productIds.slice(start, start + 1_000)
-          await tx.insert(product).values(ids.map((id, offset) => ({ id, companyId: a.companyId, projectId, name: `Bulk ${start + offset}`, kind: "additional-service", status: "active", unit: "job", vatPercent: 25 })))
+          await tx.insert(product).values(ids.map((id, offset): typeof product.$inferInsert => ({ id, companyId: a.companyId, projectId, name: `Bulk ${start + offset}`, kind: "additional-service", status: "active", unit: "job", vatPercent: 25 })))
           await tx.insert(priceListRow).values(ids.map((productId, offset) => ({ id: testId(), companyId: a.companyId, projectId, priceListId: list.id, productId, unitPriceMinor: 1_000 + start + offset, validFrom: JANUARY })))
         }
       })

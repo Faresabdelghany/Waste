@@ -40,7 +40,7 @@
 // `end-route` arriving afterwards finds nothing to end and is applied as
 // nothing (commands.ts), never refused.
 import type { Transition } from "../machine"
-import { CLOSING_REASONS, type ClosingReason, type PickupOutcome, type PickupStatus, type RouteStatus } from "./vocabulary"
+import { CLOSING_REASONS, NOT_STARTED_ROUTE_STATUSES, type ClosingReason, type PickupOutcome, type PickupStatus, type RouteStatus } from "./vocabulary"
 
 export type { PickupOutcome }
 
@@ -67,7 +67,7 @@ export const activeAnd = (label: string, consequence: string): string => `Route 
  * refused otherwise (the API's `requireNotStarted` says which way), and an
  * optimiser's answer is never made active on a route past it (#171).
  */
-export const orderIsOpen = (status: RouteStatus): boolean => status === "planned" || status === "ready"
+export const orderIsOpen = (status: RouteStatus): boolean => (NOT_STARTED_ROUTE_STATUSES as readonly RouteStatus[]).includes(status)
 
 /** The one place the route machine is spelled: status by status, what each command does. */
 export function routeTransition(status: RouteStatus, command: RouteCommand, label: string): Transition<RouteStatus> {

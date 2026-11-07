@@ -30,7 +30,6 @@ import type { BillingPeriod } from "@waste/domain/finance/periods"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import { chargedDays, chargePeriodsOfRun, priceCharge, RECURRING_UNIT, type ChargePeriod } from "@waste/domain/finance/recurring"
 import type { BlockReason } from "@waste/domain/finance/vocabulary"
-import type { BillingCadence } from "@waste/domain/registry/vocabulary"
 import { addDays } from "@waste/domain/days"
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm"
 
@@ -109,7 +108,7 @@ export async function planRecurringCharges(tx: Tx, scope: Scope, period: Billing
 
   const planned: PlannedCharge[] = []
   for (const row of subscriptions) {
-    for (const chargePeriod of chargePeriodsOfRun(row.cadence as BillingCadence, period)) {
+    for (const chargePeriod of chargePeriodsOfRun(row.cadence, period)) {
       if (already.has(`${row.id}/${chargePeriod.from}`)) continue
       const days = chargedDays(chargePeriod, [{ validFrom: row.validFrom, validTo: row.validTo }, { validFrom: row.agreementFrom, validTo: row.agreementTo }], pausesOf.get(row.id) ?? [])
       if (days.first === null) continue

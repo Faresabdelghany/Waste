@@ -48,6 +48,9 @@ export const PICKUP_EXCEPTION_HISTORY_MAX = 500
 /** The most fractions a contaminant code applies to: every fraction a company would keep. */
 export const CONTAMINANT_CODE_FRACTIONS_MAX = 200
 
+/** What naming a retired contaminant code is told, by what names it (`ACTIVE_CONTAMINANT_CODE_STATUSES`): a stop tagged before the code was retired keeps its tag, and a rule written before keeps its code. */
+export const retiredCode = (code: string, by: "a tag" | "a rule"): string => `The contaminant code ${code} is retired; ${by} names an active one`
+
 /** A tagged collection's rule names no reason; a code narrows contamination, any reason, or a tagged collection: the rule table's `reason_shape` and `code_shape`. */
 export const reasonAndCode = (rule: { outcome?: string; reason?: string | null; contaminantCodeId?: string | null }): boolean =>
   (rule.outcome !== "completed" || rule.reason == null) && (rule.contaminantCodeId == null || rule.reason == null || rule.reason === "contamination")

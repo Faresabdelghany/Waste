@@ -17,7 +17,6 @@ import {
   AccessCredentialCreate,
   AccessCredentialListQuery,
   AccessCredentialPatch,
-  type AccessCredentialKind,
 } from "@waste/contracts/site-visits"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
@@ -25,6 +24,8 @@ import { agreement } from "@waste/db/schema/agreements"
 import { validOn } from "@waste/db/query/valid-on"
 import { accessCredential } from "@waste/db/schema/site-visits"
 import type { Action } from "@waste/domain/access/modules"
+import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { normaliseCredentialValue } from "@waste/domain/visits/charges"
 import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -69,7 +70,7 @@ function credentialOf(row: Row): AccessCredential {
   return {
     id: row.id,
     projectId: row.projectId,
-    kind: row.kind as AccessCredentialKind,
+    kind: row.kind,
     value: row.value,
     label: row.label,
     customerId: row.customerId,
@@ -222,7 +223,7 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
           const customerStatus = await requireCustomer(tx, principal.companyId, body.customerId)
           const charged = await customersAgreement(tx, scope, body.customerId, body.agreementId)
           requireWithin(charged.period, periodOf(body), WITHIN_THE_AGREEMENT)
-          if (customerStatus !== undefined && customerStatus !== "active") throw problem(409, { detail: INACTIVE_HOLDER })
+          refuseUnless(customerStatus, ACTIVE_CUSTOMER_STATUSES, INACTIVE_HOLDER)
           if (charged.status !== "active") throw problem(409, { detail: agreementPaysNothing(charged.status) })
         }
         const [row] = await refuseOverlap({ [RUNNING]: RUNNING_SENTENCE }, () =>

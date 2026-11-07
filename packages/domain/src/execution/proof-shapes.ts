@@ -31,7 +31,7 @@
 // `proofShape(kind, row)` is the whole rule over a row; `proofShapeIssue` says
 // which column disagrees, for the API's sentence before the check's code.
 import type { Presence } from "../presence"
-import { CODED_PROOF_KINDS, type ExecutionSource, type ProofKind } from "./vocabulary"
+import { CODED_PROOF_KINDS, type ExecutionSource, type PickupOutcome, type PickupReason, type ProofKind } from "./vocabulary"
 
 /** What one kind of proof carries. */
 export type ProofShape = {
@@ -50,12 +50,12 @@ export type ProofShape = {
 /** A row as the rule reads it: the columns the shape decides over. */
 export type ProofRow = {
   pickupId: string | null
-  reason: string | null
+  reason: PickupReason | null
   objectKey: string | null
   weightKg: number | null
   /** The litres a tank was emptied of (M11 of #293); absent on a row from before it. */
   volumeLitres?: number | null
-  outcome: string | null
+  outcome: PickupOutcome | null
   note: string | null
   source: ExecutionSource
   /** The contaminant code an outcome was tagged with (M5 of #293); absent on a row from before it. */

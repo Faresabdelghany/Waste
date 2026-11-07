@@ -18,7 +18,7 @@
 // row to one of the company's own user accounts, is left out of both reads
 // here and read by its recipient alone, at `GET /me/notices`
 // (routes/notifications.ts).
-import { Message, MessageCreate, MessageListQuery, type MessageChannel, type MessagePurpose, type MessageStatus } from "@waste/contracts/messaging"
+import { Message, MessageCreate, MessageListQuery } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { queueMessage } from "@waste/db/commands/messaging"
@@ -78,12 +78,12 @@ export const messageOf = (row: Row): Message => ({
   customerId: row.customerId,
   contactId: row.contactId,
   userAccountId: row.userAccountId,
-  channel: row.channel as MessageChannel,
-  purpose: row.purpose as MessagePurpose,
+  channel: row.channel,
+  purpose: row.purpose,
   recipient: row.recipient,
   subject: row.subject,
   body: row.body,
-  status: row.status as MessageStatus,
+  status: row.status,
   attempts: row.attempts,
   provider: row.provider,
   providerMessageId: row.providerMessageId,

@@ -32,7 +32,7 @@ export const routeMessage = wms.table(
     ...projectScoped,
     ...recorded,
     routeId: uuid().notNull(),
-    author: text().notNull(),
+    author: text({ enum: ROUTE_MESSAGE_AUTHORS }).notNull(),
     /** The account that sent it: the office's person, or the driver's login. */
     sentBy: uuid().notNull(),
     /** The driver profile that wrote it; null for the office's. */
@@ -45,7 +45,7 @@ export const routeMessage = wms.table(
     projectReference(t, [t.routeId], route),
     projectReference(t, [t.driverId], driver),
     tenantReference(t, [t.sentBy], userAccount),
-    oneOf(t.author, ROUTE_MESSAGE_AUTHORS),
+    oneOf(t.author),
     check(tableObjectName(t.id.table, "author_shape", "routeMessage"), sql`(${t.author} = 'driver') = (${t.driverId} is not null)`),
     // A route's thread in the order it was written.
     index(tableObjectName(t.companyId.table, "route_id_idx", "routeMessage")).on(t.companyId, t.routeId, t.id),

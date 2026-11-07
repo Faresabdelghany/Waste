@@ -30,8 +30,8 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planStop } from "@waste/db/schema/routing"
 import type { JobSender } from "@waste/db/jobs"
 import { stopLoadKg } from "@waste/domain/execution/workload"
-import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { balanceDay, type BalanceRoute, type BalanceStop } from "@waste/domain/routing/balance"
+import { NOT_STARTED_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { optimiseSolver } from "@waste/domain/routing/plans"
 import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, count, eq, inArray } from "drizzle-orm"
@@ -69,7 +69,7 @@ async function routesOfDay(tx: Tx, principal: Principal, day: RouteBalanceDay): 
   return await tx
     .select(routeColumns)
     .from(route)
-    .where(and(routeScope(principal), eq(route.projectId, day.projectId), eq(route.operatingDate, day.operatingDate), inArray(route.status, ["planned", "ready"])))
+    .where(and(routeScope(principal), eq(route.projectId, day.projectId), eq(route.operatingDate, day.operatingDate), inArray(route.status, [...NOT_STARTED_ROUTE_STATUSES])))
     .orderBy(asc(route.id))
 }
 
@@ -165,11 +165,11 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
         return {
           id: stop.id,
           position: stop.position,
-          status: stop.status as PickupStatus,
+          status: stop.status,
           containerId: stop.containerId,
-          service: stop.service as PickupService,
+          service: stop.service,
           at: positionOf(stop.property) ?? positionOf(stop.point),
-          kg: stopLoadKg({ service: stop.service as PickupService, volumeLitres: stop.volumeLitres, densityKgPerCubicMetre: stop.densityKgPerCubicMetre }) ?? 0,
+          kg: stopLoadKg({ service: stop.service, volumeLitres: stop.volumeLitres, densityKgPerCubicMetre: stop.densityKgPerCubicMetre }) ?? 0,
           serviceSeconds: timed?.serviceSeconds ?? 0,
           wasteFractionId: stop.wasteFractionId,
           containerTypeId: stop.containerTypeId,

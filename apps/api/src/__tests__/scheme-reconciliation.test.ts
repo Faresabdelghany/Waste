@@ -79,7 +79,7 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
         { id: ids.onDemand, ...scoped, name: "On demand" },
       ])
       await tx.insert(property).values({ id: ids.property, ...scoped, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", kind: "residential", location: TOWN_HALL, status: "active" })
-      const bin = (id: string, label: string) => ({ id, ...scoped, label, containerTypeId: ids.type, ownership: "company" })
+      const bin = (id: string, label: string): typeof container.$inferInsert => ({ id, ...scoped, label, containerTypeId: ids.type, ownership: "company" })
       await tx.insert(container).values([
         bin(ids.weeklyBin, "BIN-W"),
         bin(ids.twiceBin, "BIN-T"),

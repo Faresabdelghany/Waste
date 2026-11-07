@@ -58,10 +58,10 @@ export const fieldInspection = wms.table(
     /** The account that recorded it. */
     inspectorId: uuid().notNull(),
     inspectedAt: instant().notNull(),
-    outcome: text().notNull(),
-    findings: text().array().notNull().default(sql`'{}'::text[]`),
+    outcome: text({ enum: FIELD_INSPECTION_OUTCOMES }).notNull(),
+    findings: text({ enum: INSPECTION_FINDINGS }).array().notNull().default(sql`'{}'::text[]`),
     note: text(),
-    status: text().notNull().default("open"),
+    status: text({ enum: FIELD_INSPECTION_STATUSES }).notNull().default("open"),
     closedAt: instant(),
   },
   (t) => [
@@ -73,9 +73,9 @@ export const fieldInspection = wms.table(
     // A photo names its inspection with the project, as every child of a project-scoped row does.
     projectKey(t),
     exactlyOne(t, "subject", [t.containerId, t.propertyId]),
-    oneOf(t.outcome, FIELD_INSPECTION_OUTCOMES),
-    oneOf(t.status, FIELD_INSPECTION_STATUSES),
-    subsetOf(t.findings, INSPECTION_FINDINGS),
+    oneOf(t.outcome),
+    oneOf(t.status),
+    subsetOf(t.findings),
     check(tableObjectName(t.id.table, "findings_shape", "fieldInspection"), sql`(${t.outcome} = 'compliant') = (cardinality(${t.findings}) = 0)`),
     check(tableObjectName(t.id.table, "closed_shape", "fieldInspection"), sql`(${t.status} = 'closed') = (${t.closedAt} is not null)`),
     // A subject's inspections, latest first: what its details list.
@@ -120,16 +120,16 @@ export const rightSizingProposal = wms.table(
     subscriptionId: uuid().notNull(),
     /** The subscription's product when the proposal was made. */
     productId: uuid().notNull(),
-    direction: text().notNull(),
+    direction: text({ enum: RIGHT_SIZING_DIRECTIONS }).notNull(),
     /** The product a size down or up; none for a frequency. */
     suggestedProductId: uuid(),
     /** The fill estimates read, newest first. */
-    evidence: text().array().notNull(),
+    evidence: text({ enum: FILL_LEVELS }).array().notNull(),
     /** The instant of the newest estimate read: a later proposal needs newer evidence. */
     evidenceThrough: instant().notNull(),
     /** The subscription's `updated_at` as the proposal read it: approve refuses a subscription changed since. Never on the wire. */
     subscriptionUpdatedAt: instant().notNull(),
-    status: text().notNull().default("open"),
+    status: text({ enum: RIGHT_SIZING_STATUSES }).notNull().default("open"),
     decidedAt: instant(),
     decidedBy: uuid(),
     dismissNote: text(),
@@ -145,9 +145,9 @@ export const rightSizingProposal = wms.table(
     projectReference(t, [t.suggestedProductId], product),
     projectReference(t, [t.replacementSubscriptionId], subscription),
     tenantReference(t, [t.decidedBy], userAccount),
-    oneOf(t.direction, RIGHT_SIZING_DIRECTIONS),
-    oneOf(t.status, RIGHT_SIZING_STATUSES),
-    subsetOf(t.evidence, FILL_LEVELS),
+    oneOf(t.direction),
+    oneOf(t.status),
+    subsetOf(t.evidence),
     nonEmpty(t.evidence),
     check(tableObjectName(t.id.table, "suggestion_shape", "rightSizingProposal"), sql`(${t.direction} in ('smaller', 'bigger')) = (${t.suggestedProductId} is not null)`),
     check(tableObjectName(t.id.table, "decided_shape", "rightSizingProposal"), sql`(${t.status} <> 'open') = (${t.decidedAt} is not null and ${t.decidedBy} is not null)`),

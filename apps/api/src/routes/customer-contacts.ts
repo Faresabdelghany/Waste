@@ -16,7 +16,7 @@
 // A Customer is the company's, so the scope is the tenant alone. The grant is
 // the customer's own module, `customers.contacts`: `view` to read, `edit` for
 // every write, since a contact is part of the customer it speaks for.
-import { CustomerContact, CustomerContactCreate, CustomerContactPatch, CustomerContacts, type ContactRole, type ContactStatus } from "@waste/contracts/customers"
+import { CustomerContact, CustomerContactCreate, CustomerContactPatch, CustomerContacts } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
@@ -59,10 +59,10 @@ export const contactOf = (row: Row): CustomerContact => ({
   id: row.id,
   customerId: row.customerId,
   name: row.name,
-  role: row.role as ContactRole,
+  role: row.role,
   email: row.email,
   phone: row.phone,
-  status: row.status as ContactStatus,
+  status: row.status,
   ...stampsOf(row),
 })
 

@@ -197,6 +197,21 @@ export type OutboundLoadStatus = (typeof OUTBOUND_LOAD_STATUSES)[number]
 /** The statuses that carry the receiving site's ticket: every one the load reaches once received. A value beside the lists. */
 export const RECEIVED_LOAD_STATUSES = without(OUTBOUND_LOAD_STATUSES, "departed", "cancelled")
 
+/** The statuses a contaminant code is named by a new tag or a new rule in (`@waste/domain/status-gates`); a stop tagged before keeps its tag. */
+export const ACTIVE_CONTAMINANT_CODE_STATUSES = ["active"] as const satisfies readonly ContaminantCodeStatus[]
+
+// Where a route is in its day, as the rules that ask read it. Values of
+// `ROUTE_STATUSES`, not vocabularies: a status a route gains is placed in each.
+
+/** A route not yet started: its order, its day and its assignment still move. */
+export const NOT_STARTED_ROUTE_STATUSES = ["planned", "ready"] as const satisfies readonly RouteStatus[]
+/** A route dispatched and not yet ended: the driver's, and kept by a scheme's archive. */
+export const DISPATCHED_ROUTE_STATUSES = ["ready", "active"] as const satisfies readonly RouteStatus[]
+/** A route that has not ended: planned, dispatched or under way. */
+export const OPEN_ROUTE_STATUSES = without(ROUTE_STATUSES, "completed", "cancelled")
+/** A route that went out: under way or completed, so a vehicle drove it and a load came from it. */
+export const RAN_ROUTE_STATUSES = ["active", "completed"] as const satisfies readonly RouteStatus[]
+
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const EXECUTION_VOCABULARIES = {
   ROUTE_STATUSES,
