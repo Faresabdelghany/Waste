@@ -254,6 +254,12 @@ importers:
 
   apps/pilot:
     dependencies:
+      '@waste/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@waste/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@waste/process':
         specifier: workspace:*
         version: link:../../packages/process

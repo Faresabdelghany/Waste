@@ -2,10 +2,13 @@
 // pilot-backup.sh and pilot-restore.sh to evaluate (src/pilot/pg-env.ts says
 // why), and beside them PILOT_PAUSED_HINT — the sentence the scripts add when
 // a Supabase project does not answer (src/pilot/identity.ts's, spelled once),
-// empty for the local stack — and PILOT_CLIENT_MAJOR, the PostgreSQL client
-// major the backup pins, supabase/config.toml's `[db] major_version`. Its
-// output holds the password: the scripts capture it into a shell variable and
-// evaluate it, and never print it or write it down.
+// empty for the local stack — PILOT_CLIENT_MAJOR, the PostgreSQL client major
+// the backup pins, supabase/config.toml's `[db] major_version`, and
+// PILOT_BACKUP_INCOMPLETE, the exit status the backup's caller reads as "the
+// database cannot be backed up whole" (src/pilot/backup.ts). Its output holds
+// the password: the scripts capture it into a shell variable and evaluate it,
+// and never print it or write it down.
+import { BACKUP_INCOMPLETE } from "../../src/pilot/backup"
 import { PAUSED_HINT, targetOfUrl } from "../../src/pilot/identity"
 import { libpqEnvironment, shellExports } from "../../src/pilot/pg-env"
 import { postgresMajor } from "../../src/supabase-config"
@@ -18,4 +21,4 @@ try {
 } catch {
   // A host that is neither a Supabase project nor the local stack: the connection attempt says so itself.
 }
-process.stdout.write(`${shellExports({ ...libpqEnvironment(url), PILOT_PAUSED_HINT: hint, PILOT_CLIENT_MAJOR: String(postgresMajor()) })}\n`)
+process.stdout.write(`${shellExports({ ...libpqEnvironment(url), PILOT_PAUSED_HINT: hint, PILOT_CLIENT_MAJOR: String(postgresMajor()), PILOT_BACKUP_INCOMPLETE: String(BACKUP_INCOMPLETE) })}\n`)

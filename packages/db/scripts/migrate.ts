@@ -3,10 +3,9 @@
 // (src/journal-check.ts), and says which it applied. Notices from the
 // migrations (an extension already present, a role already there) go to
 // stderr.
-import { migrateDatabase } from "../src/migrate"
+import { migrateAndSay } from "../src/migrate"
 import { required, step } from "./step"
 
 await step(async () => {
-  const { applied } = await migrateDatabase(required("DATABASE_ADMIN_URL"), { onnotice: (notice) => console.error(`postgres ${notice.severity}: ${notice.message}`) })
-  console.log(applied.length === 0 ? "@waste/db: no migration pending" : `@waste/db: applied ${applied.join(", ")}`)
+  await migrateAndSay(required("DATABASE_ADMIN_URL"), { log: (line) => console.log(line), notice: (line) => console.error(line) })
 })

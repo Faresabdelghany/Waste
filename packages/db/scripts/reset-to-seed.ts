@@ -2,56 +2,18 @@
 // back as the seed says (src/reset-to-seed.ts, Issue #142), as the owner
 // DATABASE_ADMIN_URL logs in as, in one transaction. On the Pilot it runs only
 // as the `reset-to-seed` operation of the protected workflow, inside the write
-// barrier (supabase/README.md); anywhere else it refuses a URL that is not the
-// local stack, like every Pilot script, and it is never something to run while
-// an API, a worker or a test suite is using the database. It takes no
-// argument: the company it resets is the demo company, whose id the seed
-// fixes. Prints what it swept, what it kept, and what becomes of the outbox
-// and of the jobs pg-boss still holds for the company.
-import { count } from "@waste/domain/text"
-
+// barrier (supabase/README.md); here it refuses a URL that is not the local
+// stack, and it is never something to run while an API, a worker or a test
+// suite is using the database. It takes no argument: the company it resets is
+// the demo company, whose id the seed fixes. Prints what it swept, what it
+// kept, and what becomes of the outbox and of the jobs pg-boss still holds
+// for the company.
 import { expectPilot } from "../src/pilot/identity"
-import { COUNTER_DEFAULTS, resetToSeed } from "../src/reset-to-seed"
+import { resetToSeed, spellReset } from "../src/reset-to-seed"
 import { required, step, summary } from "./step"
-
-/** `a, b and c`. */
-const listed = (items: readonly string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`)
 
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")
-  expectPilot(url, process.env.PILOT_SUPABASE_REF)
-  const report = await resetToSeed(url)
-  // The audit log is said apart from the state it is the history of (#291): a reset clears it.
-  const state = report.swept.filter(({ table }) => table !== "audit_event")
-  const history = report.swept.find(({ table }) => table === "audit_event")?.rows ?? 0
-  const rows = state.reduce((total, { rows: swept }) => total + swept, 0)
-  summary(`Reset the demo company ${report.companyId} on ${new URL(url).hostname} to its seed, in one transaction.`)
-  summary(`Swept ${count(rows, "row")} from ${count(state.length, "table")}, children first${state.map(({ table, rows: swept }) => `, ${table} ${swept}`).join("")}.`)
-  summary(
-    `Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; ` +
-      `the seeded rows are back at the seed's word, and ${count(report.otherAccounts, "account")} the seed does not name ${report.otherAccounts === 1 ? "is" : "are"} as it was.`,
-  )
-  // A counter's series by its field: `nextScaleTicketNumber` is the scale-ticket counter.
-  const series = Object.keys(COUNTER_DEFAULTS).map((field) =>
-    field
-      .replace(/^next|Number$/g, "")
-      .replace(/(?<!^)([A-Z])/g, "-$1")
-      .toLowerCase(),
-  )
-  const values = Object.values(COUNTER_DEFAULTS).map(String)
-  summary(
-    `The seed wrote ${count(report.written, "row")}; the ${listed(series)} counters ${report.countersReset ? "were put back to" : "were already at"} ${listed(values)}, as a fresh seed leaves them.`,
-  )
-  summary(`Audit history: the company's ${count(history, "row")} went with the sweep; the trail begins again with the seed writing the tenant back.`)
-  summary(
-    report.unsentEvents === 0
-      ? "Outbox: no unpublished event was swept."
-      : `Outbox: ${count(report.unsentEvents, "unpublished event")} went with the sweep and will never be relayed.`,
-  )
-  summary(
-    report.waitingJobs === 0
-      ? "pg-boss: no waiting job names the company."
-      : `pg-boss: ${count(report.waitingJobs, "waiting job")} still ${report.waitingJobs === 1 ? "names" : "name"} the company and ${report.waitingJobs === 1 ? "is" : "are"} left on ${report.waitingJobs === 1 ? "its queue" : "their queues"}: ` +
-        "when a worker takes one it meets a tenant without the rows it names, and either finds nothing to do or fails, is retried and ends failed — an outbox consumer's copy on outbox.dead, which is not to be redriven.",
-  )
+  expectPilot(url, undefined)
+  for (const line of spellReset(await resetToSeed(url), url)) summary(line)
 })

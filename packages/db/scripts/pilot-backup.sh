@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # The Pilot's encrypted backup (Issue #152, decided in #133): every release,
 # code-only ones included, takes one before it migrates, and a restore takes
-# one before it drops anything. The CI rehearsal runs the same script against
-# the local stack.
+# one before it drops anything. `backUpDatabase` (src/pilot/backup-scripts.ts)
+# runs it, for an operation's phase and for the CI rehearsal against the local
+# stack alike.
 #
 #   DATABASE_ADMIN_URL      the owner's URL (the `pilot` environment's secret)
 #   BACKUP_OUTPUT           the encrypted file to write
+#   BACKUP_SCRATCH          the `mktemp -d` template of the directory the dumps
+#                           live in, in the clear, until they are encrypted
+#                           (src/pilot/phase.ts, `layout`)
 #   BACKUP_RECIPIENT_FILE   the age recipient; the committed
 #                           supabase/pilot-backup.pub unless a rehearsal names
 #                           its own throwaway key
 #   GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, GITHUB_SHA
-#                           recorded in the manifest (Actions sets them)
+#                           the run and the commit the manifest records: the
+#                           workflow's, or the local run's outside it
 #
 # What it does, in order, stopping at the first failure:
 #  1. the PostgreSQL client of supabase/config.toml's `[db] major_version`
@@ -29,15 +34,18 @@
 # The plaintext lives in a directory of its own, mode 700, and is deleted on
 # every exit; the workflow's always-running cleanup step deletes it again.
 #
-# Exit 3 means a schema a backup requires (wms, drizzle) is not there, so the
-# database cannot be backed up whole — the one refusal a restore's safety
-# backup may go on without; any other failure is exit 1.
+# Exit PILOT_BACKUP_INCOMPLETE (BACKUP_INCOMPLETE of src/pilot/backup.ts, read
+# from scripts/pilot/pg-env.ts) means a schema a backup requires (wms,
+# drizzle) is not there, so the database cannot be backed up whole — the one
+# refusal a restore's safety backup may go on without; any other failure is
+# exit 1.
 # libpq reads the connection from its environment (scripts/pilot/pg-env.ts),
 # so the password is never on a command line, and nothing here prints the URL.
 set -euo pipefail
 
 : "${DATABASE_ADMIN_URL:?DATABASE_ADMIN_URL is not set}"
 : "${BACKUP_OUTPUT:?BACKUP_OUTPUT names the encrypted file to write}"
+: "${BACKUP_SCRATCH:?BACKUP_SCRATCH names the template of the directory the dumps are written to}"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$(dirname "$here")"
@@ -48,14 +56,14 @@ fail() {
 }
 incomplete() {
   echo "pilot-backup: $*" >&2
-  exit 3
+  exit "$PILOT_BACKUP_INCOMPLETE"
 }
 absolute() { (cd "$(dirname "$1")" && printf "%s/%s" "$(pwd)" "$(basename "$1")"); }
 output="$(absolute "$BACKUP_OUTPUT")"
 recipient="$(absolute "${BACKUP_RECIPIENT_FILE:-$repository/supabase/pilot-backup.pub}")"
 [ -s "$recipient" ] || fail "no age recipient at $recipient"
 
-work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pilot-backup.XXXXXX")"
+work="$(mktemp -d "$BACKUP_SCRATCH")"
 trap 'rm -rf "$work"' EXIT
 plain="$work/plain"
 mkdir -m 700 "$plain"

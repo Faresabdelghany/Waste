@@ -1,0 +1,31 @@
+name: Store a Pilot backup
+description: >-
+  The artifact store's half of a Pilot operation's back-up phase (Issue #152,
+  packages/db/src/pilot/phases.ts): the encrypted backup the phase wrote,
+  uploaded under the name the phase gave and kept 30 days, before the next
+  phase writes anything; a release's or a reset's, and a restore's safety
+  backup, which a restore may go on without (`taken` false) where the
+  database cannot be backed up whole. Every input is the back-up step's
+  output, so no name is typed twice.
+inputs:
+  taken:
+    description: The back-up step's `taken` output; nothing is stored unless it is true.
+    required: true
+  name:
+    description: The back-up step's `artifact` output, `pilot-backup-<run>-<attempt>`.
+    required: true
+  path:
+    description: The back-up step's `file` output, the encrypted backup.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Upload the backup
+      if: inputs.taken == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0

@@ -95,7 +95,7 @@ RUN pnpm --filter @waste/pilot bundle api server.ts /app/apps/api/src/server.mjs
  && pnpm --filter @waste/pilot bundle worker main.ts /app/apps/worker/src/main.mjs \
  && pnpm --filter @waste/pilot bundle pilot main.ts /app/apps/pilot/main.mjs
 # The release file, where the commit being built carries one: every commit
-# of the deploy branch does (packages/db/src/pilot/release.ts writes it),
+# of the deploy branch does (apps/pilot/src/release.ts writes it),
 # main never does. Kept beside the supervisor for the runtime stage below.
 RUN if [ -f apps/pilot/release.json ]; then cp apps/pilot/release.json /app/apps/pilot/release.json; fi
 
@@ -124,7 +124,7 @@ COPY --from=build --chown=node:node /app /app
 # revision label. Two sources, the file
 # first: on the deploy branch apps/pilot/release.json names the released
 # commit of main — the release wrote it into the branch's tree
-# (packages/db/src/pilot/release.ts) and the build stage kept it above — and
+# (apps/pilot/src/release.ts) and the build stage kept it above — and
 # that is what /healthz must name, whoever builds the commit; Suga passes no
 # commit into a build anyway (its build arguments are values typed into the
 # service's form), so there the label stays empty and the file is the truth.
