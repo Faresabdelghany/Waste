@@ -1,5 +1,8 @@
-// The last two steps of a Pilot release (Issue #152, decided in #133; on
-// Suga since #149): the deploy, and the proof that it is live.
+// What a Pilot release does beside the database (Issue #152, decided in #133;
+// on Suga since #149; ordered since ADR-0011): whether a commit is released
+// at all, CI's proof of it, the deploy, and the proof that it is live. The
+// operations (operations.ts) run them as the release's phases; GitHub is
+// reached through the one client (github.ts).
 //
 // The deploy is one commit written on the deploy branch, `pilot`, through
 // GitHub's git data API under the job's own token (`contents: write` on the
@@ -37,6 +40,9 @@
 // each such answer until the new one takes over; Suga's build and rollout
 // take about a minute, well inside the ten.
 import { HealthResponse, PROBE_CACHE_CONTROL } from "@waste/contracts/health"
+import { COMMIT_ID } from "@waste/db/pilot/run"
+
+import { gitHubRepository, refuse, type RepositoryOptions } from "./github"
 
 export const OBSERVATIONS_NEEDED = 3
 export const OBSERVE_INTERVAL_MS = 10_000
@@ -144,56 +150,17 @@ export async function observeRelease({
   }
 }
 
-/** The one fetch these calls make: always to a URL they built. */
-export type Fetch = (input: URL, init?: RequestInit) => Promise<Response>
-
-/** A full commit id, as GitHub names one. */
-const COMMIT_ID = /^[0-9a-f]{40}$/
-/** `<owner>/<name>`, as GITHUB_REPOSITORY spells it. */
-const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 /** A plain branch name: no `refs/`, no slash, nothing git would refuse. */
 const BRANCH = /^[A-Za-z0-9_.-]+$/
 
-/** Where the release commit names the released commit: the file the Pilot image reads into build.json (apps/pilot/Dockerfile). Absent on main; present on every commit of the deploy branch. */
+/** Where the release commit names the released commit: the file the Pilot image reads into build.json (Dockerfile, beside this package). Absent on main; present on every commit of the deploy branch. */
 export const RELEASE_FILE = "apps/pilot/release.json"
 
-/** What every call to GitHub carries: the job's token, GitHub's media type and API version. */
-const githubHeaders = (token: string) => ({ authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" })
-
-/** GitHub's `message` from an error body, where it gave one. */
-const githubSaid = async (response: Response): Promise<string> => {
-  try {
-    const body = (await response.json()) as { message?: unknown } | null
-    return typeof body?.message === "string" ? body.message : `status ${response.status}`
-  } catch {
-    return `status ${response.status}`
-  }
-}
-
-type GitHubCall = (path: string, init: { method: string; body?: unknown }) => Promise<Response>
-
-/** A caller on one repository's API under one token; every path is relative to the repository. */
-const githubRepository = (repository: string, token: string, apiUrl: string, fetch: Fetch): GitHubCall => {
-  const headers = githubHeaders(token)
-  return (path, init) => fetch(new URL(`/repos/${repository}${path}`, apiUrl), { method: init.method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), redirect: "manual", signal: AbortSignal.timeout(30_000) })
-}
-
-const refuse = async (response: Response, doing: string): Promise<never> => {
-  throw new Error(`GitHub answered ${response.status} ${doing}: ${await githubSaid(response)}`)
-}
-
-export type DeployBranchOptions = {
-  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
-  repository: string
+export type DeployBranchOptions = RepositoryOptions & {
   /** The deploy branch Suga tracks: PILOT_DEPLOY_BRANCH, `pilot`. */
   branch: string
   /** The released commit, on main: RELEASE_COMMIT. */
   sha: string
-  /** The job's token, with `contents: write`: GITHUB_TOKEN. Appears in no message. */
-  token: string
-  /** GitHub's API; github.com's unless a test says otherwise. */
-  apiUrl?: string
-  fetch?: Fetch
 }
 
 export type DeployBranchRelease = {
@@ -222,20 +189,18 @@ export type DeployBranchRelease = {
  * released over, and one that does not exist is created. Answers where the
  * branch was and is.
  */
-export async function releaseToDeployBranch({ repository, branch, sha, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: DeployBranchOptions): Promise<DeployBranchRelease> {
-  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+export async function releaseToDeployBranch({ branch, sha, ...github }: DeployBranchOptions): Promise<DeployBranchRelease> {
   if (!BRANCH.test(branch)) throw new Error(`PILOT_DEPLOY_BRANCH is not a plain branch name: ${branch}`)
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
-  if (token === "") throw new Error("GITHUB_TOKEN is not set")
   const ref = `refs/heads/${branch}`
-  const call = githubRepository(repository, token, apiUrl, fetch)
+  const { call } = gitHubRepository(github)
   const shaOf = async (response: Response, what: string): Promise<string> => {
     const value = ((await response.json()) as { sha?: unknown }).sha
     if (typeof value !== "string" || !COMMIT_ID.test(value)) throw new Error(`GitHub answered no id for ${what}`)
     return value
   }
   const treeOf = async (commit: string, what: string): Promise<string> => {
-    const response = await call(`/git/commits/${commit}`, { method: "GET" })
+    const response = await call(`/git/commits/${commit}`)
     if (!response.ok) await refuse(response, `reading ${what}`)
     const tree = ((await response.json()) as { tree?: { sha?: unknown } }).tree?.sha
     if (typeof tree !== "string" || !COMMIT_ID.test(tree)) throw new Error(`GitHub answered no tree for ${what}`)
@@ -243,7 +208,7 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
   }
 
   // Where the branch is.
-  const current = await call(`/git/ref/heads/${branch}`, { method: "GET" })
+  const current = await call(`/git/ref/heads/${branch}`)
   let head: string | null = null
   if (current.status !== 404) {
     if (!current.ok) await refuse(current, `reading ${ref}`)
@@ -291,17 +256,11 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
  */
 export const REQUIRED_CHECKS: readonly string[] = ["Install, typecheck, lint, test, build", "Build pilot image"]
 
-export type RequireChecksOptions = {
-  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
-  repository: string
+export type RequireChecksOptions = RepositoryOptions & {
   /** The released commit: RELEASE_COMMIT. */
   sha: string
   /** The check runs that must have completed with success on it; REQUIRED_CHECKS unless a test says otherwise. */
   names?: readonly string[]
-  /** The job's token, with `checks: read`: GITHUB_TOKEN. */
-  token: string
-  apiUrl?: string
-  fetch?: Fetch
 }
 
 export type CheckRun = { name: string; status: string; conclusion: string | null; html_url?: string }
@@ -329,14 +288,10 @@ export function judgeChecks(runs: readonly CheckRun[], names: readonly string[])
  * image itself this is what keeps a red or unfinished commit from being
  * migrated for and pushed to the deploy branch.
  */
-export async function requireChecks({ repository, sha, names = REQUIRED_CHECKS, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: RequireChecksOptions): Promise<{ names: readonly string[] }> {
-  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+export async function requireChecks({ sha, names = REQUIRED_CHECKS, ...github }: RequireChecksOptions): Promise<{ names: readonly string[] }> {
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
-  if (token === "") throw new Error("GITHUB_TOKEN is not set")
-  const call = githubRepository(repository, token, apiUrl, fetch)
-  const response = await call(`/commits/${sha}/check-runs?per_page=100`, { method: "GET" })
-  if (!response.ok) await refuse(response, `reading the check runs of ${sha}`)
-  const runs = ((await response.json()) as { check_runs?: unknown }).check_runs
+  const { read } = gitHubRepository(github)
+  const runs = (await read<{ check_runs?: unknown }>(`/commits/${sha}/check-runs?per_page=100`, `reading the check runs of ${sha}`)).check_runs
   if (!Array.isArray(runs)) throw new Error(`GitHub answered no check runs for ${sha}`)
   const verdict = judgeChecks(runs as CheckRun[], names)
   if (!verdict.ok) throw new Error(`Commit ${sha} is not released: ${verdict.reason}`)
@@ -387,37 +342,27 @@ export function judgeOrder({ candidate, mainVsCandidate, released, releasedVsCan
   }
 }
 
-export type ReleaseOrderOptions = {
-  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
-  repository: string
+export type ReleaseOrderOptions = RepositoryOptions & {
   /** The deploy branch: PILOT_DEPLOY_BRANCH. */
   branch: string
   /** The commit this run would release: RELEASE_COMMIT. */
   sha: string
-  /** The job's token, with `contents: read`: GITHUB_TOKEN. */
-  token: string
-  apiUrl?: string
-  fetch?: Fetch
 }
 
 /** Reads the facts `judgeOrder` needs from GitHub — main against the commit, the deploy branch's release file, the released commit against the commit — and judges them. */
-export async function resolveReleaseOrder({ repository, branch, sha, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: ReleaseOrderOptions): Promise<OrderVerdict & { released: string | null }> {
-  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+export async function resolveReleaseOrder({ branch, sha, ...github }: ReleaseOrderOptions): Promise<OrderVerdict & { released: string | null }> {
   if (!BRANCH.test(branch)) throw new Error(`PILOT_DEPLOY_BRANCH is not a plain branch name: ${branch}`)
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
-  if (token === "") throw new Error("GITHUB_TOKEN is not set")
-  const call = githubRepository(repository, token, apiUrl, fetch)
+  const { call, read } = gitHubRepository(github)
   const compare = async (base: string, head: string): Promise<CompareStatus> => {
-    const response = await call(`/compare/${base}...${head}`, { method: "GET" })
-    if (!response.ok) await refuse(response, `comparing ${head} with ${base}`)
-    const status = ((await response.json()) as { status?: unknown }).status
+    const status = (await read<{ status?: unknown }>(`/compare/${base}...${head}`, `comparing ${head} with ${base}`)).status
     if (status !== "ahead" && status !== "behind" && status !== "identical" && status !== "diverged") throw new Error(`GitHub answered no comparison of ${head} with ${base}`)
     return status
   }
 
   const mainVsCandidate = await compare(sha, "main")
 
-  const file = await call(`/contents/${RELEASE_FILE}?ref=${branch}`, { method: "GET" })
+  const file = await call(`/contents/${RELEASE_FILE}?ref=${branch}`)
   let released: string | null = null
   if (file.status !== 404) {
     if (!file.ok) await refuse(file, `reading ${RELEASE_FILE} on ${branch}`)

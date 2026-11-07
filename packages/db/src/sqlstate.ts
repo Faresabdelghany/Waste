@@ -64,12 +64,25 @@ export const DRIZZLE_QUERY = "Failed query: "
  * workflow summary that carried it whole would carry a row's values; its
  * first line names nothing but the statement's head, so the message is cut at
  * the statement, and the cause — postgres.js's error, whose message is the
- * database's own sentence — carries what matters. `loggable` below and the
- * Pilot scripts' `step` both read it; any other message is returned as it
- * is.
+ * database's own sentence — carries what matters. `loggable` below and
+ * `failureMessage` both read it; any other message is returned as it is.
  */
 export function messageWithoutStatement(message: string): string {
   return message.startsWith(DRIZZLE_QUERY) ? "Failed query" : message
+}
+
+/**
+ * What a script or a Pilot operation's phase says when it fails, in a log
+ * that may be public: the error's message with a statement's text and
+ * parameters cut off, and the database's own sentence kept where Drizzle
+ * wrapped one. Never the stack, where a secret could sit.
+ */
+export function failureMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error)
+  const message = messageWithoutStatement(error.message)
+  if (message === error.message) return message
+  const { cause } = error
+  return cause instanceof Error ? `${message}: ${messageWithoutStatement(cause.message)}` : message
 }
 
 /** How far down a `cause` chain `loggable` goes; Drizzle wraps postgres.js, which wraps nothing. */

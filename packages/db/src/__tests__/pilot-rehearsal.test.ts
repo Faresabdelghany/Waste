@@ -1,18 +1,21 @@
-// The Pilot's backup and restore end to end (Issue #152), on a fresh database
-// of this file's own: migrated and seeded, backed up by pilot-backup.sh to a
-// throwaway age key, its three schemas dropped, restored by pilot-restore.sh,
-// and then proved — the journal and the fingerprint as they were, and the
-// app roles able to do their work on it. CI also rehearses on the local stack
-// itself before the suites run, so every suite is a smoke test of a restored
-// database (scripts/pilot/rehearse.ts); this file is the rehearsal a machine
-// can run on its own.
+// The Pilot's restore phases end to end (Issue #152), on a fresh database of
+// this file's own: migrated and seeded, backed up by the restore's back-up
+// phase to a throwaway age key, its three schemas dropped, decrypted,
+// verified, the logins recorded, and restored behind the write barrier —
+// closed on two throwaway roles, since roles are cluster-wide and every other
+// suite logs in as wms_api — then proved: the journal and the fingerprint as
+// they were, the barrier open again, and the app roles able to do their work
+// on it. CI also rehearses on the local stack itself, the barrier on the real
+// app roles, before the suites run, so every suite is a smoke test of a
+// restored database (scripts/pilot/rehearse.ts); this file is the rehearsal a
+// machine can run on its own.
 //
 // It needs the PostgreSQL client of supabase/config.toml's major and age on
-// PATH: without them it skips,
-// visibly, unless REQUIRE_DATABASE is on, where their absence is a failure,
-// as it is in CI.
+// PATH: without them it skips, visibly, unless REQUIRE_DATABASE is on, where
+// their absence is a failure, as it is in CI.
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -24,14 +27,17 @@ import { sql as drizzleSql } from "drizzle-orm"
 
 import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
-import { rehearsalTools, rehearseRestore } from "../pilot/rehearsal"
+import { BACKUP_INCOMPLETE } from "../pilot/backup"
+import { backUpDatabase, backupTools } from "../pilot/backup-scripts"
+import { rehearseRestore } from "../pilot/rehearsal"
+import { LOCAL_RUN } from "../pilot/run"
 import { seedDemo } from "../seed/demo"
 import { postgresMajor } from "../supabase-config"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, withDatabaseName } from "./database"
 
 const database = databaseUnderTest()
-const missing = database.skip === false ? rehearsalTools() : undefined
+const missing = database.skip === false ? backupTools() : undefined
 if (missing !== undefined && isDatabaseRequired(process.env)) {
   throw new Error(`REQUIRE_DATABASE is set, but the restore rehearsal cannot run: ${missing}`)
 }
@@ -39,9 +45,13 @@ const major = postgresMajor()
 const skip = database.skip || (missing === undefined ? false : `${missing}: the restore rehearsal needs PostgreSQL client ${major} and age`)
 
 describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
-  test("restores a seeded database to the same journal and fingerprint, and the app roles work on it", async () => {
+  test("restores a seeded database behind the barrier to the same journal and fingerprint, opens the barrier again, and the app roles work on it", async () => {
     const fresh = await freshDatabase(database.adminUrl, "waste_rehearsal")
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12)
+    const roles = [`waste_rehearsal_${suffix}_a`, `waste_rehearsal_${suffix}_b`]
+    const cluster = createDb(database.adminUrl, { max: 1 })
     try {
+      for (const role of roles) await cluster.sql.unsafe(`create role ${role} login`)
       await migrateDatabase(fresh.url)
       const { companyId } = await seedDemo(fresh.url)
       const owner = createDb(fresh.url, { max: 1 })
@@ -54,9 +64,12 @@ describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
       }
 
       const lines: string[] = []
-      const rehearsal = await rehearseRestore(fresh.url, { log: (line) => lines.push(line) })
+      const rehearsal = await rehearseRestore(fresh.url, { barrierRoles: roles, log: (line) => lines.push(line) })
       assert.ok(rehearsal.journalRows > 0)
       assert.ok(lines.includes(`pilot-backup: pg_dump ${major} against server ${major}`))
+      assert.ok(lines.includes(`Barrier closed: ${roles.join(" and ")} NOLOGIN, 0 session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`))
+      assert.ok(lines.includes(`Logins restored from the restore of run 0: ${roles.map((role) => `${role} LOGIN`).join(", ")}`))
+      assert.equal(rehearsal.logins, roles.map((role) => `${role} LOGIN`).join(", "))
       assert.match(lines.join("\n"), /the fingerprint matches/)
 
       // The API role, fenced by its tenant, reads and writes the restored rows.
@@ -84,6 +97,26 @@ describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
         await worker.close()
       }
     } finally {
+      await fresh.drop()
+      for (const role of roles) await cluster.sql.unsafe(`drop role if exists ${role}`)
+      await cluster.close()
+    }
+  })
+})
+
+describe("backUpDatabase", { skip }, () => {
+  test("takes no backup of a database without the schemas a backup requires: a restore's safety backup goes on, saying why, and any other refuses", async () => {
+    const fresh = await freshDatabase(database.adminUrl, "waste_incomplete")
+    const work = mkdtempSync(path.join(tmpdir(), "waste-incomplete-"))
+    try {
+      const lines: string[] = []
+      const options = { env: process.env, url: fresh.url, output: path.join(work, "backup.tar.age"), run: LOCAL_RUN.run, commit: LOCAL_RUN.commit, log: (line: string) => lines.push(line) }
+      assert.deepEqual(backUpDatabase({ ...options, tolerateIncomplete: true }), { taken: false })
+      assert.ok(lines.includes("pilot-backup: the database has no wms schema, so it cannot be backed up whole"), lines.join("\n"))
+      assert.throws(() => backUpDatabase(options), new RegExp(`pilot-backup\\.sh failed \\(exit ${BACKUP_INCOMPLETE}\\)`))
+      assert.equal(existsSync(options.output), false)
+    } finally {
+      rmSync(work, { recursive: true, force: true })
       await fresh.drop()
     }
   })

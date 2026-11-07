@@ -1,15 +1,31 @@
 // The write barrier and the LOGIN record (Issue #152). The rules over plain
 // shapes first — what a login-state record must be, and what restoring one
-// does to the roles as they are — then the barrier against Postgres. Roles are
-// cluster-wide and every other suite logs in as wms_api, so the database test
-// closes the barrier on two throwaway roles of its own, the functions taking
-// the roles the workflow's scripts fix.
+// does to the roles as they are — then the barrier and its protocol against
+// Postgres. Roles are cluster-wide and every other suite logs in as wms_api,
+// so the database tests close the barrier on throwaway roles of their own,
+// the functions taking the roles the operations fix.
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { describe, test } from "node:test"
 
 import { createDb } from "../client"
-import { BARRIER_ROLES, requireBarrierOpen, checkRecord, closeBarrier, loginRecord, openLogins, parseLoginRecord, planRecovery, readLogins, readLoginsIfPresent, spellLogins } from "../pilot/barrier"
+import {
+  BARRIER_ROLES,
+  barrierOpen,
+  behindBarrier,
+  checkRecord,
+  closeBarrier,
+  loginRecord,
+  openFromRecord,
+  openLogins,
+  parseLoginRecord,
+  planRecovery,
+  readLogins,
+  readLoginsIfPresent,
+  recordLogins,
+  requireBarrierOpen,
+  spellLogins,
+} from "../pilot/barrier"
 import { databaseUnderTest, withUser } from "./database"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
@@ -53,6 +69,8 @@ describe("requireBarrierOpen and checkRecord", () => {
   test("refuse to close a barrier over one already closed, since the record would restore nothing", () => {
     assert.doesNotThrow(() => requireBarrierOpen({ wms_api: true, wms_worker: false }))
     assert.throws(() => requireBarrierOpen({ wms_api: false, wms_worker: false }), /wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it\. Run recover-logins/)
+    assert.equal(barrierOpen({ wms_api: null, wms_worker: true }), false, "a missing wms_api is no open barrier")
+    assert.equal(barrierOpen({ waste_barrier_a: false }), true, "roles that need not log in say nothing about an earlier barrier")
   })
 
   test("hold a record to its run, its commit and its database", () => {
@@ -122,4 +140,69 @@ describe("the barrier on a database", { skip: database.skip }, () => {
       await owner.close()
     }
   })
+})
+
+describe("the barrier's protocol on a database", { skip: database.skip }, () => {
+  /** Two throwaway roles, the first able to log in and the second not, for one test. */
+  const withRoles = async (body: (roles: string[], sql: ReturnType<typeof createDb>["sql"]) => Promise<void>) => {
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12)
+    const roles = [`waste_protocol_${suffix}_a`, `waste_protocol_${suffix}_b`]
+    const owner = createDb(database.adminUrl, { max: 1 })
+    try {
+      await owner.sql.unsafe(`create role ${roles[0]} login`)
+      await owner.sql.unsafe(`create role ${roles[1]} nologin`)
+      await body(roles, owner.sql)
+    } finally {
+      for (const role of roles) await owner.sql.unsafe(`drop role if exists ${role}`)
+      await owner.close()
+    }
+  }
+  const scopeOf = (roles: string[]) => ({ identity: "local/postgres", run: { id: "18000000001", attempt: "1" }, commit: COMMIT, roles })
+
+  test("records the logins, closes over the stored copy, does the work while no role can log in, and puts back what it recorded", () =>
+    withRoles(async (roles, sql) => {
+      const scope = scopeOf(roles)
+      const recorded = await recordLogins(sql, { ...scope, operation: "restore" })
+      assert.deepEqual(recorded.record.logins, { [roles[0]]: true, [roles[1]]: false })
+      assert.deepEqual(parseLoginRecord(recorded.text, roles), recorded.record)
+      const said: string[] = []
+      const during = await behindBarrier(sql, { ...scope, recorded: recorded.text, stored: recorded.text, say: (line) => said.push(line) }, () => readLogins(sql, roles))
+      assert.deepEqual(during, { [roles[0]]: false, [roles[1]]: false })
+      assert.deepEqual(await readLogins(sql, roles), { [roles[0]]: true, [roles[1]]: false })
+      assert.deepEqual(said, [
+        `Barrier closed: ${roles[0]} and ${roles[1]} NOLOGIN, 0 session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`,
+        `Logins restored from the restore of run 18000000001: ${roles[0]} LOGIN, ${roles[1]} NOLOGIN`,
+      ])
+    }))
+
+  test("closes nothing over a stored copy that is not the record, or over logins changed since they were recorded", () =>
+    withRoles(async (roles, sql) => {
+      const scope = scopeOf(roles)
+      const recorded = await recordLogins(sql, { ...scope, operation: "reset-to-seed" })
+      let worked = false
+      const work = async () => {
+        worked = true
+      }
+      await assert.rejects(behindBarrier(sql, { ...scope, recorded: recorded.text, stored: `${recorded.text} `, say: () => {} }, work), /reads back with sha256 [0-9a-f]{64}, not [0-9a-f]{64}: the barrier stays open/)
+      await sql.unsafe(`alter role ${roles[1]} login`)
+      await assert.rejects(behindBarrier(sql, { ...scope, recorded: recorded.text, stored: recorded.text, say: () => {} }, work), /the logins changed since they were recorded .*: the barrier stays open/)
+      assert.equal(worked, false)
+      assert.deepEqual(await readLogins(sql, roles), { [roles[0]]: true, [roles[1]]: true })
+    }))
+
+  test("leaves every role NOLOGIN when the work fails, for recover-logins to put back from the record, which no other run's record can", () =>
+    withRoles(async (roles, sql) => {
+      const scope = scopeOf(roles)
+      const recorded = await recordLogins(sql, { ...scope, operation: "restore" })
+      await assert.rejects(
+        behindBarrier(sql, { ...scope, recorded: recorded.text, stored: recorded.text, say: () => {} }, async () => {
+          throw new Error("the restore failed")
+        }),
+        /the restore failed/,
+      )
+      assert.deepEqual(await readLogins(sql, roles), { [roles[0]]: false, [roles[1]]: false })
+      await assert.rejects(openFromRecord(sql, recorded.text, { ...scope, run: { id: "18000000001", attempt: "2" } }), /is of run 18000000001 attempt 1, not run 18000000001 attempt 2/)
+      const opened = await openFromRecord(sql, recorded.text, scope)
+      assert.deepEqual([opened.restored, opened.logins], [[roles[0]], { [roles[0]]: true, [roles[1]]: false }])
+    }))
 })

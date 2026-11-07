@@ -8,7 +8,7 @@ description: >-
   lockfile's integrity hashes and restore nothing another run saved.
 inputs:
   filter:
-    description: A pnpm filter whose closure alone is installed (`@waste/db...`); empty installs the whole workspace.
+    description: A pnpm filter whose closure alone is installed (`@waste/pilot...`); empty installs the whole workspace.
     default: ""
   cache:
     description: Whether the pnpm store is restored from and saved to the Actions cache.

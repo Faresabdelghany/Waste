@@ -152,6 +152,12 @@
         "WASTE_API_ORIGIN"
       ]
     },
+    "@waste/pilot#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false
+    },
     "@waste/db#test": {
       "dependsOn": [
         "^test"

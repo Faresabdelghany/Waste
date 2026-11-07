@@ -34,8 +34,9 @@
 // - a role's password and validity are left out, and so is the LOGIN of a
 //   role a URL logs in as: the Pilot's app roles log in with their own
 //   credentials and the local stack's with bootstrap's, and their LOGIN state
-//   is a check of its own (scripts/pilot/state.ts). A role that logs in as
-//   nobody has its LOGIN recorded, since no environment gives it one;
+//   is a check of its own (`verifyLogins`, src/pilot/barrier.ts). A role
+//   that logs in as nobody has its LOGIN recorded, since no environment gives
+//   it one;
 // - an extension's version and a sequence's current value are left out.
 //
 // Every definition is deparsed by Postgres itself (`pg_get_constraintdef`,
@@ -132,6 +133,32 @@ export function committedFingerprint(): string {
 /** The sha256 of a fingerprint's object lines: what a backup's manifest records and a log prints. */
 export function fingerprintDigest(text: string): string {
   return sha256(`${fingerprintLines(text).join("\n")}\n`)
+}
+
+/**
+ * The database at `url` held to a fingerprint, as `pnpm db:fingerprint
+ * --check` and every Pilot operation hold it: the committed file unless
+ * `expected` names another (a backup's own), one line when it matches, and a
+ * failure naming every line that differs when it does not.
+ */
+export async function requireFingerprint(
+  url: string,
+  log: (line: string) => void,
+  expected: { text: string; name: string } = { text: committedFingerprint(), name: "the committed fingerprint" },
+): Promise<void> {
+  const actual = await fingerprintDatabase(url)
+  const { missing, unexpected } = compareFingerprints(expected.text, actual)
+  if (missing.length === 0 && unexpected.length === 0) {
+    log(`@waste/db: ${new URL(url).hostname} matches ${expected.name} (sha256 ${fingerprintDigest(actual)})`)
+    return
+  }
+  throw new Error(
+    [
+      ...missing.map((line) => `- ${line}`),
+      ...unexpected.map((line) => `+ ${line}`),
+      `@waste/db: ${new URL(url).hostname} differs from ${expected.name} (expected sha256 ${fingerprintDigest(expected.text)}, found ${fingerprintDigest(actual)}): ${missing.length} line(s) expected and missing (-), ${unexpected.length} found and not expected (+)`,
+    ].join("\n"),
+  )
 }
 
 /** Writes grants as `grantee=PRIVILEGE,…/grantor`, sorted, the owner as `<owner>`; without the grantor where it says nothing. */
