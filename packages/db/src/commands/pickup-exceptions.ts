@@ -8,7 +8,7 @@
 // statements it asks for, spelled once so the history and the charge read the
 // same rows.
 import type { PickupExceptionRuleFacts, PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
-import { CODED_PROOF_KINDS, PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, MISSED_PICKUP_STATUSES, PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
 import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -64,7 +64,7 @@ export async function exceptionRulesOf(tx: Tx, companyId: string, projectId: str
 /** The stops that are exceptions as a row says so: missed for a reason the customer caused, or collected but tagged — the domain's `isPickupException` in SQL. */
 export const pickupExceptionRows = (): SQL | undefined =>
   or(
-    and(inArray(pickup.status, ["failed", "skipped"]), inArray(pickup.reason, [...PICKUP_EXCEPTION_REASONS])),
+    and(inArray(pickup.status, [...MISSED_PICKUP_STATUSES]), inArray(pickup.reason, [...PICKUP_EXCEPTION_REASONS])),
     and(eq(pickup.status, "completed"), isNotNull(pickup.contaminantCodeId)),
   )
 

@@ -42,7 +42,7 @@
 //
 // Every instant is epoch milliseconds; the caller turns the project's clock —
 // the departure and the windows, times of the operating day — into instants.
-import { DRIVER_PICKUP_REASONS, type PickupReason, type PickupStatus, type RouteStatus } from "../execution/vocabulary"
+import { DRIVER_PICKUP_REASONS, pickupMissed, type PickupReason, type PickupStatus, type RouteStatus } from "../execution/vocabulary"
 import { UNLOAD_SECONDS } from "../execution/workload"
 import type { PlanTrip } from "./vocabulary"
 
@@ -92,7 +92,7 @@ export const legsOfTrip = (trip: PlanTrip, stops: number): number => (stops === 
 const DRIVER_REASONS: ReadonlySet<PickupReason> = new Set(DRIVER_PICKUP_REASONS)
 
 /** Whether the driver decided the stop: the vehicle was there, and the clock stands at its outcome. */
-const decided = (stop: Extract<EtaStop, { kind: "pickup" }>): boolean => stop.status === "completed" || ((stop.status === "skipped" || stop.status === "failed") && stop.reason !== null && DRIVER_REASONS.has(stop.reason))
+const decided = (stop: Extract<EtaStop, { kind: "pickup" }>): boolean => stop.status === "completed" || (pickupMissed(stop.status) && stop.reason !== null && DRIVER_REASONS.has(stop.reason))
 
 const nothing = (stops: readonly EtaStop[]): RouteEta => ({
   stops: stops.map((stop) => (stop.kind === "pickup" ? { kind: "pickup", pickupId: stop.pickupId, eta: null } : { kind: "unload", eta: null })),

@@ -28,6 +28,8 @@
 // Plan for each route it reshapes. The routing horizon keeps its own fixed
 // week (apps/worker's routing/horizon.ts), since it spends the routing quota.
 import { addDays } from "../days"
+import { DISPATCHED_ROUTE_STATUSES } from "../execution/vocabulary"
+import { isOneOf } from "../lists"
 import type { ExistingRoute, GenerationWindow, RouteDecision } from "./generation"
 
 /** The window the nightly sweep plans when a scheme says nothing: the week it always planned. */
@@ -70,7 +72,7 @@ export function routesEndedFrom(routes: readonly ExistingRoute[], from: string, 
   let kept = 0
   for (const route of ending) {
     if (route.status === "planned") decisions.push({ kind: route.officeStops ? "trim" : "cancel", routeId: route.id, groupId: route.collectionGroupId, serviceDate: route.serviceDate, note })
-    else if (route.status === "ready" || route.status === "active") kept += 1
+    else if (isOneOf(route.status, DISPATCHED_ROUTE_STATUSES)) kept += 1
   }
   return { decisions, kept }
 }

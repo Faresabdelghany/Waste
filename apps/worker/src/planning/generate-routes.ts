@@ -101,11 +101,9 @@ import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
 import { cancelRoutesByGeneration, lockSchemeRoutes, routesWithOfficeStops, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
 import { nextNumbers } from "@waste/db/commands/shared"
-import { validOver } from "@waste/db/query/valid-on"
+import { awayPeriodsOver, type AwayRow } from "@waste/db/query/away-periods"
 import { routeLabel } from "@waste/domain/numbering"
-import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { readProjectCalendar } from "@waste/db/query/project-clock"
-import { driver, vehicle } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
@@ -133,7 +131,7 @@ import {
   type RouteDecision,
   type StopGroup,
 } from "@waste/domain/planning/generation"
-import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
+import { crewLeftOff, crewOnDay, heldCrewAway } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm"
@@ -520,17 +518,14 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   return { kind: "succeeded", counts, projectId: run.projectId, reshaped }
 }
 
-/** A period away, with the owner it belongs to and the name a warning gives them. */
-type AwayRow = AwayPeriod & { ownerId: string; name: string }
 type AwayPeriods = { driver: ReadonlyMap<string, readonly AwayRow[]>; vehicle: ReadonlyMap<string, readonly AwayRow[]> }
 
 /**
  * The absences and the unavailability touching the operating dates the run
  * writes (O6 of #290), of the drivers and the vehicles it could write: its
  * groups', and the crew a held route keeps, its trailer among it. One read
- * each over the span of those dates (`validOver`), in the scheme's project, by
- * owner, with the name a warning gives: a driver's, a vehicle's callsign else
- * its registration.
+ * each over the span of those dates (`awayPeriodsOver`), in the scheme's
+ * project, by owner, with the name a warning gives.
  */
 async function awayPeriods(
   tx: Tx,
@@ -551,35 +546,8 @@ async function awayPeriods(
   const driverIds = present([...groups.map((group) => group.driverId), ...held.map((row) => row.plannedDriverId)])
   const vehicleIds = present([...groups.map((group) => group.vehicleId), ...held.flatMap((row) => [row.plannedVehicleId, row.plannedTrailerId])])
 
-  const drivers =
-    driverIds.length === 0
-      ? []
-      : await tx
-          .select({ ownerId: driverAbsence.driverId, validFrom: driverAbsence.validFrom, validTo: driverAbsence.validTo, reason: driverAbsence.reason, name: driver.name })
-          .from(driverAbsence)
-          .innerJoin(driver, and(eq(driver.companyId, driverAbsence.companyId), eq(driver.id, driverAbsence.driverId)))
-          .where(and(eq(driverAbsence.companyId, scope.companyId), eq(driverAbsence.projectId, scope.projectId), inArray(driverAbsence.driverId, driverIds), validOver(driverAbsence, span)))
-  const vehicles =
-    vehicleIds.length === 0
-      ? []
-      : await tx
-          .select({
-            ownerId: vehicleUnavailability.vehicleId,
-            validFrom: vehicleUnavailability.validFrom,
-            validTo: vehicleUnavailability.validTo,
-            reason: vehicleUnavailability.reason,
-            name: sql<string>`coalesce(${vehicle.callsign}, ${vehicle.registration})`,
-          })
-          .from(vehicleUnavailability)
-          .innerJoin(vehicle, and(eq(vehicle.companyId, vehicleUnavailability.companyId), eq(vehicle.id, vehicleUnavailability.vehicleId)))
-          .where(
-            and(
-              eq(vehicleUnavailability.companyId, scope.companyId),
-              eq(vehicleUnavailability.projectId, scope.projectId),
-              inArray(vehicleUnavailability.vehicleId, vehicleIds),
-              validOver(vehicleUnavailability, span),
-            ),
-          )
+  const drivers = await awayPeriodsOver(tx, "driver", scope, driverIds, span)
+  const vehicles = await awayPeriodsOver(tx, "vehicle", scope, vehicleIds, span)
   const byOwner = (rows: readonly AwayRow[]): Map<string, AwayRow[]> => {
     const map = new Map<string, AwayRow[]>()
     for (const row of rows) map.set(row.ownerId, [...(map.get(row.ownerId) ?? []), row])

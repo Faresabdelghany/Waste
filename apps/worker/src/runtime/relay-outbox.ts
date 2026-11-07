@@ -168,7 +168,6 @@ function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: D
   }
 }
 
-/** How `send` enqueues on the transaction the stamp runs in: pg-boss's adapter over the Drizzle transaction. */
 /** The sends of one relay pass on the pass's own transaction: `@waste/db/jobs`'s adapter, the one spelling the sweep and the API's trigger use too. */
 const onTransaction = (tx: Tx): SendOptions => ({ db: inTransaction(tx) })
 

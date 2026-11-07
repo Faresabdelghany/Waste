@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { overlapsDays } from "@waste/domain/resources/availability"
 import { eq, sql, and } from "drizzle-orm"
 import { date, integer, text, uuid } from "drizzle-orm/pg-core"
 
@@ -193,6 +194,23 @@ describe("effective dating against the database", { skip: database.skip }, () =>
       assert.deepEqual(await labelsOver("2099-01-01", "2099-01-02"), ["onwards"])
       assert.throws(() => validOver(specimen, { validFrom: "2026-02-30", validTo: null }), /validOver: "2026-02-30" is not a YYYY-MM-DD day/)
       assert.throws(() => validOver(specimen, { validFrom: "2026-02-01", validTo: "Mar 1" }), /validOver: "Mar 1" is not a YYYY-MM-DD day/)
+    }))
+
+  test("validOver is the domain's overlapsDays: over every stored period and every span asked, the rows it keeps are the ones overlapsDays keeps", () =>
+    inSpecimen(async (tx) => {
+      const DAYS = ["2026-02-20", "2026-03-01", "2026-03-02", "2026-03-05", "2026-03-10", "2026-03-15", "2026-03-20"]
+      const stored = DAYS.flatMap((from, i) => [...DAYS.slice(i + 1), null].map((to) => ({ validFrom: from, validTo: to })))
+      // One container per period, so the exclusion constraint lets every one of them stand.
+      await tx.insert(specimen).values(stored.map((one, n) => period(String(n), one.validFrom, one.validTo, companyA, `018f7c2e-0000-7000-8000-${String(n).padStart(12, "0")}`)))
+      const mismatches: string[] = []
+      for (const asked of stored) {
+        const rows = await tx.select({ label: specimen.label }).from(specimen).where(validOver(specimen, asked))
+        const kept = new Set(rows.map((row) => Number(row.label)))
+        stored.forEach((one, n) => {
+          if (kept.has(n) !== overlapsDays(one, asked.validFrom, asked.validTo)) mismatches.push(`${JSON.stringify(one)} over ${JSON.stringify(asked)}: SQL ${kept.has(n)}`)
+        })
+      }
+      assert.deepEqual(mismatches, [])
     }))
 
   test("the validity columns travel as YYYY-MM-DD strings through the Drizzle face", () =>

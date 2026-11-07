@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 21, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS", "RECEIVED_LOAD_STATUSES", "ACTIVE_CONTAMINANT_CODE_STATUSES", "NOT_STARTED_ROUTE_STATUSES", "DISPATCHED_ROUTE_STATUSES", "OPEN_ROUTE_STATUSES", "RAN_ROUTE_STATUSES", "MISSED_PICKUP_STATUSES"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 21, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS", "RECEIVED_LOAD_STATUSES", "ACTIVE_CONTAMINANT_CODE_STATUSES", "NOT_STARTED_ROUTE_STATUSES", "DISPATCHED_ROUTE_STATUSES", "OPEN_ROUTE_STATUSES", "RAN_ROUTE_STATUSES", "MISSED_PICKUP_STATUSES", "LIVE_STOP_STATUSES"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -73,5 +73,9 @@ describe("a missed stop", () => {
   test("is one skipped or failed: planned and completed are not, and neither is a word outside the list", () => {
     assert.deepEqual(vocabulary.PICKUP_STATUSES.filter(vocabulary.pickupMissed), ["skipped", "failed"])
     assert.equal(vocabulary.pickupMissed("Skipped"), false)
+  })
+
+  test("leaves the stop live: planned or completed, every status but a miss", () => {
+    assert.deepEqual([...vocabulary.LIVE_STOP_STATUSES], ["planned", "completed"])
   })
 })

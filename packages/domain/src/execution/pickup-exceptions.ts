@@ -31,7 +31,7 @@
 // Dates are ISO days; the module reads no clock, as every date rule here.
 import { addDays } from "../days"
 import { inForceOn } from "../periods"
-import { PICKUP_EXCEPTION_REASONS, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "./vocabulary"
+import { PICKUP_EXCEPTION_REASONS, pickupMissed, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "./vocabulary"
 
 /** How many matching exceptions a rule may let go free: 0 charges the first. */
 export const PICKUP_EXCEPTION_FREE_COUNT_MAX = 100
@@ -91,7 +91,7 @@ const isPickupExceptionReason = (reason: PickupReason | null): boolean => reason
 
 /** Whether a stop is a Pickup Exception: missed for a reason the customer caused, or collected with a contaminant code. */
 export function isPickupException(stop: Pick<PickupExceptionStop, "status" | "reason" | "contaminantCodeId">): boolean {
-  if (stop.status === "failed" || stop.status === "skipped") return isPickupExceptionReason(stop.reason)
+  if (pickupMissed(stop.status)) return isPickupExceptionReason(stop.reason)
   return stop.status === "completed" && stop.contaminantCodeId !== null
 }
 

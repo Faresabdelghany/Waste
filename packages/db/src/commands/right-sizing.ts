@@ -17,10 +17,10 @@
 // leaves it.
 import { directionOf, fillReadingOf, nextSize, RIGHT_SIZING_WINDOW } from "@waste/domain/inspections/right-sizing"
 import type { FillLevel } from "@waste/domain/execution/vocabulary"
-import { sql, type SQL } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
-import { todayOnClock } from "../query/project-clock"
+import { todayOnClock, utcInstantText } from "../query/project-clock"
 import { rightSizingProposal } from "../schema/inspections"
 
 /** One subscription with its latest estimates, as the run reads it. */
@@ -37,9 +37,6 @@ type Candidate = {
   fill_ats: string[]
   last_evidence: string | null
 }
-
-/** An instant as ISO text, UTC to the microsecond, which `Date.parse` reads whatever the session's style. */
-const iso = (column: SQL) => sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 
 /** The proposals a run made: how many, and their ids. */
 export type RightSizingRunResult = { proposed: string[] }
@@ -58,17 +55,17 @@ export async function proposeRightSizing(tx: Tx, companyId: string, at: Date, pr
   // The subscription in force today on its project's clock.
   const today = todayOnClock(at, sql`p.timezone`)
   const candidates = await tx.execute<Candidate>(sql`
-    select s.id as subscription_id, s.project_id, s.product_id, ${iso(sql`s.updated_at`)} as updated_at,
+    select s.id as subscription_id, s.project_id, s.product_id, ${utcInstantText(sql`s.updated_at`)} as updated_at,
            pr.kind, pr.waste_fraction_id, pr.service_frequency_id, ct.volume_litres,
            f.fills, f.fill_ats,
-           (select ${iso(sql`max(r.evidence_through)`)} from wms.right_sizing_proposal r where r.company_id = s.company_id and r.subscription_id = s.id) as last_evidence
+           (select ${utcInstantText(sql`max(r.evidence_through)`)} from wms.right_sizing_proposal r where r.company_id = s.company_id and r.subscription_id = s.id) as last_evidence
       from wms.subscription s
       join wms.project p on p.company_id = s.company_id and p.id = s.project_id
       join wms.product pr on pr.company_id = s.company_id and pr.id = s.product_id
       left join wms.container_type ct on ct.company_id = pr.company_id and ct.id = pr.container_type_id
       cross join lateral (
         select array_agg(latest.fill_level order by latest.operating_date desc, latest.id desc) as fills,
-               array_agg(${iso(sql`latest.at`)} order by latest.operating_date desc, latest.id desc) as fill_ats
+               array_agg(${utcInstantText(sql`latest.at`)} order by latest.operating_date desc, latest.id desc) as fill_ats
           from (
             select pk.id, pk.fill_level, r.operating_date, coalesce(pk.outcome_at, pk.updated_at) as at
               from wms.pickup pk

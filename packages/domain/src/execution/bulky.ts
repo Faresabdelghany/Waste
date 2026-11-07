@@ -21,10 +21,9 @@
 // a planned stop routes it, a completed one collected it, and a stop skipped
 // or failed leaves it booked again, the office's to move and route anew.
 import { generateOccurrences, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../planning/occurrences"
-import type { WeekRotation } from "../planning/recurrence"
 import { addDays, type ServiceDay } from "../days"
 import { lastDayIn } from "../periods"
-import type { RecurrenceFrequency } from "../planning/vocabulary"
+import type { RecurrenceFrequency, WeekRotation } from "../planning/vocabulary"
 import type { ProductUnit } from "../registry/vocabulary"
 import type { BulkyBookingStatus, PickupStatus } from "./vocabulary"
 
@@ -133,8 +132,8 @@ export function bulkyBookingStatus(booking: { cancelledAt: unknown; stopStatus: 
   return "booked"
 }
 
-/** The stop statuses that keep a booking's stop live: one planned or completed per booking, which the database holds too. */
-export const LIVE_STOP_STATUSES = ["planned", "completed"] as const satisfies readonly PickupStatus[]
+// The API's pickups route still reads it here; its home is the vocabulary.
+export { LIVE_STOP_STATUSES } from "./vocabulary"
 
 /** The commands a booking's status gates, as a sentence names each. */
 export type BulkyCommand = "route" | "cancel" | "change"

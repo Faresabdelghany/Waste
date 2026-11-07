@@ -98,6 +98,14 @@ export async function projectTodays(tx: Tx, companyId: string, projectIds: reado
 /** The caller's instant as a statement's `timestamptz`: what a statement judges "now" on, in place of Postgres's `now()`. */
 export const instantAt = (at: Date): SQL => sql`${at.toISOString()}::timestamptz`
 
+/**
+ * An instant (a `timestamptz`) as text, UTC to the microsecond as Postgres
+ * holds it (`2026-10-01T05:30:00.123456Z`): `toISOString` with the
+ * microseconds, which `Date.parse` reads back whatever the session's style —
+ * what a key or a row read as text spells an instant by.
+ */
+export const utcInstantText = (instant: SQLWrapper): SQL<string> => sql<string>`to_char((${instant}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+
 /** The day `instant` (a `timestamptz`) falls on, on the clock of `timezone` (a column or a value naming one): `dayInTimezone` in SQL, a `date`. */
 export const dayOnClock = (instant: SQLWrapper, timezone: SQLWrapper): SQL<string> => sql<string>`(${instant} at time zone ${timezone})::date`
 
