@@ -5,35 +5,14 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
 import { RoutingQuotaBanner } from "@/components/waste/routing/routing-quota-banner"
 import type { WorkspaceId } from "@/lib/data/business-modules"
-
-const publicModuleIdsByWorkspace: Partial<
-  Record<WorkspaceId, readonly string[]>
-> = {
-  // O11 of #290: a customer's bulky items booked onto a collection day; #393: the recycling centres' visit ledger; M16a of #293: the scale house; M23 of #293: the field inspections.
-  operate: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "inspections"],
-  customers: [
-    "properties",
-    "groups",
-    "shared",
-    "contacts",
-    "agreements",
-    // M7 of #293: a customer's requests and the office's decisions on them.
-    "applications",
-    // #393: the plates and cards a project's recycling centres admit by.
-    "site-access",
-    // M23b of #293: the right-sizing proposals.
-    "right-sizing",
-  ],
-}
+import { PAGE_MODULE_IDS } from "@/lib/data/office-pages"
 
 export function WorkspacePageShell({
   workspaceId,
   initialModuleId,
-  allowedModuleIds,
 }: {
   workspaceId: WorkspaceId
   initialModuleId?: string
-  allowedModuleIds?: readonly string[]
 }) {
   return (
     <SidebarProvider>
@@ -53,9 +32,7 @@ export function WorkspacePageShell({
           <BusinessWorkspace
             workspaceId={workspaceId}
             initialModuleId={initialModuleId}
-            allowedModuleIds={
-              allowedModuleIds ?? publicModuleIdsByWorkspace[workspaceId]
-            }
+            allowedModuleIds={PAGE_MODULE_IDS[workspaceId]}
             showExportAction={workspaceId !== "plan"}
           />
         </Suspense>

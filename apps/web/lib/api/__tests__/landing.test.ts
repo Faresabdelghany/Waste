@@ -4,6 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
+
+import type { Grants } from "../grants"
 import { afterSignIn, carriesNext, gateOf, landingOf, returnPath, signInTarget, type GateState } from "../landing"
 
 const NORDREN = { id: "01a0d2a4-a280-7003-8000-000000000001", legalName: "NordRen ApS" }
@@ -28,6 +31,23 @@ describe("the landing", () => {
     assert.equal(landingOf({ ...OFFICE, role: { key: "dispatcher" } }), "/operate")
     assert.equal(landingOf({ ...OFFICE, role: { key: null } }), "/operate")
     assert.equal(afterSignIn({ ...OFFICE, ...attendant }, null), "/check-in")
+  })
+
+  test("an office account lands where its role views something: on operations where it views anything there, else on the sidebar's first page it views", () => {
+    const seeded = (key: SystemRoleKey) => ({ ...OFFICE, role: { key, grants: SYSTEM_ROLES.find((role) => role.key === key)?.grants ?? [] } })
+    // The Route Planner views nothing of operations; the Dashboard's Analytics is the first page of the sidebar it views.
+    assert.equal(landingOf(seeded("route-planner")), "/performance")
+    assert.equal(landingOf(seeded("dispatcher")), "/operate")
+    assert.equal(landingOf(seeded("company-administrator")), "/operate")
+    const custom = (grants: Grants) => ({ ...OFFICE, role: { key: null, grants } })
+    assert.equal(landingOf(custom([{ moduleKey: "fleet.vehicles", actions: ["view"] }])), "/fleet")
+    // The Driver App is no module of the operations page, nor is Compliance a Dashboard tab without the weights beside it.
+    assert.equal(landingOf(custom([{ moduleKey: "operate.driver-app", actions: ["view"] }, { moduleKey: "improve.compliance", actions: ["view"] }, { moduleKey: "plan.map-planning", actions: ["view"] }])), "/plan")
+  })
+
+  test("an office account whose role views nothing anywhere lands on operations, which says so", () => {
+    assert.equal(landingOf({ ...OFFICE, role: { key: null, grants: [] } }), "/operate")
+    assert.equal(landingOf({ ...OFFICE, role: { key: null, grants: [{ moduleKey: "configure.access", actions: ["view"] }] } }), "/operate")
   })
 
   test("a provider's driver is a driver first: the phone is where the work is", () => {

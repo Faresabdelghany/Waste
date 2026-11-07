@@ -3,7 +3,7 @@ import type { APIRequestContext, BrowserContext, Page } from "@playwright/test"
 import { API_SESSION_STORAGE_KEY } from "../lib/storage-keys"
 import { accessTokenOf, apiAs, chainLanded, expect, freshContext, signIn, test as base } from "./fixtures"
 import { E2E } from "./env"
-import { ensureTester, TESTER_PROJECT, TESTER_ROLE, type User } from "./tester"
+import { ensureTester, TESTER_LANDING, TESTER_PROJECT, TESTER_ROLE, type User } from "./tester"
 
 // The account-level refusal (#150; #151's second slice): unlike a grant
 // refused in-session (grant-refusal.spec.ts), the refusal of the account
@@ -43,7 +43,7 @@ const test = base.extend<{ deactivated: Deactivated }>({
     try {
       const page = await context.newPage()
       await signIn(page, E2E.testerEmail, E2E.loginPassword)
-      await expect(page).toHaveURL(/\/operate/)
+      await expect(page).toHaveURL(TESTER_LANDING)
       // The store's module reads must have landed before the account goes:
       // a read still in flight would meet the refusal first and end the
       // session before the test asks for it (#180 lengthened the chain).
@@ -104,7 +104,7 @@ test.describe("the account's refusal ends the session", () => {
     try {
       const page = await context.newPage()
       await signIn(page, E2E.testerEmail, E2E.loginPassword)
-      await expect(page).toHaveURL(/\/operate/)
+      await expect(page).toHaveURL(TESTER_LANDING)
       const token = await accessTokenOf(context)
       expect(token).not.toBeNull()
       tester = await apiAs(token as string)

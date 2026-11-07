@@ -6,11 +6,14 @@
 //   the landing — `/me` decides it (`Me.driver`, `Me.serviceProvider`): a
 //                 driver lands on the driver's app, a Service Provider's
 //                 account on its workspace (#291 slice 23), everyone else on
-//                 operations; never a grant, never a probe of the driver door.
+//                 the office's pages; never a probe of the driver door.
 //                 A provider's driver is a driver first: the phone is where
 //                 the work is. A Site attendant (#393) lands on the
 //                 recycling centre's check-in, after those two: the seeded
-//                 role's key, the one landing a role decides. `/driver` is
+//                 role's key. The office lands on operations where its role
+//                 views anything there, else on the sidebar's first page it
+//                 views anything on, and on operations, which says it may
+//                 view nothing, where it views nothing at all. `/driver` is
 //                 the Driver App (#145, components/waste/driver/),
 //                 `/service-provider-workspace` the provider's restricted
 //                 shell, `/check-in` the attendant's phone-first page
@@ -28,8 +31,13 @@
 //                 carries no `next`: whoever signs in next lands by their own
 //                 `/me`, not on the page the last person left.
 import type { Me } from "@waste/contracts/me"
+import { modulesOf, type ModuleKey } from "@waste/domain/access/modules"
 import type { SystemRoleKey } from "@waste/domain/access/system-roles"
 
+import { PAGE_MODULE_IDS } from "../data/office-pages"
+import { navItems, type NavItemId } from "../data/sidebar"
+import { tabsShown } from "../insight/dashboard"
+import { viewedModules, type Grants } from "./grants"
 import type { SessionEnding } from "./session"
 
 /** The one page the gate never stands in front of. */
@@ -41,29 +49,43 @@ export const PUBLIC_PATH_PREFIX = "/p/"
 /** Whether a path is one of the public pages, which need no session. */
 export const isPublicPath = (pathname: string): boolean => pathname.startsWith(PUBLIC_PATH_PREFIX)
 
-/** Where each kind of account lands. */
-export type Landing = "/driver" | "/service-provider-workspace" | "/check-in" | "/operate"
-
 /** The seeded role whose accounts land on the check-in. */
 export const SITE_ATTENDANT_ROLE: SystemRoleKey = "site-attendant"
 
-/** What the landing reads of `/me`: the driver, the provider, and the role's key, each read defensively. */
-export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: Pick<Me["role"], "key"> | null }
+/** Where the office lands: operations. */
+export const OFFICE_LANDING = "/operate"
+
+/** What the landing reads of `/me`: the driver, the provider, and the role's key and grants, each read defensively. */
+export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: (Pick<Me["role"], "key"> & { grants?: Grants }) | null }
+
+/** Whether a role views anything on an office page: one of the Dashboard's tabs, or one of the modules a workspace's page shows. */
+function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
+  if (id === "improve") return tabsShown(viewed).length > 0
+  const shown = PAGE_MODULE_IDS[id]
+  const keys = shown === undefined ? modulesOf(id) : shown.map((moduleId) => `${id}.${moduleId}` as ModuleKey)
+  return keys.some((key) => viewed.has(key))
+}
 
 /**
  * Where a signed-in person lands when they were going nowhere in particular:
  * a driver on the Driver App, then a Service Provider's account on its
- * workspace, then a Site attendant on the check-in, then everyone else on
- * operations. A body with no `driver`, no `serviceProvider` or no `role` at
- * all — an API from before it — is no driver's, no provider's and no
- * attendant's: `/me` is read as a type and not checked, so the facts are
- * read defensively.
+ * workspace, then a Site attendant on the check-in, then the office on
+ * operations where its role views anything there, else on the sidebar's
+ * first page it views anything on, else on operations, whose page says it may
+ * view nothing. A body with no `driver`, no `serviceProvider` or no `role`
+ * at all — an API from before it — is no driver's, no provider's and no
+ * attendant's, and one with no grants lands the office on operations: `/me`
+ * is read as a type and not checked, so the facts are read defensively.
  */
-export function landingOf(me: LandingFacts): Landing {
+export function landingOf(me: LandingFacts): string {
   if (me.driver?.id !== undefined) return "/driver"
   if (me.serviceProvider?.id !== undefined) return "/service-provider-workspace"
   if (me.role?.key === SITE_ATTENDANT_ROLE) return "/check-in"
-  return "/operate"
+  const grants = me.role?.grants
+  if (grants === undefined) return OFFICE_LANDING
+  const viewed = viewedModules(grants)
+  if (viewsPage("operate", viewed)) return OFFICE_LANDING
+  return navItems.find((item) => viewsPage(item.id, viewed))?.href ?? OFFICE_LANDING
 }
 
 // Only to parse a relative `next` against: a value that resolves anywhere

@@ -1,6 +1,6 @@
 import { accessTokenOf, apiAs, expect, freshContext, problemOf, signIn, test } from "./fixtures"
 import { E2E } from "./env"
-import { ensureTester, listAll, TESTER_PROJECT } from "./tester"
+import { ensureTester, listAll, TESTER_LANDING, TESTER_PROJECT } from "./tester"
 
 // Scenario 3: project isolation through the Invitation flow. The
 // administrator invites the tester with one Project; the tester signs in
@@ -23,7 +23,7 @@ test("an invited tester with one Project sees that Project's records and nothing
   try {
     const page = await context.newPage()
     await signIn(page, E2E.testerEmail, E2E.loginPassword)
-    await expect(page).toHaveURL(/\/operate/)
+    await expect(page).toHaveURL(TESTER_LANDING)
     const token = await accessTokenOf(context)
     expect(token).not.toBeNull()
     const tester = await apiAs(token as string)
