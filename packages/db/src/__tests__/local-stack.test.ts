@@ -2,13 +2,14 @@ import assert from "node:assert/strict"
 import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto"
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, describe, test } from "node:test"
+import { dirname, join, relative } from "node:path"
+import { after, afterEach, describe, test } from "node:test"
 
-import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, MINIMUM_PASSWORD_LENGTH, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
+import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
 import { startWithOneRetry, type SupabaseRunner } from "../local-stack/start"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
+import { databaseVolume, minimumPasswordLength, postgresMajor, signingKeysPath, SUPABASE_CONFIG_FILE } from "../supabase-config"
 
 describe("generateSigningKey", () => {
   test("is a private ES256 JWK in the shape GoTrue reads: kid, alg, use and key_ops beside the P-256 pair", () => {
@@ -109,14 +110,6 @@ describe("planLocalLogins", () => {
     assert.throws(() => planLocalLogins({ apiUrl: undefined, secretKey, seeded: [] }), /API_URL is not set/)
     assert.throws(() => planLocalLogins({ apiUrl: "not a url", secretKey, seeded: [] }), /not a URL/)
     assert.throws(() => planLocalLogins({ apiUrl, secretKey: undefined, seeded: [] }), /SECRET_KEY is not set/)
-  })
-
-  test("the minimum it holds a password to is the one supabase/config.toml sets for Auth, so the two cannot drift again (#164)", () => {
-    const config = readFileSync(new URL("../../../../supabase/config.toml", import.meta.url), "utf8")
-    const auth = config.slice(config.indexOf("\n[auth]\n"))
-    const bound = /^minimum_password_length = (\d+)$/m.exec(auth)
-    assert.ok(bound, "config.toml sets [auth] minimum_password_length")
-    assert.equal(MINIMUM_PASSWORD_LENGTH, Number(bound[1]))
   })
 
   test("refuses a password shorter than local Auth's minimum", () => {
@@ -222,5 +215,48 @@ describe("startWithOneRetry", () => {
     const { calls, run } = scripted([1, 3])
     assert.equal(startWithOneRetry(run, ["db", "start"], { volumeExisted: false, log: quiet }), 3)
     assert.equal(calls.filter((call) => call === "db start").length, 2)
+  })
+})
+
+describe("supabase/config.toml's values", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "waste-supabase-config-"))
+  after(() => rmSync(scratch, { recursive: true, force: true }))
+  const written = (text: string) => {
+    const file = join(scratch, "config.toml")
+    writeFileSync(file, text)
+    return file
+  }
+
+  test("reads project_id, [db] major_version, and [auth]'s signing key path, resolved beside the file, and shortest password", () => {
+    const file = written(
+      [
+        "# a comment",
+        'project_id = "harbour"',
+        "[api]",
+        'schemas = ["public", "graphql_public"]',
+        "[db]",
+        "port = 54322",
+        "major_version = 18 # the hosted project's",
+        "[auth]",
+        'signing_keys_path = "./keys.json"',
+        "minimum_password_length = 12",
+        "[auth.hook.custom_access_token]",
+        "enabled = true",
+      ].join("\n"),
+    )
+    assert.deepEqual([databaseVolume(file), postgresMajor(file), signingKeysPath(file), minimumPasswordLength(file)], ["supabase_db_harbour", 18, join(scratch, "keys.json"), 12])
+  })
+
+  test("reads only the key asked for, and refuses one missing or not a whole number, naming it", () => {
+    const file = written('[db]\nmajor_version = 17\n[auth]\nminimum_password_length = "eight"\n')
+    assert.equal(postgresMajor(file), 17)
+    assert.throws(() => minimumPasswordLength(file), /auth\.minimum_password_length is not a whole number/)
+    assert.throws(() => signingKeysPath(file), /sets no auth\.signing_keys_path/)
+  })
+
+  test("the repository's own names the volume supabase_db_waste and keeps the signing key where .gitignore keeps it out of git", () => {
+    const root = dirname(dirname(SUPABASE_CONFIG_FILE))
+    assert.equal(databaseVolume(), "supabase_db_waste")
+    assert.ok(readFileSync(join(root, ".gitignore"), "utf8").split("\n").includes(relative(root, signingKeysPath())))
   })
 })

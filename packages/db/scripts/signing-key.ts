@@ -10,8 +10,7 @@
 import { resolve } from "node:path"
 
 import { ensureSigningKeys } from "../src/local-stack/signing-keys"
+import { signingKeysPath } from "../src/supabase-config"
 
-const DEFAULT_PATH = resolve(import.meta.dirname, "../../../supabase/signing_keys.json")
-
-const { path, written } = ensureSigningKeys(process.argv[2] === undefined ? DEFAULT_PATH : resolve(process.argv[2]))
+const { path, written } = ensureSigningKeys(process.argv[2] === undefined ? signingKeysPath() : resolve(process.argv[2]))
 console.log(written ? `@waste/db: a fresh ES256 signing key for local Auth is at ${path}` : `@waste/db: local Auth's signing key is already at ${path}`)

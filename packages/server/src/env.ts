@@ -5,7 +5,7 @@
 // plain schema with a default, or without one when the process cannot run
 // without it. Anything else in the environment is dropped, not carried around.
 import { withoutEmpty, type Environment } from "@waste/process/environment"
-import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
+import { SESSION_POOLER_PORT, TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import * as z from "zod"
 
 /** The address to bind. Loopback by default; a container sets `0.0.0.0`. */
@@ -55,7 +55,7 @@ const notOnTransactionPooler = (value: string): boolean => {
 /** A Postgres URL that holds a session, refused on the transaction pooler by its port; `needs` says who needs the session. */
 export const SessionUrl = (role: string, needs: string) =>
   PostgresUrl(role).refine(notOnTransactionPooler, {
-    error: `port ${TRANSACTION_POOLER_PORT} is the transaction pooler; ${needs} a session (the direct connection or the session pooler on port 5432)`,
+    error: `port ${TRANSACTION_POOLER_PORT} is the transaction pooler; ${needs} a session (the direct connection or the session pooler on port ${SESSION_POOLER_PORT})`,
   })
 
 /** Reads the environment against an app's declaration, or throws one error naming every bad variable. */

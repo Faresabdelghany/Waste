@@ -33,7 +33,7 @@
 // for the API role, whose login carries the same path; without this it would
 // depend on the owner role's setting, which on Supabase happens to include
 // `extensions` and elsewhere does not.
-import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
+import { SESSION_POOLER_PORT, TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
 import type { Notice, ReservedSql } from "postgres"
@@ -78,7 +78,7 @@ export async function withMigrationLock<T>(
 ): Promise<T> {
   if (new URL(url).port === TRANSACTION_POOLER_PORT) {
     throw new Error(
-      `${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session to hold their lock (the direct connection or the session pooler on port 5432)`,
+      `${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session to hold their lock (the direct connection or the session pooler on port ${SESSION_POOLER_PORT})`,
     )
   }
   // One connection runs the work, one holds the lock.

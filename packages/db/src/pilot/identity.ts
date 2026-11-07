@@ -7,28 +7,15 @@
 // spelling, so a backup of one Supabase project is never restored into another.
 //
 // The Supabase project ref is read from the URL: the session pooler's user
-// is `<role>.<ref>` and the direct host is `db.<ref>.supabase.co` (the Pilot is
-// reached through the pooler, since a GitHub runner has no IPv6). A loopback
-// URL is the local stack, where the CI rehearsal runs.
+// is `<role>.<ref>` and the direct host is `db.<ref>.supabase.co`
+// (src/supabase.ts). A loopback URL is the local stack, where the CI
+// rehearsal runs.
 import type { Sql } from "postgres"
 
 import { isLocalHost } from "../local-host"
-
-/** A Supabase project ref: twenty lowercase letters and digits, spelled once for the ref alone and for the direct host that carries one. */
-const REF_SHAPE = "[a-z0-9]{20}"
-const REF = new RegExp(`^${REF_SHAPE}$`)
-const POOLER_HOST = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/
-const DIRECT_HOST = new RegExp(`^db\\.(${REF_SHAPE})\\.supabase\\.co$`)
+import { DIRECT_HOST, POOLER_HOST, poolerUser, PROJECT_REF } from "../supabase"
 
 export type Target = { kind: "supabase"; ref: string } | { kind: "local" }
-
-/** The session pooler's user, `<role>.<ref>`, as its role and its Supabase project ref; undefined for a user that is not one. */
-export function poolerUser(user: string): { role: string; ref: string } | undefined {
-  const dot = user.lastIndexOf(".")
-  if (dot <= 0) return undefined
-  const ref = user.slice(dot + 1)
-  return REF.test(ref) ? { role: user.slice(0, dot), ref } : undefined
-}
 
 /** Where a URL points, read from the URL alone. */
 export function targetOfUrl(url: string): Target {
@@ -88,7 +75,7 @@ export function expectPilot(url: string, expectedRef: string | undefined): Targe
     if (target.kind !== "local") throw new Error("PILOT_SUPABASE_REF is not set: outside the protected workflow a Pilot operation runs against the local stack only")
     return target
   }
-  if (!REF.test(expectedRef)) throw new Error(`PILOT_SUPABASE_REF is not a Supabase project ref`)
+  if (!PROJECT_REF.test(expectedRef)) throw new Error(`PILOT_SUPABASE_REF is not a Supabase project ref`)
   if (target.kind !== "supabase" || target.ref !== expectedRef) {
     throw new Error(`the URL points at ${target.kind === "supabase" ? `Supabase project ${target.ref}` : "the local stack"}, not the Pilot's (${expectedRef})`)
   }

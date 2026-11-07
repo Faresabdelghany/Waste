@@ -8,10 +8,13 @@ extension btree_gist schema=extensions
 extension postgis schema=extensions
 role wms_api superuser=false inherit=true createrole=false createdb=false replication=false bypassrls=false connlimit=-1
 role wms_worker superuser=false inherit=true createrole=false createdb=false replication=false bypassrls=true connlimit=-1
+role wms_public superuser=false inherit=false createrole=false createdb=false replication=false bypassrls=false connlimit=-1 login=false
 role-setting wms_api database=* search_path=wms, extensions
 role-setting wms_worker database=* search_path=wms, extensions
 membership wms_api member=<owner> grantor=<owner> admin=false inherit=true set=true
 membership wms_api member=<owner> grantor=supabase_admin admin=true inherit=false set=false
+membership wms_public member=<owner> grantor=<owner> admin=false inherit=true set=true
+membership wms_public member=<owner> grantor=supabase_admin admin=true inherit=false set=false
 membership wms_public member=wms_api grantor=<owner> admin=false inherit=false set=true
 membership wms_worker member=<owner> grantor=<owner> admin=false inherit=true set=true
 membership wms_worker member=<owner> grantor=supabase_admin admin=true inherit=false set=false

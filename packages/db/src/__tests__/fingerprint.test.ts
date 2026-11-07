@@ -36,6 +36,16 @@ describe("a fingerprint's text", () => {
   })
 })
 
+describe("the committed fingerprint", () => {
+  test("records the public door's role with its LOGIN, so wms_public given BYPASSRLS or LOGIN fails `--check`", () => {
+    assert.ok(
+      fingerprintLines(committedFingerprint()).includes(
+        "role wms_public superuser=false inherit=false createrole=false createdb=false replication=false bypassrls=false connlimit=-1 login=false",
+      ),
+    )
+  })
+})
+
 const database = databaseUnderTest()
 
 describe("the fingerprint of a migrated database", { skip: database.skip }, () => {

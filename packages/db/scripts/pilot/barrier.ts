@@ -24,6 +24,7 @@ import path from "node:path"
 import { createDb } from "../../src/client"
 import {
   BARRIER_OPERATIONS,
+  BARRIER_ROLES,
   requireBarrierOpen,
   checkRecord,
   closeBarrier,
@@ -74,7 +75,7 @@ await step(async () => {
       const now = await readLogins(sql)
       if (JSON.stringify(now) !== JSON.stringify(record.logins)) throw new Error(`the logins changed since they were recorded (${spellLogins(now)}): the barrier stays open`)
       const { terminated } = await closeBarrier(sql)
-      summary(`Barrier closed: wms_api and wms_worker NOLOGIN, ${terminated} session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`)
+      summary(`Barrier closed: ${BARRIER_ROLES.join(" and ")} NOLOGIN, ${terminated} session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`)
     } else if (mode === "open") {
       const record = parseLoginRecord(readFileSync(required("LOGIN_STATE_FILE"), "utf8"))
       checkRecord(record, { identity, run: { id: required("EXPECTED_RUN_ID"), attempt: required("EXPECTED_ATTEMPT") }, commit: required("EXPECTED_COMMIT") })
