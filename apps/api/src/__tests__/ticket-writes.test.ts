@@ -15,6 +15,7 @@ import { getTableName, type Table } from "drizzle-orm"
 
 import { createIdMinter } from "@waste/db/ids"
 import { appendTicketEvent, openTicket, type TicketDraft } from "@waste/db/commands/open-ticket"
+import { Refused } from "@waste/domain/refusal"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -144,7 +145,7 @@ describe("openTicket", () => {
   test("is refused by a resolved alert, and by one linked to another ticket, before the outbox is written", async () => {
     const resolved = scripted({ status: "resolved", ticketId: null })
     await assert.rejects(openTicket(resolved.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } }), (error: unknown) => {
-      assert.equal((error as { status?: number }).status, 409)
+      assert.deepEqual([error instanceof Refused, (error as Refused).refusal?.reason], [true, "conflict"])
       assert.match((error as { message: string }).message, /This alert is resolved and does not change/)
       return true
     })
@@ -152,7 +153,7 @@ describe("openTicket", () => {
 
     const taken = scripted({ status: "acknowledged", ticketId: "01a0d3a5-e5e0-7000-8000-00000000000a" })
     await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED, automation: { send: async () => null, by: null } }), (error: unknown) => {
-      assert.equal((error as { status?: number }).status, 409)
+      assert.deepEqual([error instanceof Refused, (error as Refused).refusal?.reason], [true, "conflict"])
       assert.match((error as { message: string }).message, /This alert is linked to ticket T-8831; an alert links to one ticket/)
       return true
     })

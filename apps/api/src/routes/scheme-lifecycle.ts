@@ -70,7 +70,7 @@ import { route } from "@waste/db/schema/execution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { firstEndingDay, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
 import { routeLabel } from "@waste/contracts/execution"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import type { JobSender } from "@waste/db/jobs"
 import { addDays } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
@@ -80,7 +80,7 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { askGeneration } from "./generation"
+import { askGenerationBestEffort } from "./generation"
 import { projectToday } from "./fleet-lookups"
 import { writeScheme } from "./route-schemes"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type ClockOptions, type SchemeRow } from "./scheme-groups"
@@ -92,6 +92,19 @@ export const endsTomorrowAtTheEarliest = (tomorrow: string): string => `Today's 
 /** What a successor's day outside the predecessor's period is refused with, at `validFrom`. */
 export const successorStartsInside = (scheme: { validFrom: string; validTo: string | null }): string =>
   scheme.validTo === null ? `The next version starts after this one does, on ${scheme.validFrom}` : `The next version starts after this one does, on ${scheme.validFrom}, and before it ends, on ${scheme.validTo}`
+
+/**
+ * The day a scheme's next version may start on, judged once for the
+ * successor and for a proposal that would write one (#474): tomorrow on the
+ * project's clock at the earliest, since today's routes are operating, and
+ * strictly inside the predecessor's period. Which rule the day breaks, for
+ * the caller to word at its own field, or undefined where it holds.
+ */
+export function successorDayIssue(predecessor: { validFrom: string; validTo: string | null }, day: string, tomorrow: string): "before-tomorrow" | "outside-the-period" | undefined {
+  if (day < tomorrow) return "before-tomorrow"
+  if (day <= predecessor.validFrom || (predecessor.validTo !== null && day >= predecessor.validTo)) return "outside-the-period"
+  return undefined
+}
 
 /** The scheme the path names, locked and read again under the lock, refused when it is not here or is archived. */
 async function lockedScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow> {
@@ -148,13 +161,8 @@ export const dispatchedFrom = (labels: readonly string[], validFrom: string): st
  * is taken.
  */
 async function planSuccessor(tx: Tx, principal: Principal, jobs: JobSender, successor: RouteScheme, validFrom: string): Promise<string | null> {
-  try {
-    const asked = await askGeneration(tx, principal, jobs.send, successor, { from: validFrom, to: addDays(validFrom, successor.planAheadDays - 1) })
-    return asked.kind === "refused" ? null : asked.run.id
-  } catch (error) {
-    if (error instanceof QueueMissing) return null
-    throw error
-  }
+  const asked = await askGenerationBestEffort(tx, principal, jobs.send, successor, { from: validFrom, to: addDays(validFrom, successor.planAheadDays - 1) })
+  return asked === undefined || asked.kind === "refused" ? null : asked.run.id
 }
 
 export type SchemeLifecycleOptions = ClockOptions & { jobs: JobSender }
@@ -181,8 +189,8 @@ export async function writeSuccessor(
 ): Promise<RouteSchemeSuccession> {
   const current = await lockedScheme(tx, principal, id)
   const tomorrow = firstEndingDay(await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)())
-  if (validFrom < tomorrow) throw invalidRequest("body", [{ path: "validFrom", message: endsTomorrowAtTheEarliest(tomorrow) }])
-  if (validFrom <= current.validFrom || (current.validTo !== null && validFrom >= current.validTo)) throw invalidRequest("body", [{ path: "validFrom", message: successorStartsInside(current) }])
+  const day = successorDayIssue(current, validFrom, tomorrow)
+  if (day !== undefined) throw invalidRequest("body", [{ path: "validFrom", message: day === "before-tomorrow" ? endsTomorrowAtTheEarliest(tomorrow) : successorStartsInside(current) }])
   // The predecessor's routes that go out on or after the day whatever happens: the new version would collect them again.
   const going = await tx
     .select({ number: route.number })

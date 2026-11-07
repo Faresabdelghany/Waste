@@ -33,6 +33,7 @@
 // a question once the row is. The other three have no status to answer.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
@@ -58,7 +59,7 @@ import { findAlert, NOT_AN_ALERT } from "@waste/db/commands/alert-links"
 
 import { invalidRequest } from "../problem"
 import type { AlertRow } from "./resolution-shapes"
-import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
+import { requireRow, requireStatus, rowIssue, type NamedRow, type Target, type TenantTable } from "./shared"
 import { refuseRetiredReason, refuseRetiredTeam } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -223,7 +224,7 @@ export async function requireServiceProvider(tx: Tx, companyId: string, id: stri
 }
 
 /** The same check as the field error or nothing (`rowIssue`, routes/shared.ts), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
-export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<Refusal | undefined> {
+export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<ProblemFieldError | undefined> {
   if (id == null) return undefined
   return await rowIssue(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
 }

@@ -13,12 +13,12 @@ import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
+import { Refused } from "@waste/domain/refusal"
 import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 import { eq, sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
 import { companyRegistered, defaultDecommissionReasonRows, invitationOpen, provisionCompany, systemGrantRows, systemRoleRows, type CompanyProvision } from "../commands/provision-company"
-import { Refused } from "../commands/shared"
 import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
 import { role, roleGrant, userAccount } from "../schema/access"
@@ -109,8 +109,8 @@ describe("provisioning a company", { skip: database.skip }, () => {
 
   test("refuses a company the register knows, and an address with an open invitation in any company, writing nothing", async () => {
     const companies = await owner.db.select({ id: company.id }).from(company)
-    await assert.rejects(provisionCompany(owner.db, provision({ email: "someone.else@fjordby.example" }), newId), (error: unknown) => error instanceof Refused && error.status === 409 && error.message === companyRegistered("DK", "87654321"))
-    await assert.rejects(provisionCompany(owner.db, provision({ registrationNumber: "11223344" }), newId), (error: unknown) => error instanceof Refused && error.status === 409 && error.message === invitationOpen("ida.holm@fjordby.example"))
+    await assert.rejects(provisionCompany(owner.db, provision({ email: "someone.else@fjordby.example" }), newId), (error: unknown) => error instanceof Refused && error.refusal.reason === "conflict" && error.message === companyRegistered("DK", "87654321"))
+    await assert.rejects(provisionCompany(owner.db, provision({ registrationNumber: "11223344" }), newId), (error: unknown) => error instanceof Refused && error.refusal.reason === "conflict" && error.message === invitationOpen("ida.holm@fjordby.example"))
     await assert.rejects(provisionCompany(owner.db, provision({ registrationNumber: "11223344", email: "mads.jensen@kystbyen.example" }), newId), (error: unknown) => error instanceof Refused, "the demo's driver is an Invitation too")
     assert.equal((await owner.db.select({ id: company.id }).from(company)).length, companies.length)
   })

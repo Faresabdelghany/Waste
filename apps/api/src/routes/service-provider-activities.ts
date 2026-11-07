@@ -55,6 +55,7 @@ import { serviceProviderActivity, serviceProviderActivityContainer, serviceProvi
 import type { JobSender } from "@waste/db/jobs"
 import { firstEndingDay } from "@waste/domain/planning/lifecycle"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
+import { Refused, type Refusal } from "@waste/domain/refusal"
 import {
   activityLabel,
   closesWith,
@@ -82,11 +83,11 @@ import { inProjects, requireProject } from "../auth/projects"
 import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, servesScheme } from "../auth/provider"
 import { requireAllowed, requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { NOT_A_DRIVER, NOT_A_POWERED_VEHICLE, requireServiceProvider } from "./references"
-import { successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
-import { requireNotArchived, MODULE as SCHEMES } from "./scheme-groups"
+import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
+import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stamp, stampsOf } from "./shared"
 
 const MODULE = "service-providers.activities"
@@ -227,9 +228,6 @@ export const groupParked = (name: string): string => `${name} is parked: it runs
 export const notServed = (provider: string, day: string): string => `${provider} does not serve this scheme on ${day}: no Service Area assigned to it then holds the scheme's planning area`
 export const KIND_CARRIES_NOT = "Not a member of this kind of activity"
 
-/** A refusal judged on a proposal: a 400 at its field when the body is the caller's, a 409 in one sentence when the row is. */
-type ProposalRefusal = { status: 400 | 409; path: string; message: string }
-
 /** The scheme and the group a proposal names, as its rules read them. */
 type Subject = { scheme: { id: string; name: string; validFrom: string; validTo: string | null; archivedAt: Date | null }; group: { id: string; name: string; days: string[]; stopSource: string; vehicleId: string | null; driverId: string | null } }
 
@@ -259,21 +257,21 @@ export const NOT_A_WASTE_FRACTION = "Not a waste fraction of this company"
  * change moves), every fraction is the company's, and the set moves a
  * fraction. The first refusal at its field, or null.
  */
-async function fractionsRefusal(tx: Tx, companyId: string, group: { id: string; stopSource: string }, wasteFractionIds: readonly string[]): Promise<ProposalRefusal | null> {
-  if (group.stopSource !== "rule") return { status: 400, path: "collectionGroupId", message: MANUAL_GROUP_FRACTIONS }
+async function fractionsRefusal(tx: Tx, companyId: string, group: { id: string; stopSource: string }, wasteFractionIds: readonly string[]): Promise<Refusal | null> {
+  if (group.stopSource !== "rule") return { reason: "invalid", input: "collectionGroupId", sentence: MANUAL_GROUP_FRACTIONS }
   const found = await tx
     .select({ id: wasteFraction.id })
     .from(wasteFraction)
     .where(and(eq(wasteFraction.companyId, companyId), inArray(wasteFraction.id, [...wasteFractionIds])))
   const known = new Set(found.map((row) => row.id))
   const missing = wasteFractionIds.findIndex((id) => !known.has(id))
-  if (missing !== -1) return { status: 400, path: `wasteFractionIds.${missing}`, message: NOT_A_WASTE_FRACTION }
+  if (missing !== -1) return { reason: "invalid", input: `wasteFractionIds.${missing}`, sentence: NOT_A_WASTE_FRACTION }
   const current = await tx
     .select({ wasteFractionId: collectionGroupFraction.wasteFractionId })
     .from(collectionGroupFraction)
     .where(and(eq(collectionGroupFraction.companyId, companyId), eq(collectionGroupFraction.collectionGroupId, group.id)))
   const same = wasteFractionChangeRefusal(current.map((row) => row.wasteFractionId), wasteFractionIds)
-  return same === null ? null : { status: 400, path: "wasteFractionIds", message: same }
+  return same === null ? null : { reason: "invalid", input: "wasteFractionIds", sentence: same }
 }
 
 /**
@@ -282,22 +280,22 @@ async function fractionsRefusal(tx: Tx, companyId: string, group: { id: string; 
  * container is the project's, and the list moves a stop or their order. The
  * first refusal at its field, or null.
  */
-async function stopsRefusal(tx: Tx, scope: { companyId: string; projectId: string }, group: { id: string; stopSource: string }, containerIds: readonly string[]): Promise<ProposalRefusal | null> {
-  if (group.stopSource !== "manual") return { status: 400, path: "collectionGroupId", message: RULE_GROUP_STOPS }
+async function stopsRefusal(tx: Tx, scope: { companyId: string; projectId: string }, group: { id: string; stopSource: string }, containerIds: readonly string[]): Promise<Refusal | null> {
+  if (group.stopSource !== "manual") return { reason: "invalid", input: "collectionGroupId", sentence: RULE_GROUP_STOPS }
   const found = await tx
     .select({ id: container.id })
     .from(container)
     .where(and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId), inArray(container.id, [...containerIds])))
   const known = new Set(found.map((row) => row.id))
   const missing = containerIds.findIndex((id) => !known.has(id))
-  if (missing !== -1) return { status: 400, path: `containerIds.${missing}`, message: NOT_A_CONTAINER }
+  if (missing !== -1) return { reason: "invalid", input: `containerIds.${missing}`, sentence: NOT_A_CONTAINER }
   const current = await tx
     .select({ containerId: collectionGroupContainer.containerId })
     .from(collectionGroupContainer)
     .where(and(eq(collectionGroupContainer.companyId, scope.companyId), eq(collectionGroupContainer.collectionGroupId, group.id)))
     .orderBy(asc(collectionGroupContainer.position))
   const same = stopSetChangeRefusal(current.map((row) => row.containerId), containerIds)
-  return same === null ? null : { status: 400, path: "containerIds", message: same }
+  return same === null ? null : { reason: "invalid", input: "containerIds", sentence: same }
 }
 
 /**
@@ -306,22 +304,22 @@ async function stopsRefusal(tx: Tx, scope: { companyId: string; projectId: strin
  * that opens it — a provider's account — both of that provider's own fleet
  * (`reachesFleet`'s rule). The first refusal at its field, or null.
  */
-async function crewRefusal(tx: Tx, scope: { companyId: string; projectId: string; provider: string; ownFleet: string | null }, proposal: { vehicleId: string; driverId: string | null }): Promise<ProposalRefusal | null> {
+async function crewRefusal(tx: Tx, scope: { companyId: string; projectId: string; provider: string; ownFleet: string | null }, proposal: { vehicleId: string; driverId: string | null }): Promise<Refusal | null> {
   const [truck] = await tx
     .select({ serviceProviderId: vehicle.serviceProviderId })
     .from(vehicle)
     .where(and(eq(vehicle.companyId, scope.companyId), eq(vehicle.projectId, scope.projectId), eq(vehicle.id, proposal.vehicleId), eq(vehicle.kind, "powered-vehicle")))
     .limit(1)
-  if (truck === undefined) return { status: 400, path: "vehicleId", message: NOT_A_POWERED_VEHICLE }
-  if (scope.ownFleet !== null && truck.serviceProviderId !== scope.ownFleet) return { status: 400, path: "vehicleId", message: notOwnFleet("vehicle", scope.provider) }
+  if (truck === undefined) return { reason: "invalid", input: "vehicleId", sentence: NOT_A_POWERED_VEHICLE }
+  if (scope.ownFleet !== null && truck.serviceProviderId !== scope.ownFleet) return { reason: "invalid", input: "vehicleId", sentence: notOwnFleet("vehicle", scope.provider) }
   if (proposal.driverId === null) return null
   const [person] = await tx
     .select({ serviceProviderId: driver.serviceProviderId })
     .from(driver)
     .where(and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId), eq(driver.id, proposal.driverId)))
     .limit(1)
-  if (person === undefined) return { status: 400, path: "driverId", message: NOT_A_DRIVER }
-  if (scope.ownFleet !== null && person.serviceProviderId !== scope.ownFleet) return { status: 400, path: "driverId", message: notOwnFleet("driver", scope.provider) }
+  if (person === undefined) return { reason: "invalid", input: "driverId", sentence: NOT_A_DRIVER }
+  if (scope.ownFleet !== null && person.serviceProviderId !== scope.ownFleet) return { reason: "invalid", input: "driverId", sentence: notOwnFleet("driver", scope.provider) }
   return null
 }
 
@@ -342,27 +340,27 @@ async function judgeProposal(
   scope: { companyId: string; projectId: string; serviceProviderId: string; provider: string; ownFleet: string | null },
   proposal: Proposal,
   now: () => Date,
-): Promise<ProposalRefusal | Subject> {
+): Promise<Refusal | Subject> {
   const [scheme] = await tx
     .select({ id: routeScheme.id, name: routeScheme.name, validFrom: routeScheme.validFrom, validTo: routeScheme.validTo, archivedAt: routeScheme.archivedAt })
     .from(routeScheme)
     .where(and(eq(routeScheme.companyId, scope.companyId), eq(routeScheme.projectId, scope.projectId), eq(routeScheme.id, proposal.routeSchemeId)))
     .limit(1)
-  if (scheme === undefined) return { status: 400, path: "routeSchemeId", message: NOT_A_SCHEME }
+  if (scheme === undefined) return { reason: "invalid", input: "routeSchemeId", sentence: NOT_A_SCHEME }
   const [group] = await tx
     .select({ id: collectionGroup.id, name: collectionGroup.name, days: collectionGroup.days, stopSource: collectionGroup.stopSource, vehicleId: collectionGroup.vehicleId, driverId: collectionGroup.driverId })
     .from(collectionGroup)
     .where(and(eq(collectionGroup.companyId, scope.companyId), eq(collectionGroup.routeSchemeId, scheme.id), eq(collectionGroup.id, proposal.collectionGroupId)))
     .limit(1)
-  if (group === undefined) return { status: 400, path: "collectionGroupId", message: NOT_A_GROUP_OF_THE_SCHEME }
+  if (group === undefined) return { reason: "invalid", input: "collectionGroupId", sentence: NOT_A_GROUP_OF_THE_SCHEME }
   if (proposal.kind === "route-day-change") {
     const same = routeDayChangeRefusal(group.days as ServiceDay[], proposal.serviceDays)
-    if (same !== null) return { status: 400, path: "serviceDays", message: same }
+    if (same !== null) return { reason: "invalid", input: "serviceDays", sentence: same }
   } else if (proposal.kind === "vehicle-change") {
     const crew = await crewRefusal(tx, scope, proposal)
     if (crew !== null) return crew
     const same = vehicleChangeRefusal(group, proposal)
-    if (same !== null) return { status: 400, path: "vehicleId", message: same }
+    if (same !== null) return { reason: "invalid", input: "vehicleId", sentence: same }
   } else if (proposal.kind === "stop-set-change") {
     const stops = await stopsRefusal(tx, scope, group, proposal.containerIds)
     if (stops !== null) return stops
@@ -371,24 +369,14 @@ async function judgeProposal(
     if (fractions !== null) return fractions
   }
   const tomorrow = firstEndingDay(await projectToday(tx, { companyId: scope.companyId, projectId: scope.projectId }, now)())
-  if (proposal.effectiveFrom < tomorrow) return { status: 400, path: "effectiveFrom", message: appliesFromTomorrow(tomorrow) }
-  if (proposal.effectiveFrom <= scheme.validFrom || (scheme.validTo !== null && proposal.effectiveFrom >= scheme.validTo)) return { status: 400, path: "effectiveFrom", message: successorStartsInside(scheme) }
-  try {
-    requireNotArchived(scheme)
-  } catch (error) {
-    if (error instanceof ProblemError) return { status: 409, path: "routeSchemeId", message: error.body.detail ?? error.message }
-    throw error
-  }
-  if (group.days.length === 0) return { status: 409, path: "collectionGroupId", message: groupParked(group.name) }
+  const day = successorDayIssue(scheme, proposal.effectiveFrom, tomorrow)
+  if (day !== undefined) return { reason: "invalid", input: "effectiveFrom", sentence: day === "before-tomorrow" ? appliesFromTomorrow(tomorrow) : successorStartsInside(scheme) }
+  const archived = archivedRefusal(scheme)
+  if (archived !== undefined) return archived
+  if (group.days.length === 0) return { reason: "conflict", sentence: groupParked(group.name) }
   if (!(await servesScheme(tx, { companyId: scope.companyId, serviceProviderId: scope.serviceProviderId, routeSchemeId: scheme.id }, proposal.effectiveFrom)))
-    return { status: 409, path: "routeSchemeId", message: notServed(scope.provider, proposal.effectiveFrom) }
+    return { reason: "conflict", sentence: notServed(scope.provider, proposal.effectiveFrom) }
   return { scheme, group }
-}
-
-/** A proposal's refusal as an open or a correction answers it: at its field, or in one sentence. */
-function refuseProposal(refusal: ProposalRefusal): never {
-  if (refusal.status === 400) throw invalidRequest("body", [{ path: refusal.path, message: refusal.message }])
-  throw problem(409, { detail: refusal.message })
 }
 
 /** The provider's legal name, as a sentence names it. */
@@ -545,15 +533,15 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     // The approver is the office's, so the crew is held to the project and the group alone: whose fleet it is was judged when the proposal was opened.
     const scope = { companyId: principal.companyId, projectId: row.projectId, serviceProviderId: row.serviceProviderId, provider: await providerName(tx, principal.companyId, row.serviceProviderId), ownFleet: null }
     const judged = await judgeProposal(tx, scope, proposal, now)
-    if ("status" in judged) throw problem(409, { detail: `${activityLabel(row.number)} cannot be approved: ${judged.message}` })
+    if ("reason" in judged) throw problem(409, { detail: `${activityLabel(row.number)} cannot be approved: ${judged.sentence}` })
     try {
       const succession = await writeSuccessor(tx, principal, { jobs, now }, proposal.routeSchemeId, proposal.effectiveFrom, amendmentOf(proposal))
       return succession.successor.id
     } catch (error) {
-      // The successor's 400s hold a body the approver never sent, and its 409s a scheme the approver did not name: each is the approval's 409, in the successor's sentence.
-      if (error instanceof ProblemError && (error.status === 400 || error.status === 409))
-        throw problem(409, { detail: `${activityLabel(row.number)} cannot be approved: ${error.body.errors?.map((issue) => issue.message).join("; ") ?? error.body.detail}`, errors: error.body.errors })
-      throw error
+      // The successor's 400s hold a body the approver never sent, and its 409s a scheme the approver did not name: each is the approval's 409, in the successor's sentence, whoever noticed (`refusalOf`).
+      const refused = refusalOf(error)
+      if (refused === undefined || (refused.status !== 400 && refused.status !== 409)) throw error
+      throw problem(409, { detail: `${activityLabel(row.number)} cannot be approved: ${refused.body.errors?.map((issue) => issue.message).join("; ") ?? refused.body.detail}`, errors: refused.body.errors })
     }
   }
 
@@ -659,7 +647,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         if (body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" || body.kind === "waste-fraction-change") {
           const proposal: Proposal = body.kind === "vehicle-change" ? { ...body, driverId: body.driverId ?? null } : body
           const judged = await judgeProposal(tx, scope, proposal, now)
-          if ("status" in judged) refuseProposal(judged)
+          if ("reason" in judged) throw new Refused(judged)
         }
         const proposed = body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" || body.kind === "waste-fraction-change" ? body : undefined
         // The company's row first, so two opens take the next number one after the other; a key share, so the company's children still insert beside it.
@@ -775,7 +763,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
                   ? { ...stored, effectiveFrom, containerIds: patch.containerIds ?? stored.containerIds }
                   : { ...stored, effectiveFrom, wasteFractionIds: patch.wasteFractionIds ?? stored.wasteFractionIds }
           const judged = await judgeProposal(tx, scope, proposal, now)
-          if ("status" in judged) refuseProposal(judged)
+          if ("reason" in judged) throw new Refused(judged)
         }
         const { containerIds, wasteFractionIds, ...own } = patch
         const [row] = await tx

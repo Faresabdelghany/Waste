@@ -12,8 +12,12 @@
 //   a duplicate      — the unique constraints a route can foresee become a
 //                      sentence a client can show, instead of the constraint
 //                      name the generic 23505 mapping would print
-//                      (problem.ts). A collision nobody foresaw still lands
-//                      there, as a 409 either way.
+//                      (problem.ts), through `refuseDuplicate` — one of the
+//                      doors in `@waste/db/commands/shared` the routes and the
+//                      shared statements both go through, beside
+//                      `refuseOverlap` (23P01), `refuseCheck` (23514) and
+//                      `replayed`. A collision nobody foresaw still lands in
+//                      the error handler, as a 409 either way.
 //   a reference      — an id a body names must be a row of this company
 //                      (`requireRow`), checked before the write, or the
 //                      foreign key answers 23503 and the client gets a 500
@@ -22,14 +26,6 @@
 //                      own single-row GET (`created`), and every 201 in the
 //                      document declares the header (`describeCreated`),
 //                      Issue #74.
-//
-// The Registry added the same thing one SQLSTATE along (Issue #78): an
-// effective-dated table refuses a row whose period overlaps one already there
-// with 23P01, which is the same kind of news and gets the same treatment,
-// `refuseOverlap` beside `refuseDuplicate`. Two doors and not one taking a
-// SQLSTATE, because a route foresees the two separately — the same table's
-// name key and its `no_overlap` constraint say different things to a person —
-// and a sentence written for one must not answer the other.
 //
 //   a row lock     — a rule the API holds rather than the database is only
 //                    held per transaction, and two transactions that read
@@ -49,11 +45,11 @@
 //                    part B's `openTicket`, Issue #112 part B's
 //                    `recordBillableEvent`, `issueInvoice` and `runBilling`,
 //                    under `@waste/db/commands/`) has no request and refuses
-//                    with a `Refused` carrying its status and its sentence,
-//                    which the API's error handler (problem.ts,
-//                    `refusedProblem`) answers as the 409 or the 400 the route
-//                    always answered; a route calls the command and catches
-//                    nothing.
+//                    with the domain's `Refused`, a conflict or an invalid
+//                    value at its input, which the API's error handler
+//                    (problem.ts, `refusalProblem`) answers as the 409 or the
+//                    400 at the body's field of that name; a route calls the
+//                    command and catches nothing.
 //
 // The lock, the number and the two instant spellings (`stampsOf`,
 // `instantOf`) live in `@waste/db` since Issue #109 part B
@@ -77,7 +73,7 @@ import type { Context } from "hono"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
-import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
+import { invalidRequest } from "../problem"
 
 export { instantOf, lockRow, lockRows, nextNumber, stampsOf, strengthFor, type Series, type TenantTable }
 
@@ -172,25 +168,6 @@ export function timeOf(value: string): string {
   return match[1]
 }
 
-/**
- * Runs a write, and turns a unique violation the route named into a 409 with
- * that sentence. A constraint the route did not name is left to the error
- * handler, which is still a 409 — with the constraint's name, which is the
- * signal that a sentence is missing here.
- */
-export async function refuseDuplicate<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
-  return await refused(uniqueConstraintOf, sentences, write)
-}
-
-/**
- * The same for an exclusion constraint: a row whose period overlaps one
- * already there (23P01, the Registry's effective-dated tables). A constraint
- * the route did not name is left to the error handler, a 409 either way.
- */
-export async function refuseOverlap<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
-  return await refused(exclusionConstraintOf, sentences, write)
-}
-
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. `TenantTable`, re-exported above from `@waste/db/commands/shared`. */
 
 /** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
@@ -198,9 +175,6 @@ export type StatusTable = TenantTable & { status: PgColumn }
 
 /** The row a body named: this company's, and under whatever else its key demands. */
 export type NamedRow = { companyId: string; id: string; also?: SQL }
-
-/** What a body is told about a value it carried — a row that is not there, a check the database refused: a 400 at the field that named it. */
-export type Refusal = { path: string; message: string }
 
 /** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
 export type Target = "body" | "query"
@@ -223,7 +197,7 @@ export type Target = "body" | "query"
  * of its product and an agreement of its customer. A `query` target refuses
  * on the query string, for a list filter that names a row; a body on the body.
  */
-export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<void> {
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: ProblemFieldError, target: Target = "body"): Promise<void> {
   const issue = await rowIssue(tx, table, row, refusal)
   if (issue !== undefined) throw invalidRequest(target, [issue])
 }
@@ -235,7 +209,7 @@ export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refu
  * provider beside its two shape rules (routes/place-rules.ts) — so a client
  * mending one is not told about the other on its next try.
  */
-export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<Refusal | undefined> {
+export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusal: ProblemFieldError): Promise<ProblemFieldError | undefined> {
   return (await answering(tx, table, table.id, row)) === undefined ? refusal : undefined
 }
 
@@ -248,7 +222,7 @@ export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusa
  * `query` target refuses on the query string, for a list filter that names a
  * row (`GET /tickets?customerId=`, Issue #109); a body on the body.
  */
-export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<Status> {
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: ProblemFieldError, target: Target = "body"): Promise<Status> {
   const found = await answering(tx, table, table.status, row)
   if (found === undefined) throw invalidRequest(target, [refusal])
   return found.answer as Status
@@ -272,45 +246,6 @@ async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: Name
  * live in `@waste/db/commands/shared` since the write statements the worker
  * runs too take them, and are re-exported above.
  */
-
-/** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */
-async function refused<T>(
-  constraintOf: (error: unknown) => string | undefined,
-  sentences: Readonly<Record<string, string>>,
-  write: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await write()
-  } catch (error) {
-    const constraint = constraintOf(error)
-    const detail = constraint === undefined ? undefined : sentences[constraint]
-    if (detail === undefined) throw error
-    throw problem(409, { detail })
-  }
-}
-
-/**
- * The third door, one SQLSTATE further along (Issue #97): a check violation
- * (23514) the route named becomes a 400 on the field, in the shape the
- * validator's own refusals take. A 400 and not a 409, because nothing else in
- * the table says otherwise — the row is alone and its own value will not do,
- * which is what a schema says of a value it refuses; the only difference is
- * who noticed. The API runs every check it can before the write, so this door
- * is for the check only the database can run: `st_isvalid` on a polygon,
- * whose ring may cross itself in a way the shape rule cannot see. A check the
- * route did not name is left to the error handler, which answers a 500 and
- * logs the constraint — the signal that a sentence is missing here.
- */
-export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>>, write: () => Promise<T>): Promise<T> {
-  try {
-    return await write()
-  } catch (error) {
-    const constraint = checkConstraintOf(error)
-    const refusal = constraint === undefined ? undefined : sentences[constraint]
-    if (refusal === undefined) throw error
-    throw invalidRequest("body", [refusal])
-  }
-}
 
 // Resources, round A (Issue #101 review): the owning provider's shape, once.
 // A depot, an unloading station, a vehicle and a driver each name a service
@@ -341,7 +276,7 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
 }
 
 // Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
-// is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the Stock
+// is held within. `OCCURRED_AT_SKEW_MS` was the Stock
 // Movement ledger's constant in routes/lifecycle.ts and moved here so the
 // ledger, the driver door and the office's unload capture read one, and
 // `requireNotAhead` is the check over it, spelled once since Resolution's
@@ -366,11 +301,15 @@ export const OCCURRED_AT_SKEW_MS = 5 * 60_000
  * yesterday and the ledger a movement found in last week's paperwork; the
  * forty-eight-hour floor is the driver door's alone (`COMMAND_BACKDATE_MS`,
  * judged in the domain beside the skew). The ticket create, the alert raise,
- * the unload capture and the Stock Movement ledger all read this one check.
+ * the unload capture and the Stock Movement ledger all read this one check;
+ * a batch ingest that answers each reading on its own reads `aheadOfClock`.
  */
 export function requireNotAhead(instant: Date, at: Date, path = "occurredAt"): void {
-  if (instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
+  if (aheadOfClock(instant, at)) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
 }
+
+/** The skew rule's verdict as a value: whether the instant runs further ahead of the request's clock than `OCCURRED_AT_SKEW_MS`. */
+export const aheadOfClock = (instant: Date, at: Date): boolean => instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS
 
 /**
  * How far behind the request's clock a driver command's `occurredAt` may lie:
@@ -381,40 +320,8 @@ export function requireNotAhead(instant: Date, at: Date, path = "occurredAt"): v
  */
 export const COMMAND_BACKDATE_MS = 48 * 3_600_000
 
-/** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default. */
+/** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default, which a driver command's `replayed` names. */
 export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
-
-/**
- * The fourth door beside `refuseDuplicate`, `refuseOverlap` and `refuseCheck`,
- * and the one that answers a key already taken with a 200 rather than a 409
- * (#104 §3): a client-minted id already present is answered as the first
- * application, never as a conflict, because here the key is the command and
- * the command has already happened. Runs the write; when it fails with 23505
- * on one of the primary keys named — the receipt's, or the key of the row the
- * command makes with the same id, whichever the race meets first — `first`
- * reads what was recorded for the id and its answer is returned in the
- * write's place. The savepoint the caller ran the write in has rolled the
- * loser's rows back by then; the read is a fresh statement and sees the
- * winner's committed row. A 23505 on any other constraint rethrows the
- * write's own error, since it is not a replay; so does a named key that
- * `first` finds nothing recorded under — unless the caller gives `taken`,
- * whose answer stands in for the write then: the key is held by a row the
- * caller cannot see, which for the driver door (routes/driver.ts) is a
- * command id another driver's device minted, and that is neither a replay
- * nor a conflict of the caller's own making.
- */
-export async function replayed<T>(keys: readonly string[], write: () => Promise<T>, first: () => Promise<T | undefined>, taken?: () => Promise<T>): Promise<T> {
-  try {
-    return await write()
-  } catch (error) {
-    const constraint = uniqueConstraintOf(error)
-    if (constraint === undefined || !keys.includes(constraint)) throw error
-    const recorded = await first()
-    if (recorded !== undefined) return recorded
-    if (taken === undefined) throw error
-    return await taken()
-  }
-}
 
 // Finance (Issue #112, its review): the company's document series, once. A
 // route's, a ticket's and an invoice's number each come off a counter on the

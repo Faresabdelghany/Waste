@@ -27,7 +27,7 @@
 import { Page } from "@waste/contracts/pagination"
 import { BulkyAvailability, BulkyAvailabilityQuery, BulkyBooking, BulkyBookingCancel, BulkyBookingCreate, BulkyBookingListQuery, BulkyBookingPatch, type BulkyStop } from "@waste/contracts/bulky"
 import type { Tx } from "@waste/db/client"
-import { bookBulky, bulkyDaysAt, bulkyItemsOf, replaceBulkyItems, requireChargeableAgreement, takeBulkySlot } from "@waste/db/commands/bulky-bookings"
+import { bookBulky, bulkyDaysAt, bulkyItemsOf, replaceBulkyItems, requireChargeableAgreement, requireCustomersAgreement, takeBulkySlot } from "@waste/db/commands/bulky-bookings"
 import { projectToday } from "@waste/db/commands/project-clock"
 import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
@@ -301,7 +301,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         await requireWasteFraction(tx, principal.companyId, body.wasteFractionId)
         const place = { propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null }
         // The agreement's customer is the body's own field, a 400 asked before any 409.
-        await requireChargeableAgreement(tx, scope, { customerId: body.customerId, agreementId: body.agreementId, place, day: body.day }, { customerOnly: true })
+        await requireCustomersAgreement(tx, scope, { customerId: body.customerId, agreementId: body.agreementId, day: body.day })
         if (customerStatus !== undefined && customerStatus !== "active") throw problem(409, { detail: INACTIVE_CUSTOMER })
         refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "booking")
         const today = await projectToday(tx, scope, now)()

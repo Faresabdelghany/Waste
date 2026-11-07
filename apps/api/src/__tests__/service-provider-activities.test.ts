@@ -26,7 +26,8 @@ import { OFFICE_CLOSES_FOLLOW_UPS, OFFICE_DECIDES, OFFICE_RAISES_FOLLOW_UPS, MAN
 import { notOwnFleet } from "../auth/provider"
 import { createApp } from "../app"
 import { NOT_A_POWERED_VEHICLE } from "../routes/references"
-import { dispatchedFrom } from "../routes/scheme-lifecycle"
+import { schemeArchived } from "../routes/scheme-groups"
+import { dispatchedFrom, successorStartsInside } from "../routes/scheme-lifecycle"
 import { appliesFromTomorrow, KIND_CARRIES_NOT, NOT_A_CONTAINER, NOT_A_WASTE_FRACTION, NOT_A_GROUP_OF_THE_SCHEME, notOwnProvider, notServed } from "../routes/service-provider-activities"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -186,6 +187,22 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
       // The office proposes for NordRen under the same rule, and CityHaul serves nothing in Centrum.
       const cityhauls = await refused(await olivia("/service-provider-activities", { method: "POST", body: proposalBody(organic, { serviceProviderId: a.serviceProviders.cityhaul.id }) }), 400)
       assert.equal(cityhauls.errors?.[0]?.path, "serviceProviderId", "CityHaul holds no Service Area in the project")
+      // The day the successor would hold it to: strictly inside the scheme's period.
+      const ending = await schemeNamed("Organic ending", { validTo: "2026-10-15" })
+      await atField(proposalBody(ending), "effectiveFrom", successorStartsInside(ending))
+      // An archived scheme is changed no more: a 409 once every 400 has passed.
+      const archived = await schemeNamed("Organic archived")
+      await ok(await olivia(`/route-schemes/${archived.id}/archive`, { method: "POST", body: { effectiveFrom: "2026-11-01" } }))
+      assert.equal((await refused(await lars("/service-provider-activities", { method: "POST", body: proposalBody(archived) }), 409)).detail, schemeArchived("Organic archived"))
+    })
+
+    test("a scheme archived after the proposal refuses its approval in the archive's sentence", async () => {
+      const organic = await schemeNamed("Organic archived later")
+      const proposal = await open(lars, proposalBody(organic))
+      await ok(await olivia(`/route-schemes/${organic.id}/archive`, { method: "POST", body: { effectiveFrom: "2026-11-01" } }))
+      const problem = await refused(await commanded(olivia, proposal.id, "approve"), 409)
+      assert.equal(problem.detail, `ACT-${proposal.number} cannot be approved: ${schemeArchived("Organic archived later")}`)
+      assert.equal((await read(olivia, proposal.id)).status, "pending-approval")
     })
 
     test("only the office decides it: Lars is refused, and a desk that writes no scheme is refused at the scheme's grant", async () => {

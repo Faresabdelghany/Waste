@@ -34,7 +34,6 @@ import {
   type TankKind,
   type TankOutlet,
 } from "@waste/contracts/tanks"
-import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import type { Tx } from "@waste/db/client"
 import { lastEmptyings, type TankEmptying } from "@waste/db/query/tank-emptyings"
 import { validOn } from "@waste/db/query/valid-on"
@@ -47,6 +46,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -54,8 +54,9 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
+import { periodAfter, requireOrdered } from "./periods"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 
 const MODULE = "customers.properties"
 const TankPage = Page(TankInstallation)
@@ -311,7 +312,7 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
         const found = await findTank(tx, principal, id)
         if (found === undefined) throw noSuchTank(id)
         const current = await lockedTank(tx, principal, found)
-        if (patch.validTo != null && patch.validTo <= current.validFrom) throw invalidRequest("body", [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
+        requireOrdered(periodAfter(current, { validTo: patch.validTo }))
         const [bin] = await tx.select({ label: container.label }).from(container).where(and(eq(container.companyId, principal.companyId), eq(container.id, current.containerId))).limit(1)
         const [row] = await refuseOverlap({ [ANOTHER_TANK]: standsForAnotherTank(bin?.label ?? current.containerId) }, () =>
           tx

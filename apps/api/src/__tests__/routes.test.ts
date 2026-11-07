@@ -12,12 +12,15 @@ import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/pla
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import { ROUTING_MEASURE_QUEUE } from "@waste/db/commands/plans"
+import { Refused } from "@waste/domain/refusal"
 import { UNLOAD_SECONDS } from "@waste/domain/routing/reloads"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
+import { problem } from "../problem"
+import { dispatchRefusalOf } from "../routes/routes"
 import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -734,5 +737,21 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       await refused(await viewer(`/routes/${harbors.id}/commands`), 404)
       assert.match((await refused(await ungranted(`/routes/${harbors.id}/commands`), 403)).detail ?? "", /view on route-studio\.routes/)
     })
+  })
+})
+
+describe("a bulk dispatch's row refusal (database-free)", () => {
+  test("a Refused from a command is that route's own 409 in its sentence, as a route's own problem is", () => {
+    const sentence = "Route R-12 has no planned driver; assign one before dispatching it"
+    assert.deepEqual(dispatchRefusalOf(Refused.conflict(sentence)), { status: 409, detail: sentence })
+    assert.deepEqual(dispatchRefusalOf(problem(409, { detail: sentence })), { status: 409, detail: sentence })
+    assert.deepEqual(dispatchRefusalOf(problem(404, { detail: "No route 01 in the projects this account works in" })), { status: 404, detail: "No route 01 in the projects this account works in" })
+  })
+
+  test("anything a route's row cannot answer — an invalid value, a 400, a 503, an error — fails the request", () => {
+    assert.equal(dispatchRefusalOf(Refused.invalid("routeIds", "Not a route of this project")), undefined)
+    assert.equal(dispatchRefusalOf(problem(400, { detail: "The request body is invalid" })), undefined)
+    assert.equal(dispatchRefusalOf(problem(503, { detail: "Storage is not there" })), undefined)
+    assert.equal(dispatchRefusalOf(new Error("the database ate my query")), undefined)
   })
 })

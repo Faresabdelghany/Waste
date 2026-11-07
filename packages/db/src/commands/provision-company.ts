@@ -32,6 +32,7 @@
 // a role that sees them all: the owner.
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
+import { Refused } from "@waste/domain/refusal"
 import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 import { and, eq, isNull } from "drizzle-orm"
 
@@ -41,7 +42,6 @@ import { company, project } from "../schema/organisation"
 import { ticketType } from "../schema/resolution"
 import { decommissionReason } from "../schema/stock"
 import { withCompany } from "../tenant"
-import { Refused } from "./shared"
 import { defaultTicketTypeRows } from "./ticket-types"
 
 /** The twelve system roles of a company, each under the id `idOf` gives its key. */
@@ -109,13 +109,13 @@ export async function provisionCompany(db: Db, provision: CompanyProvision, newI
     .from(company)
     .where(and(eq(company.country, provision.company.country), eq(company.registrationNumber, provision.company.registrationNumber)))
     .limit(1)
-  if (registered !== undefined) throw new Refused(409, companyRegistered(provision.company.country, provision.company.registrationNumber))
+  if (registered !== undefined) throw Refused.conflict(companyRegistered(provision.company.country, provision.company.registrationNumber))
   const [invited] = await db
     .select({ id: userAccount.id })
     .from(userAccount)
     .where(and(eq(userAccount.email, email), isNull(userAccount.authUserId), isNull(userAccount.deactivatedAt)))
     .limit(1)
-  if (invited !== undefined) throw new Refused(409, invitationOpen(email))
+  if (invited !== undefined) throw Refused.conflict(invitationOpen(email))
 
   const companyId = newId()
   const projectId = newId()

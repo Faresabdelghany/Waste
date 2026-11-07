@@ -21,7 +21,7 @@ import { sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
-import { WORKER_QUEUE_MISSING } from "../routes/generation"
+import { WORKER_QUEUE_MISSING } from "../problem"
 import { nameTaken } from "../routes/message-templates"
 import { PICK_A_TEMPLATE } from "../routes/messages"
 import { callingAs, type Call } from "./calls"

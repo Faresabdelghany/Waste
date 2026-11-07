@@ -18,11 +18,12 @@ import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, ne } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, lockRow, refuseDuplicate, stampsOf, strengthFor } from "./shared"
+import { describeJson, lockRow, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "configure.organization"
 

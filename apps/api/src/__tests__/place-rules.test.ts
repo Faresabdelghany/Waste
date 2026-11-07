@@ -61,7 +61,8 @@ describe("requirePlaceShape, the patch held against the stored row (database-fre
 
 describe("placeShapeInvalid, the refuseCheck door behind it", () => {
   test("maps a table's two shape checks onto the same two refusals, by the constraint names the migration spells", () => {
-    assert.deepEqual(placeShapeInvalid("depot"), { depot_provider_shape: providerIssue, depot_hours_shape: hoursIssue })
-    assert.deepEqual(placeShapeInvalid("unloading_station"), { unloading_station_provider_shape: providerIssue, unloading_station_hours_shape: hoursIssue })
+    const atCheck = ({ path, message }: { path: string; message: string }) => ({ input: path, sentence: message })
+    assert.deepEqual(placeShapeInvalid("depot"), { depot_provider_shape: atCheck(providerIssue), depot_hours_shape: atCheck(hoursIssue) })
+    assert.deepEqual(placeShapeInvalid("unloading_station"), { unloading_station_provider_shape: atCheck(providerIssue), unloading_station_hours_shape: atCheck(hoursIssue) })
   })
 })

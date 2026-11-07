@@ -17,9 +17,10 @@
 //
 // The caller has proved the ids are the project's — the customer, the
 // agreement, the place, the fraction — and answered a 400 for any that is
-// not; what is judged here is what the rows say: the agreement signed, the
-// customer's and in force on the day, the place one it serves that day, then
-// the day itself. Each refusal is a 409 `Refused` in the domain's sentence.
+// not; what is judged here is what the rows say: the agreement the
+// customer's (an invalid `customerId`), signed and in force on the day, the
+// place one it serves that day, then the day itself — each a conflict but
+// the first, in the domain's sentence, thrown as `Refused`.
 import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
 import type { RecurrenceFrequency } from "@waste/domain/planning/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
@@ -27,6 +28,7 @@ import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@was
 import type { WeekRotation } from "@waste/domain/route-schemes/recurrence"
 import { addDays, type ServiceDay } from "@waste/domain/days"
 import { inForceOn } from "@waste/domain/periods"
+import { Refused } from "@waste/domain/refusal"
 import { and, asc, count, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -38,7 +40,7 @@ import { property, sharedCollectionPoint } from "../schema/customers"
 import { project } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import type { Scope } from "./project-clock"
-import { lockRow, refused, RefusedField } from "./shared"
+import { lockRow } from "./shared"
 
 /** A booking's place: a property or a shared collection point, one of the two. */
 export type BulkyPlace = { propertyId: string | null; sharedCollectionPointId: string | null }
@@ -108,7 +110,7 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
 
 async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from: string; to: string }, today: string): Promise<PlaceDay[]> {
   const location = await locationOf(tx, scope, place)
-  if (location === null) throw refused(409, NO_LOCATION)
+  if (location === null) throw Refused.conflict(NO_LOCATION)
   // The schedules in force over the window, each with the periods its area's boundary held the place.
   const reaching = await tx
     .select({
@@ -143,7 +145,7 @@ async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from
       ),
     )
     .orderBy(asc(planningArea.code), asc(bulkySchedule.id))
-  if (reaching.length === 0) throw refused(409, NO_BULKY_SCHEDULE)
+  if (reaching.length === 0) throw Refused.conflict(NO_BULKY_SCHEDULE)
 
   // In area-code order: the first schedule in force holding the place on a day governs it.
   const scheduleIds = [...new Set(reaching.map((row) => row.schedule.id))]
@@ -197,23 +199,35 @@ export type BulkyBookingInput = {
 }
 
 /**
- * The agreement a booking is charged to, judged on the day: the customer's
- * (400 at `customerId`, the body's own field), signed, in force, and serving
- * the place that day (409 each, in that order); with `customerOnly`, the
- * first alone.
+ * The agreement a booking names, as its rules read it on the day, held to
+ * the first of them: it is the customer's, an invalid `customerId` where it
+ * is another's.
  */
-export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "place" | "day">, { customerOnly = false }: { customerOnly?: boolean } = {}): Promise<void> {
+async function customersAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "day">): Promise<{ number: string; status: string; inForce: boolean }> {
   const [row] = await tx
     .select({ number: agreement.number, customerId: agreement.customerId, status: agreement.status, inForce: sql<boolean>`${validOn(agreement, input.day)}` })
     .from(agreement)
     .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.projectId, scope.projectId), eq(agreement.id, input.agreementId)))
     .limit(1)
-  if (row === undefined) throw new Error(`requireChargeableAgreement: agreement ${input.agreementId} was proved the project's and then not there`)
-  if (row.customerId !== input.customerId) throw new RefusedField("customerId", NOT_THE_CUSTOMERS)
-  // The customer alone: a caller asking its 400s before the 409s of the rows.
-  if (customerOnly) return
-  if (row.status !== "active") throw refused(409, agreementNotSigned(row.number, row.status))
-  if (!row.inForce) throw refused(409, agreementNotInForce(row.number, input.day))
+  if (row === undefined) throw new Error(`a bulky booking's agreement ${input.agreementId} was proved the project's and then not there`)
+  if (row.customerId !== input.customerId) throw Refused.invalid("customerId", NOT_THE_CUSTOMERS)
+  return row
+}
+
+/** The first of the agreement's rules alone, for a caller that judges every 400 of its body before any 409. */
+export async function requireCustomersAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "day">): Promise<void> {
+  await customersAgreement(tx, scope, input)
+}
+
+/**
+ * The agreement a booking is charged to, judged on the day: the customer's
+ * (an invalid `customerId`), signed, in force, and serving the place that
+ * day (a conflict each, in that order).
+ */
+export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "place" | "day">): Promise<void> {
+  const row = await customersAgreement(tx, scope, input)
+  if (row.status !== "active") throw Refused.conflict(agreementNotSigned(row.number, row.status))
+  if (!row.inForce) throw Refused.conflict(agreementNotInForce(row.number, input.day))
   const [serving] = await tx
     .select({ id: subscription.id })
     .from(subscription)
@@ -226,7 +240,7 @@ export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pi
       ),
     )
     .limit(1)
-  if (serving === undefined) throw refused(409, notServedUnder(row.number, input.day))
+  if (serving === undefined) throw Refused.conflict(notServedUnder(row.number, input.day))
 }
 
 /**
@@ -237,7 +251,7 @@ export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pi
 export async function takeBulkySlot(tx: Tx, scope: Scope, place: BulkyPlace, day: string, today: string): Promise<{ scheduleId: string; planningAreaId: string; productId: string }> {
   const days = await placeDays(tx, scope, place, { from: day, to: day }, today)
   const before = refuseBulkyDay(days, day, today)
-  if (before !== undefined) throw refused(409, before)
+  if (before !== undefined) throw Refused.conflict(before)
   const found = days.find((candidate) => candidate.day === day)!
   await lockRow(tx, bulkySchedule, { companyId: scope.companyId, id: found.scheduleId })
   // Counted again under the lock: a booking that took the last slot meanwhile is counted now.
@@ -245,7 +259,7 @@ export async function takeBulkySlot(tx: Tx, scope: Scope, place: BulkyPlace, day
     .select({ booked: count() })
     .from(bulkyBooking)
     .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.scheduleId, found.scheduleId), eq(bulkyBooking.day, day), isNull(bulkyBooking.cancelledAt)))
-  if (booked >= found.slots) throw refused(409, dayFull(day))
+  if (booked >= found.slots) throw Refused.conflict(dayFull(day))
   return { scheduleId: found.scheduleId, planningAreaId: found.planningAreaId, productId: found.productId }
 }
 

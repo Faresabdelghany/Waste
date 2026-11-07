@@ -21,10 +21,11 @@
 import { Message, MessageCreate, MessageListQuery, type MessageChannel, type MessagePurpose, type MessageStatus } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
-import { queueMessage, SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import { queueMessage } from "@waste/db/commands/messaging"
+import type { JobSender } from "@waste/db/jobs"
 import { customer } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { Refused } from "@waste/domain/refusal"
 import { and, desc, eq, isNotNull, lt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -34,8 +35,7 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { WORKER_QUEUE_MISSING } from "./generation"
+import { describeProblem, invalidRequest, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
 import { created, describeCreated, describeJson, IdParam, instantOf, stampsOf } from "./shared"
 
 const MODULE = "customers.contacts"
@@ -174,15 +174,10 @@ export function messageRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: { job
         if (template === undefined) throw invalidRequest("body", [{ path: "templateId", message: PICK_A_TEMPLATE }])
         const [holder] = await tx.select({ id: customer.id }).from(customer).where(and(eq(customer.companyId, principal.companyId), eq(customer.id, body.customerId))).limit(1)
         if (holder === undefined) throw invalidRequest("body", [{ path: "customerId", message: PICK_A_CUSTOMER }])
-        let queued
-        try {
-          queued = await queueMessage(tx, jobs.send, { id: newId(), companyId: principal.companyId, templateId: body.templateId, customerId: body.customerId, contactId: body.contactId ?? null })
-        } catch (error) {
-          if (error instanceof QueueMissing && error.queue === SEND_MESSAGE_QUEUE) throw problem(503, { detail: WORKER_QUEUE_MISSING })
-          throw error
-        }
-        const row = await findMessage(tx, principal, queued.id)
-        if (row === undefined) throw noSuchMessage(queued.id)
+        const queued = await queueMessage(tx, jobs.send, { id: newId(), companyId: principal.companyId, templateId: body.templateId, customerId: body.customerId, contactId: body.contactId ?? null })
+        if (queued.kind === "refused") throw new Refused(queued.refusal)
+        const row = await findMessage(tx, principal, queued.message.id)
+        if (row === undefined) throw noSuchMessage(queued.message.id)
         return created(c, "/messages", messageOf(row))
       },
     )

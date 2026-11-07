@@ -25,9 +25,9 @@
 //
 // A notice that cannot be sent to a customer — the template made inactive
 // since the rule was written, a customer with no address on its channel — is
-// a `Refused`, which no retry would change: it is logged, the other customers
-// are still told, and the job completes. Anything else fails the job for
-// pg-boss's retries.
+// `queueMessage`'s refusal, which no retry would change: it is logged, the
+// other customers are still told, and the job completes. Anything else fails
+// the job for pg-boss's retries.
 //
 // pg-boss delivers at least once; the event's id and the customer key each
 // notice once (`message_source_event_id_customer_id_idx`), so a redelivery
@@ -36,7 +36,6 @@
 import { ticketLabel } from "@waste/contracts/resolution"
 import type { Tx } from "@waste/db/client"
 import { queueMessage } from "@waste/db/commands/messaging"
-import { Refused } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { customersOfRoute } from "@waste/db/query/stop-customers"
 import { bulkyBooking } from "@waste/db/schema/bulky"
@@ -131,7 +130,7 @@ async function recipientsOf(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, rul
   }
 }
 
-/** One event to the notices it owes, queued in one fenced transaction as the tenant, each customer in a savepoint of its own. */
+/** One event to the notices it owes, queued in one fenced transaction as the tenant, a customer refused counted and the rest still told. */
 export async function noticeCustomerFor(event: RelayedEvent<CustomerNoticeKind>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Noticed> {
   const notice = customerNoticeOf(event.kind, factsOf(event))
   const outcome: Noticed = { event: event.id, kind: event.kind, notice, messageIds: [], why: [] }
@@ -145,16 +144,9 @@ export async function noticeCustomerFor(event: RelayedEvent<CustomerNoticeKind>,
     if (rule === undefined) return
     const { customerIds, values } = await recipientsOf(tx, event, rule.id)
     for (const customerId of customerIds) {
-      try {
-        // In a savepoint, so a refusal leaves the transaction whole.
-        const queued = await tx.transaction((savepoint) =>
-          queueMessage(savepoint, send, { id: newId(), companyId: event.companyId, templateId: rule.templateId, customerId, contactId: null, sourceEventId: event.id, values }),
-        )
-        outcome.messageIds.push(queued.id)
-      } catch (error) {
-        if (!(error instanceof Refused)) throw error
-        outcome.why.push(error.message)
-      }
+      const queued = await queueMessage(tx, send, { id: newId(), companyId: event.companyId, templateId: rule.templateId, customerId, contactId: null, sourceEventId: event.id, values })
+      if (queued.kind === "queued") outcome.messageIds.push(queued.message.id)
+      else outcome.why.push(queued.refusal.sentence)
     }
   })
   if (outcome.messageIds.length > 0) log(`customer-notices: ${event.kind} ${event.id} → ${notice} queued as ${outcome.messageIds.length === 1 ? `message ${outcome.messageIds[0]}` : `${outcome.messageIds.length} messages`}`)

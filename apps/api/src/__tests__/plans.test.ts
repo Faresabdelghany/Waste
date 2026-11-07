@@ -19,6 +19,7 @@ import { RoutingQuota } from "@waste/contracts/routing-quota"
 import { RouteDetail } from "@waste/contracts/routes"
 import { createDb, type Database } from "@waste/db/client"
 import { activateSolved, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
+import { QueueMissing } from "@waste/db/jobs"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -27,6 +28,7 @@ import { eq, inArray, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
+import { WORKER_QUEUE_MISSING } from "../problem"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fixtures"
@@ -272,6 +274,15 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     assert.equal(second.status, 200)
     assert.equal(Plan.parse(await second.json()).id, created.id)
     assert.equal((await jobsFor(ROUTING_OPTIMISE_QUEUE, created.id)).length, 1, "two clicks are one job")
+  })
+
+  test("optimise on a database no worker has made the routing queue on is a 503 saying so, and leaves no Plan", async () => {
+    const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
+    const noWorker = callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, routing: new FakeProvider(), jobs: { send: async () => Promise.reject(new QueueMissing(ROUTING_OPTIMISE_QUEUE)) } }), keys, a.users.olivia, a.companyId)
+    const response = await noWorker(`/routes/${seeded.id}/optimise`, { method: "POST" })
+    assert.equal(response.status, 503)
+    assert.equal((await readProblem(response)).detail, WORKER_QUEUE_MISSING)
+    assert.deepEqual((await plansOf(seeded.id)).items, [], "the transaction is discarded with the answer")
   })
 
   test("a ready Plan of the same fingerprint is re-activated without a job, and the read follows its stops", async () => {
