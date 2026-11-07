@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 import { placeLocation } from "@waste/domain/map-planning/positions"
 import { FALLBACK_CONTAINER_KG, FALLBACK_FRACTION_FACTOR } from "@waste/domain/route-schemes/estimates"
 
-import { FIXTURE_CONTAINER_TYPES, containerWeightSource } from "../asset-catalogue"
+import { FIXTURE_CONTAINER_TYPES } from "../asset-catalogue"
 import { getBusinessFormSchema } from "../business-form-schemas"
 import type { BusinessRecord } from "../business-modules"
 import { FIXTURE_GAZETTEER } from "../street-gazetteer"
@@ -26,8 +26,8 @@ describe("the fixture asset catalogue", () => {
     for (const type of FIXTURE_CONTAINER_TYPES) {
       const own = new Set<string>((catalogued as Record<string, readonly string[]>)[type.id] ?? [])
       for (const [fraction, kg] of Object.entries(type.wasteFractionWeights)) {
-        const source = containerWeightSource(type, fraction)
-        assert.equal(type.wasteFractionWeightSources?.[fraction], source, `${type.id} ${fraction} names its source`)
+        const source = type.wasteFractionWeightSources?.[fraction]
+        assert.ok(source, `${type.id} ${fraction} names its source`)
         assert.equal(source, own.has(fraction) ? "catalogue" : "derived", `${type.id} ${fraction}`)
         if (source === "derived") {
           const residual = type.wasteFractionWeights.residual

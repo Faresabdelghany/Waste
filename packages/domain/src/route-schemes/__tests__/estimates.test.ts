@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CLOSEOUT_MINUTES } from "../generation"
 import {
+  CLOSEOUT_MINUTES,
   STOP_MINUTES,
   estimateLoad,
   estimateRoute,

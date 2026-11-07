@@ -23,8 +23,6 @@ export type WorkspaceId =
   | "configure"
   | "control-center"
 
-export const FIXTURE_COMPANY_ID = "company-kystbyen-dk"
-
 export const FIXTURE_PROJECT_IDS = {
   copenhagen: "project-copenhagen",
   harbor: "project-harbor",
@@ -81,7 +79,6 @@ const companyWideFixtureRecordIds = [
   "integration-navision",
   "sales-lead-greenloop",
 ] as const
-
 
 /** The projects each fixture record is filed under, by id. */
 const fixtureProjectsById: Readonly<Record<string, readonly FixtureProjectId[]>> = Object.freeze(

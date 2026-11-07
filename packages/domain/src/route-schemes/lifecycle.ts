@@ -21,10 +21,7 @@ import {
   containerDriftBetween,
   containerDriftWarning,
   generationMatchHistoryOf,
-  generationMatchValues,
-  sameGenerationMatches,
   type CollectionGroupContainerDrift,
-  type GenerationMatches,
 } from "./container-drift"
 import {
   schemeAssignmentSources,
@@ -58,8 +55,8 @@ type SchemeStatusSource = Pick<BusinessRecord, "status" | "submittedValues">
 
 /**
  * Whether a successful generation has been recorded on the scheme: the
- * persisted marker (`submittedValues.lastGeneratedAt`, stamped by
- * recordSchemeGeneration) or — legacy tolerance for records written before
+ * persisted marker (`submittedValues.lastGeneratedAt`, the scheme's last run
+ * as the API reads it back) or — legacy tolerance for records written before
  * the marker existed — a persisted Scheduled/Effective status. A persisted
  * "Expired" is NOT evidence: it is exactly the stale derived value this
  * module distrusts, and without a marker the scheme may never have generated.
@@ -112,69 +109,6 @@ export function withEffectiveSchemeStatus(
 ): BusinessRecord {
   const status = effectiveSchemeStatus(record, today)
   return status === record.status ? record : { ...record, status }
-}
-
-/**
- * The matches stamp a run leaves (issue #41), over the scheme's rule groups
- * only. The history advances only when the run's matches differ from the
- * last stamp: then the last stamp becomes the previous one and this run's
- * matches the last. A run that matches what the last run matched returns
- * the input unchanged — a manual scheme, or every Plan Ahead load while the
- * container base holds still — so callers upsert only what changed
- * (`next !== scheme`), and a drift stays on the badge until the set moves
- * again rather than clearing on the next page load.
- */
-export function recordGenerationMatches(
-  scheme: BusinessRecord,
-  matches: GenerationMatches,
-): BusinessRecord {
-  const history = generationMatchHistoryOf(scheme.submittedValues)
-  if (sameGenerationMatches(history.last, matches)) return scheme
-  return {
-    ...scheme,
-    submittedValues: {
-      ...scheme.submittedValues,
-      ...generationMatchValues(history, matches),
-    },
-  }
-}
-
-/**
- * The first-successful-generation event (D25): stamps the persisted marker
- * and promotes a Validated scheme to Scheduled — with the run's matches
- * stamp when the caller has them (creation, edit reconciliation). Later
- * generations move only the matches stamp (recordGenerationRun), and a
- * technical generation failure must never reach this — failure is not
- * scheduling.
- */
-export function recordSchemeGeneration(
-  scheme: BusinessRecord,
-  generatedAt: string,
-  matches?: GenerationMatches,
-): BusinessRecord {
-  const stamped = matches ? recordGenerationMatches(scheme, matches) : scheme
-  return {
-    ...stamped,
-    status: stamped.status === "Validated" ? "Scheduled" : stamped.status,
-    submittedValues: { ...stamped.submittedValues, lastGeneratedAt: generatedAt },
-  }
-}
-
-/**
- * What a successful run leaves on the scheme, whichever run it is: the
- * first-generation event with its marker and promotion, else the matches
- * stamp alone. The one call the manual Generate routes confirm and Plan
- * Ahead make after applying a plan; the input comes back unchanged when the
- * run recorded nothing new, so a quiet run writes no scheme record.
- */
-export function recordGenerationRun(
-  scheme: BusinessRecord,
-  generatedAt: string,
-  matches: GenerationMatches,
-): BusinessRecord {
-  return schemeGenerationRecorded(scheme)
-    ? recordGenerationMatches(scheme, matches)
-    : recordSchemeGeneration(scheme, generatedAt, matches)
 }
 
 /**

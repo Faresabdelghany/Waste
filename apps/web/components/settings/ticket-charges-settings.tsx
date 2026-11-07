@@ -6,8 +6,7 @@
 // set is read and replaced whole through the client (lib/api/ticket-charges.ts),
 // since it is the project's configuration and no row of a workspace's table;
 // the products are the products module's, offered as a completion's
-// "Charged at" offers them (lib/data/ticket-charges.ts). On the Pilot alone:
-// fixture mode keeps no charges.
+// "Charged at" offers them (lib/data/ticket-charges.ts).
 import { useMemo, type ReactNode } from "react"
 import { toast } from "sonner"
 

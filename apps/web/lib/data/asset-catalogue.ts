@@ -73,11 +73,6 @@ export const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 const fixtureCreatedAt = FIXTURE_CREATED_AT
 
-/** The source of a type's weight for a fraction: the catalogue's unless the type says it was derived. */
-export function containerWeightSource(type: Pick<ContainerType, "wasteFractionWeightSources">, fraction: string): ContainerWeightSource {
-  return type.wasteFractionWeightSources?.[fraction.toLowerCase()] ?? "catalogue"
-}
-
 /**
  * A type's weight table with its sources: the fractions in `catalogue` are
  * the catalogue's own numbers, every other fraction in `derived` a planning

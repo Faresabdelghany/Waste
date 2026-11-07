@@ -188,11 +188,6 @@ export function canonicalServiceFrequencyName(value: string | undefined) {
   return resolveServiceFrequencyValue(value)?.name ?? value
 }
 
-/** Derived fact value for a typed reference; "—" when there is none. */
-export function serviceFrequencyFactValue(id: string | null | undefined) {
-  return (id && serviceFrequencyById.get(id)?.name) || EMPTY_FACT
-}
-
 /** The interval vocabulary alone, as `service_frequency` stores it: what the API's reconciliation reads (O22 of #290). */
 export type FrequencyInterval = Pick<
   ServiceFrequencyDefinition,

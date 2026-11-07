@@ -32,6 +32,7 @@ import {
   Truck,
   Buildings,
 } from "@phosphor-icons/react/dist/ssr"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
@@ -66,6 +67,9 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar()
   const { starredRouteIds } = useActiveRoutes("operator")
   const { getRecords } = useBusinessRecordStore()
+  // The project the office works in, by the workspace's rule (`projectScopeOfMe`): on the Pilot the one `/me` names, else every project the person may read.
+  const { apiConfigured, me } = useApiSession()
+  const projectLabel = !apiConfigured ? OPERATOR_PROJECT_NAME : me?.projects.length === 1 ? me.projects[0].name : "All permitted projects"
   // The Tickets badge is the open tickets the store has loaded, and none until it has (#147); no other item carries a number (#248).
   const ticketsOnApi = useServerModuleState(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
   const badgeOf = (item: NavItem): number | undefined =>
@@ -104,7 +108,7 @@ export function AppSidebar() {
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold">Waste</span>
-              <span className="text-xs text-sidebar-foreground/60">{OPERATOR_PROJECT_NAME}</span>
+              <span className="text-xs text-sidebar-foreground/60">{projectLabel}</span>
             </div>
           </div>
         </div>

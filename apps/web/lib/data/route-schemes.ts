@@ -94,7 +94,6 @@ export function schemeValuesOfDraft(data: GuidedSchemeData, groups: readonly Col
     // Guided setup options (2026-09-16). Generation applies the holiday
     // policy through the same occurrence generator the wizard previewed with.
     holidayPolicy: data.holidayPolicy,
-    createAs: data.createAs,
     // How a later edit of the running scheme applies (issue #38): step 5's
     // choice, or the quick form's; the edit-save planner reads it here.
     editPolicy: data.editPolicy,
@@ -272,8 +271,7 @@ function sameValues(a: BusinessRecord, b: BusinessRecord): boolean {
  * moved by the office's own commands — `reschedule` for the planned start,
  * `assign` for the depot, the unloading station and a group's vehicle or
  * driver — which the API holds against later generation runs; the scheme
- * keeps its shaping configuration, as the fixture path's one-off does
- * (`schemeAfterOneOff`). An edit that shapes anything else is `unavailable`
+ * keeps its shaping configuration (`schemeAfterOneOff`). An edit that shapes anything else is `unavailable`
  * with `ONE_OFF_ONLY`: a route has no command for its days, its stops or its
  * provider. The next collection is the earliest service date among the scheme's
  * routes still `planned` and running on or after `today`, the project's day
@@ -333,9 +331,8 @@ export function schemeOneOffOnApi(before: BusinessRecord, after: BusinessRecord,
 }
 
 /**
- * What a scheme edit does on the Pilot (#179), the fixture path's
- * reconciliation (@waste/domain/route-schemes/edit,
- * `planSchemeEditReconciliation`) over the routes the API holds — `routes`,
+ * What a scheme edit does on the Pilot (#179), the edit policy's question
+ * (@waste/domain/route-schemes/edit) over the routes the API holds — `routes`,
  * or null while they are not read. An edit of a scheme that is not running
  * (a Draft, never generated) or that shapes no collection saves. Otherwise
  * the policy decides — the answer given, else the one stored before the edit,
@@ -343,8 +340,8 @@ export function schemeOneOffOnApi(before: BusinessRecord, after: BusinessRecord,
  * the one-off moves the next collection's routes where they can carry the
  * edit (`schemeOneOffOnApi`, #209) and is refused with the reason where they
  * cannot, and "ask" asks while planned routes of the scheme after `today`,
- * the project's day, can still follow the edit (`futureRefreshableRoutes`,
- * the rule the fixture path counts with: a dispatched route is frozen) and
+ * the project's day, can still follow the edit (`futureRefreshableRoutes`:
+ * a dispatched route is frozen) and
  * saves when none can. The question names the collection the one-off would
  * move, else the earliest of those routes, and shows the one-off disabled
  * with its reason where it cannot. Without the routes read neither the

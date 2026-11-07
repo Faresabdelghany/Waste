@@ -6,11 +6,11 @@
  * and each list's dated, named holidays on its own record among the
  * calendars (`configure.calendars`, @waste/domain/route-schemes/
  * holiday-list-records). This module is the one place that knows how a
- * project's calendar settings and a list's entries become record writes.
+ * list's entries become record writes.
  */
 
 import type { SubmittedValues } from "@waste/domain/prototype-record"
-import { formatShortDay, type ServiceDay } from "@waste/domain/days"
+import { formatShortDay } from "@waste/domain/days"
 
 import type { BusinessRecord } from "./business-modules"
 import { countryName } from "./countries"
@@ -23,48 +23,6 @@ import {
   type HolidayEntry,
 } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
-import { weekendLabel } from "@waste/domain/route-schemes/project-calendar"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
-
-export type ProjectCalendarSettings = {
-  /** The list's name; null when the project has no holiday list. */
-  holidayList: string | null
-  /** The weekdays the project rests on. */
-  weekend: readonly ServiceDay[]
-}
-
-/** The display facts the project record carries beside the typed values. */
-const HOLIDAY_LIST_FACT = "Holiday list"
-const WEEKEND_FACT = "Weekend"
-
-/**
- * The project record with its calendar settings written: the typed values
- * resolveProjectCalendar reads (`weekend`, `holidayList` — absent for no
- * list) and the display facts beside them, everything else kept.
- */
-export function withProjectCalendar(
-  project: BusinessRecord,
-  settings: ProjectCalendarSettings,
-): BusinessRecord {
-  const listName = settings.holidayList?.trim() || null
-  const weekend = sortServiceDays(settings.weekend)
-  const submittedValues: SubmittedValues = {
-    ...project.submittedValues,
-    weekend: weekend.join(", "),
-  }
-  const facts: Record<string, string> = {
-    ...project.facts,
-    [WEEKEND_FACT]: weekendLabel(weekend),
-  }
-  if (listName) {
-    submittedValues.holidayList = listName
-    facts[HOLIDAY_LIST_FACT] = listName
-  } else {
-    delete submittedValues.holidayList
-    delete facts[HOLIDAY_LIST_FACT]
-  }
-  return { ...project, updated: "Now", freshness: "Now", facts, submittedValues }
-}
 
 /* --------------------------- the company's lists --------------------------- */
 // Since 2026-11-05 a holiday list is the company's own record, one per

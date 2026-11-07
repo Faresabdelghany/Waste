@@ -1,21 +1,26 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, type ReactNode } from "react"
+import { Ticket } from "@phosphor-icons/react/dist/ssr"
 
 import { PageTopBar } from "@/components/page-layout"
+import { Badge } from "@/components/ui/badge"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
+import { Button } from "@/components/ui/button"
 import { StatRow } from "@/components/ui/stat-row"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { RouteSurfacePage } from "@/components/waste/commands/route-surfaces"
-import { routeStatusTone, TicketsTab } from "@/components/waste/route-details-page"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { getBusinessModuleHref } from "@/lib/data/business-links"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
 /**
- * A route's own page on the Pilot, laid out as fixture mode's
- * `RouteDetailsPage`: its name and status in the top bar, the stops headed by
+ * A route's own page: its name and status in the top bar, the stops headed by
  * Dispatch and one Actions menu, the Map and Route information beside them,
  * then its tickets, sessions, Plans, messages and activity — every one
  * read from the API through its command surface (`RouteSurfacePage`).
@@ -95,9 +100,9 @@ const SCHEDULE: ReadonlyArray<readonly [fact: string, label: string]> = [
 const SHOWN_ABOVE = new Set(["Operating date", "Project", "Area"])
 
 /**
- * The route's facts as fixture mode's Route information panel shows them: its
- * operating date and status, then Assignment and Schedule, and every other
- * fact the API gave under Details — none made up where the route has none.
+ * The route's facts: its operating date and status, then Assignment and
+ * Schedule, and every other fact the API gave under Details — none made up
+ * where the route has none.
  */
 function RouteInformationOnApi({ record }: { record: BusinessRecord }) {
   const facts = record.facts
@@ -138,5 +143,133 @@ function RouteInformationOnApi({ record }: { record: BusinessRecord }) {
           ))}
       </div>
     </section>
+  )
+}
+
+function routeStatusTone(status: string): StatusTone {
+  if (/active|completed|ready/i.test(status)) {
+    return "success"
+  }
+  if (/attention|delayed|unassigned/i.test(status)) {
+    return "warning"
+  }
+  return "neutral"
+}
+
+/** The tickets about a route, as its page's Tickets tab lists them. */
+function TicketsTab({
+  tickets,
+}: {
+  tickets: readonly BusinessRecord[]
+}) {
+  const {
+    page: ticketsPage,
+    setPage: setTicketsPage,
+    pageCount: ticketsPageCount,
+    pageRows: ticketsPageRows,
+    totalCount: ticketsTotalCount,
+  } = useTablePagination(tickets)
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-sm font-semibold">Tickets related to this Route</h2>
+      </div>
+      <div className="p-4">
+        <div className="overflow-hidden rounded-xl border border-border">
+          <div className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
+            {tickets.length} {tickets.length === 1 ? "ticket" : "tickets"}
+          </div>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[900px]">
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs font-medium text-muted-foreground">
+                    Ticket
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground">
+                    Type
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground">
+                    Priority
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground">
+                    SLA
+                  </TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tickets.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-52 text-center">
+                      <Ticket className="mx-auto h-6 w-6 text-muted-foreground" />
+                      <p className="mt-2 text-sm font-medium">No related tickets</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  ticketsPageRows.map((ticketRecord) => (
+                    <TableRow
+                      key={ticketRecord.id}
+                      className="hover:bg-muted/60"
+                    >
+                      <TableCell className="min-w-[260px] py-3">
+                        <p className="text-sm font-medium text-foreground">
+                          {ticketRecord.name}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {ticketRecord.context}
+                        </p>
+                      </TableCell>
+                      <TableCell className="py-3 text-sm">
+                        {ticketRecord.facts.Type ?? "Operational"}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <Badge
+                          variant="outline"
+                          className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        >
+                          {ticketRecord.facts.Priority ?? "Normal"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <StatusBadge outlined tone={routeStatusTone(ticketRecord.status)} className="rounded-full px-2 py-0.5 text-[11px] font-medium">
+                          {ticketRecord.status}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="py-3 text-sm">
+                        {ticketRecord.value}
+                      </TableCell>
+                      <TableCell className="py-3 text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link
+                            href={getBusinessModuleHref(
+                              "operate",
+                              "tickets",
+                              ticketRecord.id,
+                            )}
+                          >
+                            Open
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <TablePagination
+            page={ticketsPage}
+            pageCount={ticketsPageCount}
+            totalCount={ticketsTotalCount}
+            onPageChange={setTicketsPage}
+          />
+        </div>
+      </div>
+    </div>
   )
 }

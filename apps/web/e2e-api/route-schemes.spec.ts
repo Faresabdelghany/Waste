@@ -3,7 +3,7 @@ import type { APIRequestContext, Page } from "@playwright/test"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { createScheme, openEdit, pick, toasts } from "./routes-support"
-import { listAll } from "./tester"
+import { listAll, TESTER_PROJECT } from "./tester"
 
 // Slice 3 of #81 (Issue #177): Route Studio's schemes read and written
 // through the API. The fixture suite's quick create and running-scheme edit
@@ -92,6 +92,7 @@ test("quick create lands as a server row: a POST the API answers with its Locati
   const dialog = page.getByRole("dialog", { name: "Create route scheme" })
   await expect(dialog).toBeVisible()
   await dialog.getByRole("textbox", { name: /^Route scheme name/ }).fill(name)
+  await pick(dialog, page, "Project", TESTER_PROJECT)
   await pick(dialog, page, "Operational planning area", "Indre By Operations")
   await pick(dialog, page, "Waste fraction", "Residual")
   await pick(dialog, page, "Service type", "Container collection")
@@ -155,6 +156,7 @@ async function quickCreateTaken(page: Page, api: APIRequestContext) {
   const taken = uniqueName("E2E Taken")
   await schemeThroughApi(api, taken)
   await dialog.getByRole("textbox", { name: /^Route scheme name/ }).fill(taken)
+  await pick(dialog, page, "Project", TESTER_PROJECT)
   await pick(dialog, page, "Operational planning area", "Indre By Operations")
   await pick(dialog, page, "Waste fraction", "Residual")
   await pick(dialog, page, "Service type", "Container collection")

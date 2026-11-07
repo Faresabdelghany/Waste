@@ -54,17 +54,18 @@ describe("the person's projects from /me, where the role does not view the organ
 })
 
 describe("the pinned project scope on the Pilot", () => {
-  test("is the project the shell names where the person works in it", () => {
-    assert.equal(projectScopeOfMe([harbor, copenhagen], "Copenhagen Central"), webIdOf("project", copenhagen.id))
+  test("is the one project /me names where the person works in exactly one", () => {
+    assert.equal(projectScopeOfMe([copenhagen]), webIdOf("project", copenhagen.id))
+    assert.equal(projectScopeOfMe([unnamed]), `project-${unnamed.id}`)
   })
 
-  test("is the person's first project where the one the shell names is not among theirs", () => {
-    assert.equal(projectScopeOfMe([harbor, unnamed], "Copenhagen Central"), `project-${harbor.id}`)
-    assert.equal(projectScopeOfMe([unnamed], "Copenhagen Central"), `project-${unnamed.id}`)
+  test("is every project for a person who works in several, whatever they are named", () => {
+    assert.equal(projectScopeOfMe([harbor, copenhagen]), ALL_PROJECTS)
+    assert.equal(projectScopeOfMe([copenhagen, harbor, unnamed]), ALL_PROJECTS)
   })
 
   test("is every project for a person with none, and until /me is read", () => {
-    assert.equal(projectScopeOfMe([], "Copenhagen Central"), ALL_PROJECTS)
-    assert.equal(projectScopeOfMe(undefined, "Copenhagen Central"), ALL_PROJECTS)
+    assert.equal(projectScopeOfMe([]), ALL_PROJECTS)
+    assert.equal(projectScopeOfMe(undefined), ALL_PROJECTS)
   })
 })

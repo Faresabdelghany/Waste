@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test"
 
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
+import { pick } from "./routes-support"
 import { projectNamed, TESTER_PROJECT } from "./tester"
 
 // Slice 5a of #81 (Issue #180): the fleet and the places read from and
@@ -70,6 +71,7 @@ async function createWarehouse(page: Page, values: { name: string; code: string;
   await page.getByRole("button", { name: "Create warehouse" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Create warehouse" }) })
   await expect(dialog).toBeVisible()
+  await pick(dialog, page, "Operating project", TESTER_PROJECT)
   await dialog.getByLabel("Warehouse name").fill(values.name)
   await dialog.getByLabel("Warehouse code").fill(values.code)
   await dialog.getByLabel("Address").fill(values.address)
@@ -124,6 +126,7 @@ test("Depots & Unloading: an unloading station's accepted fractions are picked f
   await page.getByRole("button", { name: "Create draft location" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Create depot or unloading station" }) })
   await expect(dialog).toBeVisible()
+  await pick(dialog, page, "Operating project", TESTER_PROJECT)
   await dialog.getByRole("combobox", { name: /^Location type/ }).click()
   await page.getByRole("option", { name: "Unloading or disposal station" }).click()
   await dialog.getByLabel("Location name").fill(name)

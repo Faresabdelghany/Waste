@@ -31,7 +31,7 @@
 // (100 × changed > previous × 10), so 3 of 30 is never a drift by float noise.
 //
 // Persistence. The history advances only when a run's matches differ from the
-// last stamp (recordGenerationMatches), so the two stamps are always the two
+// last stamp, so the two stamps are always the two
 // most recent DISTINCT sets: Attention means "the most recent change of the
 // matched set was a drift" and stays until the set moves again — a move back
 // within the threshold clears it, a rule edit restarts the comparison — rather
@@ -40,7 +40,6 @@
 import {
   IMPLICIT_GROUP_ID,
   type CollectionGroup,
-  type CollectionGroupResolution,
   type ResolvedCollectionGroup,
 } from "./groups"
 import { stringValue } from "./validation"
@@ -95,34 +94,6 @@ export function ruleSignature(
 
 /* --------------------------------- matches --------------------------------- */
 
-/**
- * The stamp one run leaves: for every rule group, the union of the containers
- * it serves on any of its days (rule matches do not depend on the day; only
- * another group's claims do), sorted so two runs of one set serialize alike.
- * Manual groups are left out — their list is the scheme's own.
- */
-export function generationMatchesOf(
-  groups: readonly CollectionGroup[],
-  resolution: Pick<CollectionGroupResolution, "plans">,
-  areaId: string | undefined,
-): GenerationMatches {
-  const matches: GenerationMatches = {}
-  for (const group of groups) {
-    if (group.stopSource !== "rule") continue
-    const ids = new Set<string>()
-    for (const plan of resolution.plans) {
-      if (plan.groupId !== group.id) continue
-      for (const id of plan.containerIds) ids.add(id)
-    }
-    matches[group.id] = {
-      // Within the group's own area where it has one, else the scheme's: as `ruleAreaOf` and the group's resolution read it.
-      rule: ruleSignature(group, group.planningAreaId ?? areaId),
-      containerIds: [...ids].sort(),
-    }
-  }
-  return matches
-}
-
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
 
@@ -166,11 +137,6 @@ export function serializeGenerationMatches(matches: GenerationMatches): string {
   return JSON.stringify(ordered)
 }
 
-/** Whether two stamps remember the same thing. */
-export function sameGenerationMatches(a: GenerationMatches, b: GenerationMatches): boolean {
-  return serializeGenerationMatches(a) === serializeGenerationMatches(b)
-}
-
 /** The scheme's two stamps as stored (empty when it has none yet). */
 export function generationMatchHistoryOf(
   values: StoredValues | undefined,
@@ -179,23 +145,6 @@ export function generationMatchHistoryOf(
   return {
     previous: parseGenerationMatches(stringValue(stored, PREVIOUS_GENERATION_MATCHES_KEY)),
     last: parseGenerationMatches(stringValue(stored, LAST_GENERATION_MATCHES_KEY)),
-  }
-}
-
-/**
- * The two values a run writes when its matches differ from the last stamp:
- * the last stamp becomes the previous one and the run's matches the last.
- * recordGenerationMatches calls this only on such a change, so the stamps
- * hold the two most recent distinct sets and a run of the same set writes
- * nothing.
- */
-export function generationMatchValues(
-  history: GenerationMatchHistory,
-  matches: GenerationMatches,
-): Record<string, string> {
-  return {
-    [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(history.last),
-    [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(matches),
   }
 }
 

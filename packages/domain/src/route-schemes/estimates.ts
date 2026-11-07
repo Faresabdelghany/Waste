@@ -11,11 +11,10 @@
 // ADR-0002): the distance as routed, and the drive time plus the time at the
 // stops — each container type's emptying time from the asset catalogue (the
 // caller passes that resolver), the prototype's allowance where the catalogue
-// has none — plus the closeout generation allows a route past its last stop
-// (`CLOSEOUT_MINUTES` in generation.ts, the drive back and the turnaround at
-// the depot), since the routed leg runs through the stops only and a route
-// read without it would look forty-five minutes shorter than the time window
-// generation writes for it. Until the road is known they are heuristics (the
+// has none — plus the closeout a route is allowed past its last stop
+// (`CLOSEOUT_MINUTES`, the drive back and the turnaround at the depot), since
+// the routed leg runs through the stops only and a route read without it
+// would look forty-five minutes shorter than it runs. Until the road is known they are heuristics (the
 // prototype's coefficients, their own flat allowance among them). `basis` on
 // the estimate says which, and the adapter's `labels` spell it for the route
 // map. Container weights come from the asset
@@ -30,10 +29,12 @@
 // it through that adapter — the single place a real optimiser response plugs
 // in (see the adapter's doc). The verdicts never gate Next or Create.
 
-import { CLOSEOUT_MINUTES } from "./generation"
 import type { ContainerMatchProfile } from "./matching"
 
 export const SHIFT_HOURS = 8
+
+/** The minutes a route is allowed past its last stop — the drive back and the turnaround at the depot. */
+export const CLOSEOUT_MINUTES = 45
 
 /** kg per emptied container by display container type (fallback when the catalogue has no entry). */
 export const FALLBACK_CONTAINER_KG: Readonly<Record<string, number>> = {
@@ -187,7 +188,7 @@ export type RouteEstimateInput = {
 /**
  * Distance, duration, and verdicts for one route. With the road: its
  * distance as routed and its drive time plus the time at the stops plus the
- * closeout generation allows (`CLOSEOUT_MINUTES`) — the routed leg ends at
+ * closeout a route is allowed (`CLOSEOUT_MINUTES`) — the routed leg ends at
  * the last stop. Without: the prototype's coefficients over the stop count,
  * their own flat allowance included. The capacity and shift verdicts read
  * the same whichever the basis.

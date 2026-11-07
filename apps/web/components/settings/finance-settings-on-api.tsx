@@ -9,7 +9,6 @@
 // (lib/api/records/organisation.ts), written through the store; what is typed
 // is judged by the domain's shapes (lib/data/finance-settings.ts) before the
 // API is asked. A customer's own terms are its form's, under Customers.
-// Fixture mode keeps the browser's Finance pane (`configure.finance`).
 
 import { useState } from "react"
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr"

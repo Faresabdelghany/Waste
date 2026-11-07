@@ -3,16 +3,13 @@
 // domain entity, so on submit the quick form's stored values are mapped onto
 // the exact draft shape the wizard hands to record creation
 // (GuidedSchemeData) and from there share every downstream step: the same
-// validateScheme outcome, the same canonical record shape, and the same
-// creation orchestration (planSchemeCreation). Parity holds by construction —
-// there is no second create path to drift.
+// validateScheme outcome and the same canonical record shape. Parity holds by
+// construction — there is no second create path to drift.
 
 import { typedString } from "../record-values"
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
-  isSchemeCreateAs,
   isSchemeEditPolicy,
-  type SchemeCreateAs,
   type SchemeEditPolicy,
 } from "./creation"
 import {
@@ -72,8 +69,6 @@ export interface GuidedSchemeData {
    * generation share it.
    */
   holidayPolicy: HolidayPolicy
-  /** Review step: create Validated (no generation) or Effective (generate + Plan Ahead). */
-  createAs: SchemeCreateAs
   /**
    * Review step, and the quick form's last field: how a later edit of the
    * running scheme applies (issue #38) — the edit-save planner (edit.ts)
@@ -124,7 +119,6 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "effectiveTo",
   "plannedStartTime",
   "holidayPolicy",
-  "createAs",
   "editPolicy",
   "serviceProviderId",
   "plannedVehicleId",
@@ -185,7 +179,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     containerIds: [],
   }
   const holidayPolicy = values.holidayPolicy
-  const createAs = values.createAs
   const editPolicy = values.editPolicy
   return {
     schemeName,
@@ -206,7 +199,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // Quick Create keeps the engine's behaviour: holidays skipped, the
     // initial window generated on create (the pre-2026-09-16 default).
     holidayPolicy: isHolidayPolicy(holidayPolicy) ? holidayPolicy : "skip",
-    createAs: isSchemeCreateAs(createAs) ? createAs : "effective",
     // The form's own select (issue #38); a form without a pick asks, the default.
     editPolicy: isSchemeEditPolicy(editPolicy) ? editPolicy : DEFAULT_SCHEME_EDIT_POLICY,
     depotId: optionalId(values, "depotId"),

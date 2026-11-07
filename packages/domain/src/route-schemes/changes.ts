@@ -6,7 +6,7 @@
 // quickSchemeDraftFromValues compare the same way. Pure — no UI, store, or
 // fixture dependencies; the caller supplies how an id reads as a name.
 
-import { SCHEME_CREATE_AS_LABELS, SCHEME_EDIT_POLICY_LABELS } from "./creation"
+import { SCHEME_EDIT_POLICY_LABELS } from "./creation"
 import type { CollectionGroup } from "./groups"
 import { containerTypeShortLabel } from "./matching"
 import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "./occurrences"
@@ -108,7 +108,6 @@ const scalarReaders = (names: SchemeDraftNames): Reader[] => [
     label: "On a public holiday",
     read: (data) => HOLIDAY_POLICY_LABELS[data.holidayPolicy],
   },
-  { field: "createAs", label: "Create as", read: (data) => SCHEME_CREATE_AS_LABELS[data.createAs] },
   {
     field: "editPolicy",
     label: "Changes to a running scheme",

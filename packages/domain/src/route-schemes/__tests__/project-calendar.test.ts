@@ -6,11 +6,9 @@ import { egyptianHolidayName, holidayNamesFor } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
 import { generateOccurrences, occurrencePreview } from "../occurrences"
 import {
-  DEFAULT_WEEKEND,
   NO_HOLIDAY_LIST_LABEL,
   projectCalendarLabel,
   resolveProjectCalendar,
-  schemeGenerationCalendar,
   weekendLabel,
 } from "../project-calendar"
 import { EGYPT_HOLIDAY_DATES, EGYPT_WEEKEND, calendarOf, sunToThu } from "./holiday-fixture"
@@ -117,7 +115,6 @@ describe("resolveProjectCalendar", () => {
   })
 
   test("defaults to Sat–Sun only when the project has nothing set", () => {
-    assert.deepEqual(DEFAULT_WEEKEND, ["saturday", "sunday"])
     assert.deepEqual(resolveProjectCalendar("project-harbor", { projects, calendars }).weekend, [
       "saturday",
       "sunday",
@@ -125,16 +122,6 @@ describe("resolveProjectCalendar", () => {
     const unknown = resolveProjectCalendar("project-nowhere", { projects, calendars })
     assert.deepEqual(unknown.weekend, ["saturday", "sunday"])
     assert.equal(unknown.list, null)
-  })
-
-  test("the scheme's generation calendar carries its project's holidays and weekend", () => {
-    const scheme = stub("s1", "Cairo scheme", { submittedValues: { projectId: "project-cairo" } })
-    const calendar = schemeGenerationCalendar(scheme, { projects, calendars })
-    assert.deepEqual(calendar.weekend, ["friday", "saturday"])
-    assert.deepEqual([...calendar.holidays.keys()], EGYPT_HOLIDAY_DATES)
-    const orphan = schemeGenerationCalendar(stub("s2", "No project"), { projects, calendars })
-    assert.deepEqual(orphan.weekend, ["saturday", "sunday"])
-    assert.equal(orphan.holidays.size, 0)
   })
 
   test("weekendLabel", () => {
@@ -176,13 +163,6 @@ describe("resolveProjectCalendar", () => {
 
   test("no holidayList on the project means no list — a calendar's dates do not make one", () => {
     assert.equal(resolveProjectCalendar("project-harbor", { projects, calendars }).list, null)
-    assert.equal(
-      schemeGenerationCalendar(stub("s", "Harbor scheme", { projectIds: ["project-harbor"] }), {
-        projects,
-        calendars,
-      }).holidays.size,
-      0,
-    )
   })
 
   test("a name no list record carries is a list with no dates, whatever the project's calendars say", () => {

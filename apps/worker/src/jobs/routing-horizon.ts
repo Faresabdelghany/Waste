@@ -1,6 +1,6 @@
 // The horizon (#172, decided on #132 §2–4 and #124 §2 and §4): which Routes
-// get a Plan without anyone asking. Eager inside the Plan Ahead window —
-// tomorrow through today + 7 on the project's clock, `planAheadWindow` — and
+// get a Plan without anyone asking. Eager inside a fixed week —
+// tomorrow through today + 7 on the project's clock, `HORIZON_DAYS` — and
 // on demand beyond it: an Optimise click, a reorder's measurement, a
 // dispatch. Two ways in, one door out:
 //
@@ -54,7 +54,7 @@ import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { PLAN_AHEAD_DAYS, planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
+import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
 import { answersRequest, horizonRequest, planIsStale } from "@waste/domain/routing/plans"
 import type { PlanSolver, PlanStatus } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE } from "@waste/routing/provider"
@@ -71,8 +71,12 @@ export type SweepHorizonData = {
   source: "schedule" | "manual"
 }
 
-/** The horizon on one project's clock: tomorrow through today + 7. */
-type Horizon = ReturnType<typeof planAheadWindow>
+/** How far the horizon reaches from tomorrow: a fixed week, whatever a scheme's own Plan Ahead window, since every Plan it asks spends the routing quota. */
+const HORIZON_DAYS = 7
+
+/** The horizon on one project's clock: tomorrow through today + `HORIZON_DAYS`. */
+const horizonFrom = (today: string) => planAheadRunWindow(today, HORIZON_DAYS)
+type Horizon = ReturnType<typeof horizonFrom>
 
 /**
  * What one route's turn came to: a Plan asked for (written, or found in the
@@ -181,7 +185,7 @@ export async function planReshaped(context: JobContext, scope: { companyId: stri
   if (routes.length === 0) return asks
   let horizon: Horizon
   try {
-    horizon = planAheadWindow(await withCompany(context.api.db, scope.companyId, (tx: Tx) => projectToday(tx, scope, context.now)()))
+    horizon = horizonFrom(await withCompany(context.api.db, scope.companyId, (tx: Tx) => projectToday(tx, scope, context.now)()))
   } catch (error) {
     context.log(`routing: project ${scope.projectId}'s horizon could not be read (${JSON.stringify(loggable(error))}); its routes wait for the night's sweep`)
     return { asked: [], failed: routes.map((row) => row.id) }
@@ -205,7 +209,7 @@ type HorizonRoute = { companyId: string; routeId: string; today: string }
 
 /**
  * Every planned or ready route of an active project operating inside
- * tomorrow…today + `PLAN_AHEAD_DAYS` (`planAheadWindow`'s bounds), today
+ * tomorrow…today + `HORIZON_DAYS` (`horizonFrom`'s bounds), today
  * being `at` rendered in the project's timezone by Postgres, with an open
  * stop: across companies, as the worker role — plan-ahead's precedent —
  * nearest date first. It reads and writes nothing else.
@@ -218,7 +222,7 @@ async function horizonRoutes(worker: Database, at: Date): Promise<HorizonRoute[]
     cross join lateral (select (${at.toISOString()}::timestamptz at time zone p.timezone)::date as today) d
     where p.status = 'active'
       and r.status in ('planned', 'ready')
-      and r.operating_date between d.today + 1 and d.today + ${PLAN_AHEAD_DAYS}::int
+      and r.operating_date between d.today + 1 and d.today + ${HORIZON_DAYS}::int
       and exists (select 1 from wms.pickup k where k.company_id = r.company_id and k.route_id = r.id and k.status = 'planned')
     order by r.operating_date, r.company_id, r.id
   `)
@@ -279,7 +283,7 @@ export async function sweepHorizon(context: JobContext, jobId: string | null = n
   const outcome: SweepOutcome = { inWindow: routes.length, asked: [], recovered: [], failed: [] }
   for (const candidate of routes) {
     try {
-      if ((await planRoute(context, candidate.companyId, candidate.routeId, planAheadWindow(candidate.today), "unanswered")) === "asked") outcome.asked.push(candidate.routeId)
+      if ((await planRoute(context, candidate.companyId, candidate.routeId, horizonFrom(candidate.today), "unanswered")) === "asked") outcome.asked.push(candidate.routeId)
     } catch (error) {
       context.log(`${SWEEP_HORIZON_QUEUE}: company ${candidate.companyId}, route ${candidate.routeId} failed: ${JSON.stringify(loggable(error))}`)
       outcome.failed.push(candidate.routeId)

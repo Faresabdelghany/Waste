@@ -309,6 +309,10 @@ test("step 4 draws the drafted route along the preview's road over the fake and 
   await expect(root.getByTestId("route-map-basis")).toContainText("Road · Stops in generation order, not optimised")
   // The fake's straight legs are nobody's data: no attribution is owed.
   await expect(root.getByTestId("routing-attribution")).toHaveCount(0)
+  await root.getByRole("button", { name: "Regenerate" }).click()
+  await expect(root.getByTestId("route-map-basis")).toHaveText(/^Road · Stops in generation order, not optimised · Regenerated \d{2}:\d{2}$/)
+  // Verdict badges are information only — Next is never blocked by them.
+  await expect(root.getByRole("button", { name: "Next", exact: true })).toBeEnabled()
 })
 
 test("step 4 with the directions quota spent draws the stops straight and dashed, says when the road resumes and shows the routing banner (#173)", async ({ api, page }) => {

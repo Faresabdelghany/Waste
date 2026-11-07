@@ -2,9 +2,8 @@
 
 // Step 5 — Ready to create this scheme? Four sections with Change links
 // back to their steps, what changed since the last review (Issue #40), then
-// the two create options: "Create as" and "Changes to a running scheme"
-// (issue #38), the edit policy the edit-save planner reads once the scheme
-// has generated.
+// "Changes to a running scheme" (issue #38), the edit policy a later edit is
+// judged by once the scheme has generated.
 
 import type { ReactNode } from "react"
 
@@ -17,7 +16,7 @@ import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/rou
 import type { WizardRecords } from "./use-wizard-records"
 import { WhatChanged } from "./what-changed"
 import type { WizardModel } from "./wizard-model"
-import { CREATE_AS_OPTIONS, EDIT_POLICY_OPTIONS, type WizardStepId } from "./wizard-options"
+import { EDIT_POLICY_OPTIONS, type WizardStepId } from "./wizard-options"
 import { Field, SimpleSelect } from "./wizard-fields"
 
 function ReviewRow({ label, value }: { label: string; value: ReactNode }) {
@@ -131,15 +130,6 @@ export function StepReview({
       </ReviewSection>
       <WhatChanged data={data} initial={initial} reviewed={reviewed} model={model} records={records} />
       <div className="grid gap-6 pt-2 md:grid-cols-2">
-        <Field id="scheme-create-as" label="Create as">
-          <SimpleSelect
-            id="scheme-create-as"
-            value={data.createAs}
-            onChange={(value) => update({ createAs: value as GuidedSchemeData["createAs"] })}
-            options={CREATE_AS_OPTIONS}
-            placeholder="Select"
-          />
-        </Field>
         <Field id="scheme-edit-policy" label="Changes to a running scheme">
           <SimpleSelect
             id="scheme-edit-policy"
