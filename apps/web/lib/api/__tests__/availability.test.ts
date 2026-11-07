@@ -143,13 +143,13 @@ describe("a period's line and the fleet's surfaces", () => {
     // A customer's surface is its statement (#291 C6): it reads, and changes nothing the form holds.
     // A warehouse's surface is its stock against its minimums (O30 of #290): it keeps its form and its Edit.
     // A station's surface is a transfer station's stock and loads (M17 of #293): it keeps its form and its Edit.
-    for (const key of ["fleet.drivers", "fleet.vehicles", "customers.contacts", "resources.warehouses", "resources.sensors", "resources.depots"]) {
+    for (const key of ["fleet.drivers", "fleet.vehicles", "customers.contacts", "resources.warehouses", "resources.sensors", "resources.depots"] as const) {
       const surface = COMMAND_SURFACES[key]
       assert.equal(surface.primary, "form", key)
       assert.equal(surface.genericEdit, true, key)
       assert.ok(surface.rowActions !== undefined, key)
     }
     // M7 of #293: an Application is corrected by its form while undecided, beside its commands; a customer keeps its Edit beside its statement (#291 C6); a sensor is corrected and retired by its Edit beside its pairings (O26 of #290); an inspection is corrected by its form while open, beside its photos and Close (M23 of #293); a transfer station keeps its Edit beside its stock and loads (M17 of #293).
-    assert.deepEqual(Object.keys(COMMAND_SURFACES).filter((key) => COMMAND_SURFACES[key].genericEdit).sort(), ["customers.applications", "customers.contacts", "fleet.drivers", "fleet.vehicles", "operate.inspections", "resources.depots", "resources.sensors", "resources.warehouses"], "no other surface keeps it")
+    assert.deepEqual(Object.entries(COMMAND_SURFACES).flatMap(([key, surface]) => (surface.genericEdit ? [key] : [])).sort(), ["customers.applications", "customers.contacts", "fleet.drivers", "fleet.vehicles", "operate.inspections", "resources.depots", "resources.sensors", "resources.warehouses"], "no other surface keeps it")
   })
 })

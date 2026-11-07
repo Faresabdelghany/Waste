@@ -8,6 +8,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
@@ -20,7 +21,7 @@ import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { DISMISS_FORM, MATCH_FORM, WEIGHBRIDGE_MODULE } from "@/lib/data/weighbridge"
 
-const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
+const MASTER_MODULE = moduleAt("configure.master")
 
 const FORMS = { [MATCH_TICKET]: MATCH_FORM, [DISMISS_TICKET]: DISMISS_FORM } as const
 

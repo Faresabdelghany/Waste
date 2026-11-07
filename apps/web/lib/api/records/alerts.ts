@@ -20,6 +20,7 @@ import type { Alert } from "@waste/contracts/alerts"
 import { NAMES_A_SUBJECT } from "@waste/domain/resolution/alerts"
 import { ALERT_KINDS, ALERT_SEVERITIES } from "@waste/domain/resolution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 
@@ -34,7 +35,7 @@ import { callsignOf, routeAdapter } from "./routes"
 import { isTicketRecord, TICKET_NUMBER_FACT, TICKET_PREFIX } from "./tickets"
 
 /** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
-export const ALERTS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "exceptions" }
+export const ALERTS_MODULE: ModuleLocation = moduleAt("operate.exceptions")
 
 export const ALERT_PREFIX = "alert"
 

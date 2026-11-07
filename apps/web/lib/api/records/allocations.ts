@@ -29,6 +29,7 @@
 import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
 import { formatDayMonth } from "@waste/domain/days"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { masterDataKindOf } from "@/lib/data/master-data"
 
@@ -40,7 +41,7 @@ import { depotAdapter, projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the allocations are the rows of. */
-export const VEHICLE_PLANNING_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicle-planning" }
+export const VEHICLE_PLANNING_MODULE: ModuleLocation = moduleAt("fleet.vehicle-planning")
 
 /** The row's commands, by the names the dialogs send. */
 export const CONFIRM_ALLOCATION = "confirm"

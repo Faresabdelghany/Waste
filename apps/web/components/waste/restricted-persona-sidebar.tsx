@@ -34,6 +34,8 @@ import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { useProviderWorkspace } from "@/components/waste/provider-account"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { PROVIDER_PAGES, PROVIDER_WORKSPACE_PATH } from "@/lib/modules/provider-pages"
+import type { ProviderPageId } from "@/lib/modules/manifest"
 import {
   resolveActiveRouteSummaries,
   useActiveRoutes,
@@ -84,16 +86,18 @@ const personaDefinitions: Record<LeanPersona, PersonaSidebarDefinition> = {
   },
 }
 
-const serviceProviderNavItems: PersonaNavItem[] = [
-  { label: "Routes", href: "/service-provider-workspace/routes", icon: Path },
-  { label: "Fleet", href: "/service-provider-workspace/fleet", icon: Truck },
-  { label: "Tickets", href: "/service-provider-workspace/tickets", icon: Ticket },
-  { label: "Activities", href: "/service-provider-workspace/activities", icon: ClipboardText },
-  { label: "Team", href: "/service-provider-workspace/team", icon: UsersThree },
-]
+const PROVIDER_PAGE_ICONS: Record<ProviderPageId, PersonaNavItem["icon"]> = {
+  routes: Path,
+  fleet: Truck,
+  tickets: Ticket,
+  activities: ClipboardText,
+  team: UsersThree,
+}
 
-/** The workspace's landing, which is its routes (#291 C24). */
-const PROVIDER_LANDING = "/service-provider-workspace"
+const serviceProviderNavItems: PersonaNavItem[] = PROVIDER_PAGES.map((page) => ({ label: page.label, href: page.path, icon: PROVIDER_PAGE_ICONS[page.id] }))
+
+/** The workspace's landing, its first page: its routes (#291 C24). */
+const LANDING_PAGE = PROVIDER_PAGES[0].path
 
 /**
  * The service provider manager sidebar mirrors the operator AppSidebar's layout and
@@ -116,7 +120,7 @@ function ServiceProviderManagerSidebar() {
   )
 
   const isItemActive = (href: string): boolean => {
-    if (pathname === PROVIDER_LANDING) return href === `${PROVIDER_LANDING}/routes`
+    if (pathname === PROVIDER_WORKSPACE_PATH) return href === LANDING_PAGE
     return pathname.startsWith(href)
   }
 

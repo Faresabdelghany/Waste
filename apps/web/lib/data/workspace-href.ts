@@ -1,32 +1,19 @@
-// Where a workspace module opens, and a record in it: each workspace's path
-// and the `?module=` / `?record=` the workspace reads (`WorkspaceQuerySync`),
-// spelled here alone. A Settings module opens its pane, the Driver App its own
-// surface. An address a module has left is redirected by
-// lib/data/legacy-ids.ts (`migrateLegacyHref`) and next.config.mjs, never here.
-import { settingsModuleDomains } from "./business-domain"
-import type { ModuleLocation, WorkspaceId } from "./business-modules"
-import { DEFAULT_SETTINGS_PANE, settingsHref, type SettingsPaneId } from "./settings-panes"
+// Where a workspace module opens, and a record in it: its workspace's page and
+// the `?module=` / `?record=` the workspace reads (`WorkspaceQuerySync`),
+// spelled here alone, or the Settings pane the manifest places it in
+// (lib/modules). The Driver App opens its own surface. An address a module has
+// left is redirected by lib/data/legacy-ids.ts (`migrateLegacyHref`) and
+// next.config.mjs, never here.
+import { CONTROL_CENTER, WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
 
-const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
-  operate: "/tickets",
-  plan: "/plan",
-  "route-studio": "/route-studio",
-  fleet: "/fleet",
-  customers: "/customers",
-  resources: "/resources",
-  "service-providers": "/service-providers",
-  commercial: "/commercial",
-  improve: "/improve",
-  "control-center": "/control-center",
-}
+import { DEFAULT_SETTINGS_PANE, settingsHref } from "./settings-panes"
 
-const settingsPaneByModule: Record<string, SettingsPaneId> = {
-  ...Object.fromEntries(settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId])),
-  access: "access",
-  templates: "tickets",
-  finance: "finance-invoicing",
-  integrations: "integrations-on-api",
-  portals: "portals-on-api",
+/** The params that name a module, and a record in it, on the page showing them: `params` kept beside them. */
+export function moduleParams(moduleId: string, recordId?: string, params?: URLSearchParams): URLSearchParams {
+  const named = new URLSearchParams(params)
+  named.set("module", moduleId)
+  if (recordId) named.set("record", recordId)
+  return named
 }
 
 /**
@@ -36,14 +23,15 @@ const settingsPaneByModule: Record<string, SettingsPaneId> = {
  */
 export function workspaceHref(location: ModuleLocation, recordId?: string, { page }: { page?: string } = {}): string {
   const { workspaceId, moduleId } = location
-  const params = new URLSearchParams({ module: moduleId })
-  if (recordId) params.set("record", recordId)
+  const params = moduleParams(moduleId, recordId)
   if (page !== undefined) return `${page}?${params.toString()}`
   // The Driver App is a surface of its own (Issue #145), never a workspace module.
   if (workspaceId === "operate" && moduleId === "driver-app") return "/driver"
+  const shown = moduleSpecOf(location)?.shown
+  if (typeof shown === "object") return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
   if (workspaceId === "configure") {
-    if (moduleId === "control-center") return workspaceHref({ workspaceId: "control-center", moduleId: "control-center" }, recordId)
-    return settingsHref(settingsPaneByModule[moduleId] ?? DEFAULT_SETTINGS_PANE, { record: recordId })
+    if (moduleId === CONTROL_CENTER) return workspaceHref({ workspaceId: CONTROL_CENTER, moduleId: CONTROL_CENTER }, recordId)
+    return settingsHref(DEFAULT_SETTINGS_PANE, { record: recordId })
   }
-  return `${workspacePaths[workspaceId]}?${params.toString()}`
+  return `${WORKSPACES[workspaceId].path}?${params.toString()}`
 }

@@ -1,10 +1,7 @@
-// The permission matrix has two halves that must stay one catalogue: the web
-// derives its rows from `businessWorkspaces`, and @waste/domain/access/modules
-// spells the same keys as the vocabulary the API checks and the database
-// stores (Issue #70). Neither can see the other's source, so this test holds
-// them equal in both directions: a module added to a workspace fails here
-// until the vocabulary names it, and a key named there that no workspace
-// carries fails here too.
+// The permission matrix: a row per module key of @waste/domain/access/modules,
+// the vocabulary the API checks and the database stores (Issue #70), read off
+// the module manifest (lib/modules) by workspace, and the grants each seeded
+// role starts with.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -19,23 +16,12 @@ import {
 const webKeys = rolePermissionSections.flatMap((section) => section.items.map((item) => item.key))
 
 describe("the permission catalogue", () => {
-  test("every row of the web's matrix is a module key of the vocabulary", () => {
-    const vocabulary = new Set<string>(MODULE_KEYS)
-    const missing = webKeys.filter((key) => !vocabulary.has(key))
-    assert.deepEqual(missing, [], `name these in @waste/domain/access/modules: ${missing.join(", ")}`)
+  test("is a row for each module key of the vocabulary, once, under its workspace", () => {
+    assert.deepEqual([...webKeys].sort(), [...MODULE_KEYS].sort())
+    for (const section of rolePermissionSections) {
+      for (const item of section.items) assert.ok(item.key.startsWith(`${section.id}.`), item.key)
+    }
   })
-
-  test("every module key of the vocabulary is a row of the web's matrix", () => {
-    const rows = new Set(webKeys)
-    const orphans = MODULE_KEYS.filter((key) => !rows.has(key))
-    assert.deepEqual(orphans, [], `no workspace carries these modules any more: ${orphans.join(", ")}`)
-  })
-
-  test("the matrix names each row once, and the two lists are the same size", () => {
-    assert.equal(new Set(webKeys).size, webKeys.length)
-    assert.equal(webKeys.length, MODULE_KEYS.length)
-  })
-
 })
 
 describe("the seeded defaults the matrix starts from", () => {

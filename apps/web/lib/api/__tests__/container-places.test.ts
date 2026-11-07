@@ -25,8 +25,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resource, type ResourceAdapter } from "../records/adapter"
 import { agreementAdapter, subscriptionAdapter } from "../records/agreements"
 import { containerAdapter, type ContainerResource } from "../records/containers"
-import { SERVED_PUBLICLY, SHARED_POINTS } from "../../data/containers"
-import { SHARED_POINTS_MODULE } from "../../data/properties"
+import { SERVED_PUBLICLY } from "../../data/containers"
 import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { projectAdapter } from "../records/organisation"
 import { planningAreaAdapter } from "../records/planning"
@@ -271,9 +270,5 @@ describe("a public placement (M12 of #293)", () => {
     assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, sharedPointId: pointWebId, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { sharedCollectionPointId: kongens.id, wasteFractionId: residual.id, validFrom: "2026-10-01" })
     assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { path: "sharedPointId", message: "Pick a shared collection point the API holds" })
     assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, sharedPointId: residualWebId, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { path: "sharedPointId", message: "Pick a shared collection point the API holds" }, "a fraction is no point")
-  })
-
-  test("the issue dialog's point field points at the shared points' module, spelled again as SHARED_POINTS_MODULE is", () => {
-    assert.deepEqual(SHARED_POINTS, SHARED_POINTS_MODULE)
   })
 })

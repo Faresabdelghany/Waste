@@ -23,6 +23,7 @@ import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { LiveRoute } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
 import { get, listAll } from "../client"
@@ -31,7 +32,7 @@ import { shownOn, timeOn } from "./clock"
 import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */
-export const LIVE_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "live" }
+export const LIVE_MODULE: ModuleLocation = moduleAt("route-studio.live")
 
 /** How often the board is read again while a person watches it. */
 export const LIVE_BOARD_REFRESH_MS = 30_000

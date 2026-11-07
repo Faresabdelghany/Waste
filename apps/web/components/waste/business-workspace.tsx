@@ -118,6 +118,7 @@ import type {
 import { isSoftDeleted, softDeletedRecord } from "@/lib/prototype/record-visibility"
 import { resolveBusinessRelation } from "@/lib/data/business-links"
 import { workspaceHref } from "@/lib/data/workspace-href"
+import { moduleSpecOf } from "@/lib/modules/manifest"
 import {
   agreementFormSchemaOnApi,
   agreementPriceListOptions,
@@ -607,19 +608,6 @@ const serviceProviderOperatedRelationModuleIds = new Set([
   "service-providers",
 ])
 
-const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
-  operate: ["tickets", "exceptions"],
-  plan: ["map-planning"],
-  "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
-  customers: ["properties", "groups", "shared", "agreements"],
-  resources: ["containers", "inventory", "warehouses", "depots"],
-  fleet: ["vehicles", "drivers", "vehicle-planning"],
-  "service-providers": ["service-providers", "service-areas", "activities"],
-  commercial: ["products", "price-rows", "events", "billing", "invoices"],
-  improve: ["intelligence", "analytics", "autopilot", "performance"],
-  configure: ["organization", "access", "master", "finance"],
-}
-
 function RecordValue({ record }: { record: BusinessRecord }) {
   const progress = recordProgress(record)
 
@@ -1055,15 +1043,9 @@ export function BusinessWorkspace({
   // Map Planning (2026-09-16) renders its own page below the header: no
   // search, filter, or table rows — the map owns its toolbar.
   const isMapPlanningView = workspace.id === "plan" && activeModule.id === "map-planning"
-  const primaryModuleIds =
-    primaryModuleIdsByWorkspace[workspace.id] ??
-    workspace.modules.slice(0, 4).map((module) => module.id)
-  const primaryModules = workspace.modules.filter((module) =>
-    primaryModuleIds.includes(module.id),
-  )
-  const secondaryModules = workspace.modules.filter(
-    (module) => !primaryModuleIds.includes(module.id),
-  )
+  // A workspace's tabs are the modules the manifest shows as one; the rest of its page's are under More.
+  const primaryModules = workspace.modules.filter((module) => module.shown === "tab")
+  const secondaryModules = workspace.modules.filter((module) => module.shown !== "tab")
   const activeSecondaryModule = secondaryModules.find(
     (module) => module.id === activeModule.id,
   )
@@ -1415,7 +1397,7 @@ export function BusinessWorkspace({
   // Queue vs rich vs standard table is a property of the module, never of the
   // viewing persona (lib/data/business-view-kinds.ts) — the operator's Tickets
   // page and the service provider workspace render the same rich record table.
-  const moduleViewKind = resolveModuleViewKind(activeModule.id)
+  const moduleViewKind = resolveModuleViewKind(activeModule)
   const isQueueView = moduleViewKind === "queue"
   const isTicketsView = activeModule.id === "tickets"
   const isRoutesView = activeModule.id === "routes"
@@ -1452,7 +1434,7 @@ export function BusinessWorkspace({
   // route or a stop moves by its commands), so the generic Edit is not
   // offered — unless the surface says the row keeps it (O6 of #290: the
   // fleet's absences sit beside the driver's and the vehicle's own form).
-  const offersRowActions = moduleOffersRowActions(activeModule.id)
+  const offersRowActions = moduleOffersRowActions(activeModule)
   const canEditRecords =
     offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
@@ -1583,8 +1565,8 @@ export function BusinessWorkspace({
     [agreementExtraActions, schemeExtraActions],
   )
   const factColumnOptions = useMemo(
-    () => collectFactColumnOptions(activeModule.id, visibleScopedRecords),
-    [activeModule.id, visibleScopedRecords],
+    () => collectFactColumnOptions(activeModule, visibleScopedRecords),
+    [activeModule, visibleScopedRecords],
   )
   const activeStaticColumns = useMemo(
     () =>
@@ -1740,13 +1722,13 @@ export function BusinessWorkspace({
       viewType: "table",
       groupBy: "none",
       factColumns: defaultFactColumns(
-        activeModuleId,
+        moduleSpecOf({ workspaceId: workspace.id, moduleId: activeModuleId }) ?? {},
         defaultBusinessViewOptions.factColumns,
       ),
       staticColumns: [],
     }))
     setTablePage(1)
-  }, [activeModuleId])
+  }, [activeModuleId, workspace.id])
 
   const removeFilterChip = (key: BusinessFilterKey, value: string) => {
     setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))

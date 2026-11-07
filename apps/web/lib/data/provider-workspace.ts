@@ -13,6 +13,8 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
+
 import { allows, type Grants } from "../api/grants"
 import { moduleKeyOf } from "../api/records/adapter"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
@@ -25,7 +27,7 @@ import { mintedRecord } from "./containers"
 import { createTicketRecord, tokenOptions } from "./tickets"
 
 /** Service Providers › Service Provider Workspace: a provider's own team, read and invited through `/users` (#291 C24). */
-export const TEAM_MODULE: ModuleLocation = { workspaceId: "service-providers", moduleId: "service-provider-workspace" }
+export const TEAM_MODULE: ModuleLocation = moduleAt("service-providers.service-provider-workspace")
 
 /** The provider `/me` names, as the shell reads it: null for an office account. */
 export type ProviderOfMe = { id: string; legalName: string }

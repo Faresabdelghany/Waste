@@ -13,10 +13,11 @@
 // reads, and the forms, are here.
 import type { ScaleTicketParty, ScaleTicketStatus, ScaleTicketVoidReason, TareSource, VehicleTareStatus } from "@waste/domain/scale-house/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
-export const SCALE_HOUSE_MODULE = { workspaceId: "operate", moduleId: "scale-house" } as const satisfies ModuleLocation
+export const SCALE_HOUSE_MODULE = moduleAt("operate.scale-house") satisfies ModuleLocation
 export const SCALE_TICKET_PREFIX = "scale-ticket"
 export const SCALE_TICKET_RECORD_KIND = "Scale ticket"
 export const VEHICLE_TARE_PREFIX = "vehicle-tare"

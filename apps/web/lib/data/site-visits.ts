@@ -16,16 +16,17 @@ import type { BlockReason } from "@waste/domain/finance/vocabulary"
 import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DAYS } from "@waste/domain/visits/charges"
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { allows, type Grants } from "@/lib/api/grants"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
 /** Where the register is: Customers › Site access. */
-export const SITE_ACCESS_MODULE = { workspaceId: "customers", moduleId: "site-access" } as const satisfies ModuleLocation
+export const SITE_ACCESS_MODULE = moduleAt("customers.site-access") satisfies ModuleLocation
 
 /** Where the ledger is: Operate › Site visits. */
-export const SITE_VISITS_MODULE = { workspaceId: "operate", moduleId: "site-visits" } as const satisfies ModuleLocation
+export const SITE_VISITS_MODULE = moduleAt("operate.site-visits") satisfies ModuleLocation
 
 /** The attendant's phone-first page, where a Site attendant lands. */
 export const CHECK_IN_PATH = "/check-in"

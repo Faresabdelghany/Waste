@@ -1,4 +1,6 @@
-import type { SettingsPaneId } from "./settings-panes"
+import type { ModuleKey } from "@waste/domain/access/modules"
+
+import type { WorkspaceId } from "@/lib/modules/manifest"
 
 export const blueprintModuleIds = [
   "M01",
@@ -29,31 +31,19 @@ export const blueprintModuleIds = [
 
 export type BlueprintModuleId = (typeof blueprintModuleIds)[number]
 
-export type PublicBusinessWorkspaceId =
-  | "operate"
-  | "plan"
-  | "route-studio"
-  | "fleet"
-  | "customers"
-  | "resources"
-  | "service-providers"
-  | "commercial"
-  | "improve"
-  | "control-center"
+/** A workspace with a page of its own: every one but Configure, whose modules are Settings'. */
+export type PublicBusinessWorkspaceId = Exclude<WorkspaceId, "configure">
 
 export type PublicWorkspaceDomain = {
   workspaceId: PublicBusinessWorkspaceId
   canonicalPurpose: string
   blueprintModules: BlueprintModuleId[]
   personas: string[]
-  moduleIds: string[]
   boundaryNote?: string
 }
 
 export type PublicModuleDomain = {
-  key: `${PublicBusinessWorkspaceId}.${string}`
-  workspaceId: PublicBusinessWorkspaceId
-  moduleId: string
+  key: Exclude<ModuleKey, `configure.${string}`> | "control-center.control-center"
   primaryBlueprintModule: BlueprintModuleId
   supportingBlueprintModules: BlueprintModuleId[]
   canonicalOwner: string
@@ -75,7 +65,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "inspections", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -85,7 +74,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Plan service on the map: see the container and property registry as clustered markers, filter it by fraction, type, area, and collection window, select spatially, and hand the selection to Route Scheme creation. Route Schemes own recurrence and live in Route Studio; planning geography and collection calendars are managed in Settings.",
     blueprintModules: ["M09", "M06", "M03"],
     personas: ["Route planner", "Operations administrator"],
-    moduleIds: ["map-planning"],
     boundaryNote:
       "Map Planning reads containers (M06), properties (M03), planning areas, and generated routes; it owns no records of its own — a selection becomes a Route Scheme in Route Studio. Areas & Zones moved to Settings 2026-09-03 (configure.areas, D37). Collection Calendars moved to Settings 2026-09-16 (configure.calendars) when Plan became Map Planning. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
   },
@@ -100,7 +88,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Dispatcher",
       "Compliance manager",
     ],
-    moduleIds: ["live", "schemes", "routes", "pickups", "weights", "weighbridge"],
     boundaryNote:
       "Live Operations owns current execution state. Route Schemes are recurring master data; every dated Route generates its Pickups, whose outcomes and proof stay on those same records.",
   },
@@ -110,7 +97,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Maintain vehicles, drivers, compatibility, availability, and planned allocation.",
     blueprintModules: ["M08"],
     personas: ["Fleet manager", "Dispatcher", "Route planner", "Service provider manager"],
-    moduleIds: ["vehicles", "drivers", "vehicle-planning"],
     boundaryNote:
       "Keep the three top-level Fleet tabs. Depot management is a subordinate Fleet planning capability, while unloading destinations are route master data.",
   },
@@ -125,17 +111,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Operations administrator",
       "Finance specialist",
     ],
-    moduleIds: [
-      "properties",
-      "groups",
-      "shared",
-      "contacts",
-      "agreements",
-      "applications",
-      "site-access",
-      "right-sizing",
-      "citizen-portal",
-    ],
     boundaryNote:
       "Customer, Property, Contact, Payer, and Project remain different records even when shown in one contextual workspace.",
   },
@@ -145,7 +120,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Control physical service assets, individually tracked units, stock, and warehouses.",
     blueprintModules: ["M06", "M07", "M08"],
     personas: ["Asset manager", "Warehouse staff", "Technician", "Operations planner"],
-    moduleIds: ["containers", "inventory", "warehouses", "depots", "drop-off-points", "sensors"],
     boundaryNote:
       "Resources should become Assets & Inventory. Depot records belong to Fleet; warehouses remain separate even when colocated.",
   },
@@ -160,12 +134,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Service provider manager",
       "Service provider foreman",
     ],
-    moduleIds: [
-      "service-providers",
-      "service-areas",
-      "activities",
-      "service-provider-workspace",
-    ],
     boundaryNote:
       "Office service provider management is separate from the restricted service provider application and from confidential settlement processing.",
   },
@@ -179,16 +147,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Finance specialist",
       "Billing administrator",
       "Service provider manager",
-    ],
-    moduleIds: [
-      "products",
-      "price-rows",
-      "service-provider-prices",
-      "settlements",
-      "events",
-      "billing",
-      "invoices",
-      "payments",
     ],
     boundaryNote:
       "The service provider workspace must be a restricted shell, not another tab inside the full office Commercial workspace.",
@@ -205,7 +163,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Data administrator",
       "Integration owner",
     ],
-    moduleIds: ["intelligence", "analytics", "autopilot", "imports", "performance", "compliance"],
     boundaryNote:
       "Report and Trust are nested Intelligence areas; general audit, privacy, and compliance remain cross-cutting M23 responsibilities.",
   },
@@ -220,7 +177,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Waste support",
       "Waste fulfillment",
     ],
-    moduleIds: ["control-center"],
     boundaryNote:
       "Control Center is an internal application boundary. Tenant administrators receive only explicitly authorized self-service views.",
   },
@@ -229,8 +185,6 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
 export const publicModuleDomains: readonly PublicModuleDomain[] = [
   {
     key: "route-studio.live",
-    workspaceId: "route-studio",
-    moduleId: "live",
     primaryBlueprintModule: "M12",
     supportingBlueprintModules: ["M09", "M11", "M17", "M23"],
     canonicalOwner: "Route Studio · Live Operations",
@@ -242,8 +196,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "route-studio.routes",
-    workspaceId: "route-studio",
-    moduleId: "routes",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M09", "M22", "M23"],
     canonicalOwner: "Route Studio · Routes",
@@ -255,8 +207,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.exceptions",
-    workspaceId: "operate",
-    moduleId: "exceptions",
     primaryBlueprintModule: "M17",
     supportingBlueprintModules: ["M12", "M13", "M19"],
     canonicalOwner: "Operate · Exceptions & Alerts",
@@ -268,8 +218,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.tickets",
-    workspaceId: "operate",
-    moduleId: "tickets",
     primaryBlueprintModule: "M13",
     supportingBlueprintModules: ["M14", "M17", "M23"],
     canonicalOwner: "Operate · Tickets",
@@ -287,8 +235,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.bulky-bookings",
-    workspaceId: "operate",
-    moduleId: "bulky-bookings",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M13", "M16"],
     canonicalOwner: "Operate · Bulky Bookings",
@@ -300,8 +246,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.site-visits",
-    workspaceId: "operate",
-    moduleId: "site-visits",
     primaryBlueprintModule: "M24",
     supportingBlueprintModules: ["M03", "M16"],
     canonicalOwner: "Operate · Site visits",
@@ -313,8 +257,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.scale-house",
-    workspaceId: "operate",
-    moduleId: "scale-house",
     primaryBlueprintModule: "M24",
     supportingBlueprintModules: ["M03", "M11", "M16"],
     canonicalOwner: "Operate · Scale house",
@@ -326,8 +268,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.inspections",
-    workspaceId: "operate",
-    moduleId: "inspections",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M03", "M06"],
     canonicalOwner: "Operate · Inspections",
@@ -339,8 +279,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "route-studio.pickups",
-    workspaceId: "route-studio",
-    moduleId: "pickups",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M23"],
     canonicalOwner: "Route Studio · Pickups",
@@ -352,8 +290,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "route-studio.weights",
-    workspaceId: "route-studio",
-    moduleId: "weights",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M16", "M20", "M23"],
     canonicalOwner: "Route Studio · Weight Control",
@@ -365,8 +301,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "route-studio.weighbridge",
-    workspaceId: "route-studio",
-    moduleId: "weighbridge",
     primaryBlueprintModule: "M11",
     supportingBlueprintModules: ["M16", "M23"],
     canonicalOwner: "Route Studio · Weighbridge",
@@ -378,8 +312,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "operate.driver-app",
-    workspaceId: "operate",
-    moduleId: "driver-app",
     primaryBlueprintModule: "M22",
     supportingBlueprintModules: ["M11", "M17", "M23"],
     canonicalOwner: "Driver application",
@@ -391,8 +323,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "route-studio.schemes",
-    workspaceId: "route-studio",
-    moduleId: "schemes",
     primaryBlueprintModule: "M09",
     supportingBlueprintModules: ["M15", "M23"],
     canonicalOwner: "Route Studio · Route Schemes",
@@ -404,8 +334,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "plan.map-planning",
-    workspaceId: "plan",
-    moduleId: "map-planning",
     primaryBlueprintModule: "M09",
     supportingBlueprintModules: ["M06", "M03", "M10"],
     canonicalOwner: "Plan · Map Planning",
@@ -417,8 +345,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "fleet.vehicles",
-    workspaceId: "fleet",
-    moduleId: "vehicles",
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M15", "M20"],
     canonicalOwner: "Fleet · Vehicles",
@@ -430,8 +356,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "fleet.drivers",
-    workspaceId: "fleet",
-    moduleId: "drivers",
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M01", "M15", "M22"],
     canonicalOwner: "Fleet · Drivers",
@@ -443,8 +367,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "fleet.vehicle-planning",
-    workspaceId: "fleet",
-    moduleId: "vehicle-planning",
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M09", "M11"],
     canonicalOwner: "Fleet · Vehicle Planning",
@@ -456,8 +378,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.properties",
-    workspaceId: "customers",
-    moduleId: "properties",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M21", "M23"],
     canonicalOwner: "Customers · Properties",
@@ -469,8 +389,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.groups",
-    workspaceId: "customers",
-    moduleId: "groups",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M04"],
     canonicalOwner: "Customers · Property Groups",
@@ -482,8 +400,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.shared",
-    workspaceId: "customers",
-    moduleId: "shared",
     primaryBlueprintModule: "M04",
     supportingBlueprintModules: ["M03", "M21"],
     canonicalOwner: "Customers · Shared Collection Points",
@@ -495,8 +411,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.contacts",
-    workspaceId: "customers",
-    moduleId: "contacts",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M17", "M21"],
     canonicalOwner: "Customers · Contacts & Companies",
@@ -508,8 +422,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.agreements",
-    workspaceId: "customers",
-    moduleId: "agreements",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M05", "M16"],
     canonicalOwner: "Customers · Agreements & Subscriptions",
@@ -526,8 +438,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.applications",
-    workspaceId: "customers",
-    moduleId: "applications",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M17"],
     canonicalOwner: "Customers · Applications and Decisions",
@@ -539,8 +449,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.right-sizing",
-    workspaceId: "customers",
-    moduleId: "right-sizing",
     primaryBlueprintModule: "M05",
     supportingBlueprintModules: ["M06", "M11"],
     canonicalOwner: "Customers · Right-sizing",
@@ -552,8 +460,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.site-access",
-    workspaceId: "customers",
-    moduleId: "site-access",
     primaryBlueprintModule: "M03",
     supportingBlueprintModules: ["M24"],
     canonicalOwner: "Customers · Site access",
@@ -565,8 +471,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "customers.citizen-portal",
-    workspaceId: "customers",
-    moduleId: "citizen-portal",
     primaryBlueprintModule: "M21",
     supportingBlueprintModules: ["M03", "M13", "M17"],
     canonicalOwner: "Citizen and customer portal",
@@ -578,8 +482,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.containers",
-    workspaceId: "resources",
-    moduleId: "containers",
     primaryBlueprintModule: "M06",
     supportingBlueprintModules: ["M07", "M20"],
     canonicalOwner: "Resources · Containers & Assets",
@@ -591,8 +493,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.inventory",
-    workspaceId: "resources",
-    moduleId: "inventory",
     primaryBlueprintModule: "M07",
     supportingBlueprintModules: ["M06", "M23"],
     canonicalOwner: "Resources · Inventory",
@@ -604,8 +504,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.warehouses",
-    workspaceId: "resources",
-    moduleId: "warehouses",
     primaryBlueprintModule: "M07",
     supportingBlueprintModules: ["M06", "M23"],
     canonicalOwner: "Resources · Warehouses",
@@ -617,8 +515,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.depots",
-    workspaceId: "resources",
-    moduleId: "depots",
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M09", "M11"],
     canonicalOwner: "Fleet · Depot management and Plan · Unloading destinations",
@@ -630,8 +526,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.drop-off-points",
-    workspaceId: "resources",
-    moduleId: "drop-off-points",
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M02"],
     canonicalOwner: "Resources · Drop-off Points, on the public map",
@@ -643,8 +537,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "resources.sensors",
-    workspaceId: "resources",
-    moduleId: "sensors",
     primaryBlueprintModule: "M06",
     supportingBlueprintModules: ["M20"],
     canonicalOwner: "Resources · Fill-level Sensors, paired with Containers",
@@ -656,8 +548,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.products",
-    workspaceId: "commercial",
-    moduleId: "products",
     primaryBlueprintModule: "M05",
     supportingBlueprintModules: ["M06", "M07"],
     canonicalOwner: "Commercial · Products & Services",
@@ -674,8 +564,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.price-rows",
-    workspaceId: "commercial",
-    moduleId: "price-rows",
     primaryBlueprintModule: "M05",
     supportingBlueprintModules: ["M16"],
     canonicalOwner: "Commercial · Price Rows",
@@ -687,8 +575,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.service-provider-prices",
-    workspaceId: "commercial",
-    moduleId: "service-provider-prices",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M05", "M23"],
     canonicalOwner: "Commercial · Service Provider Prices",
@@ -700,8 +586,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "service-providers.service-providers",
-    workspaceId: "service-providers",
-    moduleId: "service-providers",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M09", "M23"],
     canonicalOwner: "Service Providers · Companies",
@@ -713,8 +597,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "service-providers.service-areas",
-    workspaceId: "service-providers",
-    moduleId: "service-areas",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M09", "M23"],
     canonicalOwner: "Service Providers · Service Areas",
@@ -726,8 +608,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "service-providers.activities",
-    workspaceId: "service-providers",
-    moduleId: "activities",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M11", "M13", "M23"],
     canonicalOwner: "Service Providers · Activities",
@@ -739,8 +619,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "service-providers.service-provider-workspace",
-    workspaceId: "service-providers",
-    moduleId: "service-provider-workspace",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M11", "M13"],
     canonicalOwner: "Restricted service provider application",
@@ -752,8 +630,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.settlements",
-    workspaceId: "commercial",
-    moduleId: "settlements",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M05", "M23"],
     canonicalOwner: "Commercial · Service Provider Prices & Settlements",
@@ -765,8 +641,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.events",
-    workspaceId: "commercial",
-    moduleId: "events",
     primaryBlueprintModule: "M16",
     supportingBlueprintModules: ["M05", "M11"],
     canonicalOwner: "Commercial · Billable Events",
@@ -778,8 +652,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.billing",
-    workspaceId: "commercial",
-    moduleId: "billing",
     primaryBlueprintModule: "M16",
     supportingBlueprintModules: ["M20", "M23"],
     canonicalOwner: "Commercial · Scheduled Billing & Billing Runs",
@@ -791,8 +663,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.invoices",
-    workspaceId: "commercial",
-    moduleId: "invoices",
     primaryBlueprintModule: "M16",
     supportingBlueprintModules: ["M17", "M20", "M23"],
     canonicalOwner: "Commercial · Invoices & Credit Notes",
@@ -804,8 +674,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "commercial.payments",
-    workspaceId: "commercial",
-    moduleId: "payments",
     primaryBlueprintModule: "M16",
     supportingBlueprintModules: ["M18", "M20"],
     canonicalOwner: "Commercial · Payments & Reconciliation",
@@ -817,8 +685,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.intelligence",
-    workspaceId: "improve",
-    moduleId: "intelligence",
     primaryBlueprintModule: "M19",
     supportingBlueprintModules: ["M17", "M18", "M23"],
     canonicalOwner: "Improve · Intelligence · Ask, Monitor, Report, Trust",
@@ -836,8 +702,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.analytics",
-    workspaceId: "improve",
-    moduleId: "analytics",
     primaryBlueprintModule: "M18",
     supportingBlueprintModules: ["M19"],
     canonicalOwner: "Improve · Analytics & Dashboards",
@@ -849,8 +713,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.autopilot",
-    workspaceId: "improve",
-    moduleId: "autopilot",
     primaryBlueprintModule: "M14",
     supportingBlueprintModules: ["M13", "M17", "M19", "M23"],
     canonicalOwner: "Improve · Autopilot",
@@ -867,8 +729,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.imports",
-    workspaceId: "improve",
-    moduleId: "imports",
     primaryBlueprintModule: "M18",
     supportingBlueprintModules: ["M20", "M23"],
     canonicalOwner: "Improve · Data Exchange & Job Center",
@@ -891,8 +751,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.performance",
-    workspaceId: "improve",
-    moduleId: "performance",
     primaryBlueprintModule: "M18",
     supportingBlueprintModules: ["M19", "M23"],
     canonicalOwner: "Improve · Performance & Compliance",
@@ -904,8 +762,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "improve.compliance",
-    workspaceId: "improve",
-    moduleId: "compliance",
     primaryBlueprintModule: "M19",
     supportingBlueprintModules: ["M18", "M23"],
     canonicalOwner: "Improve · Intelligence · Report & Trust",
@@ -917,8 +773,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
   },
   {
     key: "control-center.control-center",
-    workspaceId: "control-center",
-    moduleId: "control-center",
     primaryBlueprintModule: "M24",
     supportingBlueprintModules: ["M01", "M07", "M16", "M23"],
     canonicalOwner: "Waste internal Control Center",
@@ -940,18 +794,13 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
  * Modules whose records are real business records — a form schema, a record
  * store bucket, relation targets — but whose management surface is Settings
  * rather than a public workspace. They are registered under the `configure`
- * workspace (the registry twin of Settings: business-links resolves its
- * modules to `/settings?pane=…`) and rendered by the named Settings pane. The
- * schema registry's lockstep gate counts these keys as expected.
+ * workspace, the registry twin of Settings, and rendered by the Settings pane
+ * the module manifest places them in (lib/modules/configure.ts).
  *
  * Areas & Zones moved here from Plan on 2026-09-03 (D37).
  */
 export type SettingsModuleDomain = {
-  key: `configure.${string}`
-  workspaceId: "configure"
-  moduleId: string
-  /** The Settings pane that renders the module. */
-  settingsPaneId: SettingsPaneId
+  key: Extract<ModuleKey, `configure.${string}`>
   primaryBlueprintModule: BlueprintModuleId
   supportingBlueprintModules: BlueprintModuleId[]
   canonicalOwner: string
@@ -964,9 +813,6 @@ export type SettingsModuleDomain = {
 export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
   {
     key: "configure.areas",
-    workspaceId: "configure",
-    moduleId: "areas",
-    settingsPaneId: "areas",
     primaryBlueprintModule: "M09",
     supportingBlueprintModules: ["M02", "M15"],
     canonicalOwner: "Settings · Areas & Zones",
@@ -982,9 +828,6 @@ export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
   // list in Settings.
   {
     key: "configure.calendars",
-    workspaceId: "configure",
-    moduleId: "calendars",
-    settingsPaneId: "collection-calendars",
     primaryBlueprintModule: "M09",
     supportingBlueprintModules: ["M02", "M17", "M21"],
     canonicalOwner: "Settings · Collection calendars",
@@ -1000,9 +843,6 @@ export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
   // Master data — the pattern of every configure.* module with records.
   {
     key: "configure.master",
-    workspaceId: "configure",
-    moduleId: "master",
-    settingsPaneId: "master-data",
     primaryBlueprintModule: "M09",
     supportingBlueprintModules: ["M05", "M06", "M08"],
     canonicalOwner: "Settings · Master data",

@@ -14,6 +14,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useApiClient } from "@/components/waste/api-session-store"
@@ -46,7 +47,7 @@ import type { ScaleTicketAmountDue } from "@waste/contracts/scale-house"
 import { recordsForProject } from "@/lib/data/project-scope"
 import { REWEIGH_FORM, SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND, TARE_FORM, VEHICLE_TARE_RECORD_KIND, VOID_TICKET_FORM, WEIGH_IN_FORM, WEIGH_OUT_FORM } from "@/lib/data/scale-house"
 
-const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
+const MASTER_MODULE = moduleAt("configure.master")
 
 const optionOf = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: record.name })
 

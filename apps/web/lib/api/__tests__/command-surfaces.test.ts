@@ -16,18 +16,13 @@ import { emptyBusinessFilters } from "@/lib/prototype/business-filters"
 
 import type { Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"
-import { SERVER_MODULE_KEYS } from "../records/modules"
 import { ROUTES_MODULE } from "../records/routes"
 
 describe("the command surfaces", () => {
-  test("name only switched modules", () => {
-    for (const key of Object.keys(COMMAND_SURFACES)) assert.ok(SERVER_MODULE_KEYS.includes(key), `${key} is not in SERVER_MODULES`)
-  })
-
   test("are a switched module's own, never a module the API does not back", () => {
-    for (const key of Object.keys(COMMAND_SURFACES)) {
+    for (const [key, surface] of Object.entries(COMMAND_SURFACES)) {
       const [workspaceId, moduleId] = key.split(".") as [Parameters<typeof moduleKeyOf>[0], string]
-      assert.equal(commandSurfaceFor(workspaceId, moduleId), COMMAND_SURFACES[key])
+      assert.equal(commandSurfaceFor(workspaceId, moduleId), surface)
     }
     assert.equal(commandSurfaceFor("improve", "insights"), undefined)
   })

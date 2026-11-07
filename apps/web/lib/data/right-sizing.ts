@@ -9,11 +9,12 @@
 import type { FillLevel } from "@waste/domain/execution/vocabulary"
 import type { RightSizingDirection, RightSizingStatus } from "@waste/domain/inspections/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 
-export const RIGHT_SIZING_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "right-sizing" }
+export const RIGHT_SIZING_MODULE: ModuleLocation = moduleAt("customers.right-sizing")
 export const RIGHT_SIZING_PREFIX = "right-sizing-proposal"
 export const RIGHT_SIZING_RECORD_KIND = "Right-sizing proposal"
 

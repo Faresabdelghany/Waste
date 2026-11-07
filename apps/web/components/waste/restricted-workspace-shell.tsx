@@ -25,6 +25,7 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
+import { PROVIDER_PAGES } from "@/lib/modules/provider-pages"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
@@ -41,11 +42,7 @@ type RestrictedWorkspacePage = {
   workspaceLabel: string
   navigationBasePath: string
   showWorkspaceActions: boolean
-  /**
-   * The primary action on the Pilot, where it differs. A provider's fleet is
-   * read there: its vehicle and driver forms name the company's master data
-   * and depots, which a provider's role does not read.
-   */
+  /** The primary action on the Pilot, where it differs (`PROVIDER_PAGES`). */
   showWorkspaceActionsOnApi?: boolean
   showFilters: boolean
 }
@@ -87,61 +84,17 @@ const restrictedWorkspaceDefinitions: Record<
     fixedScopeLabel: "NordRen ApS · CA-Ø-2",
     serviceProviderScopeId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
     actorName: "Lars Mikkelsen",
-    pages: [
-      {
-        id: "routes",
-        workspaceId: "route-studio",
-        moduleId: "routes",
-        moduleIds: ["routes", "pickups"],
-        workspaceLabel: "Routes",
-        navigationBasePath: "/service-provider-workspace/routes",
-        showWorkspaceActions: true,
-        // Dispatch day and Balance day are the office's: each picks a project's day, and a provider's account works in no project.
-        showWorkspaceActionsOnApi: false,
-        showFilters: true,
-      },
-      {
-        id: "fleet",
-        workspaceId: "fleet",
-        moduleId: "vehicles",
-        moduleIds: ["vehicles", "drivers"],
-        workspaceLabel: "Fleet",
-        navigationBasePath: "/service-provider-workspace/fleet",
-        showWorkspaceActions: true,
-        showWorkspaceActionsOnApi: false,
-        showFilters: true,
-      },
-      {
-        id: "tickets",
-        workspaceId: "operate",
-        moduleId: "tickets",
-        moduleIds: ["tickets"],
-        workspaceLabel: "Tickets",
-        navigationBasePath: "/service-provider-workspace/tickets",
-        showWorkspaceActions: true,
-        showFilters: true,
-      },
-      {
-        id: "activities",
-        workspaceId: "service-providers",
-        moduleId: "activities",
-        moduleIds: ["activities"],
-        workspaceLabel: "Activities",
-        navigationBasePath: "/service-provider-workspace/activities",
-        showWorkspaceActions: true,
-        showFilters: true,
-      },
-      {
-        id: "team",
-        workspaceId: "service-providers",
-        moduleId: "service-provider-workspace",
-        moduleIds: ["service-provider-workspace"],
-        workspaceLabel: "Team",
-        navigationBasePath: "/service-provider-workspace/team",
-        showWorkspaceActions: true,
-        showFilters: true,
-      },
-    ],
+    pages: PROVIDER_PAGES.map((page) => ({
+      id: page.id,
+      workspaceId: page.workspaceId,
+      moduleId: page.moduleIds[0],
+      moduleIds: page.moduleIds,
+      workspaceLabel: page.label,
+      navigationBasePath: page.path,
+      showWorkspaceActions: page.showWorkspaceActions,
+      showWorkspaceActionsOnApi: page.showWorkspaceActionsOnApi,
+      showFilters: true,
+    })),
   },
 }
 

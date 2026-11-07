@@ -12,9 +12,9 @@
 
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { slugify } from "@/lib/utils"
 
-import { settingsModuleDomains } from "./business-domain"
 import { deriveFormRecord } from "./business-form-records"
 import { getBusinessFormSchema } from "./business-form-schemas"
 import type {
@@ -31,18 +31,8 @@ import {
   type ModuleLocation,
 } from "./business-modules"
 
-const areasDomain = settingsModuleDomains.find(
-  (module) => module.key === "configure.areas",
-)
-if (!areasDomain) {
-  throw new Error("configure.areas is missing from settingsModuleDomains")
-}
-
 /** Where planning-area records live — every consumer resolves through this. */
-export const PLANNING_AREAS_MODULE: ModuleLocation = {
-  workspaceId: areasDomain.workspaceId,
-  moduleId: areasDomain.moduleId,
-}
+export const PLANNING_AREAS_MODULE: ModuleLocation = moduleAt("configure.areas")
 
 const PURPOSES: ReadonlySet<string> = new Set<PlanningAreaPurpose>(PLANNING_AREA_PURPOSES)
 

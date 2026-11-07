@@ -31,6 +31,7 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 import { type ModuleLocation } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
@@ -49,7 +50,7 @@ import { nameVia, webIdVia } from "./references"
 import { ROUTES_MODULE, routesWindowFrom } from "./routes"
 
 /** The workspace module the pickups are the rows of. */
-export const PICKUPS_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "pickups" }
+export const PICKUPS_MODULE: ModuleLocation = moduleAt("route-studio.pickups")
 
 /** The stop's commands, by the names the surfaces send. */
 export const REMOVE_PICKUP = "remove"

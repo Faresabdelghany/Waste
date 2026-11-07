@@ -42,6 +42,7 @@ import { slaStateOf, type SlaState } from "@waste/domain/resolution/sla"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { isBillableResolution, OFFICE_TICKET_SOURCES, OPEN_TICKET_STATUSES, TICKET_COMMANDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_VISIBILITIES, type TicketCommand, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
@@ -65,7 +66,7 @@ import { routeAdapter } from "./routes"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 /** The workspace module the tickets are the rows of. */
-export const TICKETS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "tickets" }
+export const TICKETS_MODULE: ModuleLocation = moduleAt("operate.tickets")
 
 export const TICKET_PREFIX = "ticket"
 

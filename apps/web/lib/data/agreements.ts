@@ -24,6 +24,7 @@
 // agreement's project. A row the store does not hold is still named by an id
 // chip — `product-<uuid>`, or the bare id — and `referencedId` is the one
 // reading of a chip.
+import { moduleAt } from "@/lib/modules/manifest"
 import { ofKind } from "@/lib/api/records/adapter"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormSection, BusinessFormValues } from "./business-form-types"
@@ -31,7 +32,7 @@ import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "./commercial"
 
 /** Where the agreements live — the one seam callers resolve the module through. */
-export const AGREEMENTS_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "agreements" }
+export const AGREEMENTS_MODULE: ModuleLocation = moduleAt("customers.agreements")
 
 /** The two kinds' id prefixes: the fixtures' own for an agreement, the adapter's for a subscription. */
 export const AGREEMENT_PREFIX = "agreement"

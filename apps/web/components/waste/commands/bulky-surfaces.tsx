@@ -14,6 +14,7 @@ import { Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { BulkyAvailableDay } from "@waste/contracts/bulky"
+import { moduleAt } from "@/lib/modules/manifest"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -32,7 +33,7 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { agreementsOfCustomer, availabilityWindow, bookingPlaceOf, placesOfAgreement, withBookingDay, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 
-const ROUTES = { workspaceId: "route-studio", moduleId: "routes" } as const satisfies ModuleLocation
+const ROUTES = moduleAt("route-studio.routes") satisfies ModuleLocation
 
 /** A place as the dialog's one picker holds it: which of the two, and its web id. */
 const placeValue = (kind: "property" | "point", id: string) => `${kind}:${id}`

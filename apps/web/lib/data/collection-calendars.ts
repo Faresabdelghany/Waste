@@ -11,9 +11,9 @@
  * shape the Settings pane writes on create and edit.
  */
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { slugify } from "@/lib/utils"
 
-import { settingsModuleDomains } from "./business-domain"
 import { deriveFormRecord } from "./business-form-records"
 import { getBusinessFormSchema } from "./business-form-schemas"
 import type {
@@ -28,18 +28,8 @@ import {
   type ModuleLocation,
 } from "./business-modules"
 
-const calendarsDomain = settingsModuleDomains.find(
-  (module) => module.key === "configure.calendars",
-)
-if (!calendarsDomain) {
-  throw new Error("configure.calendars is missing from settingsModuleDomains")
-}
-
 /** Where collection-calendar records live — every consumer resolves through this. */
-export const COLLECTION_CALENDARS_MODULE: ModuleLocation = {
-  workspaceId: calendarsDomain.workspaceId,
-  moduleId: calendarsDomain.moduleId,
-}
+export const COLLECTION_CALENDARS_MODULE: ModuleLocation = moduleAt("configure.calendars")
 
 /** The module definition (label, copy, lifecycle, fixtures) — guaranteed by the registry. */
 export function collectionCalendarsModule(): ModuleDefinition {

@@ -8,10 +8,10 @@
 // The list lives here, not in the web and not in the database: `role_grant`
 // stores `module_key` as text and the contracts' `z.enum(MODULE_KEYS)` is what
 // checks it at the API boundary (Issue #70), so adding a module is a code
-// change and never a migration. The web still derives its matrix from
-// `businessWorkspaces`, and apps/web/lib/data/__tests__/permission-catalogue.test.ts
-// holds the two lists equal in both directions: a module added to a workspace
-// fails that test until it is named here.
+// change and never a migration. The web's module manifest (apps/web/lib/modules)
+// specifies each of these keys exactly once, by its workspace: a key added here
+// is a compile error there until the web places it, and one the web places
+// that is not named here is one too.
 
 /** Every `workspace.module` key a grant can name, in sidebar order. */
 export const MODULE_KEYS = [

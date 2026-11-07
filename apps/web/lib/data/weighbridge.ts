@@ -7,10 +7,11 @@
 // reason a ticket waited are here, beside the two forms.
 import type { WeighbridgeTicketStatus, WeighbridgeUnmatchedReason } from "@waste/domain/execution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
-export const WEIGHBRIDGE_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "weighbridge" }
+export const WEIGHBRIDGE_MODULE: ModuleLocation = moduleAt("route-studio.weighbridge")
 export const WEIGHBRIDGE_PREFIX = "weighbridge-ticket"
 export const WEIGHBRIDGE_RECORD_KIND = "Weighbridge ticket"
 

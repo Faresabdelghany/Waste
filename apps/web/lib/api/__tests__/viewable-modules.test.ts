@@ -8,6 +8,8 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
+import { MODULES } from "@/lib/modules/manifest"
+
 import type { Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"
 import { MODULES_WITHOUT_ME, SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
@@ -18,6 +20,13 @@ const systemRole = (key: string) => {
   if (role === undefined) throw new Error(`no system role ${key}`)
   return role
 }
+
+describe("the switched modules", () => {
+  test("are each its adapter under its own module's key, a module of the manifest", () => {
+    assert.deepEqual(keysOf(SERVER_MODULES), [...SERVER_MODULE_KEYS])
+    for (const key of SERVER_MODULE_KEYS) assert.ok(MODULES[key], key)
+  })
+})
 
 describe("the switched modules a person's grants let the store read", () => {
   test("are none of them for the seeded driver, configure.master and configure.calendars included", () => {

@@ -2,10 +2,14 @@
 // `workspace.module` not listed here stays on the browser's own path: its
 // fixtures merged with what the browser holds, exactly as before this issue.
 //
-// Switching a module is adding it here and, where the wire does not carry
-// what the prototype's form says, a mapping under records/. The store reads
-// this list, narrowed to what the person's grants let them view
+// Switching a module is adding its adapter here under its key and, where the
+// wire does not carry what the prototype's form says, a mapping under
+// records/; the workspace's surface for it, where it has one, is keyed by the
+// same key (`COMMAND_SURFACES`), which only a switched module's may be. The
+// store reads this list, narrowed to what the person's grants let them view
 // (`viewableModules`), and nothing else to decide.
+
+import type { ModuleKey } from "@waste/domain/access/modules"
 
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
@@ -47,63 +51,70 @@ import { weighbridgeModule } from "./weighbridge"
 import { weightsModule } from "./weights"
 
 /**
- * The switched modules, in the order the store reads them. A mapping that
- * names a row of a module read after it finds none yet, and the store reads
- * it again once that module holds the row (server-records.ts, `readsChanged`):
- * a module listed after the ones it names is read once, one listed before
- * them twice, and its rows are the same either way.
+ * Each switched module's adapter, by its key: the server half of the module
+ * manifest (lib/modules/manifest.ts), which the store reads beneath the
+ * workspace's surfaces. A mapping that names a row of a module read after it
+ * finds none yet, and the store reads it again once that module holds the row
+ * (server-records.ts, `readsChanged`), so the order is the store's first read
+ * and its rows are the same either way.
  */
-export const SERVER_MODULES: readonly ServerModule[] = [
-  organisationModule,
-  serviceProvidersModule,
-  accessModule,
-  teamModule,
-  ticketTeamsModule,
-  customersModule,
-  planningAreasModule,
-  collectionCalendarsModule,
-  masterDataModule,
-  placesModule,
-  warehousesModule,
-  dropOffPointsModule,
-  fleetVehiclesModule,
-  fleetDriversModule,
-  propertiesModule,
-  propertyGroupsModule,
-  sharedPointsModule,
-  productsModule,
-  priceRowsModule,
-  agreementsModule,
-  rightSizingModule,
-  applicationsModule,
-  siteAccessModule,
-  containersModule,
-  sensorsModule,
-  inspectionsModule,
-  inventoryModule,
-  vehiclePlanningModule,
-  serviceAreasModule,
-  providerPricesModule,
-  routeSchemesModule,
-  liveModule,
-  routesModule,
-  providerActivitiesModule,
-  pickupsModule,
-  bulkyBookingsModule,
-  siteVisitsModule,
-  ticketsModule,
-  alertsModule,
-  eventsModule,
-  billingModule,
-  invoicesModule,
-  paymentsModule,
-  settlementsModule,
-  weightsModule,
-  weighbridgeModule,
-  scaleHouseModule,
-]
+const ADAPTERS = {
+  "configure.organization": organisationModule,
+  "service-providers.service-providers": serviceProvidersModule,
+  "configure.access": accessModule,
+  "service-providers.service-provider-workspace": teamModule,
+  "configure.templates": ticketTeamsModule,
+  "customers.contacts": customersModule,
+  "configure.areas": planningAreasModule,
+  "configure.calendars": collectionCalendarsModule,
+  "configure.master": masterDataModule,
+  "resources.depots": placesModule,
+  "resources.warehouses": warehousesModule,
+  "resources.drop-off-points": dropOffPointsModule,
+  "fleet.vehicles": fleetVehiclesModule,
+  "fleet.drivers": fleetDriversModule,
+  "customers.properties": propertiesModule,
+  "customers.groups": propertyGroupsModule,
+  "customers.shared": sharedPointsModule,
+  "commercial.products": productsModule,
+  "commercial.price-rows": priceRowsModule,
+  "customers.agreements": agreementsModule,
+  "customers.right-sizing": rightSizingModule,
+  "customers.applications": applicationsModule,
+  "customers.site-access": siteAccessModule,
+  "resources.containers": containersModule,
+  "resources.sensors": sensorsModule,
+  "operate.inspections": inspectionsModule,
+  "resources.inventory": inventoryModule,
+  "fleet.vehicle-planning": vehiclePlanningModule,
+  "service-providers.service-areas": serviceAreasModule,
+  "commercial.service-provider-prices": providerPricesModule,
+  "route-studio.schemes": routeSchemesModule,
+  "route-studio.live": liveModule,
+  "route-studio.routes": routesModule,
+  "service-providers.activities": providerActivitiesModule,
+  "route-studio.pickups": pickupsModule,
+  "operate.bulky-bookings": bulkyBookingsModule,
+  "operate.site-visits": siteVisitsModule,
+  "operate.tickets": ticketsModule,
+  "operate.exceptions": alertsModule,
+  "commercial.events": eventsModule,
+  "commercial.billing": billingModule,
+  "commercial.invoices": invoicesModule,
+  "commercial.payments": paymentsModule,
+  "commercial.settlements": settlementsModule,
+  "route-studio.weights": weightsModule,
+  "route-studio.weighbridge": weighbridgeModule,
+  "operate.scale-house": scaleHouseModule,
+} as const satisfies { readonly [Key in ModuleKey]?: ServerModule }
 
-const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
+/** A module switched onto the API: one the store reads from the server. */
+export type SwitchedModuleKey = keyof typeof ADAPTERS
+
+/** The switched modules, in the order the store first reads them. */
+export const SERVER_MODULES: readonly ServerModule[] = Object.values(ADAPTERS)
+
+const byKey: ReadonlyMap<string, ServerModule> = new Map(Object.entries(ADAPTERS))
 
 /** The server module behind a `workspace.module`, or undefined for one still on fixtures. */
 export function serverModuleOf(workspaceId: WorkspaceId, moduleId: string): ServerModule | undefined {
@@ -116,7 +127,7 @@ export function isServerBacked(workspaceId: WorkspaceId, moduleId: string): bool
 }
 
 /** The `workspace.module` keys switched so far, in load order. */
-export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))
+export const SERVER_MODULE_KEYS = Object.keys(ADAPTERS) as readonly SwitchedModuleKey[]
 
 /**
  * The modules a person's grants let the store read, in the order given: those

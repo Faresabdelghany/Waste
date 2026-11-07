@@ -17,6 +17,7 @@
 import type { FillReading, Sensor, SensorPairing } from "@waste/contracts/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
@@ -28,7 +29,7 @@ import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referen
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
 /** The workspace module the sensors are the rows of. */
-export const SENSORS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "sensors" }
+export const SENSORS_MODULE: ModuleLocation = moduleAt("resources.sensors")
 
 export const SENSOR_PREFIX = "sensor"
 /** The containers' web prefix, which a pairing names a container by. */

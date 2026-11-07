@@ -34,6 +34,7 @@ import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOpt
 import { recordsForProject } from "@/lib/data/project-scope"
 import { SERVICE_PROVIDERS_MODULE } from "@/lib/data/provider-money"
 import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { moduleParams } from "@/lib/data/workspace-href"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import { useApiClient } from "../api-session-store"
@@ -265,10 +266,7 @@ export function useOpenRecord(moduleId: string): (recordId: string) => void {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   return (recordId) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("module", moduleId)
-    params.set("record", recordId)
-    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    router.push(`${pathname}?${moduleParams(moduleId, recordId, new URLSearchParams(searchParams.toString())).toString()}`, { scroll: false })
   }
 }
 

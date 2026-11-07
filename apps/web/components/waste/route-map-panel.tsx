@@ -13,6 +13,7 @@ import { useTheme } from "next-themes"
 import { useEffect, useMemo, useState } from "react"
 import { CornersOut } from "@phosphor-icons/react/dist/ssr"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -38,7 +39,7 @@ const RouteMapCanvas = dynamic(() => import("./route-map-canvas").then((module) 
 })
 
 /** Resources › Depots & Unloading: where a route's depot and unloading station are read from (`placesModule`). */
-const PLACES_MODULE = { workspaceId: "resources", moduleId: "depots" } as const
+const PLACES_MODULE = moduleAt("resources.depots")
 
 const STATE_OF: Record<Pickup["status"], RouteMapStopState> = {
   planned: "open",

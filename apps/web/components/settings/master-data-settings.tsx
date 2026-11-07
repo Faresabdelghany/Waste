@@ -12,6 +12,7 @@ import { useMemo, useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import {
   AssetPanelShell,
   AssetToolbar,
@@ -72,7 +73,7 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 const ACTOR_NAME = "Olivia Larsen"
 /** Where the project records live — what a service frequency names. */
-const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
+const ORGANISATION_MODULE: ModuleLocation = moduleAt("configure.organization")
 const STATUS_OPTIONS = ["Effective"] as const
 
 /** What the table's detail column says of a row: the fact its kind is known by. */

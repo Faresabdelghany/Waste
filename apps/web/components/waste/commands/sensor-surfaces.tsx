@@ -12,6 +12,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -26,7 +27,7 @@ import { dayAndTimeOn, wallClockIn } from "@/lib/api/records/clock"
 import { CHANGE_PAIRING, PAIR_SENSOR, readingLine, sensorReadings, SENSORS_MODULE } from "@/lib/api/records/sensors"
 import { changeDraft, pairableContainers, pairDraft, pairOffered } from "@/lib/data/sensors"
 
-const CONTAINERS = { workspaceId: "resources", moduleId: "containers" } as const
+const CONTAINERS = moduleAt("resources.containers")
 
 export function SensorPairingSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SENSORS_MODULE)

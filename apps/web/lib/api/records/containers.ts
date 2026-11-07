@@ -44,6 +44,7 @@ import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-stat
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek } from "@waste/domain/planning/frequency-reconciliation"
+import { moduleAt } from "@/lib/modules/manifest"
 import { PROMISED_RATE_KEY } from "@/lib/prototype/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
@@ -61,10 +62,10 @@ import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./pl
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
-export const CONTAINERS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "containers" }
+export const CONTAINERS_MODULE: ModuleLocation = moduleAt("resources.containers")
 
 /** The workspace module the ledger is the rows of: the movements the containers' commands append. */
-export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
+export const INVENTORY_MODULE: ModuleLocation = moduleAt("resources.inventory")
 
 /** A container as the adapter reads it: the resource, and every placement it has had. */
 export type ContainerResource = Container & { placements: ContainerServicePlacement[] }

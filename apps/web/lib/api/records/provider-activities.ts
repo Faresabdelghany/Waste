@@ -14,6 +14,7 @@
 // a follow-up's due day. The words and forms are
 // lib/data/provider-activities.ts'; the routes are
 // apps/api/src/routes/service-provider-activities.ts.
+import type { ModuleKey } from "@waste/domain/access/modules"
 import type { ServiceProviderActivity, ServiceProviderActivityCreate, ServiceProviderActivityPatch } from "@waste/contracts/service-provider-activities"
 import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
@@ -43,8 +44,8 @@ const CONTAINER_PREFIX = "asset"
 const FRACTION_PREFIX = "fraction"
 
 /** The schemes and the routes an approval changes: read again once the API took it. */
-const SCHEMES_KEY = "route-studio.schemes"
-const ROUTES_KEY = "route-studio.routes"
+const SCHEMES_KEY = "route-studio.schemes" satisfies ModuleKey
+const ROUTES_KEY = "route-studio.routes" satisfies ModuleKey
 
 export function toActivityRecord(activity: ServiceProviderActivity, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(activity.projectId)

@@ -19,6 +19,7 @@ import { isOneOf } from "@waste/domain/lists"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { takesReference } from "@waste/domain/status-gates"
 
+import { moduleAt } from "@/lib/modules/manifest"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 
@@ -26,7 +27,7 @@ import { allows, type Grants } from "../api/grants"
 import { itemsSentence } from "./pickup-services"
 
 /** Where the bookings are: Operate › Bulky Bookings. */
-export const BULKY_BOOKINGS_MODULE = { workspaceId: "operate", moduleId: "bulky-bookings" } as const satisfies ModuleLocation
+export const BULKY_BOOKINGS_MODULE = moduleAt("operate.bulky-bookings") satisfies ModuleLocation
 
 /** The record's keys the surfaces read beside the facts. */
 export const BULKY_SERVER_ID_KEY = "bulkyServerId"
