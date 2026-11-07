@@ -23,8 +23,8 @@ import { product } from "@waste/db/schema/catalogue"
 import { nothingToIndex, type IndexPlan } from "@waste/domain/finance/indexation"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
+import { lockRows, type TenantTable } from "@waste/db/commands/shared"
 
-import { lockRows, type TenantTable } from "./shared"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"

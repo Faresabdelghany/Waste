@@ -29,7 +29,8 @@ import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseOverlap } from "@waste/db/commands/shared"
+import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -38,7 +39,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty } from "./references"
-import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.site-access"
 

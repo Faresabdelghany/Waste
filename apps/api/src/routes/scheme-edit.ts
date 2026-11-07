@@ -52,9 +52,9 @@ import { groupRuns, isParked } from "@waste/domain/planning/checks"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"
+import type { Today } from "@waste/db/commands/project-clock"
 import { invalidRequest, problem } from "../problem"
 import { NO_POSITION_LEFT } from "./collection-groups"
-import type { Today } from "./fleet-lookups"
 import type { Scope } from "./references"
 import { groupReleases, type HoldRelease } from "./route-holds"
 import {

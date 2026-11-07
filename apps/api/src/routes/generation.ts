@@ -68,6 +68,7 @@ import { generationRun } from "@waste/db/schema/generation"
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
@@ -75,7 +76,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
-import { describeJson, IdParam, instantOf, stampsOf } from "./shared"
+import { describeJson, IdParam } from "./shared"
 
 const GenerationRunPage = Page(GenerationRun)
 

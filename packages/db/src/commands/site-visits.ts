@@ -34,11 +34,11 @@
 // `priceVisitCharge` prices the step through `priceDraft`, exactly as a
 // billable event will be. `likelyTradesOf` counts a rule's window in one
 // aggregate statement, so no list of visits crosses the wire.
-import type { SiteVisit, VisitChargeQuoted, VisitIdentifier } from "@waste/contracts/site-visits"
+import type { SiteVisit, VisitIdentifier } from "@waste/contracts/site-visits"
 import type { PricingOutcome } from "@waste/domain/finance/pricing"
 import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 import { businessAgreementOf, feePayingAgreement, householdPropertyOf, identifyVisit, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type Identified, type LikelyTrade, type VisitCharge, type VisitFacts, type VisitHolder, type VisitRuleFacts } from "@waste/domain/visits/charges"
-import type { SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
+import type { SiteVisitSource } from "@waste/domain/visits/vocabulary"
 import { addDays } from "@waste/domain/days"
 import { Refused } from "@waste/domain/refusal"
 import { dayInTimezone } from "@waste/domain/clock"
@@ -54,8 +54,8 @@ import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFre
 import { priceDraft } from "./billable-writes"
 import { emit } from "./outbox"
 import { projectTimezone, type Scope } from "./project-clock"
-import { instantOf, stampsOf } from "./resolution-rows"
 import { lockRow, replayed } from "./shared"
+import { fractionsOf, siteVisitOf, visitColumns, type VisitRow } from "../shapes/site-visits"
 
 /** What a site that is no recycling centre of the project is told, at `siteId`. */
 export const NOT_A_CENTRE = "Not a recycling centre of this project"
@@ -69,93 +69,6 @@ export const EXTERNAL_ID_TAKEN = "This external id was already recorded for a vi
 const ONE_VISIT_PER_READ = "site_visit_external_id_idx"
 /** What a check-in at a site that is not open for visits is told. */
 export const siteNotActive = (status: string): string => `The recycling centre is ${status}; visits are checked in at an active one`
-
-export const visitColumns = {
-  id: siteVisit.id,
-  projectId: siteVisit.projectId,
-  siteId: siteVisit.siteId,
-  occurredAt: siteVisit.occurredAt,
-  serviceDate: siteVisit.serviceDate,
-  source: siteVisit.source,
-  externalId: siteVisit.externalId,
-  identification: siteVisit.identification,
-  identifierValue: siteVisit.identifierValue,
-  credentialId: siteVisit.credentialId,
-  propertyId: siteVisit.propertyId,
-  customerId: siteVisit.customerId,
-  agreementId: siteVisit.agreementId,
-  outcome: siteVisit.outcome,
-  refusalReason: siteVisit.refusalReason,
-  recordedBy: siteVisit.recordedBy,
-  note: siteVisit.note,
-  chargeBasis: siteVisit.chargeBasis,
-  chargeN: siteVisit.chargeN,
-  chargeProductId: siteVisit.chargeProductId,
-  voidedAt: siteVisit.voidedAt,
-  voidedBy: siteVisit.voidedBy,
-  voidReason: siteVisit.voidReason,
-  createdAt: siteVisit.createdAt,
-  updatedAt: siteVisit.updatedAt,
-}
-
-export type VisitRow = Pick<typeof siteVisit.$inferSelect, keyof typeof visitColumns>
-
-/** A visit on the wire, with the fractions it brought. */
-export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]): SiteVisit {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    siteId: row.siteId,
-    occurredAt: row.occurredAt.toISOString(),
-    serviceDate: row.serviceDate,
-    source: row.source as SiteVisitSource,
-    externalId: row.externalId,
-    identification: row.identification as SiteVisitIdentification,
-    identifierValue: row.identifierValue,
-    credentialId: row.credentialId,
-    propertyId: row.propertyId,
-    customerId: row.customerId,
-    agreementId: row.agreementId,
-    outcome: row.outcome as SiteVisitOutcome,
-    refusalReason: row.refusalReason as SiteVisitRefusalReason | null,
-    recordedBy: row.recordedBy,
-    note: row.note,
-    wasteFractionIds: [...wasteFractionIds],
-    charge: quotedOf(row),
-    voidedAt: instantOf(row.voidedAt),
-    voidedBy: row.voidedBy,
-    voidReason: row.voidReason,
-    ...stampsOf(row),
-  }
-}
-
-/** What a visit's row says it was charged at when it was recorded; null for a refused one. */
-export const quotedOf = (row: Pick<VisitRow, "chargeBasis" | "chargeN" | "chargeProductId">): VisitChargeQuoted | null =>
-  row.chargeBasis === null ? null : { basis: row.chargeBasis as VisitChargeBasis, n: row.chargeN, productId: row.chargeProductId }
-
-/** The fractions of each visit asked, by visit, in the order they were written. */
-export async function fractionsOf(tx: Tx, companyId: string, visitIds: readonly string[]): Promise<Map<string, string[]>> {
-  const fractions = new Map<string, string[]>()
-  if (visitIds.length === 0) return fractions
-  const rows = await tx
-    .select({ visitId: siteVisitFraction.visitId, wasteFractionId: siteVisitFraction.wasteFractionId })
-    .from(siteVisitFraction)
-    .where(and(eq(siteVisitFraction.companyId, companyId), inArray(siteVisitFraction.visitId, [...visitIds])))
-    .orderBy(asc(siteVisitFraction.id))
-  for (const row of rows) fractions.set(row.visitId, [...(fractions.get(row.visitId) ?? []), row.wasteFractionId])
-  return fractions
-}
-
-/** One visit of the company with its fractions, or undefined. */
-export async function visitById(tx: Tx, companyId: string, id: string): Promise<{ row: VisitRow; visit: SiteVisit } | undefined> {
-  const [row] = await tx
-    .select(visitColumns)
-    .from(siteVisit)
-    .where(and(eq(siteVisit.companyId, companyId), eq(siteVisit.id, id)))
-    .limit(1)
-  if (row === undefined) return undefined
-  return { row, visit: siteVisitOf(row, (await fractionsOf(tx, companyId, [row.id])).get(row.id) ?? []) }
-}
 
 /** The holder a visit's row names, as the domain reads it; null where it reached nobody. */
 export function holderOf(row: Pick<VisitRow, "propertyId" | "customerId" | "agreementId">): VisitHolder | null {

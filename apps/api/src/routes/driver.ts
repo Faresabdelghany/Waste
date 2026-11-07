@@ -125,8 +125,9 @@
 // the note goes to the log, so the driver is not locked out of a route that
 // no longer exists for them.
 //
-// The wire shapes are routes/execution-shapes.ts's, shared with the office's
-// four modules; the door's own are the scope there (`driverRouteScope`,
+// The wire shapes are `@waste/db/shapes/`', shared with the office's four
+// modules and the outbox; the door's own are the scope in
+// routes/execution-shapes.ts (`driverRouteScope`,
 // `findAssignedRoute`, `noSuchAssignedRoute`), whose fence is the assignment
 // where the office's is `inProjects`, and the route read's pickups
 // (`driverPickupsOfRoute`): `GET /driver/routes/:id` answers the contracts'
@@ -161,7 +162,6 @@ import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { recordUnload, stationTakes } from "@waste/db/commands/unloads"
 import type { JobSender, Send } from "@waste/db/jobs"
-import { bulkyItemsOf } from "@waste/db/commands/bulky-bookings"
 import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
@@ -184,45 +184,28 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
-import { replayed } from "@waste/db/commands/shared"
+import { lockRow, replayed } from "@waste/db/commands/shared"
+import { labelOf, routeColumns, routesOf, routeWithProgress, type RouteRow } from "@waste/db/shapes/routes"
+import { pickupColumns, pickupOf, type PickupRow } from "@waste/db/shapes/pickups"
+import { proofColumns, proofOf } from "@waste/db/shapes/proofs"
+import { receiptColumns, receiptOf, type ReceiptRow } from "@waste/db/shapes/driver-commands"
+import { uniqueConstraintOf } from "@waste/db/sqlstate"
+import { unloadAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
+import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problemBody, uniqueConstraintOf, validate } from "../problem"
+import { describeProblem, invalidRequest, problemBody, validate } from "../problem"
 import { namedByCode } from "./container-identity"
 import { driverColumns, driverOf } from "./drivers"
-import {
-  driverRouteScope,
-  findAssignedRoute,
-  labelOf,
-  noSuchAssignedRoute,
-  pickupColumns,
-  pickupOf,
-  proofColumns,
-  proofOf,
-  receiptColumns,
-  receiptOf,
-  routeColumns,
-  routesOf,
-  routeWithProgress,
-  routeWithSessions,
-} from "./execution-shapes"
+import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSessions, sessionColumns, sessionOf, type SessionRow } from "./execution-shapes"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
-import {
-  sessionColumns,
-  sessionOf,
-  unloadAnswered,
-  unloadsFrom,
-  type PickupRow,
-  type ReceiptRow,
-  type RouteRow,
-  type SessionRow,
-} from "./execution-shapes"
-import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
+import { vehicleColumns } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
-import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf } from "./shared"
+import { COMMAND_BACKDATE_MS, describeJson, IdParam, OCCURRED_AT_SKEW_MS, primaryKeyOf } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { tellOfficeNotTaken } from "./unload-writes"
 import { stopOutcomeChanged } from "./stop-outcomes"

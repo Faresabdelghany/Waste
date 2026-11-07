@@ -1,56 +1,20 @@
 // What the billing half of Finance & Contracting's route modules share
-// (Issue #112): the office's scope every statement is bounded by — the
-// tenant and `inProjects` — the family's 404s, and the reads that need a
-// Principal, so routes/billable-events.ts, routes/billing-runs.ts and
-// routes/invoices.ts each say only which route does what, the way
-// routes/resolution-shapes.ts holds Resolution's shapes for its modules. The
-// shapes themselves — the rows of `billable_event`, `billing_run`,
-// `billing_run_exclusion`, `invoice` and `invoice_line` on the wire, the one
-// statement a billable event is read through (`eventsFrom`) and its status
-// as a `where` (`statusIs`) — moved to `@waste/db/commands/billing-shapes`
-// with the commands the worker runs (part B), which read and answer the same
-// rows with no request in hand; they are re-exported here so the routes read
-// them from the path they always did.
-import type { BillingRunDetail } from "@waste/contracts/billing"
+// (Issue #112) beside the rows on the wire, which are `@waste/db/shapes/`'
+// (billable events, billing runs, invoices), since the commands the worker
+// runs read and answer them too: the office's scope every statement is
+// bounded by — the tenant and `inProjects` — the family's 404s, and the reads
+// that need a Principal, so routes/billable-events.ts, routes/billing-runs.ts
+// and routes/invoices.ts each say only which route does what.
 import type { Tx } from "@waste/db/client"
-import { eventsFrom, exclusionColumns, exclusionOf, invoiceColumns, runColumns, runOf, type EventReading, type InvoiceRow, type RunRow } from "@waste/db/commands/billing-shapes"
-import { billableEvent, billingRun, billingRunExclusion, invoice } from "@waste/db/schema/finance"
-import { and, asc, eq, type SQL } from "drizzle-orm"
+import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
+import { and, eq, type SQL } from "drizzle-orm"
+import { eventsFrom, type EventReading } from "@waste/db/shapes/billable-events"
+import { runColumns, type RunRow } from "@waste/db/shapes/billing-runs"
+import { invoiceColumns, type InvoiceRow } from "@waste/db/shapes/invoices"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
-
-export {
-  creditNotesOf,
-  eventColumns,
-  eventOf,
-  eventsFrom,
-  exclusionColumns,
-  exclusionOf,
-  invoiceColumns,
-  invoiceDetailOf,
-  invoiceOf,
-  issueStanding,
-  labelOf,
-  lineColumns,
-  lineOf,
-  linesOf,
-  linksOf,
-  runColumns,
-  runOf,
-  standingsOf,
-  statusIs,
-  statusOf,
-  UNNAMED,
-  type EventReading,
-  type InvoiceStanding,
-  type EventRow,
-  type ExclusionRow,
-  type InvoiceRow,
-  type LineRow,
-  type RunRow,
-} from "@waste/db/commands/billing-shapes"
 
 export const noSuchEvent = (id: string) => problem(404, { detail: `No billable event ${id} in the projects this account works in` })
 export const noSuchRun = (id: string) => problem(404, { detail: `No billing run ${id} in the projects this account works in` })
@@ -78,23 +42,6 @@ export async function findRun(tx: Tx, principal: Principal, id: string): Promise
     .where(and(runScope(principal), eq(billingRun.id, id)))
     .limit(1)
   return row
-}
-
-/** The run with the payers it excluded, in recording order, and the ids of the invoices it issued, in numbering order. */
-export async function runDetailOf(tx: Tx, companyId: string, row: RunRow): Promise<BillingRunDetail> {
-  const [exclusions, invoices] = await Promise.all([
-    tx
-      .select(exclusionColumns)
-      .from(billingRunExclusion)
-      .where(and(eq(billingRunExclusion.companyId, companyId), eq(billingRunExclusion.billingRunId, row.id)))
-      .orderBy(asc(billingRunExclusion.id)),
-    tx
-      .select({ id: invoice.id })
-      .from(invoice)
-      .where(and(eq(invoice.companyId, companyId), eq(invoice.billingRunId, row.id)))
-      .orderBy(asc(invoice.id)),
-  ])
-  return { ...runOf(row), exclusions: exclusions.map(exclusionOf), invoiceIds: invoices.map((found) => found.id) }
 }
 
 /** The documents of this company, in the projects the caller works in. */

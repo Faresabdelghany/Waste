@@ -38,7 +38,7 @@ import type { PricedAmounts } from "@waste/domain/finance/pricing"
 
 import { newId } from "@waste/db/ids"
 import { priceDraft, recordBillableEvent } from "@waste/db/commands/billable-writes"
-import { nextNumber } from "../routes/shared"
+import { nextNumber } from "@waste/db/commands/shared"
 import type { ExecutionFixtures } from "./execution-fixtures"
 import { seedPriceList, type SeededPriceList } from "./finance-fixtures"
 import { testId, type Tenant } from "./tenant"

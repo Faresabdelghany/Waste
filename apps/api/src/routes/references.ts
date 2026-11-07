@@ -56,10 +56,11 @@ import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { findAlert, NOT_AN_ALERT } from "@waste/db/commands/alert-links"
+import type { AlertRow } from "@waste/db/shapes/alerts"
+import type { TenantTable } from "@waste/db/commands/shared"
 
 import { invalidRequest } from "../problem"
-import type { AlertRow } from "./resolution-shapes"
-import { requireRow, requireStatus, rowIssue, type NamedRow, type Target, type TenantTable } from "./shared"
+import { requireRow, requireStatus, rowIssue, type NamedRow, type Target } from "./shared"
 import { refuseRetiredReason, refuseRetiredTeam } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -468,9 +469,6 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 
 /** What a body is told when it names a ticket of another project, or none. */
 export const NOT_A_TICKET = "Not a ticket of this project"
-
-/** What a body is told when it names an alert of another project, or none: the shared statement's sentence (`@waste/db/commands/alert-links`), since `openTicket` answers it too. */
-export { NOT_AN_ALERT }
 
 /** What a body is told when it names an agreement of another project, or none. */
 export const NOT_AN_AGREEMENT = "Not an agreement of this project"

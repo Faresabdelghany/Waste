@@ -38,9 +38,6 @@
 //                    proves it is there answers it too (`requireStatus`), so
 //                    the gate a new reference passes (routes/statuses.ts,
 //                    Issue #79) costs no second statement.
-//   a number       — a document numbered from one of the company's series
-//                    (a ticket, an invoice, a credit note) takes it one way
-//                    (`nextNumber`), under the company's row lock.
 //   a command      — a write the worker runs as well as a route (Issue #109
 //                    part B's `openTicket`, Issue #112 part B's
 //                    `recordBillableEvent`, `issueInvoice` and `runBilling`,
@@ -51,21 +48,19 @@
 //                    400 at the body's field of that name; a route calls the
 //                    command and catches nothing.
 //
-// The lock, the number and the two instant spellings (`stampsOf`,
-// `instantOf`) live in `@waste/db` since Issue #109 part B
-// (`commands/shared.ts`, `commands/resolution-rows.ts`), where the write
-// statements both processes run — `openTicket` first, Finance's after — read
-// them; they are re-exported here under the names every route always used.
+// The row lock and the company's numbering (`lockRow`, `lockRows`,
+// `nextNumber`, `@waste/db/commands/shared`) and how the wire spells a row's
+// time (`stampsOf`, `instantOf`, `timeOf`, `@waste/db/shapes/times`) are the
+// database package's, which the commands both processes run read too; a route
+// imports them from there.
 //
-// Nothing here knows a table or a resource but the company's row, which every
-// series lives on: what is not shared by every route module stays in the one
-// that owns it.
+// Nothing here knows a table or a resource: what is not shared by every route
+// module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { instantOf, stampsOf } from "@waste/db/commands/resolution-rows"
-import { lockRow, lockRows, nextNumber, strengthFor, type Series, type TenantTable } from "@waste/db/commands/shared"
+import type { TenantTable } from "@waste/db/commands/shared"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -74,8 +69,6 @@ import { resolver } from "hono-openapi"
 import * as z from "zod"
 
 import { invalidRequest } from "../problem"
-
-export { instantOf, lockRow, lockRows, nextNumber, stampsOf, strengthFor, type Series, type TenantTable }
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -118,8 +111,6 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
   return c.json(body, 201, { location: `${collection}/${body.id}` })
 }
 
-/** The instants of a row, as the wire spells them, and the instant of a nullable column: `stampsOf` and `instantOf`, re-exported above from `@waste/db/commands/resolution-rows`. */
-
 /** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
 const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
 
@@ -152,23 +143,6 @@ export function dayWindow(column: PgColumn, from: string | undefined, to: string
  * scope. One spelling for a Registry set and a Planning set alike.
  */
 export const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
-
-/** A `time` column as postgres.js hands it over: `HH:MM:SS`, with fractional seconds where the value carried them. */
-const TIME_OF_DAY = /^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/
-
-/**
- * A `time` column as the wire spells it (Issue #97): Postgres answers
- * `HH:MM:SS`, the contracts' `IsoTime` is `HH:MM`, so the seconds go. A value
- * that is not a time of day is a bug in a statement, not a client's, and is
- * thrown to become the server's 500 rather than sliced into a wrong time.
- */
-export function timeOf(value: string): string {
-  const match = TIME_OF_DAY.exec(value)
-  if (match === null) throw new Error(`timeOf: ${JSON.stringify(value)} is not a time of day as Postgres spells one (HH:MM:SS)`)
-  return match[1]
-}
-
-/** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. `TenantTable`, re-exported above from `@waste/db/commands/shared`. */
 
 /** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
 export type StatusTable = TenantTable & { status: PgColumn }
@@ -237,15 +211,6 @@ async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: Name
     .limit(1)
   return found
 }
-
-/**
- * The row lock (`lockRow`) and the lock over several rows (`lockRows`): a
- * rule the API holds rather than the database is only held per transaction,
- * so a route takes the parent's lock before it reads (routes/periods.ts says
- * which rule and which parent), from the top down where it locks two. Both
- * live in `@waste/db/commands/shared` since the write statements the worker
- * runs too take them, and are re-exported above.
- */
 
 // Resources, round A (Issue #101 review): the owning provider's shape, once.
 // A depot, an unloading station, a vehicle and a driver each name a service
@@ -323,15 +288,3 @@ export const COMMAND_BACKDATE_MS = 48 * 3_600_000
 /** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default, which a driver command's `replayed` names. */
 export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
 
-// Finance (Issue #112, its review): the company's document series, once. A
-// route's, a ticket's and an invoice's number each come off a counter on the
-// company's row (`next_route_number`, `next_ticket_number`,
-// `next_invoice_number`; packages/db's organisation schema), and the ticket
-// and the invoice took theirs in two spellings of one statement. This is the
-// one: `update … returning` under the company's row lock, so two documents
-// numbered at once take turns, and a transaction that fails rolls its number
-// back with its rows, the series unbroken. The route's counter is the
-// generation worker's to take (#97 part B), in blocks, and is not taken here.
-// `Series` and `nextNumber` live in `@waste/db/commands/shared` since Issue
-// #109 part B — `openTicket` takes a ticket's number there for the API and
-// the worker alike — and are re-exported above.

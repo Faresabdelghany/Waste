@@ -49,9 +49,10 @@
 import type { Tx } from "@waste/db/client"
 import { and, asc, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import type { TenantTable } from "@waste/db/commands/shared"
 
 import { eachPresent, groupedBy } from "./sets"
-import { stamp, type TenantTable } from "./shared"
+import { stamp } from "./shared"
 
 /** The record a set hangs on, and the company every row of the set inherits from it. */
 export type Owner = { companyId: string; id: string }

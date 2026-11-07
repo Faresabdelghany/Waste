@@ -130,13 +130,14 @@ import { dropOffPoint } from "../schema/drop-off-points"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } from "../schema/finance"
 import { project } from "../schema/organisation"
 import { siteVisit } from "../schema/site-visits"
-import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { projectToday, type Scope } from "./project-clock"
 import { heldWhenCharged, holdsForReview } from "./billable-writes"
 import { mintHireCharges, planHireCharges } from "./hire-charges"
 import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"
 import { lockRow } from "./shared"
+import type { EventRow } from "../shapes/billable-events"
+import { exclusionColumns, runColumns, type ExclusionRow, type RunRow } from "../shapes/billing-runs"
 
 /** The most ready events one batch of a run takes (#329): a batch is one transaction, and a thousand invoices is what Postgres is for (§7.2, §7.9); a payer above it alone is excluded, `too-many-events`. */
 export const BILLING_RUN_MAX_EVENTS = 5000

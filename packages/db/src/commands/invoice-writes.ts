@@ -38,9 +38,9 @@ import type { IdMinter } from "../ids"
 import { customer } from "../schema/customers"
 import { invoice, invoiceLine } from "../schema/finance"
 import { company } from "../schema/organisation"
-import { invoiceColumns, invoiceOf, lineColumns, lineOf } from "./billing-shapes"
 import { emit } from "./outbox"
 import { nextNumber, refuseDuplicate } from "./shared"
+import { invoiceColumns, invoiceOf, lineColumns, lineOf } from "../shapes/invoices"
 
 /** `invoice_line_billable_event_id_idx`: an event is on one line of one invoice, the database's word behind the run's selection. */
 export const EVENT_ON_ONE_LINE = "invoice_line_billable_event_id_idx"

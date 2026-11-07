@@ -21,12 +21,12 @@ import type { PlanSolver, PlanStatus, PlanStopWarning, PlanTrip } from "@waste/d
 import { executionOrder, planIsStale } from "@waste/domain/routing/plans"
 import { DEFAULT_PROFILE, type RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, inArray, isNotNull, type SQL } from "drizzle-orm"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
-import { stampsOf } from "./shared"
 
 export const noSuchPlan = (id: string) => problem(404, { detail: `No plan ${id} in the projects this account works in` })
 

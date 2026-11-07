@@ -57,12 +57,12 @@ import { PlanningAreaBoundaryCreate, PlanningAreaCreate, PlanningAreaPatch } fro
 import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectCurrency, projectToday } from "@waste/db/commands/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, product } from "@waste/db/schema/catalogue"
 import { sharedCollectionPoint } from "@waste/db/schema/customers"
 import { priceList } from "@waste/db/schema/finance"
-import { project, serviceProvider } from "@waste/db/schema/organisation"
+import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot } from "@waste/db/schema/places"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { and, eq, sql } from "drizzle-orm"
@@ -457,16 +457,8 @@ async function importContainer(context: ImportContext, cells: Cells): Promise<Wr
 /** The columns that make a row's subscription; any of them without a product is a row that cannot say what it subscribes to. */
 const SUBSCRIPTION_CELLS = ["property", "shared collection point", "quantity", "subscription from", "subscription to"] as const
 
-async function projectCurrency(context: ImportContext, projectId: string): Promise<string> {
-  if (context.memo.currency === undefined) {
-    const [row] = await context.tx
-      .select({ currency: project.currency })
-      .from(project)
-      .where(and(eq(project.companyId, context.principal.companyId), eq(project.id, projectId)))
-      .limit(1)
-    if (row === undefined) throw new Error(`project ${projectId} was checked and is not there`)
-    context.memo.currency = row.currency
-  }
+async function currencyOf(context: ImportContext, projectId: string): Promise<string> {
+  context.memo.currency ??= await projectCurrency(context.tx, context.principal.companyId, projectId)
   return context.memo.currency
 }
 
@@ -508,7 +500,7 @@ async function importAgreement(context: ImportContext, cells: Cells): Promise<Wr
       payerCustomerId,
       status: coded(cells.status),
       billingCadence: coded(cells["billing cadence"]),
-      currency: cells.currency?.toUpperCase() ?? (await projectCurrency(context, projectId)),
+      currency: cells.currency?.toUpperCase() ?? (await currencyOf(context, projectId)),
       notes: cells.notes,
       priceListId,
       validFrom,

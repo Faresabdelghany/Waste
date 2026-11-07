@@ -85,25 +85,25 @@
 // outside its reach is not its to learn.
 import { Page } from "@waste/contracts/pagination"
 import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
-import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen, type Settlement, type SettlementLine } from "@waste/contracts/settlements"
+import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen } from "@waste/contracts/settlements"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { route } from "@waste/db/schema/execution"
 import { billableEvent, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceProviderPrice, settlement, settlementEvent, settlementLine } from "@waste/db/schema/finance"
-import { serviceProvider } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { tonnesAt } from "@waste/domain/finance/tonnage"
 import { settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
-import { addDays } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, gt, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { refuseOverlap } from "@waste/db/commands/shared"
+import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { labelOf, lastDayOf, linesBySettlement, lineOf, linesOf, periodEnd, settlementColumns, settlementDetailOf, settlementOf, settlementsFrom, type SettlementRow } from "@waste/db/shapes/settlements"
+import { projectCurrency, projectToday } from "@waste/db/commands/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -111,11 +111,10 @@ import { reachesThroughAssignments } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { projectCurrency, projectToday } from "./fleet-lookups"
 import { refuseStranded } from "./periods"
 import { requireServiceAreaAssignment } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.settlements"
 
@@ -139,57 +138,6 @@ export const linesStale = (rows: number): string => `${count(rows, "line")} ${ro
 /** A settlement outside what the account reaches, or none: one sentence for the office's projects and the provider's own assignments alike. */
 const noSuchSettlement = (id: string) => problem(404, { detail: `No settlement ${id} this account reaches` })
 
-const columns = {
-  id: settlement.id,
-  projectId: settlement.projectId,
-  serviceAreaAssignmentId: settlement.serviceAreaAssignmentId,
-  status: settlement.status,
-  currency: settlement.currency,
-  calculatedAt: settlement.calculatedAt,
-  closedAt: settlement.closedAt,
-  closedBy: settlement.closedBy,
-  lineCount: settlement.lineCount,
-  netMinor: settlement.netMinor,
-  validFrom: settlement.validFrom,
-  validTo: settlement.validTo,
-  createdAt: settlement.createdAt,
-  updatedAt: settlement.updatedAt,
-}
-
-/** The settlement's columns and, through its assignment, whose it is: the provider's id for the scope and its name for the sentences. */
-type Row = Pick<typeof settlement.$inferSelect, keyof typeof columns> & { serviceProviderId: string; providerLegalName: string }
-
-/** The period's last day in: the day before its end, the first day out. */
-const lastDayOf = (row: Row): string => addDays(periodEnd(row), -1)
-
-/** How every sentence names a settlement: the provider and the period as a person reads it, `NordRen ApS · 2026-07-01–2026-07-31`, the last day inside and not the first day out. */
-const labelOf = (row: Row): string => `${row.providerLegalName} · ${row.validFrom}–${lastDayOf(row)}`
-
-/** The end every settlement has (`settlement_period_closed`): a null beside a settlement is a broken invariant, not a client's doing. */
-function periodEnd(row: { id: string; validTo: string | null }): string {
-  if (row.validTo === null) throw new Error(`settlement ${row.id} has no end to its period`)
-  return row.validTo
-}
-
-/** The row on the wire. The status is text with a CHECK in the database and an enum here. */
-function settlementOf(row: Row): Settlement {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    serviceAreaAssignmentId: row.serviceAreaAssignmentId,
-    status: row.status as SettlementStatus,
-    currency: row.currency,
-    calculatedAt: instantOf(row.calculatedAt),
-    closedAt: instantOf(row.closedAt),
-    closedBy: row.closedBy,
-    lineCount: row.lineCount,
-    netMinor: row.netMinor,
-    validFrom: row.validFrom,
-    validTo: periodEnd(row),
-    ...stampsOf(row),
-  }
-}
-
 /** The settlements the caller reads: the office's projects', or a provider account's own through the assignment they are made under (auth/provider.ts). */
 const readable = (tx: Tx, principal: Principal): SQL | undefined =>
   and(eq(settlement.companyId, principal.companyId), reachesThroughAssignments(tx, principal, settlement, eq(serviceAreaAssignment.id, settlement.serviceAreaAssignmentId)))
@@ -197,17 +145,8 @@ const readable = (tx: Tx, principal: Principal): SQL | undefined =>
 /** The settlements the caller commands: the office's projects' and no other, since the settlement is what the company tells the provider; a provider's command finds no row. */
 const writable = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), inProjects(settlement.projectId, principal))
 
-/** The one statement every settlement is read through: the row with its assignment's provider joined, for the scope and the sentences. */
-function settlementsFrom(tx: Tx) {
-  return tx
-    .select({ ...columns, serviceProviderId: serviceAreaAssignment.serviceProviderId, providerLegalName: serviceProvider.legalName })
-    .from(settlement)
-    .innerJoin(serviceAreaAssignment, and(eq(serviceAreaAssignment.companyId, settlement.companyId), eq(serviceAreaAssignment.id, settlement.serviceAreaAssignmentId)))
-    .innerJoin(serviceProvider, and(eq(serviceProvider.companyId, settlement.companyId), eq(serviceProvider.id, serviceAreaAssignment.serviceProviderId)))
-}
-
 /** One settlement of this company by id under a scope; undefined when it is not there. */
-async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
+async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promise<SettlementRow | undefined> {
   const [row] = await settlementsFrom(tx)
     .where(and(where, eq(settlement.id, id)))
     .limit(1)
@@ -215,64 +154,11 @@ async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promi
 }
 
 /** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (routes/shared.ts), and a provider's account, which commands nothing, finds no row. */
-async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<Row> {
+async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<SettlementRow> {
   await lockRow(tx, settlement, { companyId: principal.companyId, id })
   const current = await findSettlement(tx, writable(principal), id)
   if (current === undefined) throw noSuchSettlement(id)
   return current
-}
-
-const lineColumns = {
-  id: settlementLine.id,
-  settlementId: settlementLine.settlementId,
-  billableEventId: settlementLine.billableEventId,
-  serviceProviderPriceId: settlementLine.serviceProviderPriceId,
-  quantity: settlementLine.quantity,
-  unitPriceMinor: settlementLine.unitPriceMinor,
-  netMinor: settlementLine.netMinor,
-  createdAt: settlementLine.createdAt,
-  updatedAt: settlementLine.updatedAt,
-}
-
-type LineRow = Pick<typeof settlementLine.$inferSelect, keyof typeof lineColumns>
-
-const lineOf = (row: LineRow): SettlementLine => ({
-  id: row.id,
-  settlementId: row.settlementId,
-  billableEventId: row.billableEventId,
-  serviceProviderPriceId: row.serviceProviderPriceId,
-  quantity: row.quantity,
-  unitPriceMinor: row.unitPriceMinor,
-  netMinor: row.netMinor,
-  ...stampsOf(row),
-})
-
-/** One settlement's lines, by event. */
-async function linesOf(tx: Tx, companyId: string, settlementId: string): Promise<LineRow[]> {
-  return await tx
-    .select(lineColumns)
-    .from(settlementLine)
-    .where(and(eq(settlementLine.companyId, companyId), eq(settlementLine.settlementId, settlementId)))
-    .orderBy(asc(settlementLine.billableEventId))
-}
-
-/** The settlement with its lines: what the read, the create and every command answer, so what a write says is what the next read says. */
-async function detailOf(tx: Tx, companyId: string, row: Row): Promise<SettlementDetail> {
-  const lines = await linesOf(tx, companyId, row.id)
-  return { ...settlementOf(row), lines: lines.map(lineOf) }
-}
-
-/** A page's lines in one statement, grouped by settlement, so fifty settlements cost one read and not fifty. */
-async function linesBySettlement(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, LineRow[]>> {
-  const grouped = new Map<string, LineRow[]>(ids.map((id) => [id, []]))
-  if (ids.length === 0) return grouped
-  const rows = await tx
-    .select(lineColumns)
-    .from(settlementLine)
-    .where(and(eq(settlementLine.companyId, companyId), inArray(settlementLine.settlementId, [...ids])))
-    .orderBy(asc(settlementLine.billableEventId))
-  for (const row of rows) grouped.get(row.settlementId)?.push(row)
-  return grouped
 }
 
 const eventColumns = {
@@ -302,7 +188,7 @@ const eventOf = (row: EventRow): SettlementEvent => ({
 })
 
 /** The history's row for a command that moved the settlement: the kind, the status and the totals after it, the reason of a reopening, who did it. */
-async function appendEvent(tx: Tx, principal: Principal, row: Row, kind: SettlementEventKind, reason: string | null): Promise<void> {
+async function appendEvent(tx: Tx, principal: Principal, row: SettlementRow, kind: SettlementEventKind, reason: string | null): Promise<void> {
   await tx.insert(settlementEvent).values({
     id: newId(),
     companyId: principal.companyId,
@@ -321,18 +207,18 @@ async function appendEvent(tx: Tx, principal: Principal, row: Row, kind: Settlem
 type Stamped = Partial<Pick<typeof settlement.$inferInsert, "calculatedAt" | "closedAt" | "closedBy" | "lineCount" | "netMinor">>
 
 /** Moves the row to a status with what the command carries beside it, and answers it as written — the provider carried over from the read, since the assignment does not move. */
-async function setStatus(tx: Tx, principal: Principal, current: Row, status: SettlementStatus, beside: Stamped): Promise<Row> {
+async function setStatus(tx: Tx, principal: Principal, current: SettlementRow, status: SettlementStatus, beside: Stamped): Promise<SettlementRow> {
   const [row] = await tx
     .update(settlement)
     .set({ status, ...beside })
     .where(and(eq(settlement.companyId, principal.companyId), eq(settlement.id, current.id)))
-    .returning(columns)
+    .returning(settlementColumns)
   if (row === undefined) throw noSuchSettlement(current.id)
   return { ...row, serviceProviderId: current.serviceProviderId, providerLegalName: current.providerLegalName }
 }
 
 /** The machine's answer for a command on the row as read, on the project's day: the 409 in its words, `stay`, or the status to move to. */
-async function transitionOf(tx: Tx, principal: Principal, current: Row, command: SettlementCommand, now: () => Date): Promise<{ kind: "stay" } | { kind: "move"; to: SettlementStatus }> {
+async function transitionOf(tx: Tx, principal: Principal, current: SettlementRow, command: SettlementCommand, now: () => Date): Promise<{ kind: "stay" } | { kind: "move"; to: SettlementStatus }> {
   const today = await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)()
   const state = { status: current.status as SettlementStatus, label: labelOf(current), firstDay: current.validFrom, lastDay: lastDayOf(current) }
   const transition = settlementTransition(state, command, today)
@@ -358,7 +244,7 @@ type Served = { eventId: string; kind: string; quantity: number; priceId: string
  * tonne for the same weight the customer is charged for. In id order, so the
  * lines are minted in the order the events were.
  */
-async function servedEvents(tx: Tx, companyId: string, current: Row): Promise<Served[]> {
+async function servedEvents(tx: Tx, companyId: string, current: SettlementRow): Promise<Served[]> {
   const original = alias(billableEvent, "original")
   const servedRouteId = sql`coalesce(${billableEvent.routeId}, ${original.routeId})`
   return await tx
@@ -428,7 +314,7 @@ const LINES_PER_INSERT = 1000
  * request's transaction, never a diff, the set mechanism — and the totals
  * summed over the priced lines.
  */
-async function calculate(tx: Tx, principal: Principal, current: Row, at: Date): Promise<Row> {
+async function calculate(tx: Tx, principal: Principal, current: SettlementRow, at: Date): Promise<SettlementRow> {
   const served = await servedEvents(tx, principal.companyId, current)
   const lines = served.map((event) => ({
     id: newId(),
@@ -550,7 +436,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
               validFrom,
               validTo,
             })
-            .returning(columns),
+            .returning(settlementColumns),
         )
         const written = await findSettlement(tx, readable(tx, principal), row.id)
         if (written === undefined) throw new Error(`settlement ${row.id} was written and cannot be read back`)
@@ -583,7 +469,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const row = await findSettlement(tx, readable(tx, principal), id)
         if (row === undefined) throw noSuchSettlement(id)
-        return c.json(await detailOf(tx, principal.companyId, row))
+        return c.json(await settlementDetailOf(tx, principal.companyId, row))
       },
     )
     .post(
@@ -615,7 +501,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         await transitionOf(tx, principal, current, "calculate", now)
         const row = await calculate(tx, principal, current, now())
         await appendEvent(tx, principal, row, "calculated", null)
-        return c.json(await detailOf(tx, principal.companyId, row))
+        return c.json(await settlementDetailOf(tx, principal.companyId, row))
       },
     )
     .post(
@@ -644,7 +530,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const current = await lockedSettlement(tx, principal, id)
         const transition = await transitionOf(tx, principal, current, "close", now)
-        if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
+        if (transition.kind === "stay") return c.json(await settlementDetailOf(tx, principal.companyId, current))
         // The calculation's three gaps, the unpriced first: a price is what the office adds, a recalculation what it then runs. Then the served events against the lines, both ways — an event on no line, and a line whose event is no longer served.
         await refuseStranded(tx, settlementLine, and(eq(settlementLine.companyId, principal.companyId), eq(settlementLine.settlementId, current.id), isNull(settlementLine.serviceProviderPriceId)), unpricedLines)
         const [served, lines] = await Promise.all([servedEvents(tx, principal.companyId, current), linesOf(tx, principal.companyId, current.id)])
@@ -657,7 +543,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const at = now()
         const row = await setStatus(tx, principal, current, "closed", { closedAt: at, closedBy: principal.user.id })
         await appendEvent(tx, principal, row, "closed", null)
-        const answered = await detailOf(tx, principal.companyId, row)
+        const answered = await settlementDetailOf(tx, principal.companyId, row)
         await emit(tx, principal, { aggregateId: row.id, kind: "settlement-closed", payload: answered, projectId: row.projectId, occurredAt: at })
         return c.json(answered)
       },
@@ -688,10 +574,10 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const current = await lockedSettlement(tx, principal, id)
         const transition = await transitionOf(tx, principal, current, "reopen", now)
-        if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
+        if (transition.kind === "stay") return c.json(await settlementDetailOf(tx, principal.companyId, current))
         const row = await setStatus(tx, principal, current, "open", { calculatedAt: null, closedAt: null, closedBy: null })
         await appendEvent(tx, principal, row, "reopened", reason)
-        return c.json(await detailOf(tx, principal.companyId, row))
+        return c.json(await settlementDetailOf(tx, principal.companyId, row))
       },
     )
     .get(

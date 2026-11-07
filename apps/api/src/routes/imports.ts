@@ -79,6 +79,8 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, TransactionRollba
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { lockRow } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -88,7 +90,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { IMPORT_MODULES, importRow, type ImportContext } from "./import-rows"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "improve.imports"
 const ImportRunPage = Page(ImportRun)

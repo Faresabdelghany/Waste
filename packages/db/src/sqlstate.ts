@@ -11,8 +11,7 @@
 // taken meaning the work was done before: an outbox event delivered twice
 // meets `ticket_source_event_id_idx` and reads the ticket the first delivery
 // made. Both processes read the error the same way, so the reading lives in
-// the package both consume; the API's problem.ts re-exports the three
-// readers under the names its routes and tests always used. What of a
+// the package both consume, and each imports it from here. What of a
 // failure may be logged (`loggable`) is read here for the same reason.
 
 /** Two rows with the same key. */

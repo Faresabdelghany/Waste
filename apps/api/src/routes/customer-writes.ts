@@ -12,11 +12,11 @@ import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { and, asc, count, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { problem } from "../problem"
-import { lockRow, stampsOf } from "./shared"
 
 export const customerColumns = {
   id: customer.id,

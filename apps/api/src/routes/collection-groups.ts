@@ -79,13 +79,13 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { projectToday } from "@waste/db/commands/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { projectToday } from "./fleet-lookups"
 import { requireServiceProvider, type Scope } from "./references"
 import { groupReleases, releaseHolds } from "./route-holds"
 import {
@@ -114,7 +114,7 @@ import {
   type ClockOptions,
   type GroupRow,
 } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
 

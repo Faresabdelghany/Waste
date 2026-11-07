@@ -26,7 +26,7 @@
 // `serviceProviderId`).
 //
 // The hours are `time` columns on the project's clock, `HH:MM:SS` in Postgres
-// and `HH:MM` on the wire through `timeOf` (routes/shared.ts), as a scheme's
+// and `HH:MM` on the wire through `timeOf` (@waste/db/shapes/times), as a scheme's
 // planned start is. The point goes in and comes back as GeoJSON through the
 // column type; a point off the globe or with a third ordinate is the
 // contracts' 400 at the coordinates (`FlatPoint`), and `depot_location_valid`
@@ -49,7 +49,8 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -58,7 +59,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf, strengthFor } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)

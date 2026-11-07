@@ -32,7 +32,8 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
@@ -40,7 +41,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { requireHolidayList } from "./holiday-lists"
 import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
-import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.organization"
 const ProjectPage = Page(Project)

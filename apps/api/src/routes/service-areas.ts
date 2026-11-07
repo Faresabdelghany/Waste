@@ -89,7 +89,8 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
-import { refuseOverlap } from "@waste/db/commands/shared"
+import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -101,7 +102,7 @@ import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSe
 import { boundsOutside, notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { requirePlanningArea, requireServiceProvider, requireWasteFraction } from "./references"
 import { eachPresent } from "./sets"
-import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "service-providers.service-areas"
 const ServiceAreaPage = Page(ServiceArea)
