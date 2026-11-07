@@ -43,10 +43,11 @@ import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } f
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import type { CheckRefusal } from "@waste/db/commands/shared"
+import { timeOf } from "@waste/db/shapes/times"
 
 import { invalidRequest } from "../problem"
 import { serviceProviderIssue } from "./references"
-import { providerShapeIssue, timeOf } from "./shared"
+import { providerShapeIssue } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
 export type PlaceShape = {

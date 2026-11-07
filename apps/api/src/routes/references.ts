@@ -34,7 +34,6 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { ProblemFieldError } from "@waste/contracts/problem"
-import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { assigneeOf } from "@waste/db/commands/ticket-assignment"
@@ -51,16 +50,17 @@ import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { team, ticket } from "@waste/db/schema/resolution"
-import { decommissionReason } from "@waste/db/schema/stock"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { findAlert, NOT_AN_ALERT } from "@waste/db/commands/alert-links"
+import type { AlertRow } from "@waste/db/shapes/alerts"
+import type { TenantTable } from "@waste/db/commands/shared"
+import { NOT_A_SERVICE_FREQUENCY, NOT_A_WAREHOUSE } from "@waste/db/commands/stock-ledger"
 
 import { invalidRequest } from "../problem"
-import type { AlertRow } from "./resolution-shapes"
-import { requireRow, requireStatus, rowIssue, type NamedRow, type Target, type TenantTable } from "./shared"
-import { refuseRetiredReason, refuseRetiredTeam } from "./statuses"
+import { requireRow, requireStatus, rowIssue, type NamedRow, type Target } from "./shared"
+import { refuseRetiredTeam } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -125,7 +125,7 @@ export async function requireServiceFrequency(
   path = "serviceFrequencyId",
 ): Promise<void> {
   if (id == null) return
-  await requireRow(tx, serviceFrequency, inProject(serviceFrequency, scope, id), { path, message: "Not a service frequency of this project" })
+  await requireRow(tx, serviceFrequency, inProject(serviceFrequency, scope, id), { path, message: NOT_A_SERVICE_FREQUENCY })
 }
 
 /** What a body or a query is told when it reaches for a product of another project. */
@@ -194,20 +194,6 @@ export async function requirePlanningArea(
 // are named by no body yet — the path names them — so their checks arrive
 // with part B, the day a body does.
 
-/** What a decommission naming no reason of this company is told (O30 of #290). */
-export const NOT_A_DECOMMISSION_REASON = "Not a decommission reason of this company"
-
-/** The Decommission Reason a new decommission names: the company's (400 at `decommissionReasonId`) and active (409), since a status gates a new reference. */
-export async function requireDecommissionReason(tx: Tx, companyId: string, id: string): Promise<void> {
-  const [found] = await tx
-    .select({ name: decommissionReason.name, status: decommissionReason.status })
-    .from(decommissionReason)
-    .where(and(eq(decommissionReason.companyId, companyId), eq(decommissionReason.id, id)))
-    .limit(1)
-  if (found === undefined) throw invalidRequest("body", [{ path: "decommissionReasonId", message: NOT_A_DECOMMISSION_REASON }])
-  refuseRetiredReason(found.status as DecommissionReasonStatus, found.name)
-}
-
 /** A Container a body names: the project's, since a group cannot pick another project's bin. */
 export async function requireContainer(tx: Tx, scope: Scope, id: string | null | undefined, path = "containerId"): Promise<void> {
   if (id == null) return
@@ -242,12 +228,11 @@ export async function requireVehicleType(tx: Tx, companyId: string, id: string |
 
 // Resources, slice 2 round: the one check the container list makes of its
 // `warehouseId` filter, spelled here since slices 3 and 5 name a warehouse
-// from a body too (a depot's colocated warehouse, a movement's place).
+// from a body too (a depot's colocated warehouse, a work order's booking). The
+// sentence is the ledger's, whose movements hold the warehouse they arrive at
+// themselves (`@waste/db/commands/stock-ledger`).
 
-/** What a body or a query is told when it reaches for a warehouse outside the project, or the projects, it may see. */
-export const NOT_A_WAREHOUSE = "Not a warehouse of this project"
-
-/** The warehouse a check found, as the ledger's status gate reads it (routes/statuses.ts, #101 round A): the name a sentence says and the status it judges. */
+/** The warehouse a check found, as the ledger's status gate reads it (`requireWarehouseTakesStock`, #101 round A): the name a sentence says and the status it judges. */
 export type WarehouseRef = { id: string; name: string; status: WarehouseStatus }
 
 /**
@@ -468,9 +453,6 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 
 /** What a body is told when it names a ticket of another project, or none. */
 export const NOT_A_TICKET = "Not a ticket of this project"
-
-/** What a body is told when it names an alert of another project, or none: the shared statement's sentence (`@waste/db/commands/alert-links`), since `openTicket` answers it too. */
-export { NOT_AN_ALERT }
 
 /** What a body is told when it names an agreement of another project, or none. */
 export const NOT_AN_AGREEMENT = "Not an agreement of this project"

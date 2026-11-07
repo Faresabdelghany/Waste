@@ -59,9 +59,9 @@ import { product } from "../schema/catalogue"
 import { customer } from "../schema/customers"
 import { billableEvent, priceList, priceListRow } from "../schema/finance"
 import { project } from "../schema/organisation"
-import { eventColumns, eventOf, eventsFrom, UNNAMED, type EventReading, type EventRow } from "./billing-shapes"
 import type { Scope } from "./project-clock"
 import { lockRow } from "./shared"
+import { eventColumns, eventOf, eventsFrom, UNNAMED, type EventReading, type EventRow } from "../shapes/billable-events"
 
 /** The agreement as pricing reads it: its standing, its parties, its currency, the list it names, and its customer's kind — the prototype's Customer type, a price row's condition. */
 export type AgreementFacts = {

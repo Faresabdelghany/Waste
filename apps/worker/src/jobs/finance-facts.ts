@@ -86,11 +86,10 @@ import type { TicketKind, TicketResolution } from "@waste/domain/resolution/voca
 import type { Tx } from "@waste/db/client"
 import type { SiteVisit } from "@waste/contracts/site-visits"
 import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, liveWeightEventsOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
-import type { EventReading } from "@waste/db/commands/billing-shapes"
 import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from "@waste/db/commands/pickup-exceptions"
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
-import { priceVisitCharge, type VisitRow } from "@waste/db/commands/site-visits"
+import { priceVisitCharge } from "@waste/db/commands/site-visits"
 import { liveScaleTicketEventsOf, windowLinesOf } from "@waste/db/commands/window-prices"
 import { scaleTicket } from "@waste/db/schema/scale-house"
 import { validOn } from "@waste/db/query/valid-on"
@@ -105,6 +104,8 @@ import { bulkyBooking, bulkyBookingItem } from "@waste/db/schema/bulky"
 import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm"
+import type { EventReading } from "@waste/db/shapes/billable-events"
+import type { VisitRow } from "@waste/db/shapes/site-visits"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {

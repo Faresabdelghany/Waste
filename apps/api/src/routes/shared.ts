@@ -38,9 +38,6 @@
 //                    proves it is there answers it too (`requireStatus`), so
 //                    the gate a new reference passes (routes/statuses.ts,
 //                    Issue #79) costs no second statement.
-//   a number       — a document numbered from one of the company's series
-//                    (a ticket, an invoice, a credit note) takes it one way
-//                    (`nextNumber`), under the company's row lock.
 //   a command      — a write the worker runs as well as a route (Issue #109
 //                    part B's `openTicket`, Issue #112 part B's
 //                    `recordBillableEvent`, `issueInvoice` and `runBilling`,
@@ -51,22 +48,20 @@
 //                    400 at the body's field of that name; a route calls the
 //                    command and catches nothing.
 //
-// The lock, the number and the two instant spellings (`stampsOf`,
-// `instantOf`) live in `@waste/db` since Issue #109 part B
-// (`commands/shared.ts`, `commands/resolution-rows.ts`), where the write
-// statements both processes run — `openTicket` first, Finance's after — read
-// them; they are re-exported here under the names every route always used.
+// The row lock and the company's numbering (`lockRow`, `lockRows`,
+// `nextNumber`, `@waste/db/commands/shared`) and how the wire spells a row's
+// time (`stampsOf`, `instantOf`, `timeOf`, `@waste/db/shapes/times`) are the
+// database package's, which the commands both processes run read too; a route
+// imports them from there.
 //
-// Nothing here knows a table or a resource but the company's row, which every
-// series lives on: what is not shared by every route module stays in the one
-// that owns it.
+// Nothing here knows a table or a resource: what is not shared by every route
+// module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { instantOf, stampsOf } from "@waste/db/commands/resolution-rows"
-import { lockRow, lockRows, nextNumber, strengthFor, type Series, type TenantTable } from "@waste/db/commands/shared"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import type { TenantTable } from "@waste/db/commands/shared"
+import { aheadOfClock, RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
@@ -74,8 +69,6 @@ import { resolver } from "hono-openapi"
 import * as z from "zod"
 
 import { invalidRequest } from "../problem"
-
-export { instantOf, lockRow, lockRows, nextNumber, stampsOf, strengthFor, type Series, type TenantTable }
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -118,8 +111,6 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
   return c.json(body, 201, { location: `${collection}/${body.id}` })
 }
 
-/** The instants of a row, as the wire spells them, and the instant of a nullable column: `stampsOf` and `instantOf`, re-exported above from `@waste/db/commands/resolution-rows`. */
-
 /** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
 const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
 
@@ -152,23 +143,6 @@ export function dayWindow(column: PgColumn, from: string | undefined, to: string
  * scope. One spelling for a Registry set and a Planning set alike.
  */
 export const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
-
-/** A `time` column as postgres.js hands it over: `HH:MM:SS`, with fractional seconds where the value carried them. */
-const TIME_OF_DAY = /^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/
-
-/**
- * A `time` column as the wire spells it (Issue #97): Postgres answers
- * `HH:MM:SS`, the contracts' `IsoTime` is `HH:MM`, so the seconds go. A value
- * that is not a time of day is a bug in a statement, not a client's, and is
- * thrown to become the server's 500 rather than sliced into a wrong time.
- */
-export function timeOf(value: string): string {
-  const match = TIME_OF_DAY.exec(value)
-  if (match === null) throw new Error(`timeOf: ${JSON.stringify(value)} is not a time of day as Postgres spells one (HH:MM:SS)`)
-  return match[1]
-}
-
-/** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. `TenantTable`, re-exported above from `@waste/db/commands/shared`. */
 
 /** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
 export type StatusTable = TenantTable & { status: PgColumn }
@@ -238,15 +212,6 @@ async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: Name
   return found
 }
 
-/**
- * The row lock (`lockRow`) and the lock over several rows (`lockRows`): a
- * rule the API holds rather than the database is only held per transaction,
- * so a route takes the parent's lock before it reads (routes/periods.ts says
- * which rule and which parent), from the top down where it locks two. Both
- * live in `@waste/db/commands/shared` since the write statements the worker
- * runs too take them, and are re-exported above.
- */
-
 // Resources, round A (Issue #101 review): the owning provider's shape, once.
 // A depot, an unloading station, a vehicle and a driver each name a service
 // provider exactly when their ownership (or a driver's employment) says so,
@@ -276,21 +241,13 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
 }
 
 // Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
-// is held within. `OCCURRED_AT_SKEW_MS` was the Stock
-// Movement ledger's constant in routes/lifecycle.ts and moved here so the
-// ledger, the driver door and the office's unload capture read one, and
-// `requireNotAhead` is the check over it, spelled once since Resolution's
-// review (Issue #109) found it spelled four times; `COMMAND_BACKDATE_MS` is
-// the lower bound only a device's queue needs, since an office command's
-// instant defaults to the request's clock and a device's may be two days old.
-
-/**
- * How far ahead of the request's clock `occurredAt` may run: a driver's
- * device keeps its own time, and a scan stamped a minute or two ahead of the
- * server is a scan, not a prophecy. Beyond it the instant is refused as
- * recorded before it happened.
- */
-export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+// is held within. The skew, `OCCURRED_AT_SKEW_MS`, is the domain's
+// (`@waste/domain/execution/commands`), where the Stock Movement ledger
+// (`@waste/db/commands/stock-ledger`) reads it too, and `requireNotAhead` is
+// the route's check over it, spelled once since Resolution's review (Issue
+// #109) found it spelled four times; `COMMAND_BACKDATE_MS` is the lower bound
+// only a device's queue needs, since an office command's instant defaults to
+// the request's clock and a device's may be two days old.
 
 /**
  * Holds a recorded instant to the skew: the body's instant — a ticket's or a
@@ -300,16 +257,13 @@ export const OCCURRED_AT_SKEW_MS = 5 * 60_000
  * and has no lower bound here, since the office records a complaint made
  * yesterday and the ledger a movement found in last week's paperwork; the
  * forty-eight-hour floor is the driver door's alone (`COMMAND_BACKDATE_MS`,
- * judged in the domain beside the skew). The ticket create, the alert raise,
- * the unload capture and the Stock Movement ledger all read this one check;
- * a batch ingest that answers each reading on its own reads `aheadOfClock`.
+ * judged in the domain beside the skew). The ticket create, the alert raise
+ * and the unload capture read this one check; a batch ingest that answers
+ * each reading on its own reads the domain's `aheadOfClock`.
  */
 export function requireNotAhead(instant: Date, at: Date, path = "occurredAt"): void {
   if (aheadOfClock(instant, at)) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
 }
-
-/** The skew rule's verdict as a value: whether the instant runs further ahead of the request's clock than `OCCURRED_AT_SKEW_MS`. */
-export const aheadOfClock = (instant: Date, at: Date): boolean => instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS
 
 /**
  * How far behind the request's clock a driver command's `occurredAt` may lie:
@@ -323,15 +277,3 @@ export const COMMAND_BACKDATE_MS = 48 * 3_600_000
 /** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default, which a driver command's `replayed` names. */
 export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
 
-// Finance (Issue #112, its review): the company's document series, once. A
-// route's, a ticket's and an invoice's number each come off a counter on the
-// company's row (`next_route_number`, `next_ticket_number`,
-// `next_invoice_number`; packages/db's organisation schema), and the ticket
-// and the invoice took theirs in two spellings of one statement. This is the
-// one: `update … returning` under the company's row lock, so two documents
-// numbered at once take turns, and a transaction that fails rolls its number
-// back with its rows, the series unbroken. The route's counter is the
-// generation worker's to take (#97 part B), in blocks, and is not taken here.
-// `Series` and `nextNumber` live in `@waste/db/commands/shared` since Issue
-// #109 part B — `openTicket` takes a ticket's number there for the API and
-// the worker alike — and are re-exported above.

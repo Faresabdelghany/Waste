@@ -44,7 +44,6 @@ import { assertJournal, checkJournal, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, readA
 import { wms } from "./schema/wms"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
-export { MIGRATIONS_SCHEMA, MIGRATIONS_TABLE }
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../migrations", import.meta.url))
 
 /**

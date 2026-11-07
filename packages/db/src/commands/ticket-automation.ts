@@ -60,9 +60,9 @@ import { addOfficeStop, ORDER_OPEN_STATUSES } from "./office-stops"
 import { appendTicketEvent, BY_SLA, dueWithin, openTicket, slaHoursOf, ticketRefOf } from "./open-ticket"
 import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
-import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
 import { assigneeOf, assignTicket, currentTicket } from "./ticket-assignment"
 import { bookTicket, plannedStopAnswering } from "./ticket-stops"
+import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "../shapes/tickets"
 
 /** How many more actions one change's chain may run: one count every level of it shares. */
 export type AutomationBudget = { left: number }

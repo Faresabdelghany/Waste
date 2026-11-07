@@ -86,25 +86,28 @@ import { describeRoute } from "hono-openapi"
 import { inForceOn } from "@waste/domain/periods"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { requireDeparture, requireWarehouseTakesStock, type ContainerRef } from "@waste/db/commands/stock-ledger"
+import { stopOutcomeChanged } from "@waste/db/commands/stop-outcomes"
+import { placeOf, refuseUnservedPlace, type Place } from "@waste/domain/registry/served-places"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { routeLabel } from "@waste/contracts/execution"
-import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupReach, pickupScope, proofOf, proofsOfPickup, requireReachedRoute, type PickupRow, type RouteRow } from "./execution-shapes"
+import { labelOf, type RouteRow } from "@waste/db/shapes/routes"
+import { pickupColumns, pickupOf, type PickupRow } from "@waste/db/shapes/pickups"
+import { proofOf, proofsOfPickup } from "@waste/db/shapes/proofs"
+import { findRoute, noSuchPickup, pickupReach, pickupScope, requireReachedRoute } from "./execution-shapes"
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
-import { requireDeparture, type ContainerRef } from "./lifecycle"
 import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { bookTicket, requireBookableTicket, requireTicketForStop } from "./ticket-stops"
-import { stopOutcomeChanged } from "./stop-outcomes"
 import { requireTag } from "./pickup-exceptions"
-import { placeOf, refuseUnservedPlace, requireWarehouseTakesStock, type Place } from "./statuses"
 
 const MODULE = "route-studio.pickups"
 
@@ -295,7 +298,7 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
     if (!inForceOn(under, serviceDate)) throw problem(409, { detail: notInForceOn(serviceDate) })
     // The two statuses are text the columns' checks hold to the vocabulary, read as the statuses they are.
     refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus } as Place, "stop")
-    await requireDeparture(tx, principal, taken, "issue")
+    await requireDeparture(tx, principal.companyId, taken, "issue")
     return {
       label: taken.label,
       replacementLabel: null,
@@ -309,8 +312,8 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
   const place = service === "remove" ? await standsAt(tx, scope, taken.id, serviceDate) : (await containerStop(tx, scope, taken.id, serviceDate)).place
   if (place === undefined) throw problem(409, { detail: notPlacedOn(taken.label) })
   requireWarehouseTakesStock(goesBackTo)
-  await requireDeparture(tx, principal, taken, "return")
-  if (replacement !== undefined) await requireDeparture(tx, principal, replacement, "issue")
+  await requireDeparture(tx, principal.companyId, taken, "return")
+  if (replacement !== undefined) await requireDeparture(tx, principal.companyId, replacement, "issue")
   return {
     label: taken.label,
     replacementLabel: replacement?.label ?? null,
@@ -322,7 +325,7 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
 /**
  * Where a container stands for its removal: the place and fraction of its
  * latest placement to begin on or before the day, ended or not — the
- * placement the return will end, as `endPlacement` (lifecycle.ts) reads it.
+ * placement the return will end, as `endPlacement` (@waste/db/commands/stock-ledger) reads it.
  */
 async function standsAt(tx: Tx, scope: Scope, containerId: string, serviceDate: string): Promise<StopPlace | undefined> {
   const [place] = await tx
@@ -404,7 +407,7 @@ async function detailOf(tx: Tx, principal: Principal, row: PickupRow): Promise<P
  * The pickup the path names and its route, under the route's row lock: the
  * pickup is read once to learn its route, the route is locked, and both are
  * read again underneath the lock, since the first read only said which route
- * to lock (the pattern of routes/lifecycle.ts's `endPlacement`). A pickup
+ * to lock (the pattern of the stock ledger's `endPlacement`). A pickup
  * outside the caller's scope is the family's 404 either time.
  */
 async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{ current: PickupRow; parent: RouteRow }> {
@@ -716,7 +719,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           contaminantCodeId: tagged,
         })
         // What the outcome sets going (O3b, O3c of #290): a correction to completed makes a work order's movements and services its booked ticket, one away from completed tells the office the movements stand and tells the ticket.
-        await stopOutcomeChanged(tx, principal, jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to, note, occurredAt: at.toISOString(), by: "office" }, at)
+        await stopOutcomeChanged(tx, actorOf(principal), jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to, note, occurredAt: at.toISOString(), by: "office" }, at)
         const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)

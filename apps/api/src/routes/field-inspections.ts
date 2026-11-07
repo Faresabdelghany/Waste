@@ -45,7 +45,8 @@ import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type IdentifiedEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -53,7 +54,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NO_PROOF_STORAGE_DETAIL, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "./proof-objects"
-import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "operate.inspections"
 

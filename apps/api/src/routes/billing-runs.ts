@@ -31,6 +31,7 @@ import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { exclusionOf, runColumns, runDetailOf, runOf } from "@waste/db/shapes/billing-runs"
 
 import { writtenBy } from "../auth/audit"
 import { BEARER_SECURITY, type AuthEnv, type IdentifiedEnv } from "../auth/principal"
@@ -38,10 +39,8 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
-import { exclusionOf, findRun, noSuchRun, runColumns, runDetailOf, runOf, runScope } from "./billing-shapes"
+import { findRun, noSuchRun, runScope } from "./billing-shapes"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-
-export { BILLING_RUN_MAX_EVENTS, BILLING_RUN_STALE_MS, nextBatch, previewBilling, runBilling, runUnderWay, selectBilling, type BillingPeriod, type RunBillingInput, type Selection, type SelectionOptions, type Transact } from "@waste/db/commands/billing-runs"
 
 export type BillingRunOptions = {
   /** The request pool, as the API role: a run opens its own short transactions on it (#329). */

@@ -15,12 +15,12 @@ import type { AssetStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { containerScope, noSuchContainer } from "./lifecycle"
 import { requireContainerType } from "./references"
-import { stampsOf } from "./shared"
 
 export const containerColumns = {
   id: container.id,

@@ -25,21 +25,24 @@
 // where a notification rule names one; its stop's completion or failure is
 // read off the stop's own events.
 import { Page } from "@waste/contracts/pagination"
-import { BulkyAvailability, BulkyAvailabilityQuery, BulkyBooking, BulkyBookingCancel, BulkyBookingCreate, BulkyBookingListQuery, BulkyBookingPatch, type BulkyStop } from "@waste/contracts/bulky"
+import { BulkyAvailability, BulkyAvailabilityQuery, BulkyBooking, BulkyBookingCancel, BulkyBookingCreate, BulkyBookingListQuery, BulkyBookingPatch } from "@waste/contracts/bulky"
 import type { Tx } from "@waste/db/client"
-import { bookBulky, bulkyDaysAt, bulkyItemsOf, replaceBulkyItems, requireChargeableAgreement, requireCustomersAgreement, takeBulkySlot } from "@waste/db/commands/bulky-bookings"
+import { bookBulky, bulkyDaysAt, replaceBulkyItems, requireChargeableAgreement, requireCustomersAgreement, takeBulkySlot } from "@waste/db/commands/bulky-bookings"
 import { projectToday } from "@waste/db/commands/project-clock"
 import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
-import { bulkyBookingStatus, LIVE_STOP_STATUSES, onlyABookedBooking } from "@waste/domain/execution/bulky"
-import type { BulkyBookingStatus, PickupStatus } from "@waste/domain/execution/vocabulary"
-import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
+import { onlyABookedBooking } from "@waste/domain/execution/bulky"
+import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
+import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
+import { and, asc, eq, gt, gte, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
+import { lockRow } from "@waste/db/commands/shared"
+import { bookingAnswered, bookingOf, bulkyItemsOf, selectBookings, statusOf, type BookingRow } from "@waste/db/shapes/bulky-bookings"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -47,8 +50,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, stamp, stampsOf } from "./shared"
-import { placeOf, refuseUnservedPlace } from "./statuses"
+import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "operate.bulky-bookings"
 
@@ -56,67 +58,10 @@ const BookingPage = Page(BulkyBooking)
 
 type ClockOptions = { now?: () => Date }
 
-/** The planned or completed stop naming a booking: at most one, which `pickup_bulky_booking_id_key` holds. */
-const liveStop = and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, LIVE_STOP_STATUSES))
-
 /** What a booking for a customer who is not active is told: a status gates a new reference. */
 export const INACTIVE_CUSTOMER = "The customer is inactive; a bulky collection is booked for an active customer"
 /** What a query naming a project and a place of another is told. */
 const NOT_THE_PROJECTS_PLACE = "Not a place of the project the query names"
-
-const columns = {
-  id: bulkyBooking.id,
-  projectId: bulkyBooking.projectId,
-  customerId: bulkyBooking.customerId,
-  agreementId: bulkyBooking.agreementId,
-  propertyId: bulkyBooking.propertyId,
-  sharedCollectionPointId: bulkyBooking.sharedCollectionPointId,
-  wasteFractionId: bulkyBooking.wasteFractionId,
-  day: bulkyBooking.day,
-  planningAreaId: bulkyBooking.planningAreaId,
-  scheduleId: bulkyBooking.scheduleId,
-  productId: bulkyBooking.productId,
-  note: bulkyBooking.note,
-  bookedBy: bulkyBooking.bookedBy,
-  cancelledAt: bulkyBooking.cancelledAt,
-  cancelledBy: bulkyBooking.cancelledBy,
-  cancelReason: bulkyBooking.cancelReason,
-  createdAt: bulkyBooking.createdAt,
-  updatedAt: bulkyBooking.updatedAt,
-  stopId: pickup.id,
-  stopRouteId: pickup.routeId,
-  stopStatus: pickup.status,
-}
-
-
-const stopOf = (row: Row): BulkyStop | null => (row.stopId === null || row.stopRouteId === null || row.stopStatus === null ? null : { pickupId: row.stopId, routeId: row.stopRouteId, status: row.stopStatus as PickupStatus })
-
-const statusOf = (row: Row): BulkyBookingStatus => bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus as PickupStatus | null })
-
-function bookingOf(row: Row, items: readonly { description: string; quantity: number }[]): BulkyBooking {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    customerId: row.customerId,
-    agreementId: row.agreementId,
-    propertyId: row.propertyId,
-    sharedCollectionPointId: row.sharedCollectionPointId,
-    wasteFractionId: row.wasteFractionId,
-    day: row.day,
-    items: [...items],
-    note: row.note,
-    status: statusOf(row),
-    planningAreaId: row.planningAreaId,
-    scheduleId: row.scheduleId,
-    productId: row.productId,
-    stop: stopOf(row),
-    bookedBy: row.bookedBy,
-    cancelledAt: row.cancelledAt?.toISOString() ?? null,
-    cancelledBy: row.cancelledBy,
-    cancelReason: row.cancelReason,
-    ...stampsOf(row),
-  }
-}
 
 /** Where each status stands in the row: the stamp, then the live stop. */
 const STATUS_WHERE: Readonly<Record<BulkyBookingStatus, SQL | undefined>> = {
@@ -131,23 +76,15 @@ const noSuchBooking = (id: string) => problem(404, { detail: `No bulky booking $
 /** This company's bookings, in the projects the caller works in. */
 const bookingScope = (principal: Principal) => and(eq(bulkyBooking.companyId, principal.companyId), inProjects(bulkyBooking.projectId, principal))
 
-const selectBookings = (tx: Tx) => tx.select(columns).from(bulkyBooking).leftJoin(pickup, liveStop)
-
-type Row = Awaited<ReturnType<typeof selectBookings>>[number]
-
-async function findBooking(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+async function findBooking(tx: Tx, principal: Principal, id: string): Promise<BookingRow | undefined> {
   const [row] = await selectBookings(tx)
     .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
     .limit(1)
   return row
 }
 
-async function answerOf(tx: Tx, companyId: string, row: Row): Promise<BulkyBooking> {
-  return bookingOf(row, (await bulkyItemsOf(tx, companyId, [row.id])).get(row.id) ?? [])
-}
-
 /** One booking under its row lock, with what it stands as: the path's row (404), then a booked one (409 in the domain's sentence). */
-async function lockedBooked(tx: Tx, principal: Principal, id: string, command: "change" | "cancel"): Promise<Row> {
+async function lockedBooked(tx: Tx, principal: Principal, id: string, command: "change" | "cancel"): Promise<BookingRow> {
   await lockRow(tx, bulkyBooking, { companyId: principal.companyId, id })
   const row = await findBooking(tx, principal, id)
   if (row === undefined) throw noSuchBooking(id)
@@ -308,7 +245,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         const id = await bookBulky(tx, scope, newId(), { ...body, place, note: body.note ?? null, bookedBy: principal.user.id }, today)
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw new Error(`bulky booking ${id} written and then not there`)
-        const answered = await answerOf(tx, principal.companyId, row)
+        const answered = await bookingAnswered(tx, principal.companyId, row)
         await emit(tx, principal, { aggregateId: id, kind: "bulky-booking-booked", payload: answered, projectId: row.projectId, occurredAt: now() })
         return created(c, "/bulky-bookings", answered)
       },
@@ -336,7 +273,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         const principal = c.get("principal")
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw noSuchBooking(id)
-        return c.json(await answerOf(tx, principal.companyId, row))
+        return c.json(await bookingAnswered(tx, principal.companyId, row))
       },
     )
     .patch(
@@ -379,7 +316,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         if (fields.items !== undefined) await replaceBulkyItems(tx, scope, id, fields.items)
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw noSuchBooking(id)
-        return c.json(await answerOf(tx, principal.companyId, row))
+        return c.json(await bookingAnswered(tx, principal.companyId, row))
       },
     )
     .post(
@@ -415,7 +352,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
           .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw noSuchBooking(id)
-        const answered = await answerOf(tx, principal.companyId, row)
+        const answered = await bookingAnswered(tx, principal.companyId, row)
         await emit(tx, principal, { aggregateId: id, kind: "bulky-booking-cancelled", payload: answered, projectId: row.projectId, occurredAt: at })
         return c.json(answered)
       },

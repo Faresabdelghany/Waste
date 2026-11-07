@@ -14,7 +14,7 @@ import { projectAccess, userAccount } from "../schema/access"
 import { ticket } from "../schema/resolution"
 import { appendTicketEvent, ticketRefOf } from "./open-ticket"
 import { emit } from "./outbox"
-import { ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
+import { ticketColumns, ticketOf, type TicketRow } from "../shapes/tickets"
 
 /** The ticket as it stands in this transaction. */
 export async function currentTicket(tx: Tx, companyId: string, id: string): Promise<TicketRow> {

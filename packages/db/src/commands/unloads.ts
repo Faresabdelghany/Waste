@@ -14,6 +14,15 @@
 // answered by each its own way: the office's capture refuses it at the field
 // in the station's sentence (`notTaken`), while the driver's load is tipped,
 // so it is recorded all the same and the office told.
+//
+// An office row is told as it is recorded (`recordOfficeUnload`):
+// `unload-recorded`, carrying the unload as every door answers it
+// (`unloadAnswered`, shapes/unloads.ts; a row just appended has no review by
+// construction, `NO_REVIEW`), dated when the load was tipped. The
+// correction emits nothing (#112 §7.26: the outbox carries what another
+// context acts on, and the reader of a weight is Finance itself), and the
+// driver door tells each event its command made, this one among them.
+import type { Unload } from "@waste/contracts/unloads"
 import { doesNotTake, takesNoneSet } from "@waste/domain/execution/unloads"
 import type { ExecutionSource } from "@waste/domain/execution/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
@@ -21,8 +30,11 @@ import { and, eq, sql } from "drizzle-orm"
 import type { Tx } from "../client"
 import { newId } from "../ids"
 import { wasteFraction } from "../schema/catalogue"
-import { unload } from "../schema/execution"
+import { route, unload } from "../schema/execution"
 import { unloadingStation, unloadingStationFraction } from "../schema/places"
+import { NO_REVIEW, unloadAnswered, type UnloadRow } from "../shapes/unloads"
+import { emit } from "./outbox"
+import { lockRow } from "./shared"
 
 type Columns = typeof unload.$inferInsert
 
@@ -40,6 +52,67 @@ export async function recordUnload(tx: Tx, companyId: string, draft: UnloadDraft
     .values({ sessionId: null, deviceId: null, location: null, objectKey: null, ...draft, id: draft.id ?? newId(), companyId })
     .returning()
   return row
+}
+
+/** What an office unload says: the route it is on, the project the route is in, where and what was tipped, when, by whose word, the weights, the station's ticket and a note. */
+export type OfficeUnload = {
+  projectId: string
+  routeId: string
+  unloadingStationId: string
+  wasteFractionId: string
+  occurredAt: Date
+  recordedBy: string
+  grossKg: number | null
+  tareKg: number | null
+  netKg: number
+  weighbridgeTicket: string | null
+  note: string | null
+  /** Why the station refused the load (O9 of #290), null for one it took; a correction copies its original's. */
+  refusalReason: string | null
+  refusalNote: string | null
+  /** Whose reading it is: the office's, `dispatch`, unless a weighbridge's ticket is written as it (`integration`, O27 of #290). */
+  source?: "dispatch" | "integration"
+}
+
+/** Appends one office unload — `dispatch`, or a weighbridge's `integration` — and answers the row with the reading a new row has. */
+export async function appendUnload(tx: Tx, companyId: string, draft: OfficeUnload): Promise<UnloadRow> {
+  const row = await recordUnload(tx, companyId, { ...draft, source: draft.source ?? "dispatch" })
+  return { ...row, ...NO_REVIEW }
+}
+
+/** An office unload appended and told: answered as every door answers an unload, and `unload-recorded` written with that answer, dated when the load was tipped. */
+export async function recordOfficeUnload(tx: Tx, companyId: string, draft: OfficeUnload): Promise<Unload> {
+  const row = await appendUnload(tx, companyId, draft)
+  const answered = await unloadAnswered(tx, companyId, row)
+  await emit(tx, { companyId }, { aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: draft.occurredAt })
+  return answered
+}
+
+/** Whose word an unload is on: the company and the account recording it. A Principal is one. */
+export type Recorder = { companyId: string; user: { id: string } }
+
+/** Writes a matched weighbridge ticket's Unload on its route under the route's lock, `integration`, and tells it; answers the Unload's id. */
+export async function writeUnload(tx: Tx, recorder: Recorder, ticket: { routeId: string; wasteFractionId: string; unloadingStationId: string; weighedAt: Date; grossKg: number | null; tareKg: number | null; netKg: number; ticketNumber: string }): Promise<{ unloadId: string; projectId: string }> {
+  await lockRow(tx, route, { companyId: recorder.companyId, id: ticket.routeId })
+  const [ran] = await tx.select({ projectId: route.projectId }).from(route).where(and(eq(route.companyId, recorder.companyId), eq(route.id, ticket.routeId)))
+  if (ran === undefined) throw new Error(`route ${ticket.routeId} vanished under its lock`)
+  const answered = await recordOfficeUnload(tx, recorder.companyId, {
+    projectId: ran.projectId,
+    routeId: ticket.routeId,
+    unloadingStationId: ticket.unloadingStationId,
+    wasteFractionId: ticket.wasteFractionId,
+    occurredAt: ticket.weighedAt,
+    recordedBy: recorder.user.id,
+    grossKg: ticket.grossKg,
+    tareKg: ticket.tareKg,
+    netKg: ticket.netKg,
+    weighbridgeTicket: ticket.ticketNumber,
+    note: null,
+    refusalReason: null,
+    refusalNote: null,
+    source: "integration",
+  })
+  return { unloadId: answered.id, projectId: answered.projectId }
 }
 
 /** What a station says of a fraction an unload names: both names, whether the station takes it, and whether the station names any fraction it takes. */

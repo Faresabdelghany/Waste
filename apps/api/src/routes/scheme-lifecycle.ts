@@ -76,15 +76,16 @@ import { count } from "@waste/domain/text"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { lockRow } from "@waste/db/commands/shared"
+import { projectToday } from "@waste/db/commands/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { askGenerationBestEffort } from "./generation"
-import { projectToday } from "./fleet-lookups"
 import { writeScheme } from "./route-schemes"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type ClockOptions, type SchemeRow } from "./scheme-groups"
-import { describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
+import { describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 /** What an effective day before tomorrow is refused with, at its field. */
 export const endsTomorrowAtTheEarliest = (tomorrow: string): string => `Today's routes are operating: the scheme can end from ${tomorrow} at the earliest`

@@ -48,8 +48,8 @@ import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { alert, ticket } from "../schema/resolution"
-import { alertColumns, type AlertRow } from "./resolution-rows"
 import { lockRow } from "./shared"
+import { alertColumns, type AlertRow } from "../shapes/alerts"
 
 /** The tenant and the project a statement is bounded by: what `openTicket` and the link command both know. */
 export type Scope = { companyId: string; projectId: string }

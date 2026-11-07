@@ -72,15 +72,15 @@
 // relay's defaults on the three queues at every start.
 import type { Tx } from "@waste/db/client"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, ONE_WEIGHT_CHARGE_PER_STOP, recordBillableEvent, reversalOfEvent, weightChargeBySource } from "@waste/db/commands/billable-writes"
-import { eventOf, type EventReading } from "@waste/db/commands/billing-shapes"
 import { lockRow } from "@waste/db/commands/shared"
 import { ONE_SCALE_TICKET_CHARGE_PER_LINE, scaleTicketChargeOf } from "@waste/db/commands/window-prices"
-import { visitById } from "@waste/db/commands/site-visits"
 import { siteVisit } from "@waste/db/schema/site-visits"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
 import { billableActionsFor, FINANCE_EVENT_KINDS, type BillableAction, type FinanceEventKind } from "@waste/domain/finance/from-event"
+import { eventOf, type EventReading } from "@waste/db/shapes/billable-events"
+import { visitById } from "@waste/db/shapes/site-visits"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"

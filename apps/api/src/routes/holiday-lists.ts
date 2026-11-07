@@ -21,14 +21,15 @@ import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
-import { created, describeCreated, describeJson, IdParam, lockRow, stamp, stampsOf, strengthFor } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "configure.calendars"
 const HolidayListPage = Page(HolidayList)

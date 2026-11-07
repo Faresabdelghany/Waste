@@ -25,9 +25,10 @@ import { documentLanguageOf } from "@waste/domain/document-text"
 import type { TransferNoteInput } from "@waste/domain/execution/transfer-note"
 import { and, eq } from "drizzle-orm"
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
+import type { UnloadRow } from "@waste/db/shapes/unloads"
+import { labelOf } from "@waste/db/shapes/routes"
 
 import { problem } from "../problem"
-import { labelOf, type UnloadRow } from "./execution-shapes"
 
 /** Why an unload has no transfer note, as the 409 says it; null where it has one. */
 export function noteRefusal(row: UnloadRow): ReturnType<typeof problem> | null {

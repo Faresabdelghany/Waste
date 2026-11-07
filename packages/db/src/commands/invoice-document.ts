@@ -14,7 +14,7 @@ import { and, eq } from "drizzle-orm"
 import type { Tx } from "../client"
 import { invoice } from "../schema/finance"
 import { project } from "../schema/organisation"
-import { labelOf, linesOf, type InvoiceRow } from "./billing-shapes"
+import { labelOf, linesOf, type InvoiceRow } from "../shapes/invoices"
 
 /** The rows one document is rendered from, under its company. */
 export async function invoiceDocumentInputOf(tx: Tx, companyId: string, row: InvoiceRow): Promise<InvoiceDocumentInput> {

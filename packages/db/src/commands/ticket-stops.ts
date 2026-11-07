@@ -1,11 +1,12 @@
 // What a ticket hears of the stop booked to answer it (O3c of #290), in the
-// request that decides the stop: the driver's completion and the office's
-// correction of its outcome. An outbox queue has one consumer, and the stop's
+// transaction that decides the stop: the driver's completion and the office's
+// correction of its outcome (`ticketHearsOfStop`, through `stopOutcomeChanged`,
+// stop-outcomes.ts). An outbox queue has one consumer, and the stop's
 // completion and correction are Finance's, so Resolution's part of them runs
 // here, in the same transaction, as the ledger's work orders do beside it
-// (apps/api/src/routes/work-orders.ts); the misses — a stop skipped or failed
-// by the driver, the route's end or cancellation, or the office — reach the
-// ticket through Resolution's own consumer (open-tickets in the worker).
+// (work-orders.ts); the misses — a stop skipped or failed by the driver, the
+// route's end or cancellation, or the office — reach the ticket through
+// Resolution's own consumer (open-tickets in the worker).
 //
 // A stop completed completes its open ticket as `serviced`: a
 // `status-changed` recorded by whoever completed the stop, naming it, and
@@ -28,20 +29,19 @@ import { and, eq, inArray, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId, type IdMinter } from "../ids"
+import type { Send } from "../jobs"
 import { pickup, route } from "../schema/execution"
 import { ticket, ticketBooking } from "../schema/resolution"
 import { appendTicketEvent, ticketRefOf } from "./open-ticket"
+import type { Actor } from "./shared"
 import { moveTicket, type AutomationCause } from "./ticket-automation"
-import { labelOf, ticketColumns, type TicketRow } from "./resolution-rows"
+import { labelOf, ticketColumns, type TicketRow } from "../shapes/tickets"
 
 /** The stop as a ticket's words name it: its position on its route, the route's label, its service; and its route, which a ticket it services names with it. */
 export type BookedStop = { pickupId: string; routeId: string; position: number; routeLabel: string; service: PickupService }
 
 /** A stop as a ticket's words name it, no more. */
 export type StopRef = { position: number; route: string }
-
-/** Who decided the stop: the account recording the ticket's event. */
-export type Actor = { companyId: string; userAccountId: string }
 
 /**
  * The ticket names the stop booked for it, with a line saying which, and the
@@ -147,4 +147,39 @@ export async function bookedStopUncompleted(tx: Tx, actor: Actor, current: Ticke
   const serviced = current.status === "completed" && current.resolution === "serviced" && current.bookedPickupId === stop.pickupId
   const body = serviced ? correctedAway({ ...where, service: stop.service, outcome: stop.outcome, note: stop.note }) : stopCorrected({ ...where, outcome: stop.outcome, note: stop.note })
   await appendTicketEvent(tx, ticketRefOf(actor.companyId, current), comment(current, body, actor), mint)
+}
+
+/** The stop as a ticket's words name it, with its status: the stop just decided, or the one its ticket is booked for now. */
+async function bookedStop(tx: Tx, companyId: string, pickupId: string): Promise<BookedStop & { status: string }> {
+  const [row] = await tx
+    .select({ routeId: pickup.routeId, position: pickup.position, service: pickup.service, status: pickup.status, number: route.number })
+    .from(pickup)
+    .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+    .where(and(eq(pickup.companyId, companyId), eq(pickup.id, pickupId)))
+    .limit(1)
+  if (row === undefined) throw new Error(`pickup ${pickupId} decided and then not there`)
+  return { pickupId, routeId: row.routeId, position: row.position, routeLabel: routeLabel(row.number), service: row.service as PickupService, status: row.status }
+}
+
+/**
+ * A stop's outcome as its ticket hears it: completed — the driver's or the
+ * office's correction to it — services the ticket; corrected away from
+ * completed tells it in a comment. Nothing for any other move, or a stop
+ * booked for no ticket. The ticket is the one any booking named the stop for
+ * (#422): a stop it was booked away from that services it names the stop
+ * booked since, while that one is still planned.
+ */
+export async function ticketHearsOfStop(tx: Tx, actor: Actor, send: Send, pickupId: string, outcome: { from: string; to: string; note?: string }, at: Date): Promise<void> {
+  const completes = outcome.to === "completed" && outcome.from !== "completed"
+  const uncompletes = outcome.from === "completed" && (outcome.to === "skipped" || outcome.to === "failed")
+  if (!completes && !uncompletes) return
+  const booking = await bookingTicket(tx, actor.companyId, pickupId)
+  if (booking === undefined) return
+  const stop = await bookedStop(tx, actor.companyId, pickupId)
+  if (completes) {
+    const since = booking.bookedPickupId === null || booking.bookedPickupId === pickupId ? undefined : await bookedStop(tx, actor.companyId, booking.bookedPickupId)
+    await serveBookedTicket(tx, actor, booking, stop, at, { send, by: actor.userAccountId }, since?.status === "planned" ? { position: since.position, route: since.routeLabel } : undefined)
+    return
+  }
+  await bookedStopUncompleted(tx, actor, booking, { ...stop, outcome: outcome.to as "skipped" | "failed", note: outcome.note ?? "" })
 }

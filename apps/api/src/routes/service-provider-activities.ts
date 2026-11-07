@@ -77,6 +77,9 @@ import { and, asc, eq, gt, inArray, max, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { lockRow } from "@waste/db/commands/shared"
+import { projectToday } from "@waste/db/commands/project-clock"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -84,11 +87,10 @@ import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, serve
 import { requireAllowed, requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
-import { projectToday } from "./fleet-lookups"
 import { NOT_A_DRIVER, NOT_A_POWERED_VEHICLE, requireServiceProvider } from "./references"
 import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "service-providers.activities"
 const ActivityPage = Page(ServiceProviderActivity)

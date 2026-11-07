@@ -16,9 +16,9 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { absentDriver, absentForDispatch, awayOver as earliestOver, unavailableForDispatch, unavailableVehicle, type AvailabilityNeed, type AwayPeriod } from "@waste/domain/resources/availability"
 import { firstDayOut } from "@waste/domain/periods"
 import { and, asc, eq, inArray, ne } from "drizzle-orm"
+import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
 import { problem } from "../problem"
-import { vehicleLabel } from "./fleet-lookups"
 import type { Period } from "./periods"
 import type { Scope } from "./references"
 

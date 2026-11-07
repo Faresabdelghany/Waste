@@ -1,34 +1,22 @@
-// What the Resolution route modules share (Issue #109): the rows of `ticket`,
-// `ticket_event` and `alert` on the wire, the office's scope every statement
-// is bounded by — the tenant and `inProjects` — the two reads a ticket's
-// detail carries (its history in recording order, the alerts naming it), and
-// the family's 404s, so routes/tickets.ts, @waste/db/commands/open-ticket and
-// routes/alerts.ts each say only which route does what, the way
-// routes/execution-shapes.ts holds Execution's shapes for its modules.
-//
-// The rows themselves — the column sets, the row types, `ticketOf`,
-// `linksOf`, `eventOf`, `alertOf`, `labelOf` — live in
-// `@waste/db/commands/resolution-rows` since part B, because `openTicket`
-// moved to where both processes run it and the worker emits `ticket-opened`
-// with the `Ticket` as the route would answer it; they are re-exported here
-// under the names every route always used. What stays is what only a request
-// has: the principal's scope, the 404s, the detail's two reads. A ticket's
-// `label` is `ticketLabel(number)`, the contracts' one spelling of `T-8831`,
-// and every sentence of the family names a ticket by it; the nine links
-// travel as one object on the wire (`links`) and as nine columns in the row,
-// and `linksOf` is the one place the two meet.
+// What the Resolution route modules share (Issue #109) beside the rows on the
+// wire, which are `@waste/db/shapes/tickets` and `@waste/db/shapes/alerts`,
+// since the commands both processes run answer and emit them too: what only
+// a request has — the office's scope every statement is bounded by, the
+// tenant and `inProjects`, a Service Provider's reach, the family's 404s, and
+// the two reads a ticket's detail carries (its history in recording order,
+// the alerts naming it) — so routes/tickets.ts and routes/alerts.ts each say
+// only which route does what.
 import type { Tx } from "@waste/db/client"
-import { alertColumns, alertOf, eventColumns, eventOf, labelOf, linksOf, ticketColumns, ticketOf, type AlertRow, type TicketEventRow, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import type { TicketVisibility } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, type SQL } from "drizzle-orm"
+import { alertColumns, type AlertRow } from "@waste/db/shapes/alerts"
+import { eventColumns, ticketColumns, type TicketEventRow, type TicketRow } from "@waste/db/shapes/tickets"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { providerIdOf, reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
-
-export { alertColumns, alertOf, eventColumns, eventOf, labelOf, linksOf, ticketColumns, ticketOf, type AlertRow, type TicketEventRow, type TicketRow }
 
 export const noSuchTicket = (id: string) => problem(404, { detail: `No ticket ${id} in the projects this account works in` })
 export const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id} in the projects this account works in` })

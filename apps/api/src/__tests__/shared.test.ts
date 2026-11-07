@@ -9,25 +9,13 @@ import { IsoTime } from "@waste/contracts/dates"
 import { CASING } from "@waste/db/casing"
 import { driverCommand, session } from "@waste/db/schema/execution"
 import { ticket } from "@waste/db/schema/resolution"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import { aheadOfClock, OCCURRED_AT_SKEW_MS, RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import type { SQL } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
+import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
 
 import { ProblemError } from "../problem"
-import {
-  aheadOfClock,
-  COMMAND_BACKDATE_MS,
-  dayWindow,
-  endOfDayExclusive,
-  instantOf,
-  OCCURRED_AT_SKEW_MS,
-  primaryKeyOf,
-  providerShapeIssue,
-  requireNotAhead,
-  requireProviderShape,
-  stampsOf,
-  timeOf,
-} from "../routes/shared"
+import { COMMAND_BACKDATE_MS, dayWindow, endOfDayExclusive, primaryKeyOf, providerShapeIssue, requireNotAhead, requireProviderShape } from "../routes/shared"
 
 describe("timeOf", () => {
   test("drops the seconds Postgres spells a time with, so the value is the contracts' IsoTime", () => {

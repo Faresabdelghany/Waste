@@ -11,21 +11,19 @@
 // stop's outcome finds its ticket, so the stop a rebooking replaced still
 // tells the ticket it answered.
 //
-// The stop decided tells the ticket in the same request
-// (`@waste/db/commands/ticket-stops`): the driver's completion and the
-// office's correction to completed service the ticket, a correction away from
-// completed comments on it. Misses reach it through Resolution's consumer.
+// The stop decided tells the ticket in the same request (`ticketHearsOfStop`,
+// `@waste/db/commands/ticket-stops`, through `stopOutcomeChanged`): the
+// driver's completion and the office's correction to completed service the
+// ticket, a correction away from completed comments on it. Misses reach it
+// through Resolution's consumer.
 import type { Tx } from "@waste/db/client"
-import { bookedStopUncompleted, bookingTicket, bookTicket as bookTicketStop, plannedStopAnswering, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
-import type { Send } from "@waste/db/jobs"
-import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
-import { pickup, route } from "@waste/db/schema/execution"
+import { bookTicket as bookTicketStop, plannedStopAnswering } from "@waste/db/commands/ticket-stops"
 import { ticket } from "@waste/db/schema/resolution"
 import { answeredAlready, bookedFor, notAnsweredBy, onlyAnOpenTicket, servicesAnswering, stopMismatch } from "@waste/domain/execution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
-import { routeLabel } from "@waste/contracts/execution"
 import { and, eq } from "drizzle-orm"
+import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/shapes/tickets"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
@@ -78,40 +76,4 @@ export async function requireBookableTicket(tx: Tx, scope: Scope, row: TicketRow
 /** The ticket names the stop booked for it, with a comment saying which, and the ledger keeps the booking; a missed one it named before is replaced on the ticket, never in the ledger. */
 export async function bookTicket(tx: Tx, principal: Principal, booking: TicketRow, stop: { pickupId: string; routeId: string; position: number; routeLabel: string; service: PickupService }): Promise<void> {
   await bookTicketStop(tx, principal.companyId, booking, stop, { body: bookedFor({ position: stop.position, route: stop.routeLabel, service: stop.service }), recordedBy: principal.user.id })
-}
-
-/** The stop as a ticket's words name it, with its status: the stop just decided, or the one its ticket is booked for now. */
-async function bookedStop(tx: Tx, companyId: string, pickupId: string): Promise<BookedStop & { status: string }> {
-  const [row] = await tx
-    .select({ routeId: pickup.routeId, position: pickup.position, service: pickup.service, status: pickup.status, number: route.number })
-    .from(pickup)
-    .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-    .where(and(eq(pickup.companyId, companyId), eq(pickup.id, pickupId)))
-    .limit(1)
-  if (row === undefined) throw new Error(`pickup ${pickupId} decided and then not there`)
-  return { pickupId, routeId: row.routeId, position: row.position, routeLabel: routeLabel(row.number), service: row.service as PickupService, status: row.status }
-}
-
-/**
- * A stop's outcome as its ticket hears it: completed — the driver's or the
- * office's correction to it — services the ticket; corrected away from
- * completed tells it in a comment. Nothing for any other move, or a stop
- * booked for no ticket. The ticket is the one any booking named the stop for
- * (#422): a stop it was booked away from that services it names the stop
- * booked since, while that one is still planned.
- */
-export async function ticketHearsOfStop(tx: Tx, actor: Principal, send: Send, pickupId: string, outcome: { from: string; to: string; note?: string }, at: Date): Promise<void> {
-  const completes = outcome.to === "completed" && outcome.from !== "completed"
-  const uncompletes = outcome.from === "completed" && (outcome.to === "skipped" || outcome.to === "failed")
-  if (!completes && !uncompletes) return
-  const booking = await bookingTicket(tx, actor.companyId, pickupId)
-  if (booking === undefined) return
-  const who = { companyId: actor.companyId, userAccountId: actor.user.id }
-  const stop = await bookedStop(tx, actor.companyId, pickupId)
-  if (completes) {
-    const since = booking.bookedPickupId === null || booking.bookedPickupId === pickupId ? undefined : await bookedStop(tx, actor.companyId, booking.bookedPickupId)
-    await serveBookedTicket(tx, who, booking, stop, at, { send, by: actor.user.id }, since?.status === "planned" ? { position: since.position, route: since.routeLabel } : undefined)
-    return
-  }
-  await bookedStopUncompleted(tx, who, booking, { ...stop, outcome: outcome.to as "skipped" | "failed", note: outcome.note ?? "" })
 }

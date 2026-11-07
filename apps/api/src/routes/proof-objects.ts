@@ -40,12 +40,13 @@ import { notActive } from "@waste/domain/execution/transitions"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { labelOf } from "@waste/db/shapes/routes"
 
 import { resolveDriver } from "../auth/driver"
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, problem, validate } from "../problem"
-import { findAssignedRoute, labelOf, noSuchAssignedRoute, noSuchPickup, pickupReach } from "./execution-shapes"
+import { findAssignedRoute, noSuchAssignedRoute, noSuchPickup, pickupReach } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
 /** The grant a stop's proofs are read under: the stop's own read's. */
