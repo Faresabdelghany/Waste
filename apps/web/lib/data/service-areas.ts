@@ -9,7 +9,7 @@ import {
   SERVICE_AREA_POLYGON_KEY,
   serviceAreaPolygonValue,
   type ServiceAreaSeed,
-} from "@waste/domain/map-planning/service-areas"
+} from "@/lib/prototype/map-planning/service-areas"
 
 import { publicModuleDomains } from "./business-domain"
 import type { BusinessFormValues } from "./business-form-types"

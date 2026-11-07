@@ -32,7 +32,7 @@
 // way.
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Depot, UnloadingStation, Warehouse } from "@waste/contracts/places"
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 import { BOTH_HOURS_OR_NEITHER, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DEPOT_OWNERSHIPS, DEPOT_STATUSES, UNLOADING_STATION_OWNERSHIPS, UNLOADING_STATION_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 

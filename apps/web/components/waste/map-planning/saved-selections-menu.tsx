@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { businessFilterChips, type BusinessFilters } from "@waste/domain/business-filters"
+import { businessFilterChips, type BusinessFilters } from "@/lib/prototype/business-filters"
 import { formatShortDate } from "@/lib/map-planning/format"
 import {
   addSavedSelection,
@@ -26,8 +26,8 @@ import {
 } from "@/lib/map-planning/saved-selections"
 import { persistedStore } from "@/lib/persisted-store"
 import { SAVED_SELECTIONS_STORAGE_KEY } from "@/lib/storage-keys"
-import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@waste/domain/map-planning/schedule"
-import type { SelectionShape } from "@waste/domain/map-planning/selection"
+import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@/lib/prototype/map-planning/schedule"
+import type { SelectionShape } from "@/lib/prototype/map-planning/selection"
 import { cn } from "@/lib/utils"
 
 export type SavedSelectionsMenuProps = {

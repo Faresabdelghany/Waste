@@ -6,7 +6,7 @@ import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
 import { clusterPoints } from "../clusters"
 import { FALLBACK_FRACTION_PALETTE, fractionColor } from "../colors"
 import { offsetMetres } from "@waste/domain/map-planning/geo"
-import { containerPoints, type MapPoint } from "@waste/domain/map-planning/points"
+import { containerPoints, type MapPoint } from "@/lib/prototype/map-planning/points"
 
 function container(
   id: string,

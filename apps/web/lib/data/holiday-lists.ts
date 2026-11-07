@@ -9,24 +9,24 @@
  * list's entries become record writes.
  */
 
-import type { SubmittedValues } from "@waste/domain/prototype-record"
+import type { SubmittedValues } from "@/lib/prototype/prototype-record"
 import { formatShortDay } from "@waste/domain/days"
 
 import type { BusinessRecord } from "./business-modules"
 import { countryName } from "./countries"
 import { csvOf } from "./csv"
-import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, holidayListCountry, holidayListEntries, holidayListName } from "@waste/domain/route-schemes/holiday-list-records"
+import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, holidayListCountry, holidayListEntries, holidayListName } from "@/lib/prototype/route-schemes/holiday-list-records"
 import {
   carryHolidaysToYear,
   holidayEntryIssue,
   holidayEntryValues,
   type HolidayEntry,
-} from "@waste/domain/route-schemes/holiday-lists"
+} from "@/lib/prototype/route-schemes/holiday-lists"
 import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
 
 /* --------------------------- the company's lists --------------------------- */
 // Since 2026-11-05 a holiday list is the company's own record, one per
-// country (@waste/domain/route-schemes/holiday-list-records), which the pane
+// country (lib/prototype/route-schemes/holiday-list-records), which the pane
 // lists in a table and opens into a table of its holidays. These are the
 // record writes it makes; on the Pilot the store hands them to the adapter
 // (lib/api/records/holiday-lists.ts), in fixture mode to the browser's bucket.

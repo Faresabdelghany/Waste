@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
-import { softDeletedRecord } from "@waste/domain/record-visibility"
+import { softDeletedRecord } from "@/lib/prototype/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"

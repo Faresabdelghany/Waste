@@ -8,9 +8,9 @@
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
-import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
+import { projectCalendarLabel } from "@/lib/prototype/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS, PREVIEW_HORIZON_MONTHS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRecords } from "./use-wizard-records"

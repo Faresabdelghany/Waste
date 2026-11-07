@@ -35,7 +35,7 @@ import {
   type CompanyIdentityKey,
 } from "@/lib/data/finance-settings"
 import { PAYMENT_REFERENCE_SCHEMES, type PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 const typedOf = (record: BusinessRecord, key: string): string => {
   const value = record.submittedValues?.[key]

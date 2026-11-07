@@ -2,7 +2,7 @@ import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import { CHANNEL_OPTIONS as APPLICATION_CHANNEL_OPTIONS, KIND_OPTIONS as APPLICATION_KIND_OPTIONS } from "@/lib/data/applications"
 import { DROP_OFF_KIND_OPTIONS } from "@/lib/data/drop-off-points"
 import { WAREHOUSE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
-import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
+import { SERVICE_FREQUENCIES } from "@waste/fixtures/service-frequencies"
 
 const projectRelation = {
   workspaceId: "configure",

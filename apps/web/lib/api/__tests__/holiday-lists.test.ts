@@ -5,8 +5,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { HolidayListCreate, HolidayListHolidaysSet, HolidayListPatch, type HolidayList } from "@waste/contracts/holiday-lists"
-import { holidayListEntries, isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
-import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
+import { holidayListEntries, isHolidayListRecord } from "@/lib/prototype/route-schemes/holiday-list-records"
+import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { createHolidayListRecord, nextYearEntries, withHolidayListDraft, withHolidayListEntries } from "../../data/holiday-lists"

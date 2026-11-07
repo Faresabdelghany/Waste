@@ -31,7 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { defaultBaseMapForTheme } from "@/lib/map-planning/base-maps"
 import { previewBasisLabel } from "@/lib/routing/readings"
-import { previewsBounds } from "@waste/domain/map-planning/route-preview"
+import { previewsBounds } from "@/lib/prototype/map-planning/route-preview"
 import {
   ROUTE_ESTIMATE_STATUS_LABELS,
   formatKilometres,
@@ -40,9 +40,9 @@ import {
   type RouteEstimateBasis,
   type RouteEstimateStatus,
   type RouteMeasure,
-} from "@waste/domain/route-schemes/estimates"
+} from "@/lib/prototype/route-schemes/estimates"
 import { formatClockTime } from "@waste/domain/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 

@@ -17,7 +17,7 @@ import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"
 import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
-import { routesInWindow } from "@waste/domain/map-planning/routes"
+import { routesInWindow } from "@/lib/prototype/map-planning/routes"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"

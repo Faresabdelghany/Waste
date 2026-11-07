@@ -1,22 +1,22 @@
 // The Registry seed's generated half against its one spelling (issue #99),
 // without a database: the rows `pnpm db:seed` proposes for the fifty seeded
 // properties and the hundred seeded containers are
-// @waste/domain/fixtures/seeded-registry's, read index by index through the
+// @waste/fixtures/seeded-registry's, read index by index through the
 // readings registry.ts states, and every point is where
-// @waste/domain/fixtures/gazetteer places the address — the generator and the
+// @waste/fixtures/gazetteer places the address — the generator and the
 // table the web prototype shows, so `property-seed-101` stands at the same
 // address on the server as in the browser.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
+import { knownAddressLocation } from "@waste/fixtures/positions"
 import {
   SEEDED_CONTAINER_COUNT,
   SEEDED_PROPERTY_COUNT,
   seededContainer,
   seededProperty,
-} from "@waste/domain/fixtures/seeded-registry"
-import { knownAddressLocation } from "@waste/domain/map-planning/positions"
+} from "@waste/fixtures/seeded-registry"
 
 import { DEMO_PROJECT_IDS } from "../seed/ids"
 import { REGISTRY_IDS, REGISTRY_MAP_PLACES, REGISTRY_ROWS } from "../seed/registry"

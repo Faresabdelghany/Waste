@@ -18,8 +18,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { patchGuidedDraft } from "@waste/domain/route-schemes/draft"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { patchGuidedDraft } from "@/lib/prototype/route-schemes/draft"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
 import { ConflictDialog } from "./conflict-dialog"

@@ -20,14 +20,14 @@ import {
   fallbackContainerWeight,
   type ContainerWeightResolver,
   type StopMinutesResolver,
-} from "@waste/domain/route-schemes/estimates"
+} from "@/lib/prototype/route-schemes/estimates"
 import {
   collectionVehicles,
   driverProfile,
   vehicleProfile,
   type DriverProfile,
   type VehicleProfile,
-} from "@waste/domain/route-schemes/fleet-profiles"
+} from "@/lib/prototype/route-schemes/fleet-profiles"
 
 export type WizardRecords = {
   /** Whether the records are the API's (the Pilot): a group's driver is then judged on the day the API judges it (lib/data/route-schemes.ts `licenceDayOf`). */

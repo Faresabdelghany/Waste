@@ -10,7 +10,7 @@
 // web id — the project, the assignee (Users & roles), and what the ticket is
 // about, each from its switched module — and a closed list by the wire's
 // token, shown as a person reads it.
-import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
+import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { pickupMissed } from "@waste/domain/execution/vocabulary"
 import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 

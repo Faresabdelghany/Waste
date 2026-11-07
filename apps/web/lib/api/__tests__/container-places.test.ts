@@ -17,9 +17,9 @@ import type { Container, ContainerServicePlacement } from "@waste/contracts/cont
 import type { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 import type { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
-import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
-import { containerLocation } from "@waste/domain/map-planning/positions"
-import { resolveStopMatches, servingReadingOf } from "@waste/domain/route-schemes/matching"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
+import { containerLocation } from "@/lib/prototype/map-planning/positions"
+import { resolveStopMatches, servingReadingOf } from "@/lib/prototype/route-schemes/matching"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"

@@ -65,7 +65,7 @@ import {
   updatedTicketTypeRecord,
   type FieldDraft,
 } from "@/lib/data/ticket-types"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.

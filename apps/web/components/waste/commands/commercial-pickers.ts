@@ -10,7 +10,7 @@
 // (`blankNone`, lib/data/commercial-forms.ts). A resolver over the same
 // modules turns a dialog's web ids into the server's for a read that is not
 // the store's — Explain price's question.
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import { resolverOver, type ModuleState } from "@/lib/api/records/server-records"
 import type { Resolver } from "@/lib/api/records/adapter"

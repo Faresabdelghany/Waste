@@ -10,7 +10,7 @@
 // provider's own words — which the web draws as the straight dashed line
 // beside its prototype estimate. `provider` names whose geometry it is, for
 // the attribution a map owes it (#124 §6). The two bases are the web's
-// `RouteEstimateBasis` (@waste/domain/route-schemes/estimates).
+// `RouteEstimateBasis` (apps/web/lib/prototype/route-schemes/estimates).
 import { PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
 import { PREVIEW_ENDS, PREVIEW_NEEDS_TWO_POINTS, PREVIEW_POINTS_MIN, previewTakesAtMost } from "@waste/domain/routing/preview"
 import * as z from "zod"

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { driverHoldsLicence, LICENCE_CLASSES as DISPLAY_CLASSES } from "../../route-schemes/fleet-profiles"
 import { coversClass, displayLicenceClass, holdsLicence, IMPLIED_BY, isLicenceClassToken, licenceRefusal, licenceSentence } from "../licence"
 import { LICENCE_CLASSES } from "../vocabulary"
 
@@ -15,14 +14,6 @@ describe("the licence implication", () => {
       for (const [m, held] of LICENCE_CLASSES.entries()) {
         assert.equal(coversClass(held, required), m >= n, `${held} for ${required}`)
         assert.equal(holdsLicence({ licenceClass: held, licenceExpiry: null }, required, DAY), m >= n, `${held} for ${required}`)
-      }
-    }
-  })
-
-  test("is spelled once: the web's driverHoldsLicence over the display tuple answers what coversClass answers over the tokens", () => {
-    for (const [n, required] of DISPLAY_CLASSES.entries()) {
-      for (const [m, held] of DISPLAY_CLASSES.entries()) {
-        assert.equal(driverHoldsLicence({ id: "d", name: "Mads", licenceClass: held, licenceExpiry: null }, required), coversClass(LICENCE_CLASSES[m], LICENCE_CLASSES[n]), `${held} for ${required}`)
       }
     }
   })
@@ -72,7 +63,7 @@ describe("licenceSentence", () => {
     assert.equal(licenceSentence({ reason: "expired", licenceExpiry: "2026-09-05" }, names, "the scheme starts"), "Mads Jensen's licence expires on 2026-09-05, before the scheme starts")
   })
 
-  test("a class is spelled uppercase in a sentence, as a person reads it off the card, and that spelling is the web's tuple", () => {
-    assert.deepEqual(LICENCE_CLASSES.map(displayLicenceClass), [...DISPLAY_CLASSES])
+  test("a class is spelled uppercase in a sentence, as a person reads it off the card", () => {
+    assert.deepEqual(LICENCE_CLASSES.map(displayLicenceClass), ["B", "C", "CE"])
   })
 })

@@ -17,7 +17,7 @@
 // polygon the seed carries beside them is dropped, never persisted (#127).
 import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { INDEX_BASES } from "@waste/domain/finance/vocabulary"
-import type { ServiceAreaSeed } from "@waste/domain/map-planning/service-areas"
+import type { ServiceAreaSeed } from "@/lib/prototype/map-planning/service-areas"
 
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { REFUSAL_LABELS, REVIEW_LABELS, type WeightReviewCommand } from "@/lib/api/records/weights"

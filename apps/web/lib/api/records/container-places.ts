@@ -7,7 +7,7 @@
 // containers, and the store reads the containers again once one of them
 // changes (`containersModule.derivedFrom`) — in two readings.
 //
-// The rule preview's (`SERVING_KEY`, @waste/domain/route-schemes/matching):
+// The rule preview's (`SERVING_KEY`, lib/prototype/route-schemes/matching):
 // for each placement not ended by the project's day, the period it serves
 // the container in under its subscription and that subscription's agreement
 // — the three intersected, as the worker reads eligibility — with the
@@ -39,9 +39,9 @@
 // containers are named where they serve and stand nowhere on the map or in
 // any area — the worker counts the same containers as `unlocated`.
 import type { ContainerServicePlacement } from "@waste/contracts/containers"
-import { planningAreaGeometry } from "@waste/domain/map-planning/areas"
+import { planningAreaGeometry } from "@/lib/prototype/map-planning/areas"
 import { pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
-import { periodHolds, SERVING_KEY, type ServingPeriod, type ServingReading } from "@waste/domain/route-schemes/matching"
+import { periodHolds, SERVING_KEY, type ServingPeriod, type ServingReading } from "@/lib/prototype/route-schemes/matching"
 
 import { AGREEMENT_PREFIX, AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"

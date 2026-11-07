@@ -11,8 +11,8 @@
 // `null` on the wire and not a fifth value here. `STOCK_PLACE_KINDS` is where
 // a movement comes from and goes to; a supplier and scrap have no row of their
 // own, and maintenance is a place kind at a warehouse, not a table (#101 §6).
-// `LICENCE_CLASSES` is lowest first, as route-schemes/fleet-profiles.ts orders
-// its display tuple, and lowercase because every value here is a kebab token;
+// `LICENCE_CLASSES` is lowest first, as the web's prototype orders its display
+// tuple, and lowercase because every value here is a kebab token;
 // resources/licence.ts spells the implication between them. The statuses of a
 // depot and of an unloading station are the same four, so
 // `UNLOADING_STATION_STATUSES` is `DEPOT_STATUSES` under a second name — one

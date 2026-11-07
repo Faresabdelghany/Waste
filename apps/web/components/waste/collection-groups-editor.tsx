@@ -43,13 +43,13 @@ import {
   resolveCollectionGroupPlans,
   type CollectionGroup,
   type CollectionGroupResolution,
-} from "@waste/domain/route-schemes/groups"
-import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
+} from "@/lib/prototype/route-schemes/groups"
+import { schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"
 import {
-  STOP_MATCH_VEHICLE_TYPES,
   resolveStopMatches,
   type StopMatchRule,
-} from "@waste/domain/route-schemes/matching"
+} from "@/lib/prototype/route-schemes/matching"
+import { STOP_MATCH_VEHICLE_TYPES } from "@waste/fixtures/taxonomy"
 import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"

@@ -26,7 +26,7 @@
 // Ids, rule (b) of #81's plan closing with this slice: `service-area-<uuid>`
 // and `assignment-<uuid>`; no fixture lends its id.
 import type { ServiceArea, ServiceAreaAssignment, ServiceAreaCreated, ServiceAreaDetail } from "@waste/contracts/service-areas"
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"

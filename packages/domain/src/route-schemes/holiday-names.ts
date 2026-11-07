@@ -1,10 +1,10 @@
 // Public-holiday names by date, per holiday list. A Collection Calendar
 // record edited in the Holiday lists pane carries its own names
-// (`holidayNames`, holidays.ts, since 2026-09-24); this lookup names the
+// (`holidayNames`, since 2026-09-24); this lookup names the
 // dates of a record that carries none, so the guided setup's next-dates
 // preview still reads "Shifted from Thu 24 Dec · Christmas Eve" for the
 // seeded years, and it is what "Create next year" places a moveable feast
-// by (holiday-lists.ts). The lookup follows the project's holiday list name
+// by. The lookup follows the project's holiday list name
 // (holidayNamesFor): Danish names for "Danish public holidays", Egyptian
 // fixed-date names for "Egyptian public holidays", nothing for a list this
 // module does not know — such dates read "Holiday". Pure date math over ISO

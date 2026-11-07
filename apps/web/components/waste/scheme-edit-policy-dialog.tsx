@@ -21,7 +21,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
-import type { SchemeEditApplication, SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
+import type { SchemeEditApplication, SchemeEditQuestion } from "@/lib/prototype/route-schemes/edit"
 import { formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 

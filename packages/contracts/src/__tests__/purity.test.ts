@@ -6,10 +6,9 @@
 // closed list, a shape, a bound, a sentence — is the domain's, and this
 // package wraps it in zod, so any module of the domain may be read here. The
 // domain is gated pure itself, and the direction is sound: the innermost ring
-// depends on nothing. What may not be reached is the fixture-mode prototype
-// the domain still carries for the web — its record model, the map planning
-// and the demo tenant's fixtures — judged through everything a module pulls
-// in, so a module that drags the prototype record in is refused with it.
+// depends on nothing, and holds typed rules alone — the fixture-mode
+// prototype is the web's and the demo tenant @waste/fixtures', neither of
+// which this package can name.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -18,6 +17,5 @@ import { definePurityTests } from "@waste/tooling/purity"
 definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
   allowedImports: ["@waste/domain/*", "zod"],
-  deniedImports: ["@waste/domain/fixtures/*", "@waste/domain/map-planning/*", "@waste/domain/prototype-record"],
   allowedTestImports: ["@waste/tooling/program", "@waste/tooling/purity", "@waste/tooling/wire-values"],
 })

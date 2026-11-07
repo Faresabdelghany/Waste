@@ -6,7 +6,7 @@
 // two a person acts on, blocked and ready. An invoice is filtered by what its
 // payments make of it too, and the payments by where they stand and who paid
 // them (#291 C6).
-import { singleFilterValue } from "@waste/domain/business-filters"
+import { singleFilterValue } from "@/lib/prototype/business-filters"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceRowRecord } from "@/lib/data/commercial"

@@ -44,7 +44,7 @@ import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-stat
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek } from "@waste/domain/planning/frequency-reconciliation"
-import { PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
+import { PROMISED_RATE_KEY } from "@/lib/prototype/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"

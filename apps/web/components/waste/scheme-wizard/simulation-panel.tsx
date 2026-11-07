@@ -35,10 +35,10 @@ import {
   candidateIssue,
   draftOccurrenceInput,
   type DraftRecurrenceFields,
-} from "@waste/domain/route-schemes/draft"
+} from "@/lib/prototype/route-schemes/draft"
 import { formatOccurrenceDate, type Occurrence } from "@waste/domain/route-schemes/occurrences"
 import { formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import {
   DEFAULT_SIMULATION_COUNT,

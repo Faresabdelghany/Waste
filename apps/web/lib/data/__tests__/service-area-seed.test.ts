@@ -7,13 +7,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
+import { serviceAreasForSelection } from "@/lib/prototype/map-planning/coverage"
 import {
   SERVICE_AREA_POLYGON_KEY,
   serviceAreaPolygon,
   serviceAreaSeedFromSelection,
   type ServiceAreaSeed,
-} from "@waste/domain/map-planning/service-areas"
+} from "@/lib/prototype/map-planning/service-areas"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
 import type { BusinessRecord } from "../business-modules"

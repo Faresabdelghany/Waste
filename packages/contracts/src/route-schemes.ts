@@ -52,7 +52,7 @@
 // succeeded, and each rule group's two latest match stamps — the set it
 // matched as of a run's first day and the rule it matched under — which is
 // what a client's drift reading compares (`containerDriftBetween`,
-// @waste/domain/route-schemes/container-drift). It is read from
+// apps/web/lib/prototype/route-schemes/container-drift). It is read from
 // `generation_run` and `generation_match` whenever the scheme is, never kept
 // on the scheme's row and never written by a body, so the one place it is
 // stored is the runs'.

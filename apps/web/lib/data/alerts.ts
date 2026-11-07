@@ -5,7 +5,7 @@
 // with its links prefilled, and the queue's categories.
 //
 // Every field id is a key the adapter reads (lib/api/records/alerts.ts).
-import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
+import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { ALERT_KINDS, ALERT_SEVERITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
 import { CONTAINERS_MODULE } from "../api/records/containers"

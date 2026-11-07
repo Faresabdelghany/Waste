@@ -12,7 +12,7 @@
 // Everything here is pure; lib/api/routing.ts makes the calls.
 
 import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
-import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
+import { COPENHAGEN_CENTER } from "@waste/fixtures/positions"
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
 import type { LineString, Position } from "@waste/contracts/geojson"
 

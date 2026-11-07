@@ -22,12 +22,12 @@ import {
   type RouteScheme,
 } from "@waste/contracts/route-schemes"
 import type { VehicleType } from "@waste/contracts/vehicle-types"
-import { containerDriftBetween, generationMatchHistoryOf } from "@waste/domain/route-schemes/container-drift"
-import { draftGroups } from "@waste/domain/route-schemes/draft"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
-import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { containerDriftBetween, generationMatchHistoryOf } from "@/lib/prototype/route-schemes/container-drift"
+import { draftGroups } from "@/lib/prototype/route-schemes/draft"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
+import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@/lib/prototype/route-schemes/groups"
+import { effectiveSchemeStatus, schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 
 import type { BusinessRecord } from "../../data/business-modules"

@@ -37,7 +37,7 @@ import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
 import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE, recollectionStopOptions, ticketFormFor, ticketStopOptions } from "@/lib/data/tickets"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 const keyOf = (location: ModuleLocation) => moduleKeyOf(location.workspaceId, location.moduleId)
 

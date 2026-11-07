@@ -16,7 +16,7 @@
 //                            further holidays and weekend days;
 //   skip                     drop the collection;
 //   collect                  keep it on the holiday.
-// The weekend comes from the project (project-calendar.ts) — Egypt rests
+// The weekend comes from the project (the caller resolves it) — Egypt rests
 // Friday–Saturday, so a Thursday holiday shifts to Sunday there. Nothing here
 // knows which weekdays a weekend holds. Weekend days only matter as shift
 // targets: a scheme whose service days include Saturday collects on Saturdays.

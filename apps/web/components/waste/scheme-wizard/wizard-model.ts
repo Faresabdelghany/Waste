@@ -10,12 +10,12 @@
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { licenceDayOf, routesPerWeekLabel, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
-import { routePreview, type RoutePreview } from "@waste/domain/map-planning/route-preview"
+import { routePreview, type RoutePreview } from "@/lib/prototype/map-planning/route-preview"
 import {
   resolveProjectCalendar,
   schemeCalendarOf,
   type ProjectCalendar,
-} from "@waste/domain/route-schemes/project-calendar"
+} from "@/lib/prototype/route-schemes/project-calendar"
 import {
   draftGroups,
   draftOccurrenceInput,
@@ -23,31 +23,30 @@ import {
   draftRoutesPerWeek,
   resolvedDraftGroups,
   validateGuidedScheme,
-} from "@waste/domain/route-schemes/draft"
+} from "@/lib/prototype/route-schemes/draft"
 import {
   routeEstimateAdapter,
   type ContainerWeightResolver,
   type RouteEstimate,
   type RouteMeasure,
-} from "@waste/domain/route-schemes/estimates"
-import { groupDriverIssueOf, type DriverProfile, type VehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
+} from "@/lib/prototype/route-schemes/estimates"
+import { groupDriverIssueOf, type DriverProfile, type VehicleProfile } from "@/lib/prototype/route-schemes/fleet-profiles"
 import {
   checkCollectionGroups,
   withoutDuplicatedEngineIssues,
   type GroupCheckKind,
-} from "@waste/domain/route-schemes/group-checks"
+} from "@/lib/prototype/route-schemes/group-checks"
 import {
   issuesByGroup,
   type CollectionGroup,
   type CollectionGroupDayPlan,
   type CollectionGroupResolution,
-} from "@waste/domain/route-schemes/groups"
-import { SCHEME_GROUP_COLORS } from "@waste/domain/route-schemes/map"
+} from "@/lib/prototype/route-schemes/groups"
 import {
   containerMatchProfile,
   resolveStopMatches,
   type ContainerMatchProfile,
-} from "@waste/domain/route-schemes/matching"
+} from "@/lib/prototype/route-schemes/matching"
 import {
   formatClockTime,
   occurrencePreview,
@@ -55,10 +54,10 @@ import {
   type OccurrencePreviewInput,
   type SchemeCalendar,
 } from "@waste/domain/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel, sortServiceDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
 import type { ServiceDay } from "@waste/domain/days"
-import type { SchemeValidationResult } from "@waste/domain/route-schemes/validation"
+import type { SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 
 import type { WizardRecords } from "./use-wizard-records"
 
@@ -130,6 +129,22 @@ export type WizardModel = {
   containerProfile: (id: string) => ContainerMatchProfile | undefined
   weightKg: ContainerWeightResolver
 }
+
+/**
+ * Stable per-collection-group colors (D33): when a scheme has several groups
+ * the map colors lines by group, not by day — two groups on one day would
+ * otherwise share a color and be indistinguishable.
+ */
+const SCHEME_GROUP_COLORS = [
+  "#2563eb",
+  "#059669",
+  "#d97706",
+  "#db2777",
+  "#7c3aed",
+  "#0891b2",
+  "#dc2626",
+  "#65a30d",
+] as const
 
 export function groupColor(index: number): string {
   return SCHEME_GROUP_COLORS[index % SCHEME_GROUP_COLORS.length]

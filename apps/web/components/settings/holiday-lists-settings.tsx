@@ -93,13 +93,13 @@ import {
   singleFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
-} from "@waste/domain/business-filters"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { typedString } from "@waste/domain/record-values"
-import { holidayListCountry, holidayListEntries, holidayListName, holidayListYears, isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
-import { knownHolidaysOfYear, type HolidayEntry } from "@waste/domain/route-schemes/holiday-lists"
+} from "@/lib/prototype/business-filters"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { typedString } from "@/lib/prototype/record-values"
+import { holidayListCountry, holidayListEntries, holidayListName, holidayListYears, isHolidayListRecord } from "@/lib/prototype/route-schemes/holiday-list-records"
+import { knownHolidaysOfYear, type HolidayEntry } from "@/lib/prototype/route-schemes/holiday-lists"
 import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/route-schemes/holiday-names"
-import { projectHolidayListName } from "@waste/domain/route-schemes/project-calendar"
+import { projectHolidayListName } from "@/lib/prototype/route-schemes/project-calendar"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"

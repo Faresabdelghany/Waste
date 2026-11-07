@@ -72,15 +72,15 @@ import type {
   RouteSchemeSuccessorCreate,
   StopMatchingRule,
 } from "@waste/contracts/route-schemes"
-import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
-import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
-import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
+import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@/lib/prototype/route-schemes/container-drift"
+import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@/lib/prototype/route-schemes/groups"
+import { SCHEME_API_WARNINGS_KEY } from "@/lib/prototype/route-schemes/lifecycle"
 import { parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
-import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
+import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"

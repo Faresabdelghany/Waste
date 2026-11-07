@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { LICENCE_CLASSES, NO_LICENCE_ON_RECORD, type FleetRecord } from "@waste/domain/route-schemes/fleet-profiles"
+import { LICENCE_CLASSES, NO_LICENCE_ON_RECORD, type FleetRecord } from "@/lib/prototype/route-schemes/fleet-profiles"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
 import { driverFormOptions } from "../driver-form-options"

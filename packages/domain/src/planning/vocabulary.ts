@@ -8,21 +8,20 @@
 // API boundary and the check in the column cannot drift.
 //
 // Two lists moved here from the route-scheme modules that grew them —
-// `HOLIDAY_POLICIES` from route-schemes/occurrences.ts, `SCHEME_EDIT_POLICIES`
-// from route-schemes/creation.ts — and each of those modules re-exports its
-// list. `SERVICE_DAYS`, the weekdays, is the calendar's (../days), which every
+// `HOLIDAY_POLICIES` from route-schemes/occurrences.ts, which re-exports it,
+// and `SCHEME_EDIT_POLICIES` from the prototype's scheme creation. `SERVICE_DAYS`, the weekdays, is the calendar's (../days), which every
 // context's day arithmetic reads; it is listed here among the lists the
 // database and the contracts read. `RECURRENCE_FREQUENCIES` is the tuple the
 // existing `RecurrenceFrequency` union is now read off.
 // One list is the tokens of a display tuple the prototype still reads by
-// name: `SERVICE_TYPES` of route-schemes/scope.ts's `SCHEME_SERVICE_TYPES`
+// name: `SERVICE_TYPES` of the web prototype's `SCHEME_SERVICE_TYPES`
 // ("Container collection"); the display tuple stays the web's until the
 // adapter (#81) maps it, and this module is what the database and the API
 // speak. The vehicle a rule asks for was a token list here too
 // (`STOP_MATCH_VEHICLE_TYPES`, "a working taxonomy until Resources"); it left
 // with Resources (Issue #101), where a vehicle type is a company's row
-// (`vehicle_type`) and a rule names it by id, while route-schemes/matching.ts
-// keeps its display tuple for the web. The last two lists are part B's
+// (`vehicle_type`) and a rule names it by id, while the demo tenant keeps its
+// display tuple for the web (@waste/fixtures/taxonomy). The last two lists are part B's
 // (generation as a job) and are here because they are only tuples.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
@@ -51,7 +50,7 @@ export const WEEK_ROTATIONS = ["odd", "even"] as const
 export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
 /** What a recurrence date became under the holiday policy: a reading `generateOccurrences` answers, never stored. */
 export const OCCURRENCE_STATUSES = ["planned", "shifted", "skipped", "holiday"] as const
-/** How a later edit of a scheme with generated routes applies: ask each time, apply to future collections, or this collection only (route-schemes/edit.ts, #38). */
+/** How a later edit of a scheme with generated routes applies: ask each time, apply to future collections, or this collection only (#38). */
 export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
 /** What kind of work a Route Scheme plans. */
 export const SERVICE_TYPES = ["container-collection", "underground-collection", "kerbside-collection", "crane-collection", "tank-emptying"] as const

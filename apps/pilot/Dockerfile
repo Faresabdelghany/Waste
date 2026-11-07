@@ -60,6 +60,7 @@ COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
 COPY packages/documents/package.json packages/documents/
 COPY packages/domain/package.json packages/domain/
+COPY packages/fixtures/package.json packages/fixtures/
 COPY packages/process/package.json packages/process/
 COPY packages/routing/package.json packages/routing/
 COPY packages/server/package.json packages/server/

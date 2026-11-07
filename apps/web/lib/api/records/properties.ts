@@ -34,7 +34,7 @@
 // address — its natural handle, which the seed spells as the fixtures do — is
 // no key on the wire, so every row is `<prefix>-<uuid>` from the start.
 import type { Property, PropertyGroup, PropertyGroupMember, PropertyParty, PropertyPartyHeld, SharedCollectionPoint, SharedCollectionPointMember } from "@waste/contracts/customers"
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 import { SET_MAX } from "@waste/domain/requests"
 import {
   PROPERTY_GROUP_MEMBER_ROLES,

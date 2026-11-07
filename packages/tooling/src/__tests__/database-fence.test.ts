@@ -56,8 +56,8 @@ describe("the database fence around apps/web", () => {
     const source = [
       'import { HealthResponse } from "@waste/contracts/health"',
       'import { count } from "@waste/domain/text"',
-      'import { containerPoints } from "@waste/domain/map-planning/statistics"',
-      "export const specimen = [HealthResponse, count, containerPoints]",
+      'import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"',
+      "export const specimen = [HealthResponse, count, FIXTURE_GAZETTEER]",
       "",
     ].join("\n")
     assert.deepEqual(await fenceMessages(linters.web, "apps/web/lib/data/specimen.ts", source), [])

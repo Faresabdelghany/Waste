@@ -4,4 +4,4 @@
 // it mirrors and what it leaves out. Re-exported so the map's callers keep
 // reading it from lib/data. lib/data/__tests__/street-gazetteer.test.ts holds
 // it and the explicit fixture records together.
-export { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
+export { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"

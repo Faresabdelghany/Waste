@@ -28,7 +28,7 @@ import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { defaultBaseMapForTheme } from "@/lib/map-planning/base-maps"
 import { activePlanOf, planReading, routePlanOf } from "@/lib/map-planning/plan-readings"
 import { roadGeometryOfLegs, type RoadGeometry } from "@/lib/map-planning/road-geometry"
-import { containerLocation, placeLocation } from "@waste/domain/map-planning/positions"
+import { containerLocation, placeLocation } from "@/lib/prototype/map-planning/positions"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { PlanDetail } from "@waste/contracts/plans"
 
