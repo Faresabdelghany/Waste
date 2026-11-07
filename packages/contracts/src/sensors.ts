@@ -29,18 +29,16 @@
 // with the reason. A batch never fails whole for one reading it cannot take.
 // The fill is a whole percent the vendor computed; the battery and the signal
 // strength are where the vendor reports them.
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
 import { DEFAULT_FULL_THRESHOLD_PERCENT, FILL_READING_REFUSALS, PERCENT, RSSI_DBM, SENSOR_READING_BATCH_MAX, THRESHOLD_PERCENT } from "@waste/domain/resources/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
-import { IsoDate, IsoDateTime } from "./dates"
+import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { recorded, somethingToChange, stamped } from "./resource"
+import { recorded, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 export const SensorNetwork = z.enum(SENSOR_NETWORKS)
 export type SensorNetwork = z.infer<typeof SensorNetwork>
@@ -55,8 +53,8 @@ export const ThresholdPercent = z.int().min(THRESHOLD_PERCENT.min).max(THRESHOLD
 /** A signal strength in whole dBm, as the vendor reports it. */
 export const RssiDbm = z.int().min(RSSI_DBM.min).max(RSSI_DBM.max)
 
-export const SensorPairing = z
-  .object({
+export const SensorPairing = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     sensorId: Id,
@@ -65,9 +63,8 @@ export const SensorPairing = z
     fullThresholdPercent: ThresholdPercent,
     /** Whether a filling books the office's emptying of the container ahead of its next scheduled one. Absent on an answer from before it, read as false. */
     booksEmptying: z.boolean().default(false),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type SensorPairing = z.infer<typeof SensorPairing>
 
 export const FillReading = z.object({
@@ -101,44 +98,37 @@ export const Sensor = z.object({
 })
 export type Sensor = z.infer<typeof Sensor>
 
-export const SensorCreate = z.strictObject({
-  projectId: Id,
-  identifier: Label,
-  network: SensorNetwork,
-  notes: Paragraph.nullable().optional(),
-})
+/** A patch corrects a sensor, or retires it, a status only a patch sets; a sensor does not move between projects. */
+const sensorBodies = resourceBodies(
+  {
+    projectId: Id,
+    identifier: Label,
+    network: SensorNetwork,
+    notes: Paragraph.nullable().optional(),
+  },
+  { createOnly: { projectId: true }, patch: { status: SensorStatus.optional() } },
+)
+
+export const SensorCreate = sensorBodies.create
 export type SensorCreate = z.infer<typeof SensorCreate>
 
-/** Corrects a sensor, or retires it; a sensor does not move between projects. */
-export const SensorPatch = z
-  .strictObject({
-    identifier: Label.optional(),
-    network: SensorNetwork.optional(),
-    status: SensorStatus.optional(),
-    notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const SensorPatch = sensorBodies.patch
 export type SensorPatch = z.infer<typeof SensorPatch>
 
-/** `POST /sensors/:id/pairings`: the sensor is the path's and the project the sensor's. */
-export const SensorPairingCreate = z
-  .strictObject({
+/** `POST /sensors/:id/pairings`: the sensor is the path's and the project the sensor's. A patch moves a pairing's threshold, whether it books an emptying, or its end; null takes the end off. */
+const sensorPairingBodies = effectiveDatedBodies(
+  {
     containerId: Id,
     fullThresholdPercent: ThresholdPercent.default(DEFAULT_FULL_THRESHOLD_PERCENT).describe(`Defaults to ${DEFAULT_FULL_THRESHOLD_PERCENT} when absent.`),
     booksEmptying: z.boolean().default(false).describe("Off when absent: a pairing books no stop until the office asks."),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { createOnly: { containerId: true, validFrom: true } },
+)
+
+export const SensorPairingCreate = sensorPairingBodies.create
 export type SensorPairingCreate = z.infer<typeof SensorPairingCreate>
 
-/** Moves a pairing's threshold, whether it books an emptying, or its end; null takes the end off. */
-export const SensorPairingPatch = z
-  .strictObject({
-    fullThresholdPercent: ThresholdPercent.optional(),
-    booksEmptying: z.boolean().optional(),
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const SensorPairingPatch = sensorPairingBodies.patch
 export type SensorPairingPatch = z.infer<typeof SensorPairingPatch>
 
 /** A page of sensors: one project's, in one status. */

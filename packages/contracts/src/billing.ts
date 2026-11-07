@@ -16,7 +16,6 @@
 // exclusions, and the lines it catches up from earlier periods (#447) —
 // writing nothing. There is no patch: a run is a record of what
 // it did.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { PERIOD_ORDERED, periodOrdered } from "@waste/domain/finance/billing-runs"
 import * as z from "zod"
 
@@ -24,7 +23,7 @@ import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { BillableEventKind, BillingRunStatus, ExclusionReason } from "./finance"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeInt, PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
 
@@ -135,11 +134,9 @@ export const BillingRunPreview = z.object({
 export type BillingRunPreview = z.infer<typeof BillingRunPreview>
 
 /** A page of runs: one project's, of one status, over a window of `periodFrom`. */
-export const BillingRunListQuery = ProjectScopedListQuery.extend({
-  status: BillingRunStatus.optional(),
-  /** The first day of the window over `periodFrom`, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const BillingRunListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    status: BillingRunStatus.optional(),
+  }),
+)
 export type BillingRunListQuery = z.infer<typeof BillingRunListQuery>

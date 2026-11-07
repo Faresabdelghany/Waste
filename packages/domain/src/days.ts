@@ -114,3 +114,14 @@ export const dayWindowOrdered = (window: { from?: string; to?: string }): boolea
 
 /** What a backward window of days is told, at its end. */
 export const DAY_WINDOW_ORDERED = "to is the last day of the window, so it comes on or after from"
+
+/**
+ * Whether a window of days, both ends in, holds at most `maxDays` days. A
+ * backward window is `dayWindowOrdered`'s to refuse and a day that is not one
+ * a calendar day's, so a window this cannot measure passes here rather than
+ * being told a second, wrong sentence.
+ */
+export function dayWindowFits(window: { from: string; to: string }, maxDays: number): boolean {
+  const days = daysInclusive(window.from, window.to)
+  return Number.isNaN(days) || days <= maxDays
+}

@@ -26,7 +26,6 @@
 // `CREDIT_LINES_MAX`; the route holds each to the line's remaining quantity.
 // A credit is by quantity, never by amount (§7.25): the amount follows from
 // the line's unit price.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { CREDIT_LINES_MAX, EACH_LINE_ONCE, GROSS_IS_NET_PLUS_VAT, LABEL_IS_THE_NUMBER, ONE_SOURCE, oneSource, totalsAgree } from "@waste/domain/finance/invoices"
 import { invoiceLabel } from "@waste/domain/numbering"
 import { eachOnce } from "@waste/domain/requests"
@@ -36,7 +35,7 @@ import { Currency } from "./codes"
 import { IsoDate } from "./dates"
 import { CreditReason, InvoiceKind, PaymentReference } from "./finance"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
 import { InvoicePaymentStatus } from "./payments"
 import { Minor, NonNegativeMinor, NonNegativeTotal, PositiveInt, recorded } from "./resource"
 import { Paragraph } from "./text"
@@ -149,15 +148,13 @@ export const CreditNoteCreate = z
 export type CreditNoteCreate = z.infer<typeof CreditNoteCreate>
 
 /** A page of documents: one project's, of one kind, one payer's, one run's, crediting one invoice, over a window of `issuedOn`. */
-export const InvoiceListQuery = ProjectScopedListQuery.extend({
-  kind: InvoiceKind.optional(),
-  customerId: Id.optional(),
-  billingRunId: Id.optional(),
-  /** The credit notes naming this invoice. */
-  creditsInvoiceId: Id.optional(),
-  /** The first day of the window over `issuedOn`, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const InvoiceListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    kind: InvoiceKind.optional(),
+    customerId: Id.optional(),
+    billingRunId: Id.optional(),
+    /** The credit notes naming this invoice. */
+    creditsInvoiceId: Id.optional(),
+  }),
+)
 export type InvoiceListQuery = z.infer<typeof InvoiceListQuery>

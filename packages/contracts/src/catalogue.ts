@@ -40,11 +40,10 @@ import { FREE_DAYS_ARE_A_HIRES, FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/f
 import { ONE_CADENCE, serviceFrequencyShape, VAT_PERCENT, type ServiceFrequencyShape } from "@waste/domain/registry/catalogue"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { HAZARDOUS_CODE, hazardousAgrees, WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { Id } from "./ids"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 
 /** What a Product delivers. */
@@ -97,29 +96,30 @@ export const WasteFraction = z.object({
 })
 export type WasteFraction = z.infer<typeof WasteFraction>
 
-export const WasteFractionCreate = z.strictObject({
-  key: FractionKey,
-  name: Label,
-  wasteCode: WasteCode.nullable().optional(),
-  treatment: WasteTreatment.nullable().optional(),
-  densityKgPerCubicMetre: Density.nullable().optional(),
-  /** Hazardous waste; left out, hazardous exactly where the waste code is starred. */
-  hazardous: z.boolean().optional(),
-}).refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
-export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
-
-/** The name, the waste code, the treatment, the density and the hazardous flag: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code, the treatment or the density. */
-export const WasteFractionPatch = z
-  .strictObject({
-    name: Label.optional(),
+/**
+ * The key is the slug the rest of the system quotes, set once: a fraction
+ * that needs another one is another fraction. A patch's null clears the code,
+ * the treatment or the density. The hazardous flag left out of a create is
+ * hazardous exactly where the waste code is starred; left out of a patch, a
+ * starred code the patch sets makes the fraction hazardous and anything else
+ * leaves the flag as it is.
+ */
+const wasteFractionBodies = resourceBodies(
+  {
+    key: FractionKey,
+    name: Label,
     wasteCode: WasteCode.nullable().optional(),
     treatment: WasteTreatment.nullable().optional(),
     densityKgPerCubicMetre: Density.nullable().optional(),
-    /** Hazardous waste; left out, a starred code the patch sets makes the fraction hazardous and anything else leaves the flag as it is. */
     hazardous: z.boolean().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
+  },
+  { createOnly: { key: true } },
+)
+
+export const WasteFractionCreate = wasteFractionBodies.create.refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
+export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
+
+export const WasteFractionPatch = wasteFractionBodies.patch.refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
 export type WasteFractionPatch = z.infer<typeof WasteFractionPatch>
 
 export const ContainerType = z.object({
@@ -132,20 +132,16 @@ export const ContainerType = z.object({
 })
 export type ContainerType = z.infer<typeof ContainerType>
 
-export const ContainerTypeCreate = z.strictObject({
+const containerTypeBodies = resourceBodies({
   name: Label,
   volumeLitres: Count.nullable().optional(),
   serviceSeconds: ServiceSeconds.nullable().optional(),
 })
+
+export const ContainerTypeCreate = containerTypeBodies.create
 export type ContainerTypeCreate = z.infer<typeof ContainerTypeCreate>
 
-export const ContainerTypePatch = z
-  .strictObject({
-    name: Label.optional(),
-    volumeLitres: Count.nullable().optional(),
-    serviceSeconds: ServiceSeconds.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ContainerTypePatch = containerTypeBodies.patch
 export type ContainerTypePatch = z.infer<typeof ContainerTypePatch>
 
 /** A create body says on demand by leaving the rate out, so an absent field reads as the null the row will hold. */
@@ -174,28 +170,22 @@ export const ServiceFrequency = z
   .refine(serviceFrequencyShape, oneCadence)
 export type ServiceFrequency = z.infer<typeof ServiceFrequency>
 
-export const ServiceFrequencyCreate = z
-  .strictObject({
+const serviceFrequencyBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
     description: Paragraph.nullable().optional(),
     collectionsPerWeek: Count.nullable().optional(),
     weeksBetween: Count.nullable().optional(),
     daysBetween: Count.nullable().optional(),
-  })
-  .refine((body) => serviceFrequencyShape(asStored(body)), oneCadence)
+  },
+  { createOnly: { projectId: true } },
+)
+
+export const ServiceFrequencyCreate = serviceFrequencyBodies.create.refine((body) => serviceFrequencyShape(asStored(body)), oneCadence)
 export type ServiceFrequencyCreate = z.infer<typeof ServiceFrequencyCreate>
 
-export const ServiceFrequencyPatch = z
-  .strictObject({
-    name: Label.optional(),
-    description: Paragraph.nullable().optional(),
-    collectionsPerWeek: Count.nullable().optional(),
-    weeksBetween: Count.nullable().optional(),
-    daysBetween: Count.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(serviceFrequencyShape, oneCadence)
+export const ServiceFrequencyPatch = serviceFrequencyBodies.patch.refine(serviceFrequencyShape, oneCadence)
 export type ServiceFrequencyPatch = z.infer<typeof ServiceFrequencyPatch>
 
 /** A VAT rate in whole percent (Issue #112, @waste/domain/registry/catalogue). */
@@ -228,36 +218,27 @@ export const Product = z.object({
 })
 export type Product = z.infer<typeof Product>
 
-export const ProductCreate = z.strictObject({
-  projectId: Id,
-  name: Label,
-  kind: ProductKind,
-  status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is written before it is offered, and only an active one can be subscribed to."),
-  unit: ProductUnit,
-  containerTypeId: Id.nullable().optional(),
-  wasteFractionId: Id.nullable().optional(),
-  serviceFrequencyId: Id.nullable().optional(),
-  invoiceName: Label.nullable().optional(),
-  invoiceCode: Label.nullable().optional(),
-  vatPercent: VatPercent.nullable().optional(),
-  freeDays: FreeDays.nullable().optional(),
-}).refine((body) => body.freeDays == null || body.unit === HIRE_UNIT, { message: FREE_DAYS_ARE_A_HIRES, path: ["freeDays"] })
-export type ProductCreate = z.infer<typeof ProductCreate>
-
-export const ProductPatch = z
-  .strictObject({
-    name: Label.optional(),
-    kind: ProductKind.optional(),
-    status: ProductStatus.optional(),
-    unit: ProductUnit.optional(),
+/** A patch's null clears the free days; a product with free days keeps the day, which the route judges against the stored unit. */
+const productBodies = resourceBodies(
+  {
+    projectId: Id,
+    name: Label,
+    kind: ProductKind,
+    status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is written before it is offered, and only an active one can be subscribed to."),
+    unit: ProductUnit,
     containerTypeId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),
     serviceFrequencyId: Id.nullable().optional(),
     invoiceName: Label.nullable().optional(),
     invoiceCode: Label.nullable().optional(),
     vatPercent: VatPercent.nullable().optional(),
-    /** Null clears them; a product with free days keeps the day, which the route judges against the stored unit. */
     freeDays: FreeDays.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+  },
+  { createOnly: { projectId: true } },
+)
+
+export const ProductCreate = productBodies.create.refine((body) => body.freeDays == null || body.unit === HIRE_UNIT, { message: FREE_DAYS_ARE_A_HIRES, path: ["freeDays"] })
+export type ProductCreate = z.infer<typeof ProductCreate>
+
+export const ProductPatch = productBodies.patch
 export type ProductPatch = z.infer<typeof ProductPatch>

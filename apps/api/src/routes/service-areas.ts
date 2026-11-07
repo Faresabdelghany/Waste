@@ -79,12 +79,11 @@ import {
   ServiceAreaWasteFractionsSet,
 } from "@waste/contracts/service-areas"
 import type { Tx } from "@waste/db/client"
-import { validOn } from "@waste/db/query/valid-on"
+import { validOn, validOver } from "@waste/db/query/valid-on"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { and, asc, eq, exists, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
-import type { PgColumn } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
@@ -296,10 +295,6 @@ async function assignmentsFor(tx: Tx, principal: Principal, areaId: string): Pro
   return rows.map(assignmentOf)
 }
 
-/** An area's period as a `daterange`, half-open like the exclusion constraints', against a period given as two days. */
-const overlapping = (columns: { validFrom: PgColumn; validTo: PgColumn }, period: Period): SQL =>
-  sql`daterange(${columns.validFrom}, ${columns.validTo}, '[)') && daterange(${period.validFrom}::date, ${period.validTo}::date, '[)')`
-
 /**
  * The one-award rule: none of `planningAreaIds` is in another area of the
  * project over a period overlapping this one. The planning areas named are
@@ -327,7 +322,7 @@ async function requireAwardedOnce(tx: Tx, area: { companyId: string; projectId: 
         eq(serviceArea.projectId, area.projectId),
         area.id === null ? undefined : ne(serviceArea.id, area.id),
         inArray(serviceAreaPlanningArea.planningAreaId, [...planningAreaIds]),
-        overlapping(serviceArea, period),
+        validOver(serviceArea, period),
       ),
     )
     .orderBy(asc(serviceArea.id))

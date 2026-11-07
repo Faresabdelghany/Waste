@@ -10,6 +10,7 @@ import * as z from "zod"
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
+import { QueryFlag } from "./query-strings"
 import { stamped } from "./resource"
 import { Label } from "./text"
 
@@ -40,6 +41,6 @@ export const SessionListQuery = ProjectScopedListQuery.extend({
   routeId: Id.optional(),
   driverId: Id.optional(),
   /** `true` for the sessions still running, `false` for the ended ones; absent is both. */
-  open: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  open: QueryFlag.optional(),
 })
 export type SessionListQuery = z.infer<typeof SessionListQuery>

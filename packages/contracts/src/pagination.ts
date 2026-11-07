@@ -4,7 +4,7 @@
 import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX } from "@waste/domain/requests"
 import * as z from "zod"
 
-import { QueryWhole } from "./query-numbers"
+import { QueryWhole } from "./query-strings"
 
 /** Present or absent, never empty: absent means the first page. */
 const Cursor = z.string().min(1)

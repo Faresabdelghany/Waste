@@ -62,18 +62,18 @@ import {
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
 import { AN_ADDRESS, EACH_GROUP_MEMBER_ONCE, EACH_PARTY_ONCE, EACH_POINT_MEMBER_ONCE, ONE_ADDRESS, REACHABLE_ON_A_CHANNEL, reachable } from "@waste/domain/registry/customers"
-import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { eachOnce, SET_MAX } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { AddressId, AddressParts } from "./addresses"
-import { IsoDate } from "./dates"
 import { PaymentTermsDays } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
+import { effectiveDated } from "./validity"
 
 /** A person or an organisation. */
 export const CustomerKind = z.enum(CUSTOMER_KINDS)
@@ -155,7 +155,8 @@ export const Customer = z.object({
 })
 export type Customer = z.infer<typeof Customer>
 
-export const CustomerCreate = z.strictObject({
+/** A patch's null payment terms give the project's back. */
+const customerBodies = resourceBodies({
   kind: CustomerKind,
   name: Label,
   registrationNumber: Label.nullable().optional(),
@@ -169,22 +170,11 @@ export const CustomerCreate = z.strictObject({
   status: CustomerStatus.default("active").describe("Defaults to active when absent: a customer is registered in order to be served."),
   paymentTermsDays: PaymentTermsDays.nullable().optional().describe("Null or absent keeps its projects' terms."),
 })
+
+export const CustomerCreate = customerBodies.create
 export type CustomerCreate = z.infer<typeof CustomerCreate>
 
-export const CustomerPatch = z
-  .strictObject({
-    kind: CustomerKind.optional(),
-    name: Label.optional(),
-    registrationNumber: Label.nullable().optional(),
-    email: z.email().nullable().optional(),
-    phone: Label.nullable().optional(),
-    billingAddress: Paragraph.nullable().optional(),
-    serviceMessagesAllowed: z.boolean().optional(),
-    status: CustomerStatus.optional(),
-    /** Null gives the project's terms back. */
-    paymentTermsDays: PaymentTermsDays.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const CustomerPatch = customerBodies.patch
 export type CustomerPatch = z.infer<typeof CustomerPatch>
 
 /** What a Contact Person does for the organisation they speak for (#291 C14). */
@@ -215,27 +205,19 @@ export const CustomerContact = z.object({
 })
 export type CustomerContact = z.infer<typeof CustomerContact>
 
-export const CustomerContactCreate = z
-  .strictObject({
-    name: Label,
-    role: ContactRole,
-    email: z.email().nullable().optional(),
-    phone: Label.nullable().optional(),
-    status: ContactStatus.default("active").describe("Defaults to active when absent: a contact is registered in order to be reached."),
-  })
-  .refine(reachable, { message: REACHABLE_ON_A_CHANNEL, path: ["email"] })
+/** A patch's null clears a channel, and the route refuses a patch that would leave the contact with neither. */
+const customerContactBodies = resourceBodies({
+  name: Label,
+  role: ContactRole,
+  email: z.email().nullable().optional(),
+  phone: Label.nullable().optional(),
+  status: ContactStatus.default("active").describe("Defaults to active when absent: a contact is registered in order to be reached."),
+})
+
+export const CustomerContactCreate = customerContactBodies.create.refine(reachable, { message: REACHABLE_ON_A_CHANNEL, path: ["email"] })
 export type CustomerContactCreate = z.infer<typeof CustomerContactCreate>
 
-/** Every field optional; a null clears a channel, and the route refuses a patch that would leave the contact with neither. */
-export const CustomerContactPatch = z
-  .strictObject({
-    name: Label.optional(),
-    role: ContactRole.optional(),
-    email: z.email().nullable().optional(),
-    phone: Label.nullable().optional(),
-    status: ContactStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const CustomerContactPatch = customerContactBodies.patch
 export type CustomerContactPatch = z.infer<typeof CustomerContactPatch>
 
 /** A customer's contacts, every one: an organisation has a handful, never a page's worth. */
@@ -250,10 +232,7 @@ export const PropertyParty = z.strictObject({
 export type PropertyParty = z.infer<typeof PropertyParty>
 
 /** A party as the property reads it (#374): what the customer is to it, from its first day until the first day out, null while it runs. */
-export const PropertyPartyHeld = PropertyParty.extend({
-  validFrom: IsoDate,
-  validTo: IsoDate.nullable(),
-})
+export const PropertyPartyHeld = effectiveDated(PropertyParty)
 export type PropertyPartyHeld = z.infer<typeof PropertyPartyHeld>
 
 const Parties = z.array(PropertyParty)
@@ -293,13 +272,23 @@ export type Property = z.infer<typeof Property>
 const oneAddress = { message: ONE_ADDRESS, path: ["addressId"] }
 const typedOrFound = (body: { address?: string; addressId?: string | null }) => !(body.address !== undefined && body.addressId != null)
 
-export const PropertyCreate = z
-  .strictObject({
+/**
+ * A create gives the address typed, or leaves it out and names `addressId`
+ * (`GET /addresses`): the address, its parts, and the BFE number and point
+ * the body does not set are read from the register. A patch's typed address
+ * lets the register's id and parts go with the text they no longer spell; its
+ * `addressId` reads the address and its parts from the register, the BFE
+ * number and point too where the body sets neither, and its null lets the
+ * register's id and parts go and keeps the text. The service window is
+ * written whole, a null clearing it to any time of the day. The parties are a
+ * set and are replaced whole through their own route, so a patch does not
+ * take them; the project is not a property's to change.
+ */
+const propertyBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
-    /** Typed; or leave it out and name `addressId`, and the register's designation is stored. */
     address: Paragraph.optional(),
-    /** The address register's id (`GET /addresses`): the address, its parts, and the BFE number and point the body does not set, read from the register. */
     addressId: AddressId.optional(),
     registryId: Label.nullable().optional(),
     kind: PropertyKind,
@@ -309,31 +298,17 @@ export const PropertyCreate = z
     serviceWindow: TimeWindow.nullable().optional(),
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
-  })
+  },
+  { createOnly: { projectId: true, parties: true }, patch: { addressId: AddressId.nullable().optional() } },
+)
+
+export const PropertyCreate = propertyBodies.create
   .refine(typedOrFound, oneAddress)
   .refine((body) => body.address !== undefined || body.addressId !== undefined, { message: AN_ADDRESS, path: ["address"] })
   .refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyCreate = z.infer<typeof PropertyCreate>
 
-/** The parties are a set and are replaced whole, so they are not here; the project is not a property's to change. */
-export const PropertyPatch = z
-  .strictObject({
-    name: Label.optional(),
-    /** Typed: the register's id and parts go with the text they no longer spell. */
-    address: Paragraph.optional(),
-    /** The address register's id: the address and its parts read from the register, the BFE number and point too where the body sets neither; null lets the register's id and parts go and keeps the text. */
-    addressId: AddressId.nullable().optional(),
-    registryId: Label.nullable().optional(),
-    kind: PropertyKind.optional(),
-    location: FlatPoint.nullable().optional(),
-    notes: Paragraph.nullable().optional(),
-    driverInstructions: Paragraph.nullable().optional(),
-    /** Written whole; null clears it to any time of the day. */
-    serviceWindow: TimeWindow.nullable().optional(),
-    status: PropertyStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(typedOrFound, oneAddress)
+export const PropertyPatch = propertyBodies.patch.refine(typedOrFound, oneAddress)
 export type PropertyPatch = z.infer<typeof PropertyPatch>
 
 /** The whole list in force today, replacing what the property has today: a party left out ends today, one added begins today (#374). An empty list is a property nobody is billed for. */
@@ -371,26 +346,23 @@ export const PropertyGroup = z.object({
 })
 export type PropertyGroup = z.infer<typeof PropertyGroup>
 
-export const PropertyGroupCreate = z
-  .strictObject({
+/** The members are a set, replaced whole through their own route. */
+const propertyGroupBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
     purpose: PropertyGroupPurpose,
     responsibleCustomerId: Id.nullable().optional(),
     status: PropertyGroupStatus.default("draft").describe("Defaults to draft when absent: a group is gathered before it is used."),
     members: GroupMembersBody.default([]).describe("The properties the group starts with; none when absent."),
-  })
-  .refine((body) => noRepeatedGroupMember(body.members), groupMembersNamedOnce)
+  },
+  { createOnly: { projectId: true, members: true } },
+)
+
+export const PropertyGroupCreate = propertyGroupBodies.create.refine((body) => noRepeatedGroupMember(body.members), groupMembersNamedOnce)
 export type PropertyGroupCreate = z.infer<typeof PropertyGroupCreate>
 
-export const PropertyGroupPatch = z
-  .strictObject({
-    name: Label.optional(),
-    purpose: PropertyGroupPurpose.optional(),
-    responsibleCustomerId: Id.nullable().optional(),
-    status: PropertyGroupStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const PropertyGroupPatch = propertyGroupBodies.patch
 export type PropertyGroupPatch = z.infer<typeof PropertyGroupPatch>
 
 /** The whole membership, replacing what the group had. */
@@ -436,8 +408,9 @@ export const SharedCollectionPoint = z.object({
 })
 export type SharedCollectionPoint = z.infer<typeof SharedCollectionPoint>
 
-export const SharedCollectionPointCreate = z
-  .strictObject({
+/** The members are a set, replaced whole through their own route. */
+const sharedCollectionPointBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
     kind: SharedCollectionPointKind,
@@ -453,27 +426,14 @@ export const SharedCollectionPointCreate = z
     responsibleCustomerId: Id.nullable().optional(),
     status: SharedCollectionPointStatus.default("draft").describe("Defaults to draft when absent: a point is planned before it takes waste."),
     members: PointMembersBody.default([]).describe("The properties the point starts with; none when absent."),
-  })
-  .refine((body) => noRepeatedPointMember(body.members), pointMembersNamedOnce)
+  },
+  { createOnly: { projectId: true, members: true } },
+)
+
+export const SharedCollectionPointCreate = sharedCollectionPointBodies.create.refine((body) => noRepeatedPointMember(body.members), pointMembersNamedOnce)
 export type SharedCollectionPointCreate = z.infer<typeof SharedCollectionPointCreate>
 
-export const SharedCollectionPointPatch = z
-  .strictObject({
-    name: Label.optional(),
-    kind: SharedCollectionPointKind.optional(),
-    address: Paragraph.optional(),
-    location: FlatPoint.optional(),
-    eligibilityDistanceM: Metres.nullable().optional(),
-    operatingModel: SharedCollectionPointOperatingModel.optional(),
-    accessMode: SharedCollectionPointAccessMode.optional(),
-    accessConditions: Paragraph.nullable().optional(),
-    availability: Label.nullable().optional(),
-    driverInstructions: Paragraph.nullable().optional(),
-    billingMode: SharedCollectionPointBillingMode.optional(),
-    responsibleCustomerId: Id.nullable().optional(),
-    status: SharedCollectionPointStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const SharedCollectionPointPatch = sharedCollectionPointBodies.patch
 export type SharedCollectionPointPatch = z.infer<typeof SharedCollectionPointPatch>
 
 /** The whole membership, replacing what the point had. */

@@ -1594,8 +1594,8 @@ describe("GET /openapi.json", () => {
       assert.match(document.paths[path].post.description ?? "", /`validTo` the first day back/, path)
     }
     const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
-    assert.deepEqual(required("/driver-absences"), ["driverId", "validFrom", "reason"])
-    assert.deepEqual(required("/vehicle-unavailability"), ["vehicleId", "validFrom", "reason"])
+    assert.deepEqual(required("/driver-absences"), ["driverId", "reason", "validFrom"])
+    assert.deepEqual(required("/vehicle-unavailability"), ["vehicleId", "reason", "validFrom"])
 
     // The commands that name a crew afresh say they refuse one away, in the prose a client reads.
     assert.match(document.paths["/routes"].post.description ?? "", /a vehicle out of use or a driver absent on the operating date \(O6 of #290\)/)

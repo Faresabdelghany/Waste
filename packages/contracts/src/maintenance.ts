@@ -9,7 +9,6 @@
 // API holds over the merged row. Completing an order of a plan is the service
 // done: its day and readings become the plan's baseline. A plan is retired,
 // never deleted, since its orders name it.
-import { changesSomething } from "@waste/domain/requests"
 import { MAINTENANCE_DUE_STATES, MAINTENANCE_INTERVAL_MAX, NAME_THE_ORDER, planIssue } from "@waste/domain/resources/maintenance"
 import { MAINTENANCE_ORDER_STATUSES, MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
@@ -17,7 +16,7 @@ import * as z from "zod"
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const MaintenancePlanStatus = z.enum(MAINTENANCE_PLAN_STATUSES)
@@ -67,8 +66,9 @@ const holdsTheRule = (body: { intervalDays?: number | null; intervalKm?: number 
   if (issue !== undefined) context.addIssue({ code: "custom", message: issue.message, path: [issue.path] })
 }
 
-export const MaintenancePlanCreate = z
-  .strictObject({
+/** A patch takes the name, the intervals and the baseline, each nullable but the name and the day, and the status; the API holds the merged row to the rule. */
+const maintenancePlanBodies = resourceBodies(
+  {
     vehicleId: Id,
     name: Label,
     intervalDays: IntervalDays.optional(),
@@ -77,23 +77,24 @@ export const MaintenancePlanCreate = z
     lastDoneOn: IsoDate.describe("The day the service was last done; the date interval counts from it."),
     lastDoneKm: NonNegativeInt.optional().describe("The odometer then, in whole kilometres; required with a distance interval."),
     lastDoneHours: NonNegativeInt.optional().describe("The engine hours then; required with an hours interval."),
-  })
-  .superRefine(holdsTheRule)
+  },
+  {
+    createOnly: { vehicleId: true },
+    patch: {
+      intervalDays: IntervalDays.nullable().optional(),
+      intervalKm: IntervalKm.nullable().optional(),
+      intervalHours: IntervalHours.nullable().optional(),
+      lastDoneKm: NonNegativeInt.nullable().optional(),
+      lastDoneHours: NonNegativeInt.nullable().optional(),
+      status: MaintenancePlanStatus.optional(),
+    },
+  },
+)
+
+export const MaintenancePlanCreate = maintenancePlanBodies.create.superRefine(holdsTheRule)
 export type MaintenancePlanCreate = z.infer<typeof MaintenancePlanCreate>
 
-/** The name, the intervals and the baseline, each nullable but the name and the day, and the status; the API holds the merged row to the rule. */
-export const MaintenancePlanPatch = z
-  .strictObject({
-    name: Label.optional(),
-    intervalDays: IntervalDays.nullable().optional(),
-    intervalKm: IntervalKm.nullable().optional(),
-    intervalHours: IntervalHours.nullable().optional(),
-    lastDoneOn: IsoDate.optional(),
-    lastDoneKm: NonNegativeInt.nullable().optional(),
-    lastDoneHours: NonNegativeInt.nullable().optional(),
-    status: MaintenancePlanStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const MaintenancePlanPatch = maintenancePlanBodies.patch
 export type MaintenancePlanPatch = z.infer<typeof MaintenancePlanPatch>
 
 export const MaintenancePlanListQuery = ProjectScopedListQuery.extend({ vehicleId: Id.optional(), status: MaintenancePlanStatus.optional() })

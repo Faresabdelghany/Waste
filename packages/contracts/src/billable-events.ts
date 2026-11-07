@@ -24,7 +24,6 @@
 // the office picked; `cancel` stamps a ready or blocked event with the
 // caller, the clock and a reason — the office's three, never the consumer's
 // `pickup-corrected`. The consumer's two doors are the worker's.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { OVERRIDE_WITH_A_REASON, overrideWithAReason } from "@waste/domain/finance/billable-events"
 import { OFFICE_CANCEL_REASONS } from "@waste/domain/finance/vocabulary"
 import * as z from "zod"
@@ -33,7 +32,7 @@ import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { BillableEventKind, BillableEventStatus, BlockReason, CancelReason } from "./finance"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeMinor, PositiveInt, stamped } from "./resource"
 import { Paragraph } from "./text"
 
@@ -160,20 +159,18 @@ export const BillableEventCancel = z.strictObject({
 export type BillableEventCancel = z.infer<typeof BillableEventCancel>
 
 /** A page of events: one project's, by status, kind or block reason, under one agreement, for one payer, of one product, about one route, pickup or ticket, over a window of service dates. */
-export const BillableEventListQuery = ProjectScopedListQuery.extend({
-  status: BillableEventStatus.optional(),
-  kind: BillableEventKind.optional(),
-  blockReason: BlockReason.optional(),
-  agreementId: Id.optional(),
-  /** The payer, through the agreement. */
-  customerId: Id.optional(),
-  productId: Id.optional(),
-  routeId: Id.optional(),
-  pickupId: Id.optional(),
-  ticketId: Id.optional(),
-  /** The first day of the window over `serviceDate`, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const BillableEventListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    status: BillableEventStatus.optional(),
+    kind: BillableEventKind.optional(),
+    blockReason: BlockReason.optional(),
+    agreementId: Id.optional(),
+    /** The payer, through the agreement. */
+    customerId: Id.optional(),
+    productId: Id.optional(),
+    routeId: Id.optional(),
+    pickupId: Id.optional(),
+    ticketId: Id.optional(),
+  }),
+)
 export type BillableEventListQuery = z.infer<typeof BillableEventListQuery>

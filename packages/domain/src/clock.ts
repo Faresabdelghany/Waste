@@ -23,6 +23,9 @@
 /** What a window of instants whose end comes before its start is told. */
 export const OCCURRED_WINDOW_ORDERED = "to is the end of the window, so it comes on or after from"
 
+/** Whether a window of instants, both ends in, runs forward: its end on or after its start. A half-given window is not judged. */
+export const instantWindowOrdered = (window: { from?: string; to?: string }): boolean => window.from === undefined || window.to === undefined || Date.parse(window.to) >= Date.parse(window.from)
+
 /** A wall clock's reading, every part a whole number. */
 export type WallClock = { year: number; month: number; day: number; hour: number; minute: number; second: number }
 

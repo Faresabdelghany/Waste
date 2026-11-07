@@ -65,8 +65,7 @@
 // clearing them; a body's seasons are held to one name each and to no day
 // shared, which a list always shows whole, and a daily scheme carries none,
 // a pair a patch may see half of and the route holds against the stored row.
-import { DAY_WINDOW_ORDERED, dayWindowOrdered, ISO_WEEKS_MAX } from "@waste/domain/days"
-import { validityOrdered } from "@waste/domain/periods"
+import { ISO_WEEKS_MAX } from "@waste/domain/days"
 import { PLAN_AHEAD_DAYS_BOUND, PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
 import {
   AT_MOST_GROUPS,
@@ -82,26 +81,27 @@ import {
   EACH_GROUP_NAME_ONCE,
   EACH_GROUP_ONCE,
   GROUPS_MAX,
+  OCCURRENCE_WINDOW_MAX_DAYS,
   ONE_WAY_TO_FIND_STOPS,
   OUTSIDE_SERVICE_DAYS,
   WEEK_ROTATION_WITH_FORTNIGHTLY,
   weekRotationShape,
   WINDOW_AT_MOST_A_YEAR,
-  windowAtMostAYear,
   withinServiceDays,
 } from "@waste/domain/planning/schemes"
 import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/planning/seasons"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
 import { Id } from "./ids"
 import { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, SeasonFrequency, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
-import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { requiredDayWindow, ProjectScopedListQuery } from "./queries"
+import { QueryFlag } from "./query-strings"
+import { NonNegativeInt, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** An order among siblings: whole and positive, since the first is number one, and no larger than `collection_group.position` holds — `PositiveInt`'s own bound, so a larger one is refused at its field rather than failing the write (22003). */
 const Ordinal = PositiveInt
@@ -191,8 +191,15 @@ const collectionGroupBody = {
   driverId: Id.nullable().optional(),
 }
 
-/** The scheme is the path's and the project the scheme's, so neither is here; the position is appended when absent. */
-export const CollectionGroupCreate = z.strictObject(collectionGroupBody).refine(oneWayToFindStopsGiven, oneWayToFindStops)
+/**
+ * The scheme is the path's and the project the scheme's, so neither is here;
+ * the position is appended when absent. A patch moves the name, the order,
+ * the days, the provider, the vehicle and the driver; the source, the rule
+ * and the list never move through one.
+ */
+const collectionGroupBodies = resourceBodies(collectionGroupBody, { createOnly: { stopSource: true, rule: true, containerIds: true } })
+
+export const CollectionGroupCreate = collectionGroupBodies.create.refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
 
 /**
@@ -210,17 +217,7 @@ export const CollectionGroupEntry = z
   .refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupEntry = z.infer<typeof CollectionGroupEntry>
 
-/** The name, the order, the days, the provider, the vehicle and the driver; the source, the rule and the list never move through a patch. */
-export const CollectionGroupPatch = z
-  .strictObject({
-    name: Label.optional(),
-    position: Ordinal.optional(),
-    days: ServiceDays.optional(),
-    serviceProviderId: Id.nullable().optional(),
-    vehicleId: Id.nullable().optional(),
-    driverId: Id.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const CollectionGroupPatch = collectionGroupBodies.patch
 export type CollectionGroupPatch = z.infer<typeof CollectionGroupPatch>
 
 const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, path: ["weekRotation"] }
@@ -319,55 +316,72 @@ const groupsWithinServiceDays = (body: { serviceDays?: unknown; collectionGroups
 /** How many days from tomorrow the nightly job keeps a scheme planned (O21 of #290): a whole number in 1..28. */
 export const PlanAheadDays = PositiveInt.max(PLAN_AHEAD_DAYS_MAX, PLAN_AHEAD_DAYS_BOUND)
 
-const RouteSchemeFields = {
-  ...stamped,
-  projectId: Id,
-  /** Unique among the schemes of the project in force at one time, which the database holds. */
-  name: Label,
-  /** Null while a draft has none; a validated scheme with a rule group needs one (the route's rule). */
-  planningAreaId: Id.nullable(),
-  serviceType: ServiceType,
-  frequency: RecurrenceFrequency,
-  /** The weekdays the scheme serves, one or more, each once. */
-  serviceDays: ServiceDays.min(1),
-  /** Which ISO-week parity an every-2-weeks scheme serves; null for every other cadence. */
-  weekRotation: WeekRotation.nullable(),
-  /** A time on the project's clock; carried, not used in the date math. */
-  plannedStartTime: IsoTime.nullable(),
-  holidayPolicy: HolidayPolicy,
-  /** How a later edit of the running scheme applies (#38): ask each time, apply to future collections, or this collection only. */
-  editPolicy: SchemeEditPolicy,
-  /** Whether the nightly job keeps the coming days planned. */
-  planAhead: z.boolean(),
-  /** How many days from tomorrow it keeps planned (O21 of #290). */
-  planAheadDays: PlanAheadDays,
-  status: RouteSchemeStatus,
-  /** When the office archived the scheme (O21 of #290), null while it plans: an archived scheme is never planned or edited again, and nothing it made is erased. */
-  archivedAt: IsoDateTime.nullable(),
-  /** Where the routes depart from, a depot of the project; null while unsaid. */
-  depotId: Id.nullable(),
-  /** Where the routes empty, a station of the company; null while unsaid. */
-  unloadingStationId: Id.nullable(),
-  /** The seasons, by the day they start (O17 of #290); empty for a scheme at one cadence all year. */
-  seasons: z.array(SchemeSeason),
-  /** By position. */
-  collectionGroups: z.array(CollectionGroup),
-  /** A reading of the runs, never written: see the header. */
-  generation: SchemeGeneration,
-  /**
-   * Non-blocking caveats, read on every read and never written (O22 of #290):
-   * the containers the scheme collects whose promised service frequency its
-   * cadence under- or over-serves. A write that leaves one still succeeds.
-   */
-  warnings: z.array(z.string()),
-  ...Validity.shape,
-}
-
-export const RouteScheme = z.object(RouteSchemeFields).refine(validityOrdered, endsAfterItStarts).refine(weekRotationShape, weekRotationWithFortnightly)
+export const RouteScheme = effectiveDated(
+  z.object({
+    ...stamped,
+    projectId: Id,
+    /** Unique among the schemes of the project in force at one time, which the database holds. */
+    name: Label,
+    /** Null while a draft has none; a validated scheme with a rule group needs one (the route's rule). */
+    planningAreaId: Id.nullable(),
+    serviceType: ServiceType,
+    frequency: RecurrenceFrequency,
+    /** The weekdays the scheme serves, one or more, each once. */
+    serviceDays: ServiceDays.min(1),
+    /** Which ISO-week parity an every-2-weeks scheme serves; null for every other cadence. */
+    weekRotation: WeekRotation.nullable(),
+    /** A time on the project's clock; carried, not used in the date math. */
+    plannedStartTime: IsoTime.nullable(),
+    holidayPolicy: HolidayPolicy,
+    /** How a later edit of the running scheme applies (#38): ask each time, apply to future collections, or this collection only. */
+    editPolicy: SchemeEditPolicy,
+    /** Whether the nightly job keeps the coming days planned. */
+    planAhead: z.boolean(),
+    /** How many days from tomorrow it keeps planned (O21 of #290). */
+    planAheadDays: PlanAheadDays,
+    status: RouteSchemeStatus,
+    /** When the office archived the scheme (O21 of #290), null while it plans: an archived scheme is never planned or edited again, and nothing it made is erased. */
+    archivedAt: IsoDateTime.nullable(),
+    /** Where the routes depart from, a depot of the project; null while unsaid. */
+    depotId: Id.nullable(),
+    /** Where the routes empty, a station of the company; null while unsaid. */
+    unloadingStationId: Id.nullable(),
+    /** The seasons, by the day they start (O17 of #290); empty for a scheme at one cadence all year. */
+    seasons: z.array(SchemeSeason),
+    /** By position. */
+    collectionGroups: z.array(CollectionGroup),
+    /** A reading of the runs, never written: see the header. */
+    generation: SchemeGeneration,
+    /**
+     * Non-blocking caveats, read on every read and never written (O22 of #290):
+     * the containers the scheme collects whose promised service frequency its
+     * cadence under- or over-serves. A write that leaves one still succeeds.
+     */
+    warnings: z.array(z.string()),
+  }),
+).refine(weekRotationShape, weekRotationWithFortnightly)
 export type RouteScheme = z.infer<typeof RouteScheme>
 
-export const RouteSchemeCreate = z
-  .strictObject({
+/**
+ * A create names a depot of the project and an unloading station of the
+ * company (Issue #101), and at least one group: a scheme without explicit
+ * groups has one implicit group, which the server writes as a row; at most
+ * `GROUPS_MAX`.
+ *
+ * A patch takes everything but the project; a null depot or station clears
+ * it, and a null end reopens the period. The two recurrence rules are held
+ * here where the patch carries both halves; the route holds them against the
+ * stored row otherwise, and holds every group's days within new service
+ * days. `collectionGroups` (#205) is the scheme's groups whole, so an edit
+ * that moves the scheme and its groups together is one request: an entry
+ * with an id restates that group, one without adds a group, and a group the
+ * list leaves out is parked, since there is no delete; absent, the groups
+ * stay as they are. Its bounds are the create's, each group once by name and
+ * by id. The seasons (O17 of #290) are replaced whole, `[]` clearing them and
+ * absent leaving them as they are.
+ */
+const routeSchemeBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     name: Label,
     planningAreaId: Id.nullable().optional(),
@@ -381,16 +395,15 @@ export const RouteSchemeCreate = z
     planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming days planned."),
     planAheadDays: PlanAheadDays.default(PLAN_AHEAD_DAYS_DEFAULT).describe(`Defaults to ${PLAN_AHEAD_DAYS_DEFAULT} when absent: the nightly job plans tomorrow through a week ahead.`),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
-    /** A depot of the project (Issue #101). */
     depotId: Id.nullable().optional(),
-    /** An unloading station of the company (Issue #101). */
     unloadingStationId: Id.nullable().optional(),
-    /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. At most `GROUPS_MAX`. */
     collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
     seasons: SchemeSeasons.default([]).describe("Defaults to none when absent: the scheme runs at its own cadence all year."),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { createOnly: { projectId: true }, patch: { collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional() } },
+)
+
+export const RouteSchemeCreate = routeSchemeBodies.create
   .refine((body) => weekRotationShape({ ...body, weekRotation: body.weekRotation ?? null }), weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
   .refine(dailyHasNoSeasons, dailyHasNoSeasonsIssue)
@@ -398,44 +411,7 @@ export const RouteSchemeCreate = z
   .superRefine(groupsWithinServiceDays)
 export type RouteSchemeCreate = z.infer<typeof RouteSchemeCreate>
 
-/**
- * Everything but the project and the stamps. The two recurrence rules are
- * held here where the patch carries both halves; the route holds them
- * against the stored row otherwise, and holds every group's days within new
- * service days. `collectionGroups` (#205) is the scheme's groups whole, so an
- * edit that moves the scheme and its groups together is one request: an
- * entry with an id restates that group, one without adds a group, and a
- * group the list leaves out is parked, since there is no delete. Its bounds
- * are the create's, each group once by name and by id.
- */
-export const RouteSchemePatch = z
-  .strictObject({
-    name: Label.optional(),
-    planningAreaId: Id.nullable().optional(),
-    serviceType: ServiceType.optional(),
-    frequency: RecurrenceFrequency.optional(),
-    serviceDays: ServiceDays.min(1).optional(),
-    weekRotation: WeekRotation.nullable().optional(),
-    plannedStartTime: IsoTime.nullable().optional(),
-    holidayPolicy: HolidayPolicy.optional(),
-    editPolicy: SchemeEditPolicy.optional(),
-    planAhead: z.boolean().optional(),
-    planAheadDays: PlanAheadDays.optional(),
-    status: RouteSchemeStatus.optional(),
-    /** A depot of the project; null clears it. */
-    depotId: Id.nullable().optional(),
-    /** An unloading station of the company; null clears it. */
-    unloadingStationId: Id.nullable().optional(),
-    validFrom: IsoDate.optional(),
-    /** Null reopens the period; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-    /** The scheme's groups as the edit leaves them (#205); absent, the groups stay as they are. */
-    collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional(),
-    /** The scheme's seasons whole (O17 of #290); `[]` clears them, absent leaves them as they are. */
-    seasons: SchemeSeasons.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const RouteSchemePatch = routeSchemeBodies.patch
   .refine(weekRotationShape, weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
   .refine(dailyHasNoSeasons, dailyHasNoSeasonsIssue)
@@ -449,11 +425,11 @@ export const RouteSchemeListQuery = ProjectScopedListQuery.extend({
   planningAreaId: Id.optional(),
   status: RouteSchemeStatus.optional(),
   /** A query string spells a boolean as `true` or `false`, exactly. */
-  planAhead: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  planAhead: QueryFlag.optional(),
   /** The day the period is read against; absent asks for every scheme, whenever it ran. */
   validOn: IsoDate.optional(),
   /** `true` the archived schemes alone, `false` the ones still planning; absent both. */
-  archived: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  archived: QueryFlag.optional(),
 })
 export type RouteSchemeListQuery = z.infer<typeof RouteSchemeListQuery>
 
@@ -499,23 +475,8 @@ export const RouteSchemeSuccession = z.object({
 })
 export type RouteSchemeSuccession = z.infer<typeof RouteSchemeSuccession>
 
-/** A window of calendar days, both ends inclusive — the occurrence read's, and the generation command's (generation.ts), which holds it to the same two rules — refused at its end when it runs backward or spans more than a year (@waste/domain/planning/schemes). */
-export const windowOrderedIssue = { message: DAY_WINDOW_ORDERED, path: ["to"] }
-export const windowAtMostAYearIssue = { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] }
-
-/**
- * The window of `GET /route-schemes/:id/occurrences`: both ends inclusive,
- * `to` on or after `from`, spanning at most 366 days — so the two days are
- * fewer than 366 apart, since a window of one day is `from` and `to` on the
- * same day and zero apart.
- */
-export const OccurrenceQuery = z
-  .object({
-    from: IsoDate,
-    to: IsoDate,
-  })
-  .refine(dayWindowOrdered, windowOrderedIssue)
-  .refine(windowAtMostAYear, windowAtMostAYearIssue)
+/** The window of `GET /route-schemes/:id/occurrences`: both ends inclusive, `to` on or after `from`, at most a year — the window a generation run walks too (generation.ts). */
+export const OccurrenceQuery = requiredDayWindow(z.object({}), { maxDays: { days: OCCURRENCE_WINDOW_MAX_DAYS, tooLong: WINDOW_AT_MOST_A_YEAR } })
 export type OccurrenceQuery = z.infer<typeof OccurrenceQuery>
 
 /** What a recurrence date became under the holiday policy: the domain's `OccurrenceStatus`, a reading and never stored, read from its tuple like every other Planning enum. */

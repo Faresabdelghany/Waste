@@ -10,7 +10,6 @@
 // line. ISO 20022's CAMT.053 is the standard a bank's export maps onto later.
 // A customer's statement runs its invoices, credit notes and payments in a
 // currency over a window of days, from an opening balance to a closing one.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { ALLOCATION_MOVES_MONEY, BANK_LINE_OUTCOMES, BANK_MATCH_BYS, BANK_REFERENCE_MAX, BANK_TEXT_MAX, INVOICE_PAYMENT_STATUSES, STATEMENT_LINE_KINDS } from "@waste/domain/finance/payments"
 import { PAYMENT_SOURCES } from "@waste/domain/finance/vocabulary"
 import { IMPORT_BATCH_MAX } from "@waste/domain/imports/vocabulary"
@@ -19,7 +18,8 @@ import * as z from "zod"
 import { Currency } from "./codes"
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery, requiredDayWindow } from "./queries"
+import { QueryFlag } from "./query-strings"
 import { Minor, NonNegativeInt, NonNegativeTotal, PositiveInt, recorded } from "./resource"
 import { Paragraph } from "./text"
 
@@ -87,14 +87,14 @@ export type PaymentCreate = z.infer<typeof PaymentCreate>
 export const AllocationCreate = z.strictObject({ invoiceId: Id, amountMinor: PositiveInt })
 export type AllocationCreate = z.infer<typeof AllocationCreate>
 
-export const PaymentListQuery = ProjectScopedListQuery.extend({
-  customerId: Id.optional(),
-  invoiceId: Id.optional(),
-  /** Only what is not allocated in full. */
-  unmatched: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
-  from: IsoDate.optional(),
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const PaymentListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    customerId: Id.optional(),
+    invoiceId: Id.optional(),
+    /** Only what is not allocated in full. */
+    unmatched: QueryFlag.optional(),
+  }),
+)
 export type PaymentListQuery = z.infer<typeof PaymentListQuery>
 
 /** One incoming line of a statement as the browser read it: its row, what it says, and how many identical lines the file held before it. */
@@ -164,7 +164,5 @@ export const CustomerStatement = z.object({
 })
 export type CustomerStatement = z.infer<typeof CustomerStatement>
 
-export const CustomerStatementQuery = z
-  .object({ currency: Currency, from: IsoDate, to: IsoDate })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
+export const CustomerStatementQuery = requiredDayWindow(z.object({ currency: Currency }))
 export type CustomerStatementQuery = z.infer<typeof CustomerStatementQuery>

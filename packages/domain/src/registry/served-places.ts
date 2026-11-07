@@ -12,6 +12,9 @@ import { Refused } from "../refusal"
 import { takesReference } from "../status-gates"
 import { SERVED_PROPERTY_STATUSES, SERVING_POINT_STATUSES, type PropertyStatus, type SharedCollectionPointStatus } from "./vocabulary"
 
+/** How many places a body names: a property and a shared collection point, a null or absent id naming neither. Each context says how many it takes, and in its own words. */
+export const placesNamed = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }): number => [body.propertyId, body.sharedCollectionPointId].filter((place) => place != null).length
+
 /** The place a reference is made at, as the statuses of its two possible rows: one is null, since a reference names one place. */
 export type Place = { propertyStatus: PropertyStatus | null; sharedCollectionPointStatus: SharedCollectionPointStatus | null }
 

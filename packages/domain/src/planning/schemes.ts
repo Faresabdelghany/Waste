@@ -3,7 +3,7 @@
 // stored row. A scheme recurs on its service days at its cadence, its groups
 // run on days it serves and find their stops one way each, and the window an
 // occurrence read or a generation run walks is at most a year.
-import { daysBetween, SERVICE_DAYS } from "../days"
+import { SERVICE_DAYS } from "../days"
 import { eachOnceSentence } from "../requests"
 
 /**
@@ -84,6 +84,3 @@ export const EACH_GROUP_ONCE = eachOnceSentence("collection group", "an entry is
 /** The longest window the occurrence read and a generation run walk: a year. */
 export const OCCURRENCE_WINDOW_MAX_DAYS = 366
 export const WINDOW_AT_MOST_A_YEAR = `A window spans at most ${OCCURRENCE_WINDOW_MAX_DAYS} days`
-
-/** Whether a window of days, both ends in, spans at most a year: its two days fewer than 366 apart, a window of one day being zero apart. */
-export const windowAtMostAYear = (window: { from: string; to: string }): boolean => daysBetween(window.from, window.to) < OCCURRENCE_WINDOW_MAX_DAYS
