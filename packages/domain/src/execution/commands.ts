@@ -244,6 +244,15 @@ export const noRouteAssigned = (routeId: string): string => `No route ${routeId}
 export const noPickupOnRoute = (pickupId: string, label: string): string => `No pickup ${pickupId} on route ${label}`
 /** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
 export const RECORDED_AFTER_IT_HAPPENED = "Recorded after it happened"
+/**
+ * How far ahead of the request's clock a recorded instant may run: a driver's
+ * device keeps its own time, and a scan stamped a minute or two ahead of the
+ * server is a scan, not a prophecy. Beyond it the instant is refused as
+ * recorded before it happened.
+ */
+export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+/** The skew rule's verdict: whether the instant runs further ahead of the request's clock `at` than `OCCURRED_AT_SKEW_MS`. */
+export const aheadOfClock = (instant: Date, at: Date): boolean => instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS
 /** `occurredAt` further behind the request's clock than the backdate bound: the day is over. */
 export const recordedTooLate = (backdateMs: number): string => `Recorded more than ${Math.round(backdateMs / 3_600_000)} hours after it happened`
 /** A command after `start-route` whose instant precedes the session it belongs to. */

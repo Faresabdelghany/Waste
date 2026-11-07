@@ -59,6 +59,7 @@ import { dayInTimezone } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
+import { aheadOfClock } from "@waste/domain/execution/commands"
 
 import { Allowance } from "../auth/public-door"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -70,7 +71,7 @@ import { findRoute, noSuchRoute } from "./execution-shapes"
 import { requireRoute, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { aheadOfClock, describeJson, IdParam } from "./shared"
+import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.weighbridge"
 

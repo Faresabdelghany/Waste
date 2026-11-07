@@ -44,6 +44,7 @@
 import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database, Tx } from "@waste/db/client"
+import type { Actor } from "@waste/db/commands/shared"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { driver } from "@waste/db/schema/fleet"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
@@ -80,6 +81,9 @@ export type AuthEnv = { Variables: { principal: Principal; tx: Tx } }
 
 /** What a route behind `identify` reads: the principal alone, since its transaction ended before the handler (#173). */
 export type IdentifiedEnv = { Variables: { principal: Principal } }
+
+/** Who a shared statement of `@waste/db/commands` acts for when the principal asks: its company, and its account recording the rows. */
+export const actorOf = (principal: Principal): Actor => ({ companyId: principal.companyId, userAccountId: principal.user.id })
 
 /** The name of the security scheme in the OpenAPI document, and the requirement every authenticated route declares. */
 export const BEARER_AUTH = "bearerAuth"

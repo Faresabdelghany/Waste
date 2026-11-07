@@ -173,7 +173,7 @@ import type { TankKind, TankOutlet } from "@waste/contracts/tanks"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
-import { alreadyOnRoute, assignedTo, decide, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
+import { alreadyOnRoute, assignedTo, decide, OCCURRED_AT_SKEW_MS, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
@@ -185,6 +185,7 @@ import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, replayed } from "@waste/db/commands/shared"
+import { stopOutcomeChanged } from "@waste/db/commands/stop-outcomes"
 import { labelOf, routeColumns, routesOf, routeWithProgress, type RouteRow } from "@waste/db/shapes/routes"
 import { pickupColumns, pickupOf, type PickupRow } from "@waste/db/shapes/pickups"
 import { proofColumns, proofOf } from "@waste/db/shapes/proofs"
@@ -195,7 +196,7 @@ import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problemBody, validate } from "../problem"
@@ -205,10 +206,9 @@ import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSess
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { vehicleColumns } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
-import { COMMAND_BACKDATE_MS, describeJson, IdParam, OCCURRED_AT_SKEW_MS, primaryKeyOf } from "./shared"
+import { COMMAND_BACKDATE_MS, describeJson, IdParam, primaryKeyOf } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { tellOfficeNotTaken } from "./unload-writes"
-import { stopOutcomeChanged } from "./stop-outcomes"
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -891,7 +891,7 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .set({ status: effect.status, reason: effect.reason, outcomeAt: new Date(effect.at) })
           .where(and(eq(pickup.companyId, companyId), eq(pickup.id, effect.pickupId)))
         // What the outcome sets going: a work order's ledger movements and the booked ticket's service as the stop completes (O3b, O3c of #290); a miss reaches the ticket through Resolution's consumer.
-        await stopOutcomeChanged(tx, applier.principal, applier.send, effect.pickupId, { from: "planned", to: effect.status, occurredAt: effect.at, by: "driver" }, applier.now)
+        await stopOutcomeChanged(tx, actorOf(applier.principal), applier.send, effect.pickupId, { from: "planned", to: effect.status, occurredAt: effect.at, by: "driver" }, applier.now)
         break
       case "append-unload": {
         const { unload: draft } = effect

@@ -28,8 +28,9 @@
 // and a 404 says "there is no such row", and neither is what happened. It is
 // a sentence naming the status the row has and the state the reference needs,
 // so a person reads what to change, and each is spelled here once per family;
-// "served" is defined once for the two references that ask it, so a
-// subscription and a placement cannot disagree about which places take waste.
+// "served" is defined once, in the domain (`@waste/domain/registry/served-places`),
+// for every reference that asks it, so a subscription, a placement, a stop and
+// a booking cannot disagree about which places take waste.
 //
 // These are gates over a status already read, not lookups. routes/references.ts
 // answers the status with the proof the row is there, and a route runs every
@@ -53,28 +54,27 @@
 // either.
 //
 // Resources (Issue #101, its review rounds) applies the same rule to its own
-// rows — a warehouse that takes no stock, a retired vehicle or trailer, an
-// inactive or suspended driver — below the Registry's gates. The lookup that
-// proves a Resources row is there answers its status too (`requireStatus` in
-// routes/shared.ts, the fleet checks of routes/references.ts, the
-// `WarehouseRef` `requireWarehouse` answers), so a gate costs no second
+// rows — a retired vehicle or trailer, an inactive or suspended driver —
+// below the Registry's gates; a warehouse that takes no stock and a retired
+// decommission reason are the Stock Movement ledger's own
+// (`@waste/db/commands/stock-ledger`). The lookup that proves a Resources row
+// is there answers its status too (`requireStatus` in routes/shared.ts, the
+// fleet checks of routes/references.ts), so a gate costs no second
 // statement; the statuses are the vocabulary's
 // (@waste/domain/resources/vocabulary), the sentences are spelled here once
 // and read by every door, and each review round appends its gates under its
 // own heading.
 import type { ProductStatus } from "@waste/contracts/catalogue"
-import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { CustomerStatus } from "@waste/contracts/customers"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
-import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { TicketTypeStatus } from "@waste/contracts/ticket-types"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
-import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import type { AllocationStatus, DriverStatus, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
 import { and, eq, gt, inArray, sql, type SQL } from "drizzle-orm"
 
 import { problem } from "../problem"
-import type { WarehouseRef } from "./references"
 
 /** The two fields an agreement names a customer in: as its holder, and as the customer it is billed to. */
 export type Party = "customerId" | "payerCustomerId"
@@ -84,22 +84,6 @@ const INACTIVE_PARTY: Readonly<Record<Party, string>> = {
   customerId: "The customer is inactive; an agreement needs an active customer",
   payerCustomerId: "The customer named as payer is inactive; an agreement needs an active one",
 }
-
-/** The states a Point takes waste in: from anybody when open, from its members when restricted. The one definition, for every reference that asks. */
-const SERVING_POINT: readonly SharedCollectionPointStatus[] = ["open", "restricted"]
-
-/** The place a subscription is delivered at, as the statuses of its two possible rows: one is null, since a subscription has one place. */
-export type Place = { propertyStatus: PropertyStatus | null; sharedCollectionPointStatus: SharedCollectionPointStatus | null }
-
-/** A place as two lookups answer it, an id not named being a row not there. */
-export const placeOf = (propertyStatus: PropertyStatus | undefined, sharedCollectionPointStatus: SharedCollectionPointStatus | undefined): Place => ({
-  propertyStatus: propertyStatus ?? null,
-  sharedCollectionPointStatus: sharedCollectionPointStatus ?? null,
-})
-
-/** What names the place, and how its sentence begins: a subscription, a public placement (M12 of #293) and a stop the office adds at an address (#111) name it themselves, a placement reaches it through its subscription. */
-type PlaceReference = "subscription" | "placement" | "public placement" | "stop" | "booking"
-const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's", "public placement": "The", stop: "The", booking: "The" }
 
 /** A Customer an agreement names, in either field: active, or the sentence for that field. Nothing named is nothing to gate. */
 export function refuseInactiveCustomer(status: CustomerStatus | undefined, path: Party): void {
@@ -114,48 +98,6 @@ export const unofferedProduct = (status: Exclude<ProductStatus, "active">): stri
 export function refuseUnofferedProduct(status: ProductStatus | undefined): void {
   if (status === undefined || status === "active") return
   throw problem(409, { detail: unofferedProduct(status) })
-}
-
-/**
- * The place a subscription is delivered at, a placement reaches through its
- * subscription, or an address-only stop is collected at (#111): served, or
- * the sentence naming the status it has and what the reference needs. One
- * definition for the three, so a point a subscription may not be made at is a
- * point a container may not be placed at and a stop may not be added at
- * either, drafted again or closed alike.
- */
-export function refuseUnservedPlace(place: Place, reference: PlaceReference): void {
-  const { propertyStatus, sharedCollectionPointStatus } = place
-  if (propertyStatus !== null && propertyStatus !== "active") {
-    throw problem(409, { detail: `${PLACE_OF[reference]} property is ${propertyStatus}; a ${reference} needs an active property` })
-  }
-  if (sharedCollectionPointStatus !== null && !SERVING_POINT.includes(sharedCollectionPointStatus)) {
-    throw problem(409, {
-      detail: `${PLACE_OF[reference]} shared collection point is ${sharedCollectionPointStatus}; a ${reference} needs an open or restricted point`,
-    })
-  }
-}
-
-// Resources, round A (Issue #101 review): the warehouse a movement arrives at.
-// A closed or draft warehouse takes no new stock — nothing is received,
-// returned, transferred or adjusted into it — and what stands there stands:
-// the ledger's rows are never rewritten, the projection goes on reading them,
-// and a transfer out of it is a movement into somewhere else, which is the
-// way to empty it. `active` and `restricted` take stock; what `restricted`
-// restricts is inventory's question, not the ledger's. The refusal is a 409
-// naming the warehouse and its status — the row the caller named is really
-// there, so it is not the 400 a missing id earns, and no better body would do
-// while the warehouse stands as it does.
-
-/** The warehouse statuses a movement may not arrive at. */
-export const WAREHOUSE_TAKES_NO_STOCK: readonly WarehouseStatus[] = ["draft", "closed"]
-
-/** What a movement into a closed or draft warehouse is told, naming the warehouse and its status. */
-export const takesNoStock = (name: string, status: WarehouseStatus): string => `${name} is ${status}; a movement arrives only at an active or restricted warehouse`
-
-/** Holds the warehouse a movement arrives at open for stock: the #79 rule as the ledger applies it, a 409 naming the status. */
-export function requireWarehouseTakesStock(found: WarehouseRef): void {
-  if (WAREHOUSE_TAKES_NO_STOCK.includes(found.status)) throw problem(409, { detail: takesNoStock(found.name, found.status) })
 }
 
 // Resources, round B: the fleet. An allocation's `vehicleId`, `trailerId` and
@@ -237,15 +179,6 @@ export const retiredCode = (code: string, by: "a tag" | "a rule"): string => `Th
 export function refuseRetiredCode(status: ContaminantCodeStatus, code: string, by: "a tag" | "a rule"): void {
   if (status === "active") return
   throw problem(409, { detail: retiredCode(code, by) })
-}
-
-/** What a decommission naming a retired reason is told (O30 of #290). */
-export const retiredReason = (name: string): string => `The decommission reason ${JSON.stringify(name)} is retired; a decommission names an active one`
-
-/** A Decommission Reason a new decommission names: active, or the sentence. */
-export function refuseRetiredReason(status: DecommissionReasonStatus, name: string): void {
-  if (status === "active") return
-  throw problem(409, { detail: retiredReason(name) })
 }
 
 /** What a ticket or a project's default naming a retired team is told (O30 of #290, row 7.20). */
