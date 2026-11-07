@@ -77,10 +77,10 @@ describe("route-studio.schemes is in step with Guided Setup step 1", () => {
   })
 
   test("every field id the domain names is a field of the form", () => {
-    // The draft defaults the holiday policy and Validated-vs-Effective for a
-    // quick scheme (quickSchemeDraftFromValues), so those two ids are named
-    // for the wizard and are deliberately not on the quick form.
-    const defaulted = new Set(["holidayPolicy", "createAs"])
+    // The draft defaults the holiday policy for a quick scheme
+    // (quickSchemeDraftFromValues), so that id is named for the wizard and is
+    // deliberately not on the quick form.
+    const defaulted = new Set(["holidayPolicy"])
     for (const id of QUICK_SCHEME_DRAFT_FIELD_IDS) {
       if (defaulted.has(id)) continue
       assert.ok(fieldById.has(id), `${id} is consumed by the draft but is not on the form`)

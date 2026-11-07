@@ -2,8 +2,7 @@
 // Operate › Exceptions & Alerts offers once it reads the API — raise an
 // alert by hand, trimmed to what `AlertCreate` carries; resolve with a note;
 // link to a ticket — the New ticket form an alert's Open ticket hands over
-// with its links prefilled, and the queue's categories. Fixture mode keeps
-// the registry's alert form untouched.
+// with its links prefilled, and the queue's categories.
 //
 // Every field id is a key the adapter reads (lib/api/records/alerts.ts).
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"

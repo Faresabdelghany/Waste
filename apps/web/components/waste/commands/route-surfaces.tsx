@@ -451,11 +451,10 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
 }
 
 /**
- * A route's own page on the Pilot (`RouteDetailsOnApi`), laid out as fixture
- * mode's `RouteDetailsPage`: Overview's stops table with its search and
- * Filters, headed by Dispatch and one Actions menu of every other command, the
- * Map and the route's information beside it; then the route's tickets,
- * sessions, Plans, messages and activity.
+ * A route's own page (`RouteDetailsOnApi`): Overview's stops table with its
+ * search and Filters, headed by Dispatch and one Actions menu of every other
+ * command, the Map and the route's information beside it; then the route's
+ * tickets, sessions, Plans, messages and activity.
  */
 export function RouteSurfacePage({
   record,

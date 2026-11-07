@@ -1,5 +1,6 @@
-// Scheme detail Routes / Stops tabs (D9, D17): the derivations that let both
-// tabs render and filter through the shared filter model
+// Scheme detail page (D9, D17): what its tabs read off the scheme and the
+// routes and stops generated for it, and the derivations that let the Routes
+// and Stops tabs render and filter through the shared filter model
 // (@waste/domain/business-filters) exactly like the workspace record tables.
 //
 // A generated route carries no waste-fraction fact of its own — its fractions
@@ -16,25 +17,72 @@ import {
   splitFilterValues,
   type FilterValueReaders,
 } from "../business-filters"
-import { pickupRemovedFromPlan, stringValueOf } from "./generation"
+import { EMPTY_FACT } from "../record-values"
+import { stringValue } from "./validation"
 
 /** Fact the Routes tab exposes derived fractions under — the containers convention. */
 const ROUTE_FRACTIONS_FACT = "Waste fractions"
 /** Fact the Stops tab exposes the route's operating date under (ISO date). */
 const STOP_SERVICE_DATE_FACT = "Service date"
 
+/** A record's submitted value as a non-empty string, else undefined. */
+export const stringValueOf = (
+  record: BusinessRecord,
+  key: string,
+): string | undefined => stringValue(record.submittedValues ?? {}, key)
+
+/** "v6 draft" → "v6"; absent → "v1". */
+export function schemeVersionOf(scheme: BusinessRecord): string {
+  const version = scheme.facts?.Version?.trim().split(/\s+/)[0]
+  return version || "v1"
+}
+
 /**
- * The Stops in a dated route's plan: linked by structured routeId, minus the
- * ones a regeneration removed (kept as Skipped records, no longer served).
+ * The scheme's planned start time, or undefined when it has none (issue
+ * #32): submittedValues win over the legacy "Planned start" fact, both are
+ * trimmed, and the "—" display placeholder counts as absent — a scheme
+ * without one shows "—".
  */
+export function schemePlannedStartTime(
+  scheme: BusinessRecord,
+): string | undefined {
+  const raw =
+    stringValueOf(scheme, "plannedStartTime")?.trim() ||
+    scheme.facts?.["Planned start"]?.trim()
+  return raw && raw !== EMPTY_FACT ? raw : undefined
+}
+
+/**
+ * The note a route detail shows for its `Deviation` fact (issue #26): the
+ * stamped fact other than "None", read from the record alone so every
+ * presentation path agrees. A route with the "None" placeholder or no fact
+ * renders no deviation row.
+ */
+export function routeDeviationNote(route: BusinessRecord): string | null {
+  const stamped = route.facts.Deviation?.trim()
+  return stamped && stamped !== "None" ? stamped : null
+}
+
+/** The routes one scheme generated, sorted by service date. */
+export function schemeGeneratedRoutes(
+  schemeId: string,
+  routes: readonly BusinessRecord[],
+): BusinessRecord[] {
+  return routes
+    .filter((route) => stringValueOf(route, "schemeId") === schemeId)
+    .sort((a, b) =>
+      (stringValueOf(a, "serviceDate") ?? "").localeCompare(
+        stringValueOf(b, "serviceDate") ?? "",
+      ),
+    )
+}
+
+/** The Stops in a dated route's plan: linked by structured routeId. */
 function plannedRouteStops(
   route: BusinessRecord,
   pickups: readonly BusinessRecord[],
 ): BusinessRecord[] {
-  return pickups.filter(
-    (pickup) =>
-      stringValueOf(pickup, "routeId") === route.id && !pickupRemovedFromPlan(pickup),
-  )
+  return pickups.filter((pickup) => stringValueOf(pickup, "routeId") === route.id)
 }
 
 /** The waste fractions a route serves: the sorted union over its planned Stops. */

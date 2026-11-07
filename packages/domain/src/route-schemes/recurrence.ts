@@ -204,19 +204,6 @@ export function nextServiceDates(
   return dates
 }
 
-/**
- * Route identity: (schemeId, serviceDate) for the implicit legacy collection
- * group; explicit groups (D36) append their id, so one date can carry one
- * route per group while every already-generated legacy route keeps its key.
- */
-export function routeIdentityKey(
-  schemeId: string,
-  serviceDate: string,
-  groupKey?: string,
-): string {
-  return groupKey ? `${schemeId}:${serviceDate}:${groupKey}` : `${schemeId}:${serviceDate}`
-}
-
 export function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
   return [...days].sort((a, b) => SERVICE_DAYS.indexOf(a) - SERVICE_DAYS.indexOf(b))
 }

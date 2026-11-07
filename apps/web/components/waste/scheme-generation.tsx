@@ -12,8 +12,7 @@
 // stops, which the page counts and lists (#247). Its times read the project's
 // clock, as the route's own do (#255). A run open for fifteen minutes
 // since its last update is left unwatched and says so: its row cannot say
-// whether the worker is still at it. Fixture mode never reaches this file;
-// its Generate dialog is scheme-generate-routes.tsx.
+// whether the worker is still at it.
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 

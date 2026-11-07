@@ -6,7 +6,7 @@
 // it is reopened; the three weight reviews — for the command surfaces
 // (components/waste/commands/provider-money-surfaces.tsx) and, for the award
 // and the price, the map's and the provider page's doors (`schemaOverride` in
-// business-workspace.tsx). Fixture mode keeps the registry's forms.
+// business-workspace.tsx).
 //
 // Every field id is a key the adapters read (lib/api/records/
 // service-areas.ts, provider-money.ts, weights.ts);

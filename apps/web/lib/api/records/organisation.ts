@@ -48,7 +48,6 @@ import {
   typedFlag,
   webIdOf,
   type LocalRefusal,
-  type MappingContext,
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
@@ -644,6 +643,3 @@ export const teamModule: ServerModule = {
   // An office account's `/users` and `/roles` are `configure.access`'s, read by the access module: never twice, and never refused to a role without it.
   providersOnly: true,
 }
-
-/** The mapping context a resolver makes. */
-export const contextOf = (resolve: MappingContext["resolve"], now?: Date): MappingContext => ({ resolve, now })

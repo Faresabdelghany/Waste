@@ -7,8 +7,7 @@
 // the latest CSV import (`GET /imports`, where the role views the imports),
 // each in a sentence (`integrationRowsOf`, lib/data/integrations.ts). Vendor
 // connectors the deployment does not make — a GPS feed, an ERP, Digital Post,
-// regulatory reporting — are not shown: no API holds them. Fixture mode
-// keeps the browser's pane (`configure.integrations`).
+// regulatory reporting — are not shown: no API holds them.
 
 import { useState } from "react"
 import Link from "next/link"

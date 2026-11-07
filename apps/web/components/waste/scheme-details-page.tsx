@@ -38,14 +38,6 @@ import type {
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
-  lastGeneratedAt,
-  routeDeviationNote,
-  schemeGeneratedRoutes,
-  schemePlannedStartTime,
-  schemeVersionOf,
-  stringValueOf,
-} from "@waste/domain/route-schemes/generation"
-import {
   containerDriftMovement,
   type CollectionGroupContainerDrift,
 } from "@waste/domain/route-schemes/container-drift"
@@ -75,6 +67,11 @@ import { schemeAreaName } from "@waste/domain/route-schemes/scheme-list"
 import {
   SCHEME_ROUTE_FILTER_READERS,
   SCHEME_STOP_FILTER_READERS,
+  routeDeviationNote,
+  schemeGeneratedRoutes,
+  schemePlannedStartTime,
+  schemeVersionOf,
+  stringValueOf,
   routeWasteFractionsLabel,
   schemeStopContainerLabel,
   schemeStopContainerType,
@@ -114,7 +111,6 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
-import { useApiConfigured } from "@/components/waste/api-session-store"
 import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
 import { dayIn } from "@/lib/api/records/clock"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
@@ -134,14 +130,6 @@ import {
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { readableKey } from "@/lib/data/record-key"
-
-const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-})
 
 /** The date a generated route operates on (D17). */
 function routeOperatingDate(route: BusinessRecord): string | undefined {
@@ -198,8 +186,6 @@ export function SchemeDetailsPage({
   record,
   onBack,
   onEdit,
-  onDelete,
-  onGenerateRoutes,
   onEditGroups,
   readOnly = false,
 }: {
@@ -209,20 +195,16 @@ export function SchemeDetailsPage({
   onBack: () => void
   /** Opens the existing prefilled edit flow; absent hides Edit. */
   onEdit?: () => void
-  onDelete?: () => void
-  /** Opens the Generate routes dialog; absent hides the action entirely. */
-  onGenerateRoutes?: () => void
   /** Opens the collection groups editor (D36); absent hides the action. */
   onEditGroups?: () => void
   /** Hides every mutation control, e.g. for view-only roles. */
   readOnly?: boolean
 }) {
   const { upsertRecord } = useBusinessRecordStore()
-  const onApi = useApiConfigured()
-  // On the Pilot the scheme's routes are the API's (#179): the Routes tab lists them once the routes module has read them, and nothing before, under the dates the API plans.
-  const routesRead = useServerModuleState("route-studio", "routes")?.status === "ready" || !onApi
+  // The scheme's routes are the API's (#179): the Routes tab lists them once the routes module has read them, and nothing before, under the dates the API plans.
+  const routesRead = useServerModuleState("route-studio", "routes")?.status === "ready"
   const [generateOpen, setGenerateOpen] = useState(false)
-  // The lifecycle's dialogs on the Pilot (O21 of #290): the Plan Ahead window, the next version, the archive.
+  // The lifecycle's dialogs (O21 of #290): the Plan Ahead window, the next version, the archive.
   const [lifecycleDialog, setLifecycleDialog] = useState<"window" | "successor" | "archive" | null>(null)
   const schemes = useModuleRecords("route-studio", "schemes").records
   const allRoutes = useModuleRecords("route-studio", "routes").records
@@ -232,7 +214,7 @@ export function SchemeDetailsPage({
     COLLECTION_CALENDARS_MODULE.moduleId,
   ).records
   const projects = useModuleRecords("configure", "organization").records
-  // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178), on the project's clock (#255).
+  // Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178), on the project's clock (#255).
   const schemeProject = projects.find((project) => project.id === stringValueOf(record, "projectId"))
   const generation = useSchemeGenerationRuns(record, schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId).records
@@ -373,9 +355,9 @@ export function SchemeDetailsPage({
         </PageTopBar>
       </header>
 
-      {onApi && lifecycleDialog === "window" && <SchemePlanAheadWindowDialog record={record} stored={storedScheme} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
-      {onApi && lifecycleDialog === "successor" && <SchemeSuccessorDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
-      {onApi && lifecycleDialog === "archive" && <SchemeArchiveDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} onArchived={onBack} />}
+      {lifecycleDialog === "window" && <SchemePlanAheadWindowDialog record={record} stored={storedScheme} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {lifecycleDialog === "successor" && <SchemeSuccessorDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {lifecycleDialog === "archive" && <SchemeArchiveDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} onArchived={onBack} />}
 
       <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
@@ -405,24 +387,7 @@ export function SchemeDetailsPage({
             </TabsList>
           </div>
           <PageActions>
-            {onGenerateRoutes && (
-              <Button
-                size="sm"
-                onClick={onGenerateRoutes}
-                disabled={!canGenerate}
-                title={
-                  canGenerate
-                    ? undefined
-                    : draftPendingResave
-                      ? "Save the scheme via Edit to validate it — generation is enabled once it validates."
-                      : "Generation is blocked by scheme validation — resolve the blocking issues via Edit."
-                }
-              >
-                <ArrowsClockwise className="h-4 w-4" />
-                Generate routes
-              </Button>
-            )}
-            {onApi && !readOnly && (
+            {!readOnly && (
               <Button size="sm" onClick={() => setGenerateOpen(true)}>
                 <ArrowsClockwise className="h-4 w-4" />
                 Generate routes
@@ -454,7 +419,7 @@ export function SchemeDetailsPage({
                     {planAheadOn ? "Turn off Plan Ahead" : "Turn on Plan Ahead"}
                   </DropdownMenuItem>
                 )}
-                {onApi && !readOnly && (
+                {!readOnly && (
                   <>
                     <DropdownMenuItem onSelect={() => setLifecycleDialog("window")}>
                       <CalendarCheck className="h-4 w-4" />
@@ -468,19 +433,6 @@ export function SchemeDetailsPage({
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setLifecycleDialog("archive")}>
                       <Trash className="h-4 w-4" />
                       Archive scheme…
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {/* On the Pilot a scheme is archived, never deleted: the fixture planner's delete is fixture mode's. */}
-                {onDelete && !onApi && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onSelect={onDelete}
-                    >
-                      <Trash className="h-4 w-4" />
-                      Delete scheme
                     </DropdownMenuItem>
                   </>
                 )}
@@ -513,8 +465,8 @@ export function SchemeDetailsPage({
             pickups={schemePickups}
             generationBlocked={!canGenerate}
             containerDrift={containerDrift}
-            nextCollectionsOf={onApi ? record : undefined}
-            generation={onApi ? generation : undefined}
+            nextCollectionsOf={record}
+            generation={generation}
             routesRead={routesRead}
           />
         </TabsContent>
@@ -915,7 +867,7 @@ function SchemeRoutesTab({
   containerDrift,
   nextCollectionsOf,
   generation,
-  routesRead = true,
+  routesRead,
 }: {
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
@@ -924,12 +876,12 @@ function SchemeRoutesTab({
   generationBlocked: boolean
   /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
-  /** On the Pilot, the scheme whose next collections the API plans, above its routes. */
-  nextCollectionsOf?: BusinessRecord
-  /** On the Pilot, the scheme's generation runs, read and watched by the page. */
-  generation?: SchemeGenerationRuns
-  /** Whether the routes are read: on the Pilot, once the routes module holds the API's rows (#179); the table shows nothing before. A row opens the workspace's route, the generic details there. */
-  routesRead?: boolean
+  /** The scheme whose next collections the API plans, above its routes. */
+  nextCollectionsOf: BusinessRecord
+  /** The scheme's generation runs, read and watched by the page. */
+  generation: SchemeGenerationRuns
+  /** Whether the routes are read: once the routes module holds the API's rows (#179); the table shows nothing before. A row opens the workspace's route, the generic details there. */
+  routesRead: boolean
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -948,7 +900,6 @@ function SchemeRoutesTab({
   )
   const { page, setPage, pageCount, pageRows, totalCount } =
     useTablePagination(filtered)
-  const generatedStamp = lastGeneratedAt(routes)
 
   return (
     <div className="space-y-4 p-4">
@@ -979,9 +930,9 @@ function SchemeRoutesTab({
         </section>
       )}
 
-      {generation !== undefined && <SchemeGenerationRunsSection generation={generation} />}
+      <SchemeGenerationRunsSection generation={generation} />
 
-      {nextCollectionsOf !== undefined && <SchemeNextCollections record={nextCollectionsOf} />}
+      <SchemeNextCollections record={nextCollectionsOf} />
 
       {routesRead && (
         <>
@@ -1002,7 +953,7 @@ function SchemeRoutesTab({
           />
 
           <TableCard
-            summary={`${recordCountLabel(filtered.length, rows.length)}${generatedStamp ? ` · Last generated ${GENERATED_AT_FORMAT.format(new Date(generatedStamp))}` : ""}`}
+            summary={recordCountLabel(filtered.length, rows.length)}
           >
             <div className="overflow-x-auto">
               <Table>

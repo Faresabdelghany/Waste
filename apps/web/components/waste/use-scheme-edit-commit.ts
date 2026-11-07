@@ -2,33 +2,22 @@
 
 // The one edit-save of a route scheme (issue #33, D31; the edit policy of
 // issue #38), as a hook the workspace calls from both edit doors — the schema
-// dialog and the collection groups editor. `commitSchemeEdit` runs the
-// lifecycle seam (planSchemeEditReconciliation) over the stored record and
-// the edited one against the records as they are NOW, and applies what it
-// returns: the scheme, the routes, the pickups, the toast.
+// dialog and the collection groups editor. The API holds the scheme and
+// generates its routes, so the edit is the scheme's, under the status the
+// wire has — the web's validation never lowers a validated scheme, the API's
+// 409 speaking for one the edit breaks, and a Draft the edit leaves without a
+// blocking issue asks to be validated (`schemeEditStatusOnApi`) — and the
+// next generation run reconciles its routes. The dialog closes once the API
+// has taken the edit.
 //
-// Under "Ask each time" the planner may answer with a question instead of
-// writes. The hook then keeps only the edit itself — `{ before, after,
-// onSaved }` and the question — as `pendingSchemeEdit`; the edit dialog stays
-// open underneath so "Back to the edit" loses nothing, and the answer goes
-// through `answerPendingSchemeEdit`, which calls the CURRENT commit. Nothing
-// closes over the records as they were when the question was raised: a Plan
-// Ahead run or another tab's write in the seconds the person takes to answer
-// is read when the plan is made, not overwritten by a plan made before it.
-// A one-off that fails validation is refused whole and the dialog stays open
-// on the refusal.
-//
-// On the Pilot (`schemesOnApi`, slice 3 of #81) the API holds the scheme and
-// generates its routes, so most of that does not run: the edit is the scheme's,
-// under the status the wire has — the web's validation never lowers a
-// validated scheme, the API's 409 speaking for one the edit breaks, and a
-// Draft the edit leaves without a blocking issue asks to be validated, the
-// browser path's rule (`schemeEditStatusOnApi`) — and the next generation
-// run reconciles its routes. The dialog closes once the API has taken the
-// edit. The question returns there with the routes on the API (#179): the
-// same rule over the routes the API holds (`schemeEditOnApi`). "Apply to
-// future collections" saves the scheme, and its planned routes follow it when
-// its routes are next generated. "This collection only" (#209) moves the next
+// Under "Ask each time" the edit may answer with a question instead (the
+// rule over the routes the API holds, `schemeEditOnApi`, #179). The hook then
+// keeps only the edit itself — `{ before, after, onSaved }` and the question —
+// as `pendingSchemeEdit`; the edit dialog stays open underneath so "Back to
+// the edit" loses nothing, and the answer goes through
+// `answerPendingSchemeEdit`, which calls the CURRENT commit. "Apply to future
+// collections" saves the scheme, and its planned routes follow it when its
+// routes are next generated. "This collection only" (#209) moves the next
 // collection's routes by their own commands, which the API holds against
 // later runs, the scheme keeping its configuration (`schemeOneOffOnApi`); an
 // edit those commands cannot carry shows it disabled with the reason, and a
@@ -43,24 +32,18 @@ import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/compo
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
-import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { dayIn } from "@/lib/api/records/clock"
 import { schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced, type SchemeOneOff } from "@/lib/data/route-schemes"
-import {
-  planSchemeEditReconciliation,
-  type SchemeEditApplication,
-  type SchemeEditQuestion,
-} from "@waste/domain/route-schemes/edit"
+import type { SchemeEditApplication, SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
 import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 
 /**
- * A scheme edit the planner answered with a question (issue #38): the edit
- * as it was submitted, kept until the person answers or goes back, and the
- * question to show. Deliberately no callback that plans — the answer plans
- * again through the current `commitSchemeEdit`.
+ * A scheme edit answered with a question (issue #38): the edit as it was
+ * submitted, kept until the person answers or goes back, and the question to
+ * show. Deliberately no callback that decides — the answer decides again
+ * through the current `commitSchemeEdit`.
  */
 export type PendingSchemeEdit = {
   before: BusinessRecord
@@ -70,22 +53,17 @@ export type PendingSchemeEdit = {
 }
 
 export type SchemeEditCommitDeps = {
-  /** The live records of any workspace module — what the planner reads its related records from, at plan time. */
+  /** The live records of any workspace module, read when the edit is decided. */
   moduleRecords: (workspaceId: WorkspaceId, moduleId: string) => BusinessRecord[]
   upsertRecord: (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => Promise<WriteOutcome> | undefined
   /** The workspace's selected record: refreshed when it is the scheme just saved. */
   setSelectedRecord: Dispatch<SetStateAction<BusinessRecord | null>>
-  actorName: string
-  /** The Pilot: the API holds the schemes, so an edit writes the scheme alone (the header). */
-  schemesOnApi: boolean
 }
 
 export function useSchemeEditCommit({
   moduleRecords,
   upsertRecord,
   setSelectedRecord,
-  actorName,
-  schemesOnApi,
 }: SchemeEditCommitDeps) {
   const [pendingSchemeEdit, setPendingSchemeEdit] = useState<PendingSchemeEdit | null>(null)
   // The API's routes, once the routes module has read them; null before, or when the read failed.
@@ -155,94 +133,40 @@ export function useSchemeEditCommit({
       onSaved: (scheme: BusinessRecord) => void,
       apply?: SchemeEditApplication,
     ) => {
-      if (schemesOnApi) {
-        const projectId = typeof before.submittedValues?.projectId === "string" ? before.submittedValues.projectId : undefined
-        const today = dayIn(new Date(), timezoneOfProject(moduleRecords("configure", "organization"), projectId))
-        const decided = schemeEditOnApi(before, after, apiRoutes, today, apply)
-        if (decided.kind === "ask") {
-          setPendingSchemeEdit({ before, after, onSaved, question: decided.question })
-          return
-        }
-        if (decided.kind === "refuse") {
-          toast.error(`${after.name} not saved`, { description: decided.message })
-          return
-        }
-        if (decided.kind === "one-off") {
-          moveOneOff(before, decided, onSaved)
-          return
-        }
-        const own = schemeLiveValidation(after, {
-          schemes: moduleRecords("route-studio", "schemes"),
-          allocations: moduleRecords("fleet", "vehicle-planning"),
-          containers: moduleRecords("resources", "containers"),
-          vehicles: moduleRecords("fleet", "vehicles"),
-        })
-        // With the API's containers not placed the zero-match sentence is no evidence, so it keeps no Draft a Draft (#207).
-        const validation = own === null ? null : validationWhenUnplaced(own, containersPlaced)
-        const scheme: BusinessRecord = { ...after, status: schemeEditStatusOnApi(before.status, validation?.issues ?? null) }
-        whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
-          setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
-          onSaved(scheme)
-          toast.success(`${scheme.name} updated`, decided.following === 0 ? undefined : { description: `The next generation of its routes brings ${count(decided.following, "planned route")} to it.` })
-        })
+      const projectId = typeof before.submittedValues?.projectId === "string" ? before.submittedValues.projectId : undefined
+      const today = dayIn(new Date(), timezoneOfProject(moduleRecords("configure", "organization"), projectId))
+      const decided = schemeEditOnApi(before, after, apiRoutes, today, apply)
+      if (decided.kind === "ask") {
+        setPendingSchemeEdit({ before, after, onSaved, question: decided.question })
         return
       }
-      const schemeEdit = planSchemeEditReconciliation(
-        {
-          before,
-          after,
-          today: todayIso(),
-          actorName,
-          ...(apply ? { apply } : {}),
-        },
-        {
-          schemes: moduleRecords("route-studio", "schemes"),
-          existingRoutes: moduleRecords("route-studio", "routes"),
-          existingPickups: moduleRecords("route-studio", "pickups"),
-          containers: moduleRecords("resources", "containers"),
-          vehicles: moduleRecords("fleet", "vehicles"),
-          allocations: moduleRecords("fleet", "vehicle-planning"),
-          calendarRecords: moduleRecords(
-            COLLECTION_CALENDARS_MODULE.workspaceId,
-            COLLECTION_CALENDARS_MODULE.moduleId,
-          ),
-          projectRecords: moduleRecords("configure", "organization"),
-        },
-      )
-      if (schemeEdit.outcome === "ask" && schemeEdit.question) {
-        setPendingSchemeEdit({ before, after, onSaved, question: schemeEdit.question })
+      if (decided.kind === "refuse") {
+        toast.error(`${after.name} not saved`, { description: decided.message })
         return
       }
-      if (schemeEdit.outcome === "refused") {
-        toast.error(`${after.name} not saved`, { description: schemeEdit.message })
+      if (decided.kind === "one-off") {
+        moveOneOff(before, decided, onSaved)
         return
       }
-      const scheme = schemeEdit.scheme
-      upsertRecord("route-studio", "schemes", scheme)
-      for (const route of schemeEdit.routes) {
-        upsertRecord("route-studio", "routes", route)
-      }
-      for (const pickup of schemeEdit.pickups) {
-        upsertRecord("route-studio", "pickups", pickup)
-      }
-      setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
-      onSaved(scheme)
-      // The reconciliation consequence line replaces the generic edit toast
-      // (issue #33): saving IS the action that reshaped future routes.
-      if (schemeEdit.outcome === "draft") {
-        toast.warning(`${scheme.name} saved as Draft`, { description: schemeEdit.message })
-      } else if (schemeEdit.outcome === "generation-failed") {
-        toast.warning(`${scheme.name} updated`, { description: schemeEdit.message })
-      } else if (schemeEdit.outcome === "single") {
-        toast.success(`${scheme.name} — this collection only`, { description: schemeEdit.message })
-      } else {
-        toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
-      }
+      const own = schemeLiveValidation(after, {
+        schemes: moduleRecords("route-studio", "schemes"),
+        allocations: moduleRecords("fleet", "vehicle-planning"),
+        containers: moduleRecords("resources", "containers"),
+        vehicles: moduleRecords("fleet", "vehicles"),
+      })
+      // With the API's containers not placed the zero-match sentence is no evidence, so it keeps no Draft a Draft (#207).
+      const validation = own === null ? null : validationWhenUnplaced(own, containersPlaced)
+      const scheme: BusinessRecord = { ...after, status: schemeEditStatusOnApi(before.status, validation?.issues ?? null) }
+      whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
+        setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
+        onSaved(scheme)
+        toast.success(`${scheme.name} updated`, decided.following === 0 ? undefined : { description: `The next generation of its routes brings ${count(decided.following, "planned route")} to it.` })
+      })
     },
-    [actorName, apiRoutes, containersPlaced, moduleRecords, moveOneOff, schemesOnApi, setSelectedRecord, upsertRecord],
+    [apiRoutes, containersPlaced, moduleRecords, moveOneOff, setSelectedRecord, upsertRecord],
   )
 
-  /** The dialog's answer: the pending edit is planned again, with `apply`, by the commit of this render. */
+  /** The dialog's answer: the pending edit is decided again, with `apply`, by the commit of this render. */
   const answerPendingSchemeEdit = useCallback(
     (apply: SchemeEditApplication) => {
       if (!pendingSchemeEdit) return

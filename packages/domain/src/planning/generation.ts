@@ -11,10 +11,10 @@
 // ONE implementation the guided setup's preview, the API's occurrence read
 // and this module share, so a preview row and a generated route agree by
 // construction; `planRoutes` wraps it and never re-derives a date. The walk
-// is capped at `WALK_CAP_DAYS` past the window's start (route-schemes/
-// generation.ts's rule, reused): a route beyond the cap is never judged, and
-// the cleanup is bounded by the same day, or an over-long window would cancel
-// routes still served past the truncation point.
+// is capped at `WALK_CAP_DAYS` past the window's start: a route beyond the
+// cap is never judged, and the cleanup is bounded by the same day, or an
+// over-long window would cancel routes still served past the truncation
+// point.
 //
 // The identity of a Route is `(scheme, group, service date)`, the recurrence
 // date (ADR-0002); a shifted collection keeps it and moves `operatingDate`.
@@ -75,7 +75,6 @@
 // `containerDriftBetween` compares.
 import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
 import { ruleSignature } from "../route-schemes/container-drift"
-import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { tankWaits, type TankCadence, type TankGate } from "../route-schemes/due-from-last"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
 import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
@@ -84,9 +83,14 @@ import { lastDayIn } from "../periods"
 import type { SchemeRecurrence } from "../route-schemes/recurrence"
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
-export { WALK_CAP_DAYS }
-
 /* --------------------------------- window ---------------------------------- */
+
+/**
+ * The furthest the day walk reaches past a window's start: from + 366 days,
+ * 367 dates. Dates past it are never judged, so anything that cancels on
+ * generation's behalf must bound itself to this range too.
+ */
+export const WALK_CAP_DAYS = 366
 
 /** The window a run is asked for, both days inclusive, `YYYY-MM-DD`. */
 export type GenerationWindow = { from: string; to: string }

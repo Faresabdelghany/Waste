@@ -26,7 +26,7 @@ import { routeLabel } from "@waste/contracts/execution"
 import type { Tx } from "@waste/db/client"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
-import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
+import { WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
 import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } from "drizzle-orm"
 

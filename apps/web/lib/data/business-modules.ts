@@ -1,4 +1,4 @@
-import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
+import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
 import type { BusinessRecord } from "@waste/domain/prototype-record"
 
 // The registry of workspaces and modules, and the fixture records of the
@@ -22,8 +22,6 @@ export type WorkspaceId =
   | "improve"
   | "configure"
   | "control-center"
-
-export const FIXTURE_COMPANY_ID = "company-kystbyen-dk"
 
 export const FIXTURE_PROJECT_IDS = {
   copenhagen: "project-copenhagen",
@@ -81,7 +79,6 @@ const companyWideFixtureRecordIds = [
   "integration-navision",
   "sales-lead-greenloop",
 ] as const
-
 
 /** The projects each fixture record is filed under, by id. */
 const fixtureProjectsById: Readonly<Record<string, readonly FixtureProjectId[]>> = Object.freeze(

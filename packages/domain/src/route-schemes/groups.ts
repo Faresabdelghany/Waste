@@ -527,13 +527,6 @@ export function resolveCollectionGroupPlans(input: {
   return { plans, manualDuplicates, ruleOverlaps }
 }
 
-/** Every container id any group serves on any day (frequency promises, relation refs). */
-export function collectionGroupContainerIds(
-  resolution: Pick<CollectionGroupResolution, "plans">,
-): string[] {
-  return Array.from(new Set(resolution.plans.flatMap((plan) => plan.containerIds)))
-}
-
 /* ---------------------------------- display -------------------------------- */
 
 /** "Organic run · Wed, Sun · NR-08 · Lars Møller" — one line per group for facts and lists. */

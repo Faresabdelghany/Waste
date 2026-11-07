@@ -1,9 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
-
-import type { BusinessRecord } from "../business-modules"
 import { CSV_BOM } from "../csv"
 import {
   createHolidayListRecord,
@@ -11,59 +8,7 @@ import {
   holidayListRows,
   holidayListsCsv,
   orderHolidayListRows,
-  withProjectCalendar,
 } from "../holiday-lists"
-
-/** A project record as the organisation module reads one: its language, its list and its weekend. */
-const project = (id: string, name: string, holidayList: string): BusinessRecord => ({
-  id,
-  name,
-  context: "Project · municipality",
-  status: "Active",
-  owner: "",
-  value: "",
-  updated: "Yesterday",
-  description: "",
-  facts: { Language: "Danish", "Holiday list": holidayList, Weekend: "Sat–Sun" },
-  related: [],
-  source: "Waste API",
-  freshness: "Yesterday",
-  projectIds: [id],
-  recordKind: "Project",
-  submittedValues: { name, language: "da", holidayList, weekend: "saturday, sunday" },
-})
-
-describe("withProjectCalendar — the project record's list name and weekend", () => {
-  const harbor = project("project-harbor", "Harbor Commercial", "Danish public holidays")
-
-  test("writes the typed values resolveProjectCalendar reads and the facts beside them", () => {
-    const written = withProjectCalendar(harbor, {
-      holidayList: " Danish public holidays ",
-      weekend: ["sunday", "saturday"],
-    })
-    assert.equal(written.submittedValues?.holidayList, "Danish public holidays")
-    assert.equal(written.submittedValues?.weekend, "saturday, sunday")
-    assert.equal(written.facts["Holiday list"], "Danish public holidays")
-    assert.equal(written.facts.Weekend, "Sat–Sun")
-    assert.equal(written.facts.Language, "Danish")
-    assert.equal(written.updated, "Now")
-    const calendar = resolveProjectCalendar(harbor.id, { projects: [written], calendars: [] })
-    assert.equal(calendar.list?.name, "Danish public holidays")
-    assert.deepEqual(calendar.weekend, ["saturday", "sunday"])
-  })
-
-  test("a blank name means no list: the value and the fact go, the weekend stays", () => {
-    const copenhagen = project("project-copenhagen", "Copenhagen Central", "Danish public holidays")
-    const written = withProjectCalendar(copenhagen, { holidayList: "  ", weekend: ["friday", "saturday"] })
-    assert.equal("holidayList" in (written.submittedValues ?? {}), false)
-    assert.equal("Holiday list" in written.facts, false)
-    assert.equal(written.submittedValues?.weekend, "friday, saturday")
-    assert.equal(written.facts.Weekend, "Fri–Sat")
-    assert.equal(resolveProjectCalendar(copenhagen.id, { projects: [written], calendars: [] }).list, null)
-    // The input is left as it was.
-    assert.equal(copenhagen.submittedValues?.holidayList, "Danish public holidays")
-  })
-})
 
 describe("the lists' table, laid out as the Routes table", () => {
   const danish = createHolidayListRecord(

@@ -2,6 +2,7 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
+import { pick } from "./routes-support"
 import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 
 // Scenario 4, the switched Registry modules whose product surfaces write to
@@ -79,6 +80,7 @@ async function addServiceProvider(page: Page, values: { legalName: string; regis
   await page.getByRole("button", { name: "Add service provider" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Add service provider" })).toBeVisible()
+  await pick(dialog, page, "Project", TESTER_PROJECT)
   await dialog.getByLabel("Legal company name").fill(values.legalName)
   await dialog.getByLabel("Registration number").fill(values.registrationNumber)
   await dialog.getByLabel("Primary contact").fill(values.contactName)
@@ -156,6 +158,7 @@ test("Service Providers: the dialog holds its submit while the create is out, an
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add service provider" }) })
   const submit = dialog.getByRole("button", { name: "Add service provider" })
   await page.getByRole("button", { name: "Add service provider" }).click()
+  await pick(dialog, page, "Project", TESTER_PROJECT)
   await dialog.getByLabel("Legal company name").fill(uniqueName("E2E Held Provider"))
   await dialog.getByLabel("Registration number").fill(registrationNumber())
   await dialog.getByLabel("Primary contact").fill("Held")
@@ -185,6 +188,7 @@ async function createOrganisation(page: Page, values: { name: string; registrati
   await page.getByRole("button", { name: "Create party" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Create contact or company" })).toBeVisible()
+  await pick(dialog, page, "Operating project", TESTER_PROJECT)
   await dialog.getByRole("combobox", { name: /^Party type/ }).click()
   await page.getByRole("option", { name: "Company or organization" }).click()
   await dialog.getByLabel("Display or legal name").fill(values.name)
@@ -297,6 +301,7 @@ async function createAgreement(page: Page, values: { number: string; customer: s
   await page.getByRole("main").getByRole("button", { name: "Create draft agreement" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Create agreement" })).toBeVisible()
+  await pick(dialog, page, "Operating project", TESTER_PROJECT)
   await dialog.getByLabel("Agreement number").fill(values.number)
   await dialog.getByRole("combobox", { name: /^Customer/ }).click()
   await page.getByRole("option", { name: values.customer, exact: true }).click()
@@ -337,7 +342,7 @@ test("Agreements: created in the browser with Location, signed, its subscription
   const number = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
   await openAgreementsLoaded(page)
 
-  // The agreement, a draft in the pinned project, its customer and payer picked by name from the switched contacts module, priced under the project's default list, which the form opens on (#291).
+  // The agreement, a draft in the tester's project, its customer and payer picked by name from the switched contacts module, priced under the project's default list, which the form opens on (#291).
   const created = await createAgreement(page, { number, customer: customer.name, payer: customer.name })
   expect(created.status()).toBe(201)
   expect(created.request().postDataJSON()).not.toHaveProperty("priceListId")

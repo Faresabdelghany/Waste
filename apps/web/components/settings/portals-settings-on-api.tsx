@@ -11,8 +11,7 @@
 // and an accessibility statement it serves itself, written whole through
 // `PUT /projects/:id/branding` under `edit` on `configure.portals`
 // (lib/data/project-branding.ts). The customer portal (C20–C22, #382–#384)
-// has no API yet and is not shown. Fixture mode keeps the browser's pane
-// (`configure.portals`).
+// has no API yet and is not shown.
 
 import { useState } from "react"
 import { ArrowSquareOut, PencilSimple } from "@phosphor-icons/react/dist/ssr"

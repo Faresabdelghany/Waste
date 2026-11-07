@@ -20,13 +20,13 @@
 // an earlier run, is already what it would become.
 //
 // The earliest effective day is tomorrow on the project's clock: today's
-// routes are operating, the Plan Ahead convention (route-schemes/plan-ahead.ts).
+// routes are operating, the Plan Ahead convention.
 //
 // The Plan Ahead window is a scheme's setting, `plan_ahead_days`: the nightly
 // sweep plans tomorrow through that many days ahead, 7 unless the office says
 // otherwise and at most 28, four weeks, since every run re-plans and asks a
 // Plan for each route it reshapes. The routing horizon keeps its own fixed
-// week (route-schemes/plan-ahead.ts), since it spends the routing quota.
+// week (apps/worker's routing-horizon.ts), since it spends the routing quota.
 import { addDays } from "../days"
 import type { ExistingRoute, GenerationWindow, RouteDecision } from "./generation"
 

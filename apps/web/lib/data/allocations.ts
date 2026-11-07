@@ -2,8 +2,7 @@
 // what Fleet › Vehicle Planning offers once it reads the API — allocate, the
 // change a planner makes with its reason, and the release's reason — for the
 // command surfaces (components/waste/commands/allocation-surfaces.tsx) to
-// render. Fixture mode keeps the registry's "Allocate fleet resources" action
-// form untouched.
+// render.
 //
 // Every field id is a key the adapter reads (lib/api/records/allocations.ts);
 // lib/data/__tests__/allocation-forms.test.ts holds the two together through

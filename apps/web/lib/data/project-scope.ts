@@ -81,7 +81,7 @@ export function recordsForProject<T extends Pick<BusinessRecord, "projectIds">>(
 export function selectedProjectIds(
   scope: ProjectScope,
   values: BusinessFormValues,
-  projects: readonly BusinessRecord[],
+  projects: readonly Pick<BusinessRecord, "id">[],
 ): string[] {
   if (isProjectRecordId(values.projectId)) return [values.projectId]
   const pinned = pinnedProjectId(scope)
@@ -96,7 +96,7 @@ export function selectedProjectIds(
  */
 export function projectScopeLabel(
   projectIds: readonly string[],
-  projects: readonly BusinessRecord[],
+  projects: readonly Pick<BusinessRecord, "id" | "name">[],
 ): string {
   if (projectIds.length > 1) return "All permitted projects"
   const [projectId] = projectIds

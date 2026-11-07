@@ -114,8 +114,7 @@ const SERVICE_WINDOW_SECTION: BusinessFormSection = {
  * The registry's agreement form as the API takes it: the fields above gone,
  * the price list the API's, a section that lost fields losing the words that
  * were about them, and the one left holding the price list and the notes
- * called so, then the service window (O14 of #290). Fixture mode keeps the
- * registry's form whole.
+ * called so, then the service window (O14 of #290).
  */
 export function agreementFormSchemaOnApi(schema: BusinessFormSchema): BusinessFormSchema {
   return {

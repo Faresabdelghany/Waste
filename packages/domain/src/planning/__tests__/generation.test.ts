@@ -7,7 +7,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { WALK_CAP_DAYS } from "../../route-schemes/generation"
 import { ruleSignature } from "../../route-schemes/container-drift"
 import type { SchemeCalendar } from "../../route-schemes/occurrences"
 import type { TankGate } from "../../route-schemes/due-from-last"
@@ -43,6 +42,7 @@ import {
   type StopCandidate,
   type StopGroup,
   type StopRule,
+  WALK_CAP_DAYS,
 } from "../generation"
 
 /** Mondays and Thursdays, from October 2026, open-ended. */

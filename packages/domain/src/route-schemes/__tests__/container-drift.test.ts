@@ -9,26 +9,16 @@ import {
   containerDriftBetween,
   containerDriftWarning,
   generationMatchHistoryOf,
-  generationMatchesOf,
   parseGenerationMatches,
-  ruleSignature,
   serializeGenerationMatches,
   type GenerationMatches,
 } from "../container-drift"
-import { applySchemeGeneration, planSchemeGeneration } from "../generation"
-import { COLLECTION_GROUPS_KEY, collectionGroupsOf, type CollectionGroup } from "../groups"
-import {
-  recordGenerationRun,
-  schemeAttention,
-  schemeGenerationRecorded,
-  schemeLiveAssessment,
-} from "../lifecycle"
-import { runPlanAhead } from "../plan-ahead"
+import { COLLECTION_GROUPS_KEY, collectionGroupsOf } from "../groups"
+import { schemeAttention } from "../lifecycle"
 
 /* --------------------------------- fixtures -------------------------------- */
 
 const AREA = "area-indreby"
-const DRIFT_PREFIX = "Matched containers shifted"
 
 /** An in-service 240 L residual bin inside the scheme's planning area. */
 const container = (id: string, fraction = "Residual"): BusinessRecord => ({
@@ -91,30 +81,6 @@ function ruleScheme(values: Record<string, string | boolean> = {}, status = "Val
   }
 }
 
-const window = { from: "2026-09-28", to: "2026-10-02" }
-
-/** One generation run: plan, apply, and the scheme record the run leaves behind. */
-function run(scheme: BusinessRecord, containers: readonly BusinessRecord[], generatedAt: string) {
-  const plan = planSchemeGeneration({ scheme, window, existingRoutes: [], containers })
-  assert.ok(plan, "the fixture scheme must plan")
-  const result = applySchemeGeneration({
-    plan,
-    existingPickups: [],
-    containers,
-    actorName: "Test",
-    generatedAt,
-  })
-  return { plan, result, scheme: recordGenerationRun(scheme, generatedAt, plan.matches) }
-}
-
-const related = (scheme: BusinessRecord, containers: readonly BusinessRecord[]) => ({
-  schemes: [scheme],
-  containers,
-})
-
-const driftWarnings = (warnings: readonly string[]) =>
-  warnings.filter((warning) => warning.startsWith(DRIFT_PREFIX))
-
 const stamp = (rule: string, containerIds: string[]): GenerationMatches => ({
   default: { rule, containerIds },
 })
@@ -169,127 +135,45 @@ describe("the 10 % threshold", () => {
   })
 })
 
-describe("a group's own planning area (O30 of #290)", () => {
-  const group = (planningAreaId?: string): CollectionGroup => ({ id: "group-a", name: "A", days: ["monday"], fractions: ["Residual"], stopSource: "rule", containerIds: [], ...(planningAreaId === undefined ? {} : { planningAreaId }) })
-  const plans = { plans: [] }
+/* ------------------------------- the badge -------------------------------- */
 
-  test("a group without one is signed with the scheme's area, as before", () => {
-    assert.equal(generationMatchesOf([group()], plans, AREA)["group-a"]?.rule, ruleSignature(group(), AREA))
-  })
-
-  test("a group with one is signed with its own, so moving it is a rule edit and never a drift", () => {
-    const own = generationMatchesOf([group("area-harbour")], plans, AREA)["group-a"]?.rule
-    assert.equal(own, ruleSignature(group(), "area-harbour"))
-    assert.notEqual(own, generationMatchesOf([group("area-north")], plans, AREA)["group-a"]?.rule)
-    assert.notEqual(own, generationMatchesOf([group()], plans, AREA)["group-a"]?.rule)
-  })
-})
-
-/* ------------------------------- run to run -------------------------------- */
-
-describe("generation runs stamp what they matched and compare with the run before", () => {
+describe("the Attention badge reads the two stamps the scheme carries", () => {
+  const rule = `${AREA}|Residual||`
   const thirty = containersOf(30)
-
-  test("the first run has nothing to compare: no drift, and the stamp carries the set under its rule", () => {
-    const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
-    assert.deepEqual(first.plan.containerDrift, [])
-    assert.deepEqual(first.result.summary.containerDrift, [])
-    assert.deepEqual(first.plan.matches, {
-      default: { rule: `${AREA}|Residual||`, containerIds: ids(thirty) },
-    })
-    // The first-generation event still promotes and marks the scheme (D25).
-    assert.equal(first.scheme.status, "Scheduled")
-    assert.ok(schemeGenerationRecorded(first.scheme))
-    const history = generationMatchHistoryOf(first.scheme.submittedValues)
-    assert.deepEqual(history.previous, {})
-    assert.deepEqual(history.last, first.plan.matches)
-    assert.deepEqual(driftWarnings(schemeAttention(first.scheme, related(first.scheme, thirty))), [])
+  const DRIFT_PREFIX = "Matched containers shifted"
+  /** The scheme as the API's adapter hands it over: the run before and the last run, stored as `serializeGenerationMatches` writes them. */
+  const stamped = (scheme: BusinessRecord, previous: GenerationMatches, last: GenerationMatches): BusinessRecord => ({
+    ...scheme,
+    submittedValues: {
+      ...scheme.submittedValues,
+      [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(previous),
+      [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
+    },
   })
+  const attentionOf = (scheme: BusinessRecord, containers: readonly BusinessRecord[]) => schemeAttention(scheme, { schemes: [scheme], containers })
+  const driftWarnings = (warnings: readonly string[]) => warnings.filter((warning) => warning.startsWith(DRIFT_PREFIX))
 
-  test("an unchanged set is no drift, and an identical run writes nothing", () => {
-    const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
-    const second = run(first.scheme, thirty, "2026-09-25T06:00:00.000Z")
-    assert.deepEqual(second.plan.containerDrift, [])
-    // The history advances only when the set moves: the second run of the
-    // same set returns its input, and so does the third.
-    assert.equal(second.scheme, first.scheme)
-    const third = run(second.scheme, thirty, "2026-09-26T06:00:00.000Z")
-    assert.equal(third.scheme, second.scheme)
-    assert.deepEqual(generationMatchHistoryOf(third.scheme.submittedValues).previous, {})
-    assert.deepEqual(driftWarnings(schemeAttention(third.scheme, related(third.scheme, thirty))), [])
-  })
-
-  test("a shift past the threshold is reported by the plan, the run summary and the Attention badge, persists across identical runs, and clears when the set moves back within the threshold", () => {
-    const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
-    // Four containers join the area: 4 of 30 = 13 %.
+  test("a shift past the threshold is the badge's last sentence, joined and left counted against the run before; within the threshold, or with no run before, there is none", () => {
     const grown = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id))]
-
-    // The badge reports runs, not the live base: before the next run it is quiet.
-    assert.deepEqual(driftWarnings(schemeAttention(first.scheme, related(first.scheme, grown))), [])
-
-    const second = run(first.scheme, grown, "2026-09-25T06:00:00.000Z")
-    assert.equal(second.plan.containerDrift.length, 1)
-    assert.deepEqual(second.plan.containerDrift[0].joined, ["d01", "d02", "d03", "d04"])
-    assert.deepEqual(second.plan.containerDrift[0].left, [])
-    assert.deepEqual(second.result.summary.containerDrift, second.plan.containerDrift)
+    const joined = stamped(ruleScheme(), stamp(rule, ids(thirty)), stamp(rule, ids(grown)))
     const sentence = "Matched containers shifted 13 % between generation runs: 4 joined, 0 left of 30"
-    assert.equal(containerDriftWarning(second.plan.containerDrift), sentence)
-
-    // The stamped record derives the same sentence from its two stamps alone.
-    const attention = schemeAttention(second.scheme, related(second.scheme, grown))
+    const attention = attentionOf(joined, grown)
     assert.deepEqual(driftWarnings(attention), [sentence])
     assert.equal(attention[attention.length - 1], sentence, "the drift sentence follows validation's warnings")
-    const assessment = schemeLiveAssessment(second.scheme, related(second.scheme, grown))
-    assert.deepEqual(assessment?.containerDrift, second.plan.containerDrift)
 
-    // An identical run — every Plan Ahead load while the base holds still —
-    // finds nothing new, writes nothing, and leaves the badge where it is.
-    const third = run(second.scheme, grown, "2026-09-26T06:00:00.000Z")
-    assert.deepEqual(third.plan.containerDrift, [])
-    assert.equal(third.scheme, second.scheme)
-    assert.deepEqual(driftWarnings(schemeAttention(third.scheme, related(third.scheme, grown))), [sentence])
-
-    // The set moves again, within the threshold: 3 of 34 leave (9 %). The
-    // most recent change is no drift, so the Attention clears.
+    // 3 of 34 leave (9 %): the most recent change is no drift.
     const settled = grown.slice(0, 31)
-    const fourth = run(third.scheme, settled, "2026-09-27T06:00:00.000Z")
-    assert.deepEqual(fourth.plan.containerDrift, [])
-    assert.notEqual(fourth.scheme, third.scheme)
-    assert.deepEqual(driftWarnings(schemeAttention(fourth.scheme, related(fourth.scheme, settled))), [])
-
-    // A move past the threshold puts a new sentence on the badge: 4 of 31 leave (13 %).
-    const fifth = run(fourth.scheme, settled.slice(0, 27), "2026-09-28T06:00:00.000Z")
-    assert.deepEqual(driftWarnings(schemeAttention(fifth.scheme, related(fifth.scheme, settled.slice(0, 27)))), [
-      "Matched containers shifted 13 % between generation runs: 0 joined, 4 left of 31",
-    ])
+    assert.deepEqual(driftWarnings(attentionOf(stamped(ruleScheme(), stamp(rule, ids(grown)), stamp(rule, ids(settled))), settled)), [])
+    // The first run has nothing to compare with.
+    assert.deepEqual(driftWarnings(attentionOf(stamped(ruleScheme(), {}, stamp(rule, ids(thirty))), thirty)), [])
   })
 
-  test("containers leaving count too: 4 of 30 taken out of service is a drift", () => {
-    const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
-    const shrunk = thirty.map((record, index) =>
-      index < 4 ? { ...record, status: "Defect" } : record,
-    )
-    const second = run(first.scheme, shrunk, "2026-09-25T06:00:00.000Z")
-    assert.equal(
-      containerDriftWarning(second.plan.containerDrift),
+  test("containers leaving count too: 4 of 30 out of the set is a drift", () => {
+    const shrunk = thirty.slice(4)
+    const left = stamped(ruleScheme(), stamp(rule, ids(thirty)), stamp(rule, ids(shrunk)))
+    assert.deepEqual(driftWarnings(attentionOf(left, shrunk)), [
       "Matched containers shifted 13 % between generation runs: 0 joined, 4 left of 30",
-    )
-  })
-
-  test("a rule edit starts the comparison over: the set matched under the new rule is not drift", () => {
-    const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
-    const base = [...thirty, ...containersOf(5, "Organic").map((record) => ({ ...record, id: `o-${record.id}` }))]
-    const edited: BusinessRecord = {
-      ...first.scheme,
-      submittedValues: { ...first.scheme.submittedValues, matchFractions: "Organic" },
-    }
-    const second = run(edited, base, "2026-09-25T06:00:00.000Z")
-    assert.deepEqual(second.plan.matches.default.containerIds, base.slice(30).map((record) => record.id).sort())
-    assert.deepEqual(second.plan.containerDrift, [])
-    assert.deepEqual(driftWarnings(schemeAttention(second.scheme, related(second.scheme, base))), [])
-    // Under the new rule, the next run compares normally: 5 → 4 is 20 %.
-    const third = run(second.scheme, base.slice(0, 34), "2026-09-26T06:00:00.000Z")
-    assert.equal(third.plan.containerDrift.length, 1)
+    ])
   })
 
   test("named collection groups are reported one clause each", () => {
@@ -297,57 +181,25 @@ describe("generation runs stamp what they matched and compare with the run befor
       stopSelection: "",
       matchFractions: "",
       [COLLECTION_GROUPS_KEY]: JSON.stringify([
-        {
-          id: "g-residual",
-          name: "Residual run",
-          days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-          fractions: ["Residual"],
-          vehicleId: "vehicle-wh24",
-          driverId: "driver-mads",
-          stopSource: "rule",
-          containerIds: [],
-        },
-        {
-          id: "g-organic",
-          name: "Organic run",
-          days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-          fractions: ["Organic"],
-          vehicleId: "vehicle-wh25",
-          driverId: "driver-lars",
-          stopSource: "rule",
-          containerIds: [],
-        },
+        { id: "g-residual", name: "Residual run", days: ["monday", "tuesday", "wednesday", "thursday", "friday"], fractions: ["Residual"], vehicleId: "vehicle-wh24", driverId: "driver-mads", stopSource: "rule", containerIds: [] },
+        { id: "g-organic", name: "Organic run", days: ["monday", "tuesday", "wednesday", "thursday", "friday"], fractions: ["Organic"], vehicleId: "vehicle-wh25", driverId: "driver-lars", stopSource: "rule", containerIds: [] },
       ]),
     })
     const organic = containersOf(5, "Organic").map((record) => ({ ...record, id: `o-${record.id}` }))
-    const first = run(explicit, [...thirty, ...organic], "2026-09-24T06:00:00.000Z")
-    assert.deepEqual(Object.keys(first.plan.matches).sort(), ["g-organic", "g-residual"])
-    const moved = [
-      ...thirty,
-      ...["d01", "d02", "d03", "d04"].map((id) => container(id)),
-      ...organic,
-      container("o-d01", "Organic"),
-      container("o-d02", "Organic"),
-    ]
-    const second = run(first.scheme, moved, "2026-09-25T06:00:00.000Z")
-    assert.equal(
-      containerDriftWarning(second.plan.containerDrift),
-      "Matched containers shifted between generation runs: Residual run 13 % (4 joined, 0 left of 30); Organic run 40 % (2 joined, 0 left of 5)",
-    )
-  })
-
-  test("a manual scheme has nothing to stamp: no matches, and a recorded scheme is returned as it was", () => {
-    const manual = ruleScheme({
-      stopSelection: "manual",
-      matchFractions: "",
-      containerIds: "c01, c02",
-      lastGeneratedAt: "2026-09-01T06:00:00.000Z",
-    }, "Scheduled")
-    const first = run(manual, thirty, "2026-09-24T06:00:00.000Z")
-    assert.deepEqual(first.plan.matches, {})
-    assert.deepEqual(first.plan.containerDrift, [])
-    assert.equal(first.scheme, manual)
-    assert.equal(first.scheme.submittedValues?.[LAST_GENERATION_MATCHES_KEY], undefined)
+    const moved = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id)), ...organic, container("o-d01", "Organic"), container("o-d02", "Organic")]
+    const organicRule = `${AREA}|Organic||`
+    const previous: GenerationMatches = {
+      "g-residual": { rule, containerIds: ids(thirty) },
+      "g-organic": { rule: organicRule, containerIds: ids(organic) },
+    }
+    const last: GenerationMatches = {
+      "g-residual": { rule, containerIds: [...ids(thirty), "d01", "d02", "d03", "d04"] },
+      "g-organic": { rule: organicRule, containerIds: [...ids(organic), "o-d01", "o-d02"] },
+    }
+    const sentence = "Matched containers shifted between generation runs: Residual run 13 % (4 joined, 0 left of 30); Organic run 40 % (2 joined, 0 left of 5)"
+    const scheme = stamped(explicit, previous, last)
+    assert.deepEqual(driftWarnings(attentionOf(scheme, moved)), [sentence])
+    assert.equal(containerDriftWarning(containerDriftBetween(previous, last, collectionGroupsOf(explicit.submittedValues, { facts: {} }))), sentence)
   })
 })
 
@@ -391,54 +243,5 @@ describe("the stamp's storage", () => {
       [LAST_GENERATION_MATCHES_KEY]: "",
     })
     assert.deepEqual(history, { previous: {}, last: {} })
-  })
-})
-
-/* -------------------------------- Plan Ahead -------------------------------- */
-
-describe("Plan Ahead stamps every run and reports drifted schemes in its summary", () => {
-  const thirty = containersOf(30)
-  const today = "2026-09-24"
-  const armed = ruleScheme(
-    { planAhead: true, lastGeneratedAt: "2026-09-01T06:00:00.000Z" },
-    "Scheduled",
-  )
-  const auto = (scheme: BusinessRecord, containers: readonly BusinessRecord[], at: string) =>
-    runPlanAhead({
-      schemes: [scheme],
-      today,
-      existingRoutes: [],
-      existingPickups: [],
-      containers,
-      actorName: "Plan Ahead",
-      generatedAt: at,
-    })
-
-  test("an already-recorded scheme comes back stamped on the first run, drifted on the second, and not at all on a load of the same set", () => {
-    const first = auto(armed, thirty, "2026-09-24T06:00:00.000Z")
-    assert.equal(first.schemes.length, 1)
-    assert.deepEqual(first.summary.containerDrift, [])
-    assert.deepEqual(
-      generationMatchHistoryOf(first.schemes[0].submittedValues).last.default.containerIds,
-      ids(thirty),
-    )
-
-    const grown = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id))]
-    const second = auto(first.schemes[0], grown, "2026-09-25T06:00:00.000Z")
-    assert.equal(second.schemes.length, 1)
-    const sentence = "Matched containers shifted 13 % between generation runs: 4 joined, 0 left of 30"
-    assert.deepEqual(second.summary.containerDrift, [
-      { schemeId: "scheme-drift", schemeName: "RS-Drift", warning: sentence },
-    ])
-
-    // The next load of the same set writes no scheme and toasts nothing,
-    // and the stored record keeps the badge until the set moves again.
-    const third = auto(second.schemes[0], grown, "2026-09-26T06:00:00.000Z")
-    assert.equal(third.schemes.length, 0)
-    assert.deepEqual(third.summary.containerDrift, [])
-    assert.deepEqual(
-      driftWarnings(schemeAttention(second.schemes[0], related(second.schemes[0], grown))),
-      [sentence],
-    )
   })
 })

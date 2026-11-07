@@ -6,7 +6,7 @@
 // dialog over an invoice's lines, and a payment's registration, its match
 // and a customer's statement (#291 C6) — for the command surfaces
 // (components/waste/commands/commercial-surfaces.tsx, billing-surfaces.tsx)
-// and the Settings pane to render. Fixture mode keeps the registry's forms.
+// and the Settings pane to render.
 //
 // Every field id here is a key the adapters read (lib/api/records/pricing.ts,
 // billing.ts): the form's values go onto the record as its typed values, or

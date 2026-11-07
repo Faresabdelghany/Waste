@@ -17,7 +17,6 @@ import {
   ArrowSquareOut,
   CalendarCheck,
   CaretDown,
-  ArrowsClockwise,
   DownloadSimple,
   Gear,
   Info,
@@ -63,15 +62,11 @@ import {
   withDerivedCalendarValue,
   type CalendarRowSummary,
 } from "@waste/domain/route-schemes/calendar-list"
-import {
-  SCHEME_EDIT_POLICY_LABELS,
-  planSchemeCreation,
-} from "@waste/domain/route-schemes/creation"
+import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
 import { draftGroups } from "@waste/domain/route-schemes/draft"
 import { driverFormOptions } from "@/lib/data/driver-form-options"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
-import { planSchemeDeletion } from "@waste/domain/route-schemes/deletion"
 import {
   schemeAttention,
   schemeCanGenerateRoutes,
@@ -117,10 +112,7 @@ import type {
   BusinessFormSchema,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
-import { softDeletedRecord } from "@waste/domain/record-visibility"
-import {
-  isSoftDeleted,
-} from "@/lib/commercial/price-model"
+import { isSoftDeleted, softDeletedRecord } from "@waste/domain/record-visibility"
 import {
   getBusinessModuleHref,
   resolveBusinessRelation,
@@ -232,25 +224,18 @@ import { SchemeEditPolicyDialog } from "@/components/waste/scheme-edit-policy-di
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { useSchemeEditCommit } from "@/components/waste/use-scheme-edit-commit"
 import {
-  RouteCreateEntry,
-  type GuidedRouteData,
-} from "@/components/waste/route-create-flow"
-import {
   SchemeCreateEntry,
   resolvedDraftPlans,
   validateGuidedScheme,
   type GuidedSchemeData,
 } from "@/components/waste/scheme-create-flow"
 import { CollectionGroupsEditorDialog } from "@/components/waste/collection-groups-editor"
-import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
-import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
-import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
@@ -271,7 +256,6 @@ import {
   selectedProjectIds,
   type ProjectScope,
 } from "@/lib/data/project-scope"
-import { RouteDetailsPage } from "@/components/waste/route-details-page"
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import {
@@ -1018,7 +1002,7 @@ export function BusinessWorkspace({
   const projectScope =
     fixedProjectScope ??
     (apiConfigured
-      ? projectScopeOfMe(me?.projects, OPERATOR_PROJECT_NAME)
+      ? projectScopeOfMe(me?.projects)
       : DEFAULT_PROJECT_SCOPE)
   // The scope vocabulary: the organisation module's project records, fixture
   // and created alike (issue #44) — what a scope is compared against, what a
@@ -1055,8 +1039,6 @@ export function BusinessWorkspace({
     )
   }
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [generateSchemeRecord, setGenerateSchemeRecord] =
-    useState<BusinessRecord | null>(null)
   const [groupsEditorScheme, setGroupsEditorScheme] =
     useState<BusinessRecord | null>(null)
   const [relatedCreateTarget, setRelatedCreateTarget] =
@@ -1064,12 +1046,8 @@ export function BusinessWorkspace({
   // The one edit-save of a route scheme (issue #33; the edit policy of issue
   // #38) — both edit doors save through it, and the "Ask each time" question
   // it may raise is answered by the commit of the render that answers.
-  // On the Pilot the API holds the schemes and generates their routes: a
-  // scheme's create and edit write the scheme alone, and the web's own
-  // generation — the Generate dialog, Plan Ahead on load — stays off until
-  // slice 4 brings the API's trigger (the nightly sweep plans meanwhile).
   const { commitSchemeEdit, pendingSchemeEdit, answerPendingSchemeEdit, dismissPendingSchemeEdit } =
-    useSchemeEditCommit({ moduleRecords, upsertRecord, setSelectedRecord, actorName, schemesOnApi: apiConfigured })
+    useSchemeEditCommit({ moduleRecords, upsertRecord, setSelectedRecord })
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
@@ -1162,10 +1140,7 @@ export function BusinessWorkspace({
   }
   const formWriteTarget = resolveFormModule(formWriteRequest.workspaceId, formWriteRequest.moduleId)
   const formTargetOnApi = useServerModuleState(formWriteTarget?.workspaceId ?? workspace.id, formWriteTarget?.module.id ?? activeModule.id)
-  // Routes get a chooser between Quick create and the Guided Setup wizard.
-  const isRouteCreateFlow =
-    activeModuleFormSchema?.key === "route-studio.routes"
-  // Route Schemes get the same chooser with their own guided wizard.
+  // Route Schemes get a chooser between Quick create and the Guided Setup wizard.
   const isSchemeCreateFlow =
     activeModuleFormSchema?.key === "route-studio.schemes"
   const activeRecords = useMemo(() => {
@@ -1213,15 +1188,8 @@ export function BusinessWorkspace({
         : activeRecords,
     [activeRecords, getRecords, relatedCreateModule],
   )
-  // Fixture mode's route page; on the Pilot a route opens RouteDetailsOnApi,
-  // below, over its command surface (#179).
-  const isRouteDetails =
-    workspace.id === "route-studio" &&
-    activeModule.id === "routes" &&
-    Boolean(selectedRecord) &&
-    RowSurface === undefined
-  // On the Pilot a route opens its own page over the same command surface
-  // (RouteDetailsOnApi): its stops first, its facts and History beside them.
+  // A route opens its own page over its command surface (RouteDetailsOnApi):
+  // its stops first, its facts and History beside them.
   const isRoutePageOnApi =
     workspace.id === "route-studio" &&
     activeModule.id === "routes" &&
@@ -1246,36 +1214,6 @@ export function BusinessWorkspace({
     workspace.id === "operate" &&
     activeModule.id === "tickets" &&
     Boolean(selectedRecord)
-  const selectedRouteReference = selectedRecord?.name.split(" · ")[0] ?? ""
-  const relatedRouteTickets = useMemo(() => {
-    if (!selectedRouteReference) return []
-    const operateWorkspace = getWorkspaceDefinition("operate")
-    const ticketsModule = operateWorkspace.modules.find(
-      (module) => module.id === "tickets",
-    )
-    if (!ticketsModule) return []
-    return getRecords("operate", ticketsModule.id).filter(
-      (ticket) =>
-        [ticket.name, ticket.context, ...ticket.related]
-          .join(" ")
-          .includes(selectedRouteReference),
-    )
-  }, [getRecords, selectedRouteReference])
-  const relatedRouteSessions = useMemo(() => {
-    if (!selectedRouteReference) return []
-    const operateWorkspace = getWorkspaceDefinition("operate")
-    const sessionsModule = operateWorkspace.modules.find(
-      (module) => module.id === "driver-app",
-    )
-    if (!sessionsModule) return []
-    return getRecords(
-      "operate",
-      sessionsModule.id).filter((session) =>
-      [session.name, session.context, ...session.related]
-        .join(" ")
-        .includes(selectedRouteReference),
-    )
-  }, [getRecords, selectedRouteReference])
   const selectedServiceProviderId = isServiceProviderDetails ? selectedRecord?.id ?? "" : ""
   const relatedServiceProviderUsers = useMemo(() => {
     if (!selectedServiceProviderId) return []
@@ -1574,9 +1512,8 @@ export function BusinessWorkspace({
   const canDeleteRecords =
     offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
   const canRunRecordActions = hasGrant("edit")
-  // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
-  // ticket #8) on a scheme: row menu + detail view, only for schemes whose
-  // recurrence is structured enough to generate.
+  // The Plan Ahead toggle (FR-11, ticket #8) on a scheme's row menu, only for
+  // schemes whose recurrence is structured enough to generate.
   const isSchemesView = activeModule.id === "schemes"
   // Per-scheme derived row presentation, one pass over one related-records
   // load: the live Attention warnings (issue #25, D5/D20 — recomputed from
@@ -1622,15 +1559,6 @@ export function BusinessWorkspace({
       canRunRecordActions &&
       schemeCanGenerateRoutes(record, todayIso())
         ? [
-            ...(apiConfigured
-              ? []
-              : [
-                  {
-                    label: "Generate routes",
-                    icon: <ArrowsClockwise className="h-4 w-4" />,
-                    onSelect: (target: BusinessRecord) => setGenerateSchemeRecord(target),
-                  },
-                ]),
             {
               label: isPlanAheadEnabled(record)
                 ? "Turn off Plan Ahead"
@@ -1652,7 +1580,7 @@ export function BusinessWorkspace({
             },
           ]
         : undefined,
-    [apiConfigured, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
+    [canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
   // The agreements module's sheet actions on the API (slice 9a of #81): the
   // edit a standard view offers no row action for — an agreement's period
@@ -1997,46 +1925,11 @@ export function BusinessWorkspace({
 
     if (action.toLowerCase().includes("delete")) {
       const deletion = { reason, actorName, deletionLogId: auditId }
-      let deletionMessage =
-        "The structured reason and actor were written to the deletion log."
-      if (activeModule.id === "schemes") {
-        // Scheme deletion (issue #34, D32) goes through the lifecycle seam:
-        // Plan Ahead off, future refreshable routes cancelled (kept as
-        // records), operational history preserved — this handler only
-        // applies the returned upserts. Plan against the STORED record: the
-        // detail page's record carries render-time derived status/context
-        // that must never be frozen into the store.
-        const stored =
-          moduleRecords("route-studio", "schemes").find(
-            (candidate) => candidate.id === record.id,
-          ) ?? record
-        const plan = planSchemeDeletion(
-          {
-            scheme: stored,
-            today: todayIso(),
-            ...deletion,
-            generatedAt: new Date().toISOString(),
-          },
-          {
-            existingRoutes: moduleRecords("route-studio", "routes"),
-            existingPickups: moduleRecords("route-studio", "pickups"),
-          },
-        )
-        upsertRecord(workspace.id, activeModule.id, plan.scheme)
-        for (const route of plan.routes) {
-          upsertRecord("route-studio", "routes", route)
-        }
-        for (const pickup of plan.pickups) {
-          upsertRecord("route-studio", "pickups", pickup)
-        }
-        deletionMessage = plan.message
-      } else {
-        upsertRecord(
-          workspace.id,
-          activeModule.id,
-          softDeletedRecord(record, deletion),
-        )
-      }
+      upsertRecord(
+        workspace.id,
+        activeModule.id,
+        softDeletedRecord(record, deletion),
+      )
       setSelectedRecord(null)
       setPendingAction(null)
       router.replace(
@@ -2048,7 +1941,7 @@ export function BusinessWorkspace({
         { scroll: false },
       )
       toast.success(`${record.name} soft-deleted`, {
-        description: deletionMessage,
+        description: "The structured reason and actor were written to the deletion log.",
       })
       return
     }
@@ -3093,12 +2986,10 @@ export function BusinessWorkspace({
         updatedRecord = normalizeRouteRecord(updatedRecord)
       }
       if (resolvedTarget.module.id === "schemes") {
-        // Edit-save reconciliation (issue #33, D31) through the one scheme
-        // edit-save: the lifecycle seam revalidates the edited scheme and
-        // reshapes the future planning window by the scheme's edit policy
-        // (issue #38) — asking first when the policy says so — and
-        // commitSchemeEdit applies the returned upserts. The dialog closes
-        // once the save is applied, so an asked or refused save keeps it open.
+        // The one scheme edit-save (issue #33, D31): commitSchemeEdit applies
+        // the edit by the scheme's edit policy (issue #38) — asking first when
+        // the policy says so. The dialog closes once the save is applied, so
+        // an asked or refused save keeps it open.
         // The stored record is the `before`: it is what the form was seeded
         // from, and the planner reads the policy and the kept configuration
         // off it.
@@ -3202,142 +3093,11 @@ export function BusinessWorkspace({
     })
   }
 
-  const handleGuidedRouteCreate = (data: GuidedRouteData) => {
-    const now = Date.now()
-    const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
-    const linkRecord = (
-      fieldId: string,
-      workspaceId: WorkspaceId,
-      moduleId: string,
-      recordId?: string,
-    ) => {
-      if (!recordId) return undefined
-      const resolved = resolveFormModule(workspaceId, moduleId)
-      if (!resolved) return undefined
-      const record = getRecords(
-        resolved.workspaceId,
-        resolved.module.id).find((candidate) => candidate.id === recordId)
-      if (!record) return undefined
-      relationRefs.push({
-        fieldId,
-        workspaceId: resolved.workspaceId,
-        moduleId: resolved.module.id,
-        recordId,
-        label: record.name,
-      })
-      return record
-    }
-
-    const project = linkRecord("projectId", "configure", "organization", data.projectId)
-    const serviceProvider = linkRecord(
-      "serviceProviderId",
-      "service-providers",
-      "service-providers",
-      data.serviceProviderId,
-    )
-    const vehicle = linkRecord("vehicleId", "fleet", "vehicles", data.vehicleId)
-    const driver = linkRecord("driverId", "fleet", "drivers", data.driverId)
-    const containerRecords = data.containerIds
-      .map((containerId) =>
-        linkRecord("containerIds", "resources", "containers", containerId),
-      )
-      .filter((record): record is BusinessRecord => Boolean(record))
-
-    const projectIds = selectedProjectIds(
-      projectScope,
-      { projectId: data.projectId ?? "" },
-      projectRecords,
-    )
-    // Vehicle names carry the registration plate; facts show the callsign.
-    const vehicleName = vehicle?.name.split(" · ")[0]
-    const facts: Record<string, string> = {
-      Scope: projectScopeLabel(projectIds, projectRecords),
-      "Record kind": "Route",
-      "Execution policy": "create record",
-      "Submitted by": actorName,
-      ...(project ? { Project: project.name } : {}),
-      // The canonical date fact key routes share with generation (issue #23).
-      ...(data.date ? { "Operating date": formatShortDay(data.date) } : {}),
-      ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
-      ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
-      ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),
-      Vehicle: vehicleName ?? "Unassigned",
-      Driver: driver?.name ?? "Unassigned",
-      ...(data.wasteFraction ? { "Waste fraction": data.wasteFraction } : {}),
-      ...(data.containerType ? { "Container type": data.containerType } : {}),
-      ...(containerRecords.length
-        ? {
-            Containers: containerRecords
-              .map((record) => record.name)
-              .join(" · "),
-          }
-        : {}),
-    }
-
-    const newRecord: BusinessRecord = {
-      id: `${activeModule.id}-route-${now}`,
-      // Routes carry no user-entered name; the system issues the Route ID.
-      name: `RC-${String(now).slice(-4)}`,
-      context:
-        [project?.name, data.date, serviceProvider?.name].filter(Boolean).join(" · ") ||
-        projectScopeLabel(projectIds, projectRecords),
-      status:
-        activeModuleFormSchema?.execution?.initialStatus ??
-        activeModule.lifecycle[0] ??
-        "Planned",
-      owner: actorName,
-      value:
-        activeModuleFormSchema?.execution?.resultValue ??
-        "Stops pending generation",
-      updated: "Now",
-      description:
-        "Created with Guided Setup covering project, date, responsibility, fleet, locations, and containers.",
-      facts,
-      related: [
-        ...relationRefs.map((relation) => relation.label),
-        "Audit history created",
-      ],
-      source: "Office workspace",
-      freshness: "Now",
-      allowedTransitions: activeModule.lifecycle.slice(1, 3),
-      projectIds,
-      serviceProviderId: data.serviceProviderId ?? serviceProviderScopeId,
-      recordKind: "Route",
-      submittedValues: {
-        projectId: data.projectId ?? "",
-        operatingDate: data.date ?? "",
-        serviceProviderId: data.serviceProviderId ?? "",
-        homeDepot: data.homeDepot ?? "",
-        wasteStation: data.wasteStation ?? "",
-        vehicleId: data.vehicleId ?? "",
-        driverId: data.driverId ?? "",
-        wasteFraction: data.wasteFraction ?? "",
-        containerType: data.containerType ?? "",
-        containerIds: data.containerIds.join(","),
-      },
-      relationRefs,
-    }
-    upsertRecord(workspace.id, activeModule.id, newRecord)
-    setSelectedRecord(newRecord)
-    router.push(
-      getWorkspaceNavigationHref(
-        navigationBasePath,
-        workspace.id,
-        activeModule.id,
-        newRecord.id,
-      ),
-      { scroll: false },
-    )
-    toast.success("Route created", {
-      description: `${newRecord.name} was created with Guided Setup.`,
-    })
-  }
-
   // Route Scheme creation shared by both create paths (spec FR-2/FR-5/FR-14;
   // issue #31, D19/P1): builds the record from the draft, decides Validated vs
   // Draft with the blocking checks, keeps submittedValues in the shape the
-  // recurrence engine and per-day plan readers consume, and applies the
-  // creation orchestration. Guided Setup hands the wizard draft in directly;
+  // recurrence engine and per-day plan readers consume, and writes it.
+  // Guided Setup hands the wizard draft in directly;
   // Quick Create maps its form values onto the same draft shape
   // (quickSchemeDraftFromValues) — one path, so the two cannot drift.
   const createSchemeFromDraft = (
@@ -3568,109 +3328,36 @@ export function BusinessWorkspace({
       submittedValues,
       relationRefs,
     }
-    // On the Pilot the API takes the scheme as it stands — Draft or
-    // Validated, the web's validation deciding which it asks for and the API
-    // holding a validated one to its structural rules — and its routes are
-    // the API's to generate: nothing past the scheme is written here, and
-    // the scheme opens and the toast shows once the API has answered.
-    if (apiConfigured) {
-      const saved = upsertRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, newRecord)
-      whenSaved(saved, () => {
-        if (origin.method !== "Guided Setup") {
-          setSelectedRecord(newRecord)
-          router.push(getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id, newRecord.id), { scroll: false })
-        }
-        if (newRecord.status === "Draft") {
-          toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
-            description: `${validation.issues.length} open issue${validation.issues.length === 1 ? "" : "s"}: ${validation.issues.join(" · ")}`,
-          })
-        } else {
-          toast.success(`Route scheme created — ${newRecord.name}`, {
-            description: "The nightly plan-ahead run generates its routes.",
-          })
-        }
-      })
-      return saved
-    }
-    // Self-contained creation (issue #28, D18/D24/D25): the orchestration
-    // planner decides everything past "Create" — a Validated scheme generates
-    // its initial window with Plan Ahead on and becomes Scheduled; this
-    // handler only applies the returned upserts.
-    const routesModule = businessWorkspaces["route-studio"].modules.find(
-      (candidate) => candidate.id === "routes",
-    )
-    const pickupsModule = businessWorkspaces["route-studio"].modules.find(
-      (candidate) => candidate.id === "pickups",
-    )
-    const calendarsModule = getModuleDefinition(COLLECTION_CALENDARS_MODULE)
-    const creation = planSchemeCreation(
-      { scheme: newRecord, today: todayIso(), actorName, createAs: data.createAs },
-      {
-        existingRoutes: routesModule
-          ? getRecords("route-studio", routesModule.id)
-          : [],
-        existingPickups: pickupsModule
-          ? getRecords("route-studio", pickupsModule.id)
-          : [],
-        containers: containerRecords,
-        calendarRecords: calendarsModule
-          ? getRecords(
-              COLLECTION_CALENDARS_MODULE.workspaceId,
-              calendarsModule.id)
-          : [],
-        projectRecords: moduleRecords("configure", "organization"),
-      },
-    )
-    upsertRecord(workspace.id, activeModule.id, creation.scheme)
-    for (const route of creation.routes) {
-      upsertRecord("route-studio", "routes", route)
-    }
-    for (const pickup of creation.pickups) {
-      upsertRecord("route-studio", "pickups", pickup)
-    }
-    // Guided Setup closes onto the list, where the new scheme appears with
-    // its status (2026-09-16 redesign); Quick create keeps opening the record.
-    if (origin.method !== "Guided Setup") {
-      setSelectedRecord(creation.scheme)
-      router.push(
-        getWorkspaceNavigationHref(
-          navigationBasePath,
-          workspace.id,
-          activeModule.id,
-          newRecord.id,
-        ),
-        { scroll: false },
-      )
-    }
-    if (creation.outcome === "scheduled") {
-      toast.success(`Route scheme created — ${newRecord.name}`, {
-        description: creation.message,
-      })
-    } else if (creation.outcome === "validated") {
-      toast.success(`Route scheme created as Validated — ${newRecord.name}`, {
-        description: creation.message,
-      })
-    } else if (creation.outcome === "generation-failed") {
-      toast.warning(`Route scheme created as Validated — ${newRecord.name}`, {
-        description: creation.message,
-      })
-    } else {
-      toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
-        description: `${creation.message} ${validation.issues.length} open issue${
-          validation.issues.length === 1 ? "" : "s"
-        }: ${validation.issues.join(" · ")}`,
-      })
-    }
-    return undefined
+    // The API takes the scheme as it stands — Draft or Validated, the web's
+    // validation deciding which it asks for and the API holding a validated
+    // one to its structural rules — and its routes are the API's to
+    // generate: nothing past the scheme is written here, and the scheme opens
+    // and the toast shows once the API has answered.
+    const saved = upsertRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, newRecord)
+    whenSaved(saved, () => {
+      if (origin.method !== "Guided Setup") {
+        setSelectedRecord(newRecord)
+        router.push(getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id, newRecord.id), { scroll: false })
+      }
+      if (newRecord.status === "Draft") {
+        toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
+          description: `${validation.issues.length} open issue${validation.issues.length === 1 ? "" : "s"}: ${validation.issues.join(" · ")}`,
+        })
+      } else {
+        toast.success(`Route scheme created — ${newRecord.name}`, {
+          description: "The nightly plan-ahead run generates its routes.",
+        })
+      }
+    })
+    return saved
   }
 
   /**
    * "Edit collection groups" save (D36): serializes the groups onto the stored
    * scheme (legacy shape for one group covering every day, explicit
    * otherwise), refreshes the facts, and saves through the same edit-save the
-   * schema dialog uses (commitSchemeEdit) — the lifecycle seam revalidates
-   * and reshapes the future planning window by the scheme's edit policy,
-   * asking first when the policy says so (issue #38).
+   * schema dialog uses (commitSchemeEdit), which applies it by the scheme's
+   * edit policy, asking first when the policy says so (issue #38).
    */
   const handleSchemeGroupsSave = (groups: CollectionGroup[]) => {
     if (!groupsEditorScheme) return
@@ -3811,13 +3498,7 @@ export function BusinessWorkspace({
         )}
         {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
         {primary === "form" && formSchema && (
-          isRouteCreateFlow ? (
-            <RouteCreateEntry
-              submitLabel={formSchema.submitLabel}
-              onQuickCreate={() => setIsCreateOpen(true)}
-              onGuidedCreate={handleGuidedRouteCreate}
-            />
-          ) : isSchemeCreateFlow ? (
+          isSchemeCreateFlow ? (
             <SchemeCreateEntry
               submitLabel={formSchema.submitLabel}
               onQuickCreate={() => setIsCreateOpen(true)}
@@ -3844,41 +3525,8 @@ export function BusinessWorkspace({
           onEdit={
             canEditRecords ? () => openEditRecord(schemeDetailRecord) : undefined
           }
-          onDelete={
-            canDeleteRecords
-              ? () => requestRecordDelete(schemeDetailRecord)
-              : undefined
-          }
-          onGenerateRoutes={
-            canRunRecordActions && !apiConfigured
-              ? () => setGenerateSchemeRecord(schemeDetailRecord)
-              : undefined
-          }
           onEditGroups={
             canEditRecords ? () => setGroupsEditorScheme(schemeDetailRecord) : undefined
-          }
-          readOnly={!canRunRecordActions}
-        />
-      ) : isRouteDetails && selectedRecord ? (
-        <RouteDetailsPage
-          module={activeModule}
-          record={selectedRecord}
-          tickets={relatedRouteTickets}
-          sessions={relatedRouteSessions}
-          onBack={closeRecord}
-          onAction={requestRecordAction}
-          onEdit={canEditRecords ? () => openEditRecord(selectedRecord) : undefined}
-          onDelete={canDeleteRecords ? () => requestRecordDelete(selectedRecord) : undefined}
-          onReassign={
-            canRunRecordActions
-              ? (updated, reassignedPickups) => {
-                  upsertRecord(workspace.id, activeModule.id, updated)
-                  for (const pickup of reassignedPickups) {
-                    upsertRecord("route-studio", "pickups", pickup)
-                  }
-                  setSelectedRecord(updated)
-                }
-              : undefined
           }
           readOnly={!canRunRecordActions}
         />
@@ -4674,13 +4322,6 @@ export function BusinessWorkspace({
       )}
         </>
       )}
-      {/* Shared with the scheme detail page (issue #29) — rendered outside
-          the list branch so both surfaces can open it. */}
-      <SchemeGenerateRoutesDialog
-        scheme={generateSchemeRecord}
-        actorName={actorName}
-        onClose={() => setGenerateSchemeRecord(null)}
-      />
       <CollectionGroupsEditorDialog
         scheme={groupsEditorScheme}
         onClose={() => setGroupsEditorScheme(null)}
@@ -4767,13 +4408,6 @@ export function BusinessWorkspace({
           resolveRecord={resolveWorkspaceRecord}
         />
       </Suspense>
-      {/* Plan Ahead auto-generation fires when Route Studio loads (FR-11) —
-          operator-side automation, so never inside a service provider scope, and
-          never on behalf of a viewer whose role could not run the manual
-          Generate routes action. */}
-      {workspace.id === "route-studio" &&
-        !serviceProviderScopeId &&
-        canRunRecordActions && <SchemePlanAheadRunner actorName={actorName} />}
     </div>
   )
 }

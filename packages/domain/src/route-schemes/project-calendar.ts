@@ -1,10 +1,10 @@
 // The project's calendar (round 3, 2026-09-16): its weekend and its holiday
 // list, resolved by ONE function — resolveProjectCalendar — for the guided
-// setup, generation (creation, edit, Plan Ahead, manual runs), the scheme
-// detail, and the list. Both are explicit project attributes:
+// setup, the scheme detail, and the list. Both are explicit project
+// attributes:
 //   weekend      the weekdays the project rests on (Egypt Friday–Saturday,
 //                Denmark Saturday–Sunday), never derived from the weekday
-//                number; DEFAULT_WEEKEND only when nothing is set;
+//                number; planning's DEFAULT_WEEKEND only when nothing is set;
 //   holidayList  the name of the company's Holiday List the project rests
 //                on, or absent = no list. Since 2026-11-05 the list is a
 //                record of its own (holiday-list-records.ts), riding among
@@ -19,13 +19,11 @@ import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
 import { holidayNamesFor, withCarriedNames } from "./holiday-names"
-import { holidayListFromDates, schemeProjectId } from "./holidays"
+import { holidayListFromDates } from "./holidays"
 import type { SchemeCalendar } from "./occurrences"
 import { type HolidayList, NO_HOLIDAYS, type ServiceDay } from "../days"
 import { parseServiceDays } from "./recurrence"
-
-/** The weekend a project takes when it has none set. */
-export const DEFAULT_WEEKEND: readonly ServiceDay[] = ["saturday", "sunday"]
+import { DEFAULT_WEEKEND } from "../planning/vocabulary"
 
 /** The list name shown when the project has no holiday list. */
 export const NO_HOLIDAY_LIST_LABEL = "None on this project"
@@ -88,19 +86,6 @@ export function resolveProjectCalendar(
 /** The generator's input for a project calendar: dates (none without a list) plus the weekend. */
 export function schemeCalendarOf(calendar: ProjectCalendar): SchemeCalendar {
   return { holidays: calendar.list?.dates ?? NO_HOLIDAYS, weekend: calendar.weekend }
-}
-
-/** The calendar a stored scheme generates against — its project's. */
-export function schemeGenerationCalendar(
-  scheme: Pick<BusinessRecord, "submittedValues" | "projectIds">,
-  records: { projects?: readonly BusinessRecord[]; calendars?: readonly BusinessRecord[] },
-): SchemeCalendar {
-  return schemeCalendarOf(
-    resolveProjectCalendar(schemeProjectId(scheme), {
-      projects: records.projects ?? [],
-      calendars: records.calendars ?? [],
-    }),
-  )
 }
 
 /** "Sat–Sun" / "Fri–Sat". */
