@@ -20,7 +20,7 @@
 // A type's automation (#546 of #544) is its actions, each run on a trigger
 // in its place in that trigger's list (@waste/domain/resolution/automation),
 // replaced whole through `PUT /ticket-types/:id/actions` like the fields.
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { actionIssue, TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
 import {
   AT_MOST_FIELDS,
@@ -43,7 +43,7 @@ import * as z from "zod"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { TicketKind, TicketPriority, TicketResolution } from "./resolution"
-import { NonNegativeInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const TicketTypeStatus = z.enum(TICKET_TYPE_STATUSES)
@@ -152,29 +152,28 @@ export type TicketType = z.infer<typeof TicketType>
 
 const defaultTypeOffered = { message: DEFAULT_TYPE_OFFERED, path: ["status"] }
 
-/** `POST /ticket-types`: a new type of a kind. Its fields and permissions have routes of their own and start empty. */
-export const TicketTypeCreate = z
-  .strictObject({
+/**
+ * `POST /ticket-types`: a new type of a kind. Its fields and permissions have
+ * routes of their own and start empty. A patch moves the name, the
+ * description, the status, and makes it its kind's default — only true, since
+ * the default moves to another type and never disappears; never the kind,
+ * which its tickets carry.
+ */
+const ticketTypeBodies = resourceBodies(
+  {
     name: Label,
     kind: TicketKind,
     description: Paragraph.nullable().default(null).describe("Null when absent."),
     status: TicketTypeStatus.default("active"),
     isDefault: z.boolean().default(false).describe("Defaults to false: true makes it its kind's default in place of the one that was."),
-  })
-  .refine(defaultIsActive, defaultTypeOffered)
+  },
+  { keys: ["kind"], patch: { isDefault: z.literal(true).optional() } },
+)
+
+export const TicketTypeCreate = ticketTypeBodies.create.refine(defaultIsActive, defaultTypeOffered)
 export type TicketTypeCreate = z.infer<typeof TicketTypeCreate>
 
-/** The name, the description, the status, and making it its kind's default; never the kind, which its tickets carry. */
-export const TicketTypePatch = z
-  .strictObject({
-    name: Label.optional(),
-    description: Paragraph.nullable().optional(),
-    status: TicketTypeStatus.optional(),
-    /** Only true: the default moves to another type and never disappears. */
-    isDefault: z.literal(true).optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(defaultIsActive, defaultTypeOffered)
+export const TicketTypePatch = ticketTypeBodies.patch.refine(defaultIsActive, defaultTypeOffered)
 export type TicketTypePatch = z.infer<typeof TicketTypePatch>
 
 /** One field as a set body names it: no help text and no choices when absent. */

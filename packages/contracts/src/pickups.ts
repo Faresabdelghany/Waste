@@ -23,15 +23,14 @@
 // `Rescheduled` is a Ticket's outcome, not a status here. A stop the office
 // added carries `origin = office`, which generation's refresh leaves where
 // the office put it; `containerId` is null on an address-only one.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { addedStopIssues, CODE_WITH_CONTAMINATION, codeWithOutcome, REASON_WITH_A_MISS, reasonWithOutcome } from "@waste/domain/execution/office-stops"
 import * as z from "zod"
 
-import { IsoDate, IsoDateTime } from "./dates"
+import { IsoDateTime } from "./dates"
 import { FillLevel, OfficeStopService, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
 import { PositiveInt, stamped } from "./resource"
 import { Paragraph } from "./text"
 
@@ -179,14 +178,12 @@ export const PickupCorrection = z
 export type PickupCorrection = z.infer<typeof PickupCorrection>
 
 /** A page of pickups: one project's, one route's, one container's, of one status, at one property, over a window of the route's operating date. */
-export const PickupListQuery = ProjectScopedListQuery.extend({
-  routeId: Id.optional(),
-  containerId: Id.optional(),
-  status: PickupStatus.optional(),
-  propertyId: Id.optional(),
-  /** The first day of the window over the route's operating date, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const PickupListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    routeId: Id.optional(),
+    containerId: Id.optional(),
+    status: PickupStatus.optional(),
+    propertyId: Id.optional(),
+  }),
+)
 export type PickupListQuery = z.infer<typeof PickupListQuery>

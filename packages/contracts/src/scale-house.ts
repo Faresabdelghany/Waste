@@ -16,7 +16,7 @@
 // it ran, is also written as that route's Unload: `routeId` and `unloadId`.
 import { WEIGHBRIDGE_UNMATCHED_REASONS } from "@waste/domain/execution/vocabulary"
 import { FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE } from "@waste/domain/registry/address"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { EACH_LINE_ONCE, lineKey, PARTY_SHAPE, partyShaped, SCALE_TICKET_LINES_MAX, VOID_SAYS_WHY, voidSaysWhy } from "@waste/domain/scale-house/rules"
 import { SCALE_TICKET_PARTIES, SCALE_TICKET_STATUSES, SCALE_TICKET_VOID_REASONS, TARE_SOURCES, VEHICLE_TARE_STATUSES } from "@waste/domain/scale-house/vocabulary"
 import * as z from "zod"
@@ -25,7 +25,7 @@ import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { BlockReason } from "./finance"
-import { Minor, PositiveInt, somethingToChange, stamped } from "./resource"
+import { Minor, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const ScaleTicketStatus = z.enum(SCALE_TICKET_STATUSES)
@@ -60,28 +60,25 @@ export const VehicleTare = z.object({
 })
 export type VehicleTare = z.infer<typeof VehicleTare>
 
-export const VehicleTareCreate = z.strictObject({
-  projectId: Id,
-  plate: Label,
-  trailerPlate: Label.nullable().optional(),
-  containerRef: Label.nullable().optional(),
-  tareKg: PositiveInt,
-  weighedOn: IsoDate,
-  customerId: Id.nullable().optional(),
-  label: Label.nullable().optional(),
-})
-export type VehicleTareCreate = z.infer<typeof VehicleTareCreate>
-
-/** A re-weighing, its owner and label, or its retirement: the plates and the container are what the tare is of — register another. */
-export const VehicleTarePatch = z
-  .strictObject({
-    tareKg: PositiveInt.optional(),
-    weighedOn: IsoDate.optional(),
+/** A patch is a re-weighing, its owner and label, or its retirement, a status only a patch sets: the plates and the container are what the tare is of — register another. */
+const vehicleTareBodies = resourceBodies(
+  {
+    projectId: Id,
+    plate: Label,
+    trailerPlate: Label.nullable().optional(),
+    containerRef: Label.nullable().optional(),
+    tareKg: PositiveInt,
+    weighedOn: IsoDate,
     customerId: Id.nullable().optional(),
     label: Label.nullable().optional(),
-    status: VehicleTareStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+  },
+  { keys: ["projectId", "plate", "trailerPlate", "containerRef"], patch: { status: VehicleTareStatus.optional() } },
+)
+
+export const VehicleTareCreate = vehicleTareBodies.create
+export type VehicleTareCreate = z.infer<typeof VehicleTareCreate>
+
+export const VehicleTarePatch = vehicleTareBodies.patch
 export type VehicleTarePatch = z.infer<typeof VehicleTarePatch>
 
 /** A page of registered tares: one project's, one plate's (keyed as stored), one standing's. */
@@ -147,9 +144,9 @@ export const ScaleTicket = z.object({
 })
 export type ScaleTicket = z.infer<typeof ScaleTicket>
 
-/** `POST /scale-tickets`: the first pass, at the gross. */
-export const ScaleTicketCreate = z
-  .strictObject({
+/** `POST /scale-tickets`: the first pass, at the gross, weighed in now where the instant is omitted. A patch moves an open ticket's walk-in name and note; what was weighed and for whom is what the ticket is — void it and weigh again. */
+const scaleTicketBodies = resourceBodies(
+  {
     projectId: Id,
     unloadingStationId: Id,
     vehiclePlate: Label,
@@ -160,20 +157,16 @@ export const ScaleTicketCreate = z
     agreementId: Id.nullable().optional(),
     visitorName: Label.nullable().optional(),
     grossKg: PositiveInt,
-    /** Now, where omitted. */
     weighedInAt: IsoDateTime.optional(),
     note: Paragraph.nullable().optional(),
-  })
-  .refine(partyShaped, { message: PARTY_SHAPE, path: ["customerId"] })
+  },
+  { keys: ["projectId", "unloadingStationId", "vehiclePlate", "trailerPlate", "containerRef", "party", "customerId", "agreementId", "grossKg", "weighedInAt"] },
+)
+
+export const ScaleTicketCreate = scaleTicketBodies.create.refine(partyShaped, { message: PARTY_SHAPE, path: ["customerId"] })
 export type ScaleTicketCreate = z.infer<typeof ScaleTicketCreate>
 
-/** An open ticket's walk-in name and note; what was weighed and for whom is what the ticket is — void it and weigh again. */
-export const ScaleTicketPatch = z
-  .strictObject({
-    visitorName: Label.nullable().optional(),
-    note: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ScaleTicketPatch = scaleTicketBodies.patch
 export type ScaleTicketPatch = z.infer<typeof ScaleTicketPatch>
 
 export const ScaleTicketLineIn = z.strictObject({

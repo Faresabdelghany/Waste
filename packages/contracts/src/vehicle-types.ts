@@ -17,13 +17,13 @@
 // with, a patch never does. The set body is bounded and distinct, the
 // resource unbounded, since a set already stored has to read back however
 // long it grew.
-import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { eachOnce, SET_MAX } from "@waste/domain/requests"
 import { EACH_CONTAINER_TYPE_ONCE } from "@waste/domain/resources/fleet"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 
 /** The stable key, `rear-loader`: the one key shape of text.ts, as a waste fraction's. */
@@ -46,23 +46,21 @@ export const VehicleType = z.object({
 })
 export type VehicleType = z.infer<typeof VehicleType>
 
-export const VehicleTypeCreate = z
-  .strictObject({
+/** A patch takes the name and the description; the key is the slug the rest of the system quotes, and the compatibility set has a route of its own. */
+const vehicleTypeBodies = resourceBodies(
+  {
     key: VehicleTypeKey,
     name: Label,
     description: Paragraph.nullable().optional(),
     containerTypeIds: ContainerTypeIdsBody.default([]).describe("The container types the vehicle type starts out servicing; none when absent, and then no typed rule matches through it."),
-  })
-  .refine((body) => eachOnce(body.containerTypeIds), eachContainerTypeOnce)
+  },
+  { keys: ["key", "containerTypeIds"] },
+)
+
+export const VehicleTypeCreate = vehicleTypeBodies.create.refine((body) => eachOnce(body.containerTypeIds), eachContainerTypeOnce)
 export type VehicleTypeCreate = z.infer<typeof VehicleTypeCreate>
 
-/** The name and the description; the key is the slug the rest of the system quotes, and the compatibility set has a route of its own. */
-export const VehicleTypePatch = z
-  .strictObject({
-    name: Label.optional(),
-    description: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const VehicleTypePatch = vehicleTypeBodies.patch
 export type VehicleTypePatch = z.infer<typeof VehicleTypePatch>
 
 /** The whole compatibility set, replacing what the type had. An empty set is a type no typed rule matches through. */

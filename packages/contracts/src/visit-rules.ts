@@ -9,16 +9,15 @@
 // apps/api/src/routes/visit-rules.ts, under `commercial.products` as the
 // ticket charges are; the rules are
 // @waste/domain/visits/charges.
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { EACH_FREE_FRACTION_ONCE, FREE_FRACTIONS_MAX, FREE_VISITS, TRADE_THRESHOLD, TRADE_TOGETHER, TRADE_WINDOW_DAYS, tradeTogether, VISIT_LADDER_MAX } from "@waste/domain/visits/charges"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { NonNegativeInt, PositiveInt, stamped } from "./resource"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** The ladder: the per-visit products charged once the free visits are spent, the last repeating; empty includes every visit. */
 const Ladder = z.array(Id).max(VISIT_LADDER_MAX)
@@ -35,8 +34,8 @@ const TradeWindowDays = PositiveInt.max(TRADE_WINDOW_DAYS.max)
 
 const tradeTogetherAt = { message: TRADE_TOGETHER, path: ["tradeWindowDays"] }
 
-export const VisitRule = z
-  .object({
+export const VisitRule = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     freeVisits: FreeVisits,
@@ -48,13 +47,13 @@ export const VisitRule = z
     annualAccessProductId: Id.nullable(),
     tradeThreshold: TradeThreshold.nullable(),
     tradeWindowDays: TradeWindowDays.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type VisitRule = z.infer<typeof VisitRule>
 
-export const VisitRuleCreate = z
-  .strictObject({
+/** A patch takes everything but the project and the start: the ladder and the free fractions replaced whole, a null end reopening the rule. */
+const visitRuleBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     freeVisits: FreeVisits.default(0),
     ladder: Ladder.default([]),
@@ -63,26 +62,14 @@ export const VisitRuleCreate = z
     annualAccessProductId: Id.nullable().optional(),
     tradeThreshold: TradeThreshold.nullable().optional(),
     tradeWindowDays: TradeWindowDays.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
-  .refine(tradeTogether, tradeTogetherAt)
+  },
+  { keys: ["projectId", "validFrom"] },
+)
+
+export const VisitRuleCreate = visitRuleBodies.create.refine(tradeTogether, tradeTogetherAt)
 export type VisitRuleCreate = z.infer<typeof VisitRuleCreate>
 
-/** Everything but the project and the start: the ladder and the free fractions replaced whole. */
-export const VisitRulePatch = z
-  .strictObject({
-    freeVisits: FreeVisits.optional(),
-    ladder: Ladder.optional(),
-    freeFractionIds: FreeFractionIds.optional(),
-    businessVisitProductId: Id.nullable().optional(),
-    annualAccessProductId: Id.nullable().optional(),
-    tradeThreshold: TradeThreshold.nullable().optional(),
-    tradeWindowDays: TradeWindowDays.nullable().optional(),
-    /** Null reopens the rule; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const VisitRulePatch = visitRuleBodies.patch
 export type VisitRulePatch = z.infer<typeof VisitRulePatch>
 
 /** A page of rules: one project's, in force on a day where `validOn` says. */

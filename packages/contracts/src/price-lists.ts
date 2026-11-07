@@ -37,19 +37,17 @@ import { indexBody } from "./finance"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { QueryDecimal } from "./query-numbers"
-import { Minor, NonNegativeMinor, PositiveInt, somethingToChange, stamped } from "./resource"
+import { QueryDecimal, QueryFlag } from "./query-strings"
+import { Minor, NonNegativeMinor, PositiveInt, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 import * as z from "zod"
 
 /** The stable code a person quotes, `PL-CPH-2026` spelled as a slug: `pl-cph-2026`. The one key shape of text.ts. */
 const PriceListCode = Slug()
 
-export const PriceList = z
-  .object({
+export const PriceList = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     /** Set once; one list of a code in force at a time. */
@@ -60,37 +58,32 @@ export const PriceList = z
     /** The list an agreement without one is priced under: one per project. */
     isDefault: z.boolean(),
     notes: Paragraph.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type PriceList = z.infer<typeof PriceList>
 
-/** `POST /price-lists`: the currency is the project's when absent, and must be the project's when the list is the default. */
-export const PriceListCreate = z
-  .strictObject({
+/**
+ * `POST /price-lists`: the currency is the project's when absent, and must be
+ * the project's when the list is the default. `PATCH /price-lists/:id` moves
+ * the name, the default flag, the notes and the period, a null end reopening
+ * it; never the code or the currency, which the rows are quoted in.
+ */
+const priceListBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     code: PriceListCode,
     name: Label,
     currency: Currency.optional().describe("The project's currency when absent; a default list is always in it."),
     isDefault: z.boolean().default(false).describe("Defaults to false when absent: a named list an agreement is priced under, not the project's tariff."),
     notes: Paragraph.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["projectId", "code", "currency"] },
+)
+
+export const PriceListCreate = priceListBodies.create
 export type PriceListCreate = z.infer<typeof PriceListCreate>
 
-/** `PATCH /price-lists/:id`: the name, the default flag, the notes and the period; never the code or the currency, which the rows are quoted in. */
-export const PriceListPatch = z
-  .strictObject({
-    name: Label.optional(),
-    isDefault: z.boolean().optional(),
-    notes: Paragraph.nullable().optional(),
-    validFrom: IsoDate.optional(),
-    /** Null reopens the period; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const PriceListPatch = priceListBodies.patch
 export type PriceListPatch = z.infer<typeof PriceListPatch>
 
 /** The five conditions a row may name, each null where it names none; `conditionKey` is the database's and not here. */
@@ -105,8 +98,8 @@ const conditions = {
   customerId: Id.nullable(),
 }
 
-export const PriceListRow = z
-  .object({
+export const PriceListRow = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     priceListId: Id,
@@ -123,18 +116,24 @@ export const PriceListRow = z
     indexBasisPoints: z.int().nullable(),
     /** A quantity tier (M16b of #293): the row applies from this many of its product's unit; null for any quantity. */
     fromQuantity: PositiveInt.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type PriceListRow = z.infer<typeof PriceListRow>
 
 /** `POST /price-lists/:id/index`: an Apply index over the list's rows from `appliedFrom`, each row in force ended on it and its successor written at the indexed price; `dryRun` previews it. */
 export const PriceListIndex = z.strictObject(indexBody)
 export type PriceListIndex = z.infer<typeof PriceListIndex>
 
-/** `POST /price-lists/:id/rows`: the list is the path's and the project the list's, so neither is here; every condition may be given as null, the two-field convention. */
-export const PriceListRowCreate = z
-  .strictObject({
+/**
+ * `POST /price-lists/:id/rows`: the list is the path's and the project the
+ * list's, so neither is here; every condition may be given as null, the
+ * two-field convention, and a quantity tier (M16b of #293) is part of the
+ * row's key beside them. `PATCH /price-list-rows/:id` moves the price, the
+ * note and the end, a null reopening the row; a condition or the start never,
+ * since they are the key and the period — end the row and add another.
+ */
+const priceListRowBodies = effectiveDatedBodies(
+  {
     productId: Id,
     unitPriceMinor: NonNegativeMinor,
     planningAreaId: Id.nullable().optional(),
@@ -142,23 +141,16 @@ export const PriceListRowCreate = z
     containerTypeId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),
     customerId: Id.nullable().optional(),
-    /** A quantity tier (M16b of #293), part of the row's key beside its conditions. */
     fromQuantity: PositiveInt.nullable().optional(),
     note: Paragraph.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["productId", "planningAreaId", "customerKind", "containerTypeId", "wasteFractionId", "customerId", "fromQuantity", "validFrom"] },
+)
+
+export const PriceListRowCreate = priceListRowBodies.create
 export type PriceListRowCreate = z.infer<typeof PriceListRowCreate>
 
-/** `PATCH /price-list-rows/:id`: the price, the note and the end; a condition or the start never, since they are the key and the period — end the row and add another. */
-export const PriceListRowPatch = z
-  .strictObject({
-    unitPriceMinor: NonNegativeMinor.optional(),
-    note: Paragraph.nullable().optional(),
-    /** Null reopens the row; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const PriceListRowPatch = priceListRowBodies.patch
 export type PriceListRowPatch = z.infer<typeof PriceListRowPatch>
 
 /** A page of lists: one project's, in force on a day, the default one. */
@@ -166,7 +158,7 @@ export const PriceListListQuery = ProjectScopedListQuery.extend({
   /** The day the period is read against; absent asks for every list, whenever it ran. */
   validOn: IsoDate.optional(),
   /** A query string spells a boolean as `true` or `false`, exactly. */
-  isDefault: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  isDefault: QueryFlag.optional(),
 })
 export type PriceListListQuery = z.infer<typeof PriceListListQuery>
 

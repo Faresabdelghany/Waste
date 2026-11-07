@@ -8,7 +8,7 @@
 // tickets grant takes one, member or not. A project's defaults name the team
 // a ticket of a kind goes to when its opener names none, one per kind,
 // replaced whole through `PUT /projects/:id/ticket-team-defaults`.
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { EACH_KIND_ONCE, EACH_MEMBER_ONCE, TEAM_MEMBERS_MAX } from "@waste/domain/resolution/teams"
 import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TEAM_STATUSES, TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
@@ -17,7 +17,7 @@ import * as z from "zod"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { TicketKind } from "./resolution"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
 export const TeamStatus = z.enum(TEAM_STATUSES)
@@ -38,22 +38,20 @@ export const Team = z.object({
 })
 export type Team = z.infer<typeof Team>
 
-export const TeamCreate = z
-  .strictObject({
+/** A patch takes the name and the status; the members have a route of their own. */
+const teamBodies = resourceBodies(
+  {
     name: Label,
     status: TeamStatus.default("active"),
     memberUserAccountIds: MemberIdsBody.default([]).describe("The accounts the team starts with; none when absent."),
-  })
-  .refine((body) => eachOnce(body.memberUserAccountIds), eachMemberOnce)
+  },
+  { keys: ["memberUserAccountIds"] },
+)
+
+export const TeamCreate = teamBodies.create.refine((body) => eachOnce(body.memberUserAccountIds), eachMemberOnce)
 export type TeamCreate = z.infer<typeof TeamCreate>
 
-/** The name and the status; the members have a route of their own. */
-export const TeamPatch = z
-  .strictObject({
-    name: Label.optional(),
-    status: TeamStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const TeamPatch = teamBodies.patch
 export type TeamPatch = z.infer<typeof TeamPatch>
 
 /** The whole set of members, replacing what the team had; an empty set is a team of nobody, whose queue anyone with the grant still works. */

@@ -14,9 +14,9 @@
 // The arguments of `.describe()` and `.meta()` document the schema, and are
 // not values it states.
 //
-// A field's name, a union's tag (`z.literal`) and a token such as zod's
-// issue code are none of these: they are the shape of a body, not a value of
-// it.
+// A field's name — one an issue is told at, or one a create sets once — a
+// union's tag (`z.literal`) and a token such as zod's issue code are none of
+// these: they are the shape of a body, not a value of it.
 //
 // A package opts in with one call from a test, naming the modules that state
 // no domain's values at all and why (`beside`): the probes' answer, which
@@ -77,7 +77,7 @@ export function findOwnValues(files: readonly SourceFile[]): OwnValue[] {
           return
         }
       }
-      if (ts.isArrayLiteralExpression(node) && node.elements.length >= 2 && node.elements.every(isText) && !isIssuePath(node)) {
+      if (ts.isArrayLiteralExpression(node) && node.elements.length >= 2 && node.elements.every(isText) && !isFieldNames(node)) {
         push(node, "closed-list")
         return
       }
@@ -117,10 +117,10 @@ function textOf(node: ts.Node): string {
   return (node as ts.StringLiteral).text
 }
 
-/** Whether an array is an issue's `path`: the field names a refusal is told at, the shape of a body and not a list of its values. */
-function isIssuePath(node: ts.ArrayLiteralExpression): boolean {
+/** Whether an array names a body's fields: an issue's `path`, where a refusal is told, or the `keys` a create sets and a patch does not take — the shape of a body, not a list of its values. */
+function isFieldNames(node: ts.ArrayLiteralExpression): boolean {
   const parent = node.parent
-  return ts.isPropertyAssignment(parent) && parent.initializer === node && ts.isIdentifier(parent.name) && parent.name.text === "path"
+  return ts.isPropertyAssignment(parent) && parent.initializer === node && ts.isIdentifier(parent.name) && (parent.name.text === "path" || parent.name.text === "keys")
 }
 
 function isPropertyName(node: ts.Node): boolean {

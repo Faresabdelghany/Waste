@@ -48,8 +48,7 @@
 // `project.timezone`. The days a report reads begin at `REPORT_FIRST_DAY`.
 // A rate is 0..1, or null where there was nothing to divide by — a rate of
 // nothing is not zero (`rate`).
-import { dayWindowOrdered } from "@waste/domain/days"
-import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_TOO_LONG, reportWindowFits } from "@waste/domain/insight/reports"
+import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG } from "@waste/domain/insight/reports"
 import { REPORT_INTERVALS, WASTE_DATA_WARNINGS } from "@waste/domain/insight/vocabulary"
 import { CSV_SEPARATORS } from "@waste/domain/imports/vocabulary"
 import * as z from "zod"
@@ -59,7 +58,7 @@ import { IsoDate, IsoDateTime } from "./dates"
 import { PickupReason } from "./execution"
 import { Id } from "./ids"
 import { WasteCode } from "./catalogue"
-import { dayWindowIsOrdered } from "./queries"
+import { requiredDayWindow } from "./queries"
 import { TicketKind } from "./resolution"
 import { Minor, NonNegativeTotal } from "./resource"
 
@@ -67,52 +66,38 @@ import { Minor, NonNegativeTotal } from "./resource"
 export const ReportInterval = z.enum(REPORT_INTERVALS)
 export type ReportInterval = z.infer<typeof ReportInterval>
 
-const reportWindowFitsAt = { message: REPORT_WINDOW_TOO_LONG, path: ["to"] }
-
 /** A day of a report's window: a calendar day, from `REPORT_FIRST_DAY` on; comparing two `YYYY-MM-DD` strings compares the days. */
 export const ReportDay = IsoDate.refine((day) => day >= REPORT_FIRST_DAY, REPORT_DAY_TOO_EARLY)
 
-/** The parameters every report takes; each query restates the two rules on its window, since spreading takes the fields and not the rules. */
-const windowFields = {
-  /** One of the caller's projects; absent, every project they work in. */
-  projectId: Id.optional(),
-  /** The first day of the window, inclusive. */
-  from: ReportDay,
-  /** The last day, inclusive. */
-  to: ReportDay,
-  interval: ReportInterval.default("day").describe("How the series cuts the window; `day` when absent."),
-}
+/** The window every report reads, its two rules with it: one of the caller's projects, or every project they work in where it is absent, over `from` to `to`. */
+const reportWindow = requiredDayWindow(z.strictObject({ projectId: Id.optional() }), { day: ReportDay, maxDays: { days: REPORT_WINDOW_MAX_DAYS, tooLong: REPORT_WINDOW_TOO_LONG } })
+
+const interval = ReportInterval.default("day").describe("How the series cuts the window; `day` when absent.")
 
 /** `GET /reports/service`: one project's or all of them, one fraction's pickups, one scheme's routes. */
-export const ServiceReportQuery = z
-  .strictObject({
-    ...windowFields,
-    /** The pickups of one fraction, and the routes that hold one. */
-    wasteFractionId: Id.optional(),
-    routeSchemeId: Id.optional(),
-  })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine(reportWindowFits, reportWindowFitsAt)
+export const ServiceReportQuery = reportWindow.safeExtend({
+  interval,
+  /** The pickups of one fraction, and the routes that hold one. */
+  wasteFractionId: Id.optional(),
+  routeSchemeId: Id.optional(),
+})
 export type ServiceReportQuery = z.infer<typeof ServiceReportQuery>
 
 /** `GET /reports/tickets`. */
-export const TicketReportQuery = z.strictObject(windowFields).refine(dayWindowOrdered, dayWindowIsOrdered).refine(reportWindowFits, reportWindowFitsAt)
+export const TicketReportQuery = reportWindow.safeExtend({ interval })
 export type TicketReportQuery = z.infer<typeof TicketReportQuery>
 
 /** `GET /reports/revenue`. */
-export const RevenueReportQuery = z.strictObject(windowFields).refine(dayWindowOrdered, dayWindowIsOrdered).refine(reportWindowFits, reportWindowFitsAt)
+export const RevenueReportQuery = reportWindow.safeExtend({ interval })
 export type RevenueReportQuery = z.infer<typeof RevenueReportQuery>
 
 /** `GET /reports/tonnage`: one fraction's weights, one station's unloads. */
-export const TonnageReportQuery = z
-  .strictObject({
-    ...windowFields,
-    wasteFractionId: Id.optional(),
-    /** The unloads at one station; a pickup's weight is weighed at the kerb and is not narrowed by it. */
-    unloadingStationId: Id.optional(),
-  })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine(reportWindowFits, reportWindowFitsAt)
+export const TonnageReportQuery = reportWindow.safeExtend({
+  interval,
+  wasteFractionId: Id.optional(),
+  /** The unloads at one station; a pickup's weight is weighed at the kerb and is not narrowed by it. */
+  unloadingStationId: Id.optional(),
+})
 export type TonnageReportQuery = z.infer<typeof TonnageReportQuery>
 
 /** A count of rows: zero or more, summed and never written, so with no `integer` bound. */
@@ -333,26 +318,13 @@ export type TonnageReport = z.infer<typeof TonnageReport>
 // through its correction once that is approved.
 
 /** `GET /reports/waste-data`: one of the caller's projects or all of them, over a period of days. */
-export const WasteDataReportQuery = z
-  .strictObject({
-    projectId: windowFields.projectId,
-    from: windowFields.from,
-    to: windowFields.to,
-  })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine(reportWindowFits, reportWindowFitsAt)
+export const WasteDataReportQuery = reportWindow
 export type WasteDataReportQuery = z.infer<typeof WasteDataReportQuery>
 
 /** `GET /reports/waste-data.csv`: the report's query, and the file's separator. */
-export const WasteDataFileQuery = z
-  .strictObject({
-    projectId: windowFields.projectId,
-    from: windowFields.from,
-    to: windowFields.to,
-    separator: z.enum(CSV_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
-  })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine(reportWindowFits, reportWindowFitsAt)
+export const WasteDataFileQuery = reportWindow.safeExtend({
+  separator: z.enum(CSV_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
+})
 export type WasteDataFileQuery = z.infer<typeof WasteDataFileQuery>
 
 /** One municipality's reviewed weight of one fraction at one station over the period. */

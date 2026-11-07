@@ -39,6 +39,7 @@ describe("findOwnValues", () => {
     const source = [
       'export const P = { message: SENTENCE, path: ["sharedCollectionPointId"] }',
       'export const N = { message: SENTENCE, path: ["links", "pickupId"] }',
+      'export const B = resourceBodies({ projectId: Id, code: Label, name: Label }, { keys: ["projectId", "code"] })',
       'export const U = z.object({ outcome: z.literal("refused"), status: z.union([z.literal(404), z.literal(409)]) })',
       'export const C = ctx.addIssue({ code: "custom", message: SENTENCE })',
       'export type K = "a b" | 404',

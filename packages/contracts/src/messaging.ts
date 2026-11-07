@@ -15,14 +15,13 @@
 // be.
 import { channelShapeIssue, SAY_SOMETHING, TEMPLATE_BODY_MAX, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_PURPOSES, MESSAGE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
 export const MessageChannel = z.enum(MESSAGE_CHANNELS)
@@ -61,8 +60,9 @@ export const MessageTemplate = z.object({
 })
 export type MessageTemplate = z.infer<typeof MessageTemplate>
 
-export const MessageTemplateCreate = z
-  .strictObject({
+/** A patch takes every field but the project, which a template keeps; the channel's demands are the API's to judge against the stored template. */
+const messageTemplateBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
     purpose: MessageTemplatePurpose,
@@ -70,26 +70,18 @@ export const MessageTemplateCreate = z
     subject: Label.nullable().optional().describe("An e-mail's subject, required for one; a text message has none."),
     body: TemplateBody,
     status: MessageTemplateStatus.default("active").describe("Defaults to active when absent: a template is written to be used."),
-  })
-  .superRefine((template, context) => {
-    const issue = channelShapeIssue({ channel: template.channel, subject: template.subject ?? null, body: template.body })
-    if (issue !== undefined) context.addIssue({ code: "custom", path: [issue.path], message: issue.message })
-    placeholdersIssues(template, context)
-  })
+  },
+  { keys: ["projectId"] },
+)
+
+export const MessageTemplateCreate = messageTemplateBodies.create.superRefine((template, context) => {
+  const issue = channelShapeIssue({ channel: template.channel, subject: template.subject ?? null, body: template.body })
+  if (issue !== undefined) context.addIssue({ code: "custom", path: [issue.path], message: issue.message })
+  placeholdersIssues(template, context)
+})
 export type MessageTemplateCreate = z.infer<typeof MessageTemplateCreate>
 
-/** Every field optional but the project, which a template keeps; the channel's demands are the API's to judge against the stored template. */
-export const MessageTemplatePatch = z
-  .strictObject({
-    name: Label.optional(),
-    purpose: MessageTemplatePurpose.optional(),
-    channel: MessageChannel.optional(),
-    subject: Label.nullable().optional(),
-    body: TemplateBody.optional(),
-    status: MessageTemplateStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .superRefine(placeholdersIssues)
+export const MessageTemplatePatch = messageTemplateBodies.patch.superRefine(placeholdersIssues)
 export type MessageTemplatePatch = z.infer<typeof MessageTemplatePatch>
 
 export const MessageTemplateListQuery = ProjectScopedListQuery

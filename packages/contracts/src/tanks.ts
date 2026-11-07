@@ -16,18 +16,16 @@
 //
 // An inspection is a ledger row: appended under the installation, by the
 // account that recorded it, never rewritten.
-import { validityOrdered } from "@waste/domain/periods"
 import { NEXT_INSPECTION_AFTER, TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import { TANK_INSPECTION_OUTCOMES, TANK_KINDS, TANK_OUTLETS } from "@waste/domain/registry/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, Validity } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 export const TankKind = z.enum(TANK_KINDS)
 export type TankKind = z.infer<typeof TankKind>
@@ -43,31 +41,33 @@ export const EmptyingIntervalMonths = z.int().min(1).max(TANK_INTERVAL_MONTHS_MA
 export const TankEmptying = z.object({ on: IsoDate, pickupId: Id, volumeLitres: PositiveInt.nullable() })
 export type TankEmptying = z.infer<typeof TankEmptying>
 
-export const TankInstallation = z.object({
-  ...stamped,
-  projectId: Id,
-  ...Validity.shape,
-  /** The Property it serves; set once. */
-  propertyId: Id,
-  /** The Container that stands for it in the plan; set once. */
-  containerId: Id,
-  kind: TankKind,
-  /** What it holds, whole litres. */
-  volumeLitres: PositiveInt,
-  outlet: TankOutlet,
-  emptyingIntervalMonths: EmptyingIntervalMonths,
-  /** The last emptying before the platform knew the tank, as the register says; a completed stop is read before it. */
-  lastEmptiedOn: IsoDate.nullable(),
-  notes: Paragraph.nullable(),
-  /** Its container's latest completed stop; null before there is one. */
-  lastEmptying: TankEmptying.nullable(),
-  /** The day the next emptying falls due, from the last one; null for a tank never emptied, which is due now. */
-  dueOn: IsoDate.nullable(),
-})
+export const TankInstallation = effectiveDated(
+  z.object({
+    ...stamped,
+    projectId: Id,
+    /** The Property it serves; set once. */
+    propertyId: Id,
+    /** The Container that stands for it in the plan; set once. */
+    containerId: Id,
+    kind: TankKind,
+    /** What it holds, whole litres. */
+    volumeLitres: PositiveInt,
+    outlet: TankOutlet,
+    emptyingIntervalMonths: EmptyingIntervalMonths,
+    /** The last emptying before the platform knew the tank, as the register says; a completed stop is read before it. */
+    lastEmptiedOn: IsoDate.nullable(),
+    notes: Paragraph.nullable(),
+    /** Its container's latest completed stop; null before there is one. */
+    lastEmptying: TankEmptying.nullable(),
+    /** The day the next emptying falls due, from the last one; null for a tank never emptied, which is due now. */
+    dueOn: IsoDate.nullable(),
+  }),
+)
 export type TankInstallation = z.infer<typeof TankInstallation>
 
-export const TankInstallationCreate = z
-  .strictObject({
+/** A patch takes everything but the Property, the Container and the first day. */
+const tankInstallationBodies = effectiveDatedBodies(
+  {
     propertyId: Id,
     containerId: Id,
     kind: TankKind,
@@ -76,24 +76,14 @@ export const TankInstallationCreate = z
     emptyingIntervalMonths: EmptyingIntervalMonths,
     lastEmptiedOn: IsoDate.nullable().optional(),
     notes: Paragraph.nullable().optional(),
-    validFrom: IsoDate,
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["propertyId", "containerId", "validFrom"] },
+)
+
+export const TankInstallationCreate = tankInstallationBodies.create
 export type TankInstallationCreate = z.infer<typeof TankInstallationCreate>
 
-/** Everything but the Property, the Container, the first day and the stamps. */
-export const TankInstallationPatch = z
-  .strictObject({
-    kind: TankKind.optional(),
-    volumeLitres: PositiveInt.optional(),
-    outlet: TankOutlet.optional(),
-    emptyingIntervalMonths: EmptyingIntervalMonths.optional(),
-    lastEmptiedOn: IsoDate.nullable().optional(),
-    notes: Paragraph.nullable().optional(),
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const TankInstallationPatch = tankInstallationBodies.patch
 export type TankInstallationPatch = z.infer<typeof TankInstallationPatch>
 
 /** A page of installations: of one project, of one Property, of one Container, in force on one day. */

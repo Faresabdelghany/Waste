@@ -12,13 +12,13 @@
 // not an import. The country is ISO 3166-1 alpha-2, checked by shape, once
 // per company; so is the name.
 import { HOLIDAYS_MAX, ONE_LISTED_HOLIDAY_PER_DAY } from "@waste/domain/planning/holiday-lists"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { Country } from "./codes"
 import { IsoDate } from "./dates"
 import { PageRequest } from "./pagination"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
 
@@ -50,22 +50,20 @@ export const HolidayList = z.object({
 })
 export type HolidayList = z.infer<typeof HolidayList>
 
-export const HolidayListCreate = z
-  .strictObject({
+/** A patch takes the country and the name; the days are a set and are replaced whole. A rename follows to every project on the list. */
+const holidayListBodies = resourceBodies(
+  {
     country: Country,
     name: Label,
     holidays: HolidaysBody.default([]).describe("The days the list starts with; none when absent."),
-  })
-  .refine((body) => noRepeatedDay(body.holidays), oneHolidayPerDay)
+  },
+  { keys: ["holidays"] },
+)
+
+export const HolidayListCreate = holidayListBodies.create.refine((body) => noRepeatedDay(body.holidays), oneHolidayPerDay)
 export type HolidayListCreate = z.infer<typeof HolidayListCreate>
 
-/** The country and the name; the days are a set and are replaced whole. A rename follows to every project on the list. */
-export const HolidayListPatch = z
-  .strictObject({
-    country: Country.optional(),
-    name: Label.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const HolidayListPatch = holidayListBodies.patch
 export type HolidayListPatch = z.infer<typeof HolidayListPatch>
 
 /** The whole set, replacing what the list had. An empty set is a list without holidays. */

@@ -13,20 +13,18 @@
 // stop the office's Add stop (`PickupAdd.bulkyBookingId`).
 import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_SLOTS_PER_DAY_MAX, BULKY_WINDOW_DAYS_MAX, ONE_PLACE, WINDOW_TOO_WIDE } from "@waste/domain/execution/bulky"
 import { BULKY_BOOKING_STATUSES } from "@waste/domain/execution/vocabulary"
-import { daysInclusive, dayWindowOrdered } from "@waste/domain/days"
-import { validityOrdered } from "@waste/domain/periods"
 import { weekRotationShape, WEEK_ROTATION_WITH_FORTNIGHTLY } from "@waste/domain/planning/schemes"
-import { changesSomething } from "@waste/domain/requests"
+import { placesNamed } from "@waste/domain/registry/served-places"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { HolidayPolicy, RecurrenceFrequency, ServiceDays, WeekRotation } from "./planning"
-import { ProjectScopedListQuery, dayWindowIsOrdered } from "./queries"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { dayWindow, ProjectScopedListQuery, requiredDayWindow } from "./queries"
+import { NonNegativeInt, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** Where a booking stands: booked, routed by a planned stop, collected by a completed one, or cancelled. */
 export const BulkyBookingStatus = z.enum(BULKY_BOOKING_STATUSES)
@@ -37,8 +35,8 @@ const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, p
 /** How many bookings one day takes, at most. */
 const SlotsPerDay = PositiveInt.max(BULKY_SLOTS_PER_DAY_MAX)
 
-export const BulkySchedule = z
-  .object({
+export const BulkySchedule = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     planningAreaId: Id,
@@ -50,13 +48,13 @@ export const BulkySchedule = z
     slotsPerDay: SlotsPerDay,
     /** What a booking is charged at once collected: a product of the project sold by the job. */
     productId: Id,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type BulkySchedule = z.infer<typeof BulkySchedule>
 
-export const BulkyScheduleCreate = z
-  .strictObject({
+/** A patch moves the slots, the product and the end, a null end reopening the schedule; the area and the recurrence are the schedule's key and its start its period's — end it and add another. */
+const bulkyScheduleBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     planningAreaId: Id,
     frequency: RecurrenceFrequency,
@@ -65,21 +63,14 @@ export const BulkyScheduleCreate = z
     holidayPolicy: HolidayPolicy.default("skip"),
     slotsPerDay: SlotsPerDay,
     productId: Id,
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
-  .refine(weekRotationShape, weekRotationWithFortnightly)
+  },
+  { keys: ["projectId", "planningAreaId", "frequency", "serviceDays", "weekRotation", "holidayPolicy", "validFrom"] },
+)
+
+export const BulkyScheduleCreate = bulkyScheduleBodies.create.refine(weekRotationShape, weekRotationWithFortnightly)
 export type BulkyScheduleCreate = z.infer<typeof BulkyScheduleCreate>
 
-/** The slots, the product and the end; the area and the recurrence are the schedule's key and its start its period's — end it and add another. */
-export const BulkySchedulePatch = z
-  .strictObject({
-    slotsPerDay: SlotsPerDay.optional(),
-    productId: Id.optional(),
-    /** Null reopens the schedule; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const BulkySchedulePatch = bulkyScheduleBodies.patch
 export type BulkySchedulePatch = z.infer<typeof BulkySchedulePatch>
 
 /** A page of schedules: one project's or one area's, in force on a day where `validOn` says. */
@@ -124,11 +115,11 @@ export const BulkyBooking = z.object({
 })
 export type BulkyBooking = z.infer<typeof BulkyBooking>
 
-const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }): boolean => (body.propertyId != null) !== (body.sharedCollectionPointId != null)
+const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }): boolean => placesNamed(body) === 1
 
-/** `POST /bulky-bookings`: the customer, the place, the agreement charged, the day, the fraction and the items. */
-export const BulkyBookingCreate = z
-  .strictObject({
+/** `POST /bulky-bookings`: the customer, the place, the agreement charged, the day, the fraction and the items. A patch moves a booked booking's day, judged again, replaces its items whole, or changes its note. */
+const bulkyBookingBodies = resourceBodies(
+  {
     customerId: Id,
     agreementId: Id,
     propertyId: Id.nullable().optional(),
@@ -137,18 +128,14 @@ export const BulkyBookingCreate = z
     day: IsoDate,
     items: Items,
     note: Paragraph.nullable().optional(),
-  })
-  .refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] })
+  },
+  { keys: ["customerId", "agreementId", "propertyId", "sharedCollectionPointId", "wasteFractionId"] },
+)
+
+export const BulkyBookingCreate = bulkyBookingBodies.create.refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] })
 export type BulkyBookingCreate = z.infer<typeof BulkyBookingCreate>
 
-/** A booked booking's day, judged again, its items replaced whole, and its note. */
-export const BulkyBookingPatch = z
-  .strictObject({
-    day: IsoDate.optional(),
-    items: Items.optional(),
-    note: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const BulkyBookingPatch = bulkyBookingBodies.patch
 export type BulkyBookingPatch = z.infer<typeof BulkyBookingPatch>
 
 /** `POST /bulky-bookings/:id/cancel`: why. */
@@ -156,31 +143,28 @@ export const BulkyBookingCancel = z.strictObject({ reason: Paragraph })
 export type BulkyBookingCancel = z.infer<typeof BulkyBookingCancel>
 
 /** A page of bookings: one project's, of one status, customer, place or area, over a window of their days. */
-export const BulkyBookingListQuery = ProjectScopedListQuery.extend({
-  status: BulkyBookingStatus.optional(),
-  customerId: Id.optional(),
-  propertyId: Id.optional(),
-  sharedCollectionPointId: Id.optional(),
-  planningAreaId: Id.optional(),
-  /** The first day of the window over the booking's day, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const BulkyBookingListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
+    status: BulkyBookingStatus.optional(),
+    customerId: Id.optional(),
+    propertyId: Id.optional(),
+    sharedCollectionPointId: Id.optional(),
+    planningAreaId: Id.optional(),
+  }),
+)
 export type BulkyBookingListQuery = z.infer<typeof BulkyBookingListQuery>
 
 /** `GET /bulky-bookings/availability`: the place, optionally under the project it is of, and the window of days, both ends included. */
-export const BulkyAvailabilityQuery = z
-  .strictObject({
-    projectId: Id.optional(),
-    propertyId: Id.optional(),
-    sharedCollectionPointId: Id.optional(),
-    from: IsoDate,
-    to: IsoDate,
-  })
-  .refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] })
-  .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine((query) => query.to < query.from || daysInclusive(query.from, query.to) <= BULKY_WINDOW_DAYS_MAX, { message: WINDOW_TOO_WIDE, path: ["to"] })
+export const BulkyAvailabilityQuery = requiredDayWindow(
+  z
+    .strictObject({
+      projectId: Id.optional(),
+      propertyId: Id.optional(),
+      sharedCollectionPointId: Id.optional(),
+    })
+    .refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] }),
+  { maxDays: { days: BULKY_WINDOW_DAYS_MAX, tooLong: WINDOW_TOO_WIDE } },
+)
 export type BulkyAvailabilityQuery = z.infer<typeof BulkyAvailabilityQuery>
 
 /** One day the place may be booked on, with its slots, and the schedule and area they are counted under. */

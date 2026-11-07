@@ -24,7 +24,6 @@
 // latest point a proof carried, when the device was last seen, whether it is
 // paused, and since O8 of #290 its newest position and its estimates — for
 // the dashboard, paged like every list.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { DISPATCH_MANY_MAX, EACH_PICKUP_ONCE, EACH_ROUTE_ONCE, LABEL_IS_THE_NUMBER, PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
 import type { RouteShift as DomainRouteShift } from "@waste/domain/execution/shift"
 import { EACH_STOP_MOVED_ONCE } from "@waste/domain/execution/stop-moves"
@@ -41,7 +40,7 @@ import { Id } from "./ids"
 import { Pickup } from "./pickups"
 import { ActivePlan } from "./plans"
 import { LiveEta, Position } from "./positions"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
 import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
 import { DriverShift } from "./shifts"
@@ -380,18 +379,12 @@ export const RouteBalanceResult = z.object({
 export type RouteBalanceResult = z.infer<typeof RouteBalanceResult>
 
 /** A page of routes: one project's, one scheme's, one group's, over a window of operating days, on one service date, of one status, planned for one driver or one vehicle. */
-export const RouteListQuery = ProjectScopedListQuery.extend({
-  routeSchemeId: Id.optional(),
-  collectionGroupId: Id.optional(),
-  /** The first operating day of the window, inclusive. */
-  from: IsoDate.optional(),
-  /** The last, inclusive. */
-  to: IsoDate.optional(),
+export const RouteListQuery = dayWindow(ProjectScopedListQuery.extend({ routeSchemeId: Id.optional(), collectionGroupId: Id.optional() })).safeExtend({
   serviceDate: IsoDate.optional(),
   status: RouteStatus.optional(),
   plannedDriverId: Id.optional(),
   plannedVehicleId: Id.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+})
 export type RouteListQuery = z.infer<typeof RouteListQuery>
 
 /** `GET /routes/live`: a page of the routes running or due today. */

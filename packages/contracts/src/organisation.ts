@@ -44,7 +44,7 @@ import * as z from "zod"
 import { Country, Currency, Language, Timezone } from "./codes"
 import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
 import { ServiceDays } from "./planning"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
@@ -164,42 +164,34 @@ export const Project = z.object({
 })
 export type Project = z.infer<typeof Project>
 
-export const ProjectCreate = z.strictObject({
-  name: Label,
-  kind: Label,
-  language: Language,
-  currency: Currency,
-  timezone: Timezone,
-  status: ProjectStatus.default("onboarding").describe("Defaults to onboarding when absent: a project is onboarding until it runs."),
-  weekend: Weekend.default([...DEFAULT_WEEKEND]).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once, at most six."),
-  holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
-  paymentTermsDays: PaymentTermsDays.default(DEFAULT_PAYMENT_TERMS_DAYS).describe(`Defaults to ${DEFAULT_PAYMENT_TERMS_DAYS} when absent: the days after issue the project's invoices are due, 0 to 365.`),
-  paymentReferenceScheme: PaymentReferenceScheme.default("none").describe("Defaults to none when absent: a FI card's scheme needs the company's creditor number."),
-  weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT).describe("Defaults to 5 when absent: how far a weighbridge's net may differ from the load weighed on board, in whole percent (O9 of #290)."),
-  holdForReview: z.boolean().default(false).describe("Defaults to false when absent: a project's hires and jobs go to the run as they are charged."),
-})
+/**
+ * A patch's null holiday list drops the list, a name sets it. A slug only a
+ * patch takes: it publishes the project under it, and null unpublishes it —
+ * its public pages answer 404 from the next request (an answer cached before
+ * runs out within the minute).
+ */
+const projectBodies = resourceBodies(
+  {
+    name: Label,
+    kind: Label,
+    language: Language,
+    currency: Currency,
+    timezone: Timezone,
+    status: ProjectStatus.default("onboarding").describe("Defaults to onboarding when absent: a project is onboarding until it runs."),
+    weekend: Weekend.default([...DEFAULT_WEEKEND]).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once, at most six."),
+    holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
+    paymentTermsDays: PaymentTermsDays.default(DEFAULT_PAYMENT_TERMS_DAYS).describe(`Defaults to ${DEFAULT_PAYMENT_TERMS_DAYS} when absent: the days after issue the project's invoices are due, 0 to 365.`),
+    paymentReferenceScheme: PaymentReferenceScheme.default("none").describe("Defaults to none when absent: a FI card's scheme needs the company's creditor number."),
+    weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT).describe("Defaults to 5 when absent: how far a weighbridge's net may differ from the load weighed on board, in whole percent (O9 of #290)."),
+    holdForReview: z.boolean().default(false).describe("Defaults to false when absent: a project's hires and jobs go to the run as they are charged."),
+  },
+  { patch: { publicSlug: PublicSlug.nullable().optional() } },
+)
+
+export const ProjectCreate = projectBodies.create
 export type ProjectCreate = z.infer<typeof ProjectCreate>
 
-export const ProjectPatch = z
-  .strictObject({
-    name: Label.optional(),
-    kind: Label.optional(),
-    language: Language.optional(),
-    currency: Currency.optional(),
-    timezone: Timezone.optional(),
-    status: ProjectStatus.optional(),
-    weekend: Weekend.optional(),
-    /** Null drops the list; a name sets it. */
-    holidayList: Label.nullable().optional(),
-    /** A slug publishes the project under it; null unpublishes it, and its public pages answer 404 from the next request (an answer cached before runs out within the minute). */
-    publicSlug: PublicSlug.nullable().optional(),
-    paymentTermsDays: PaymentTermsDays.optional(),
-    paymentReferenceScheme: PaymentReferenceScheme.optional(),
-    /** The weighbridge's tolerance, in whole percent, 1 to 100 (O9 of #290). */
-    weightTolerancePercent: ProjectTolerance.optional(),
-    holdForReview: z.boolean().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ProjectPatch = projectBodies.patch
 export type ProjectPatch = z.infer<typeof ProjectPatch>
 
 export const ServiceProvider = z.object({
@@ -213,22 +205,16 @@ export const ServiceProvider = z.object({
 })
 export type ServiceProvider = z.infer<typeof ServiceProvider>
 
-export const ServiceProviderCreate = z.strictObject({
+const serviceProviderBodies = resourceBodies({
   legalName: Label,
   registrationNumber: Label,
   country: Country,
   contactName: Label,
   contactEmail: z.email(),
 })
+
+export const ServiceProviderCreate = serviceProviderBodies.create
 export type ServiceProviderCreate = z.infer<typeof ServiceProviderCreate>
 
-export const ServiceProviderPatch = z
-  .strictObject({
-    legalName: Label.optional(),
-    registrationNumber: Label.optional(),
-    country: Country.optional(),
-    contactName: Label.optional(),
-    contactEmail: z.email().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ServiceProviderPatch = serviceProviderBodies.patch
 export type ServiceProviderPatch = z.infer<typeof ServiceProviderPatch>

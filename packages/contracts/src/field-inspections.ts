@@ -14,14 +14,13 @@
 // then appended by its key; the bytes never pass through the API.
 import { findingsIssue, ONE_SUBJECT } from "@waste/domain/inspections/rules"
 import { FIELD_INSPECTION_OUTCOMES, FIELD_INSPECTION_STATUSES, INSPECTION_FINDINGS } from "@waste/domain/inspections/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import { IMAGE_EXTENSIONS, OBJECT_KEY_MAX } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { Paragraph } from "./text"
 
 export const FieldInspectionOutcome = z.enum(FIELD_INSPECTION_OUTCOMES)
@@ -65,29 +64,29 @@ const findingsAgree = (value: { outcome: FieldInspectionOutcome; findings: Inspe
 }
 const oneSubject = (value: { containerId?: string | null; propertyId?: string | null }) => (value.containerId == null) !== (value.propertyId == null)
 
-export const FieldInspectionCreate = z
-  .strictObject({
+/**
+ * The instant is when the inspector stood there, the request's clock where it
+ * is not said. A patch is an open inspection's correction: its subject is
+ * what it is, so the verdict, the findings, the note and the instant alone; a
+ * verdict and its findings are judged together against the row's other half
+ * by the API.
+ */
+const fieldInspectionBodies = resourceBodies(
+  {
     containerId: Id.nullable().optional(),
     propertyId: Id.nullable().optional(),
-    /** When the inspector stood there; the request's clock where it is not said. */
     inspectedAt: IsoDateTime.optional(),
     outcome: FieldInspectionOutcome,
     findings: z.array(InspectionFinding).max(INSPECTION_FINDINGS.length).default([]),
     note: Paragraph.nullable().optional(),
-  })
-  .refine(oneSubject, { message: ONE_SUBJECT, path: ["containerId"] })
-  .superRefine(findingsAgree)
+  },
+  { keys: ["containerId", "propertyId"] },
+)
+
+export const FieldInspectionCreate = fieldInspectionBodies.create.refine(oneSubject, { message: ONE_SUBJECT, path: ["containerId"] }).superRefine(findingsAgree)
 export type FieldInspectionCreate = z.infer<typeof FieldInspectionCreate>
 
-/** An open inspection's correction: its subject is what it is, so the verdict, the findings, the note and the instant alone. A verdict and its findings are judged together against the row's other half by the API. */
-export const FieldInspectionPatch = z
-  .strictObject({
-    inspectedAt: IsoDateTime.optional(),
-    outcome: FieldInspectionOutcome.optional(),
-    findings: z.array(InspectionFinding).max(INSPECTION_FINDINGS.length).optional(),
-    note: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const FieldInspectionPatch = fieldInspectionBodies.patch
 export type FieldInspectionPatch = z.infer<typeof FieldInspectionPatch>
 
 /** A page of inspections: one project's, one subject's, one verdict's, open or closed. */

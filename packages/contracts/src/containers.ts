@@ -38,20 +38,18 @@
 // what makes that the honest way to say it. Whether a corrected end still lies
 // inside the subscription's period is the route's question, since this schema
 // cannot see the stored row.
-import { validityOrdered } from "@waste/domain/periods"
 import { A_DAY_FOR_A_PLACE, SERVED_BY_ONE } from "@waste/domain/registry/containers"
 import { CONTAINER_IDENTIFIERS, CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { AssetStatus } from "./resources"
 import { AssetState } from "./stock"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity } from "./validity"
+import { effectiveDated } from "./validity"
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const ContainerOwnership = z.enum(CONTAINER_OWNERSHIPS)
@@ -77,33 +75,28 @@ export const Container = z.object({
 })
 export type Container = z.infer<typeof Container>
 
-export const ContainerCreate = z.strictObject({
-  projectId: Id,
-  label: Label,
-  containerTypeId: Id,
-  barcode: Label.nullable().optional(),
-  rfid: Label.nullable().optional(),
-  serialNumber: Label.nullable().optional(),
-  ownership: ContainerOwnership.default("company").describe("Defaults to company when absent: a container the company bought is the common case."),
-  notes: Paragraph.nullable().optional(),
-})
-export type ContainerCreate = z.infer<typeof ContainerCreate>
-
-export const ContainerPatch = z
-  .strictObject({
-    label: Label.optional(),
-    containerTypeId: Id.optional(),
+const containerBodies = resourceBodies(
+  {
+    projectId: Id,
+    label: Label,
+    containerTypeId: Id,
     barcode: Label.nullable().optional(),
     rfid: Label.nullable().optional(),
     serialNumber: Label.nullable().optional(),
-    ownership: ContainerOwnership.optional(),
+    ownership: ContainerOwnership.default("company").describe("Defaults to company when absent: a container the company bought is the common case."),
     notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+  },
+  { keys: ["projectId"] },
+)
+
+export const ContainerCreate = containerBodies.create
+export type ContainerCreate = z.infer<typeof ContainerCreate>
+
+export const ContainerPatch = containerBodies.patch
 export type ContainerPatch = z.infer<typeof ContainerPatch>
 
-export const ContainerServicePlacement = z
-  .object({
+export const ContainerServicePlacement = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     containerId: Id,
@@ -116,9 +109,8 @@ export const ContainerServicePlacement = z
     serviceFrequencyId: Id.nullable(),
     /** The cadence in force: the placement's, else the Product's. Read through a coalesce, never written. */
     effectiveServiceFrequencyId: Id.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement>
 
 const servedByOne = { message: SERVED_BY_ONE, path: ["subscriptionId"] }
@@ -131,37 +123,39 @@ const servedOnce = (body: { subscriptionId?: string | null; sharedCollectionPoin
  * is here; the effective frequency is read, not written. The create is the
  * `issue` command of the Stock Movement ledger (Issue #101, ADR-0003: one
  * action, one command), so it also says what the movement it appends may:
- * when the container was issued and what paper it quotes. Neither is a column
- * of the placement. There is no `validTo`: a placement ends only through the
+ * when the container was issued (`occurredAt`, on the person's word, the
+ * request's clock when absent) and what paper it quotes (`reference`, a
+ * delivery note or a ticket). Neither is a column of the placement. A public
+ * placement gives its point in place of a subscription (M12 of #293).
+ *
+ * There is no `validTo` on a create: a placement ends only through the
  * container's `return` or `decommission`, which end it and append the
- * movement together, so the strict object refuses the member by name.
+ * movement together, so the strict object refuses the member by name. A
+ * patch corrects a placement the ledger has already ended — its end, its
+ * fraction or its override; a placement that starts on another day or serves
+ * another subscription is another placement. Its end is a day, never null:
+ * the ledger's word on when the container left is not taken back by a form,
+ * so a null — reopening the placement — is refused here at the boundary; an
+ * end on an open placement is the route's 409, since only it can see the
+ * stored row.
  */
-export const ContainerServicePlacementCreate = z
-  .strictObject({
+const placementBodies = resourceBodies(
+  {
     subscriptionId: Id.nullable().optional(),
-    /** A public placement's point, given in place of a subscription (M12 of #293). */
     sharedCollectionPointId: Id.nullable().optional(),
     wasteFractionId: Id,
     serviceFrequencyId: Id.nullable().optional(),
-    /** The first day the container serves here; the end is the ledger's to set. */
     validFrom: IsoDate,
-    /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
     occurredAt: IsoDateTime.optional(),
-    /** A delivery note or a ticket the issue quotes; the movement's. */
     reference: Label.optional(),
-  })
-  .refine(servedOnce, servedByOne)
+  },
+  { keys: ["subscriptionId", "sharedCollectionPointId", "validFrom", "occurredAt", "reference"], patch: { validTo: IsoDate.optional() } },
+)
+
+export const ContainerServicePlacementCreate = placementBodies.create.refine(servedOnce, servedByOne)
 export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePlacementCreate>
 
-/** Corrects a placement the ledger has already ended, its fraction or its override; a placement that starts on another day or serves another subscription is another placement. */
-export const ContainerServicePlacementPatch = z
-  .strictObject({
-    /** A corrected end for a placement that already has one: a day, never null. The container's `return` or `decommission` sets the end, and the ledger's word on when it left is not taken back by a form, so a null — reopening the placement — is a member the API can never take and is refused here at the boundary; an end on an open placement is the route's 409, since only it can see the stored row. */
-    validTo: IsoDate.optional(),
-    wasteFractionId: Id.optional(),
-    serviceFrequencyId: Id.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ContainerServicePlacementPatch = placementBodies.patch
 export type ContainerServicePlacementPatch = z.infer<typeof ContainerServicePlacementPatch>
 
 /** A page of containers: one project's, of one type, in one asset state, standing in one warehouse. The unrecorded — no movement, a null state — are not askable for; that is a later read. */

@@ -23,8 +23,7 @@
 // neither may put a container into service. Both lists are the vocabulary's,
 // which the domain's `MOVEMENT_SHAPES` is built from too, so what a command
 // may ask for and what the ledger allows cannot drift.
-import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
 import { EACH_TYPE_ONCE, STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
 import { ADJUSTMENT_TARGETS, DECOMMISSION_REASON_STATUSES, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
@@ -33,8 +32,8 @@ import * as z from "zod"
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { instantWindow, ProjectScopedListQuery } from "./queries"
+import { NonNegativeInt, PositiveInt, recorded, resourceBodies, stamped } from "./resource"
 import { AssetStatus, StockMovementKind, StockPlaceKind } from "./resources"
 import { Label, Paragraph, Slug } from "./text"
 
@@ -152,16 +151,14 @@ export const Adjust = z
 export type Adjust = z.infer<typeof Adjust>
 
 /** A page of movements across containers: one project's, one container's, through one warehouse on either side, of one kind, over a window of `occurredAt`. */
-export const StockMovementListQuery = ProjectScopedListQuery.extend({
-  containerId: Id.optional(),
-  /** Movements that left from or arrived at this warehouse. */
-  warehouseId: Id.optional(),
-  kind: StockMovementKind.optional(),
-  /** The first instant of the window over `occurredAt`, inclusive. */
-  from: IsoDateTime.optional(),
-  /** The last instant, inclusive. */
-  to: IsoDateTime.optional(),
-}).refine((query) => query.from === undefined || query.to === undefined || Date.parse(query.to) >= Date.parse(query.from), { message: OCCURRED_WINDOW_ORDERED, path: ["to"] })
+export const StockMovementListQuery = instantWindow(
+  ProjectScopedListQuery.extend({
+    containerId: Id.optional(),
+    /** Movements that left from or arrived at this warehouse. */
+    warehouseId: Id.optional(),
+    kind: StockMovementKind.optional(),
+  }),
+)
 export type StockMovementListQuery = z.infer<typeof StockMovementListQuery>
 
 /** A Decommission Reason's state (O30 of #290): offered for a new decommission, or retired from them. */
@@ -179,20 +176,20 @@ export const DecommissionReason = z.object({
 })
 export type DecommissionReason = z.infer<typeof DecommissionReason>
 
-export const DecommissionReasonCreate = z.strictObject({
-  code: Slug(),
-  name: Label,
-  status: DecommissionReasonStatus.default("active"),
-})
+/** A patch takes the name and the status: the code is the slug a report quotes, and a reason that needs another one is another reason. */
+const decommissionReasonBodies = resourceBodies(
+  {
+    code: Slug(),
+    name: Label,
+    status: DecommissionReasonStatus.default("active"),
+  },
+  { keys: ["code"] },
+)
+
+export const DecommissionReasonCreate = decommissionReasonBodies.create
 export type DecommissionReasonCreate = z.infer<typeof DecommissionReasonCreate>
 
-/** The name and the status: the code is the slug a report quotes, and a reason that needs another one is another reason. */
-export const DecommissionReasonPatch = z
-  .strictObject({
-    name: Label.optional(),
-    status: DecommissionReasonStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const DecommissionReasonPatch = decommissionReasonBodies.patch
 export type DecommissionReasonPatch = z.infer<typeof DecommissionReasonPatch>
 
 /** A page of reasons: every one of the company's, or one status's. */

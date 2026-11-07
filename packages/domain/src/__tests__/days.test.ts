@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { addDays, addMonthsClamped, addMonthsRolling, daysBetween, daysInclusive, formatDayMonth, formatShortDay, isIsoDate, isoWeek, mondayOf, serviceDayOf } from "../days"
+import { addDays, addMonthsClamped, addMonthsRolling, daysBetween, daysInclusive, dayWindowFits, formatDayMonth, formatShortDay, isIsoDate, isoWeek, mondayOf, serviceDayOf } from "../days"
 
 describe("isIsoDate", () => {
   test("is a day that exists, spelled YYYY-MM-DD", () => {
@@ -37,6 +37,19 @@ describe("daysBetween and daysInclusive", () => {
   test("daysInclusive counts both ends", () => {
     assert.equal(daysInclusive("2026-10-05", "2026-10-05"), 1)
     assert.equal(daysInclusive("2026-01-01", "2026-12-31"), 365)
+  })
+})
+
+describe("dayWindowFits", () => {
+  test("holds a window of days, both ends in, to at most so many days", () => {
+    assert.equal(dayWindowFits({ from: "2026-03-01", to: "2026-05-31" }, 92), true, "92 days")
+    assert.equal(dayWindowFits({ from: "2026-03-01", to: "2026-06-01" }, 92), false, "93 days")
+    assert.equal(dayWindowFits({ from: "2026-10-05", to: "2026-10-05" }, 1), true, "one day is a window")
+  })
+
+  test("passes what is not its to refuse: a backward window, and one it cannot measure", () => {
+    assert.equal(dayWindowFits({ from: "2027-01-01", to: "2026-01-01" }, 1), true)
+    assert.equal(dayWindowFits({ from: "2026-10-05", to: "nope" }, 1), true)
   })
 })
 

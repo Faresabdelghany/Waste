@@ -12,7 +12,7 @@
 // Times are `HH:MM` on the project's clock. A point open always keeps any
 // weekly hours it had, which are not read while it is.
 import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
-import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { eachOnce, SET_MAX } from "@waste/domain/requests"
 import { exceptionIssues, hoursIssues, OPENING_EXCEPTIONS_MAX } from "@waste/domain/resources/drop-off-points"
 import * as z from "zod"
 
@@ -21,7 +21,7 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ServiceDay } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { DropOffPointKind, DropOffPointStatus } from "./resources"
 import { Label, Paragraph } from "./text"
 
@@ -82,38 +82,31 @@ export const DropOffPoint = z.object({
 })
 export type DropOffPoint = z.infer<typeof DropOffPoint>
 
-export const DropOffPointCreate = z.strictObject({
-  projectId: Id,
-  code: Label,
-  name: Label,
-  kind: DropOffPointKind,
-  address: Paragraph,
-  location: FlatPoint,
-  openAlways: z.boolean().default(false).describe("Defaults to false when absent: a recycling centre keeps hours."),
-  closedOnHolidays: z.boolean().default(false).describe("Defaults to false when absent."),
-  publicNote: Paragraph.nullable().optional(),
-  status: DropOffPointStatus.default("draft").describe("Defaults to draft when absent: a point reaches the public map when the office makes it active."),
-  notes: Paragraph.nullable().optional(),
-  wasteFractionIds: WasteFractionIds.default([]).describe("The fractions it starts out taking; none when absent."),
-  hours: Hours.default([]).describe("Its weekly windows; none when absent."),
-  exceptions: Exceptions.default([]).describe("Its dated exceptions; none when absent."),
-})
+/** A patch takes everything but the project, the code and the sets, each replaced whole through its own route. */
+const dropOffPointBodies = resourceBodies(
+  {
+    projectId: Id,
+    code: Label,
+    name: Label,
+    kind: DropOffPointKind,
+    address: Paragraph,
+    location: FlatPoint,
+    openAlways: z.boolean().default(false).describe("Defaults to false when absent: a recycling centre keeps hours."),
+    closedOnHolidays: z.boolean().default(false).describe("Defaults to false when absent."),
+    publicNote: Paragraph.nullable().optional(),
+    status: DropOffPointStatus.default("draft").describe("Defaults to draft when absent: a point reaches the public map when the office makes it active."),
+    notes: Paragraph.nullable().optional(),
+    wasteFractionIds: WasteFractionIds.default([]).describe("The fractions it starts out taking; none when absent."),
+    hours: Hours.default([]).describe("Its weekly windows; none when absent."),
+    exceptions: Exceptions.default([]).describe("Its dated exceptions; none when absent."),
+  },
+  { keys: ["projectId", "code", "wasteFractionIds", "hours", "exceptions"] },
+)
+
+export const DropOffPointCreate = dropOffPointBodies.create
 export type DropOffPointCreate = z.infer<typeof DropOffPointCreate>
 
-/** Everything but the project, the code, the sets and the stamps. */
-export const DropOffPointPatch = z
-  .strictObject({
-    name: Label.optional(),
-    kind: DropOffPointKind.optional(),
-    address: Paragraph.optional(),
-    location: FlatPoint.optional(),
-    openAlways: z.boolean().optional(),
-    closedOnHolidays: z.boolean().optional(),
-    publicNote: Paragraph.nullable().optional(),
-    status: DropOffPointStatus.optional(),
-    notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const DropOffPointPatch = dropOffPointBodies.patch
 export type DropOffPointPatch = z.infer<typeof DropOffPointPatch>
 
 /** The whole set of fractions the point takes, replacing what it had. */

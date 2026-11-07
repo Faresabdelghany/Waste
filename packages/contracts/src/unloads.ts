@@ -35,7 +35,6 @@
 // integration` (O27 of #290, weighbridge.ts); where the driver recorded the
 // same load too, each reads the other in `possibleDuplicates` until the desk
 // rejects or corrects one.
-import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, refusalIssue, SAY_WHY_REFUSED, weightsAddUp, weightsPaired, type Weights } from "@waste/domain/execution/unloads"
 import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
@@ -45,7 +44,7 @@ import { ExecutionSource, ObjectKey } from "./execution"
 import { WeightReviewState, WeightReviewStatus } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
-import { ProjectScopedListQuery } from "./queries"
+import { instantWindow, ProjectScopedListQuery } from "./queries"
 import { PositiveInt, recorded } from "./resource"
 import { Label, Paragraph } from "./text"
 
@@ -131,15 +130,13 @@ export const UnloadCreate = z
 export type UnloadCreate = z.infer<typeof UnloadCreate>
 
 /** A page of unloads: one project's, one route's, at one station, of one fraction, of one review status, over a window of `occurredAt`, oldest first. */
-export const UnloadListQuery = ProjectScopedListQuery.extend({
-  routeId: Id.optional(),
-  unloadingStationId: Id.optional(),
-  wasteFractionId: Id.optional(),
-  /** The reading to page by: `captured` is the weights desk's queue. */
-  reviewStatus: WeightReviewStatus.optional(),
-  /** The first instant of the window over `occurredAt`, inclusive. */
-  from: IsoDateTime.optional(),
-  /** The last instant, inclusive. */
-  to: IsoDateTime.optional(),
-}).refine((query) => query.from === undefined || query.to === undefined || Date.parse(query.to) >= Date.parse(query.from), { message: OCCURRED_WINDOW_ORDERED, path: ["to"] })
+export const UnloadListQuery = instantWindow(
+  ProjectScopedListQuery.extend({
+    routeId: Id.optional(),
+    unloadingStationId: Id.optional(),
+    wasteFractionId: Id.optional(),
+    /** The reading to page by: `captured` is the weights desk's queue. */
+    reviewStatus: WeightReviewStatus.optional(),
+  }),
+)
 export type UnloadListQuery = z.infer<typeof UnloadListQuery>

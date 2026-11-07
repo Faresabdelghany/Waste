@@ -8,18 +8,14 @@
 // (the database's exclusion, a 409 naming the period already there).
 // Recording one is never refused for the work planned on its days; the
 // commands that name the driver or the vehicle afresh read these.
-import { dayWindowOrdered } from "@waste/domain/days"
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
-import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
-import { somethingToChange, stamped } from "./resource"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
+import { stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** Why a driver is away. */
 export const DriverAbsenceReason = z.enum(DRIVER_ABSENCE_REASONS)
@@ -29,53 +25,38 @@ export type DriverAbsenceReason = z.infer<typeof DriverAbsenceReason>
 export const VehicleUnavailabilityReason = z.enum(VEHICLE_UNAVAILABILITY_REASONS)
 export type VehicleUnavailabilityReason = z.infer<typeof VehicleUnavailabilityReason>
 
-/** The period's own fields, beside whose it is. */
-const periodFields = { ...stamped, projectId: Id, ...Validity.shape, note: Paragraph.nullable() }
-
 /** A driver's absence: the days the driver is away, and why. */
-export const DriverAbsence = z.object({ ...periodFields, driverId: Id, reason: DriverAbsenceReason }).refine(validityOrdered, endsAfterItStarts)
+export const DriverAbsence = effectiveDated(z.object({ ...stamped, projectId: Id, note: Paragraph.nullable(), driverId: Id, reason: DriverAbsenceReason }))
 export type DriverAbsence = z.infer<typeof DriverAbsence>
 
 /** A vehicle's unavailability: the days the vehicle or trailer is out of use, and why. */
-export const VehicleUnavailability = z.object({ ...periodFields, vehicleId: Id, reason: VehicleUnavailabilityReason }).refine(validityOrdered, endsAfterItStarts)
+export const VehicleUnavailability = effectiveDated(z.object({ ...stamped, projectId: Id, note: Paragraph.nullable(), vehicleId: Id, reason: VehicleUnavailabilityReason }))
 export type VehicleUnavailability = z.infer<typeof VehicleUnavailability>
 
-/** `POST /driver-absences`: the driver, the first day away and the first day back (absent while not known), why, and a note. */
-export const DriverAbsenceCreate = z
-  .strictObject({ driverId: Id, ...ValidityCreate, reason: DriverAbsenceReason, note: Paragraph.nullable().optional() })
-  .refine(validityOrdered, endsAfterItStarts)
+/** `POST /driver-absences`: the driver, why, a note, the first day away and the first day back (absent while not known). A patch moves the period, the reason or the note; never whose it is. */
+const driverAbsenceBodies = effectiveDatedBodies({ driverId: Id, reason: DriverAbsenceReason, note: Paragraph.nullable().optional() }, { keys: ["driverId"] })
+
+export const DriverAbsenceCreate = driverAbsenceBodies.create
 export type DriverAbsenceCreate = z.infer<typeof DriverAbsenceCreate>
 
-/** `POST /vehicle-unavailability`: the vehicle or trailer, the period, why, and a note. */
-export const VehicleUnavailabilityCreate = z
-  .strictObject({ vehicleId: Id, ...ValidityCreate, reason: VehicleUnavailabilityReason, note: Paragraph.nullable().optional() })
-  .refine(validityOrdered, endsAfterItStarts)
-export type VehicleUnavailabilityCreate = z.infer<typeof VehicleUnavailabilityCreate>
-
-/** What a patch may move: the period, the reason, the note; never whose it is. */
-const patchFields = { validFrom: IsoDate.optional(), validTo: IsoDate.nullable().optional(), note: Paragraph.nullable().optional() }
-
 /** `PATCH /driver-absences/:id`. */
-export const DriverAbsencePatch = z
-  .strictObject({ ...patchFields, reason: DriverAbsenceReason.optional() })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const DriverAbsencePatch = driverAbsenceBodies.patch
 export type DriverAbsencePatch = z.infer<typeof DriverAbsencePatch>
 
+/** `POST /vehicle-unavailability`: the vehicle or trailer, why, a note, and the period. */
+const vehicleUnavailabilityBodies = effectiveDatedBodies({ vehicleId: Id, reason: VehicleUnavailabilityReason, note: Paragraph.nullable().optional() }, { keys: ["vehicleId"] })
+
+export const VehicleUnavailabilityCreate = vehicleUnavailabilityBodies.create
+export type VehicleUnavailabilityCreate = z.infer<typeof VehicleUnavailabilityCreate>
+
 /** `PATCH /vehicle-unavailability/:id`. */
-export const VehicleUnavailabilityPatch = z
-  .strictObject({ ...patchFields, reason: VehicleUnavailabilityReason.optional() })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const VehicleUnavailabilityPatch = vehicleUnavailabilityBodies.patch
 export type VehicleUnavailabilityPatch = z.infer<typeof VehicleUnavailabilityPatch>
 
-/** The days a list is asked over: `from` and `to`, both inclusive; a period touching any of them is listed. */
-const touching = { from: IsoDate.optional(), to: IsoDate.optional() }
-
 /** A page of absences: one project's, one driver's, the ones touching a window of days. */
-export const DriverAbsenceListQuery = ProjectScopedListQuery.extend({ driverId: Id.optional(), ...touching }).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const DriverAbsenceListQuery = dayWindow(ProjectScopedListQuery.extend({ driverId: Id.optional() }))
 export type DriverAbsenceListQuery = z.infer<typeof DriverAbsenceListQuery>
 
 /** A page of unavailability: one project's, one vehicle's, the periods touching a window of days. */
-export const VehicleUnavailabilityListQuery = ProjectScopedListQuery.extend({ vehicleId: Id.optional(), ...touching }).refine(dayWindowOrdered, dayWindowIsOrdered)
+export const VehicleUnavailabilityListQuery = dayWindow(ProjectScopedListQuery.extend({ vehicleId: Id.optional() }))
 export type VehicleUnavailabilityListQuery = z.infer<typeof VehicleUnavailabilityListQuery>

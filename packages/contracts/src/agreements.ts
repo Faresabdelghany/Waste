@@ -26,10 +26,9 @@
 // inside the agreement's, or the agreement's inside its subscriptions' —
 // Postgres cannot hold that across rows without a trigger and this schema
 // cannot see the stored row, so the route holds it.
-import { validityOrdered } from "@waste/domain/periods"
 import { CHANGE_NAMES_SOMETHING, ONE_PLACE } from "@waste/domain/registry/agreements"
 import { AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
+import { placesNamed } from "@waste/domain/registry/served-places"
 import * as z from "zod"
 
 import { Currency } from "./codes"
@@ -37,10 +36,10 @@ import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, stamped } from "./resource"
 import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** Where the Agreement stands; expiry is a reading of the period, never a status. */
 export const AgreementStatus = z.enum(AGREEMENT_STATUSES)
@@ -53,8 +52,8 @@ export type BillingCadence = z.infer<typeof BillingCadence>
 /** A count of one thing subscribed to: whole and positive, since zero of a product is no subscription. */
 const Quantity = PositiveInt
 
-export const Agreement = z
-  .object({
+export const Agreement = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     /** The number a person quotes: `AGR-2408`. Unique among the agreements valid at one time, which the database holds. */
@@ -72,13 +71,20 @@ export const Agreement = z
     priceListId: Id.nullable(),
     /** The window the agreement promises its stops are served in (O14 of #290), on the project's clock; null is any time. A stop's window is where it and its property's access hours overlap. */
     serviceWindow: TimeWindow.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type Agreement = z.infer<typeof Agreement>
 
-export const AgreementCreate = z
-  .strictObject({
+/**
+ * The price list is a list of the project in the agreement's currency,
+ * absent or null the project's default; the service window is written whole,
+ * absent or null any time of the day. Amending an agreement changes the row,
+ * the audit log being its history; a patch's null clears the list or the
+ * window, and reopens the period. Whether the new period still contains its
+ * subscriptions' is the route's question.
+ */
+const agreementBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     number: Label,
     customerId: Id,
@@ -87,39 +93,20 @@ export const AgreementCreate = z
     billingCadence: BillingCadence,
     currency: Currency,
     notes: Paragraph.nullable().optional(),
-    /** A list of the project in the agreement's currency; absent or null is the project's default list. */
     priceListId: Id.nullable().optional(),
-    /** Absent or null is any time of the day. */
     serviceWindow: TimeWindow.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["projectId"] },
+)
+
+export const AgreementCreate = agreementBodies.create
 export type AgreementCreate = z.infer<typeof AgreementCreate>
 
-/** Amending an agreement changes the row; the audit log is its history. Whether the new period still contains its subscriptions' is the route's question. */
-export const AgreementPatch = z
-  .strictObject({
-    number: Label.optional(),
-    customerId: Id.optional(),
-    payerCustomerId: Id.optional(),
-    status: AgreementStatus.optional(),
-    billingCadence: BillingCadence.optional(),
-    currency: Currency.optional(),
-    notes: Paragraph.nullable().optional(),
-    /** Null clears the list back to the project's default. */
-    priceListId: Id.nullable().optional(),
-    /** Written whole; null clears it to any time of the day. */
-    serviceWindow: TimeWindow.nullable().optional(),
-    validFrom: IsoDate.optional(),
-    /** Null reopens the period; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const AgreementPatch = agreementBodies.patch
 export type AgreementPatch = z.infer<typeof AgreementPatch>
 
-export const Subscription = z
-  .object({
+export const Subscription = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     agreementId: Id,
@@ -129,43 +116,33 @@ export const Subscription = z
     /** The place, where it is a Shared Collection Point; null when it is a Property. */
     sharedCollectionPointId: Id.nullable(),
     quantity: Quantity,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type Subscription = z.infer<typeof Subscription>
-
-const onePlace = { message: ONE_PLACE }
-const exactlyOnePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) =>
-  [body.propertyId, body.sharedCollectionPointId].filter((place) => place != null).length === 1
 
 /**
  * The agreement is the path's and the project is the agreement's, so neither
  * is here. Either place may be given as null: a form with both fields sends
  * the one it has and null for the other, and the resource says null too, so
  * refusing it would refuse the natural body for no reason the rule cares
- * about — `exactlyOnePlace` counts a null as a place not given.
+ * about — `placesNamed` counts a null as a place not given. The place and the
+ * product do not change: a patch ends this subscription's period, and the one
+ * that replaces it is written.
  */
-export const SubscriptionCreate = z
-  .strictObject({
+const subscriptionBodies = effectiveDatedBodies(
+  {
     productId: Id,
     propertyId: Id.nullable().optional(),
     sharedCollectionPointId: Id.nullable().optional(),
     quantity: Quantity.default(1).describe("Defaults to one when absent: one of the product at the place."),
-    ...ValidityCreate,
-  })
-  .refine(exactlyOnePlace, onePlace)
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["productId", "propertyId", "sharedCollectionPointId"] },
+)
+
+export const SubscriptionCreate = subscriptionBodies.create.refine((body) => placesNamed(body) === 1, { message: ONE_PLACE })
 export type SubscriptionCreate = z.infer<typeof SubscriptionCreate>
 
-/** The place and the product do not change: end this subscription and write the one that replaces it. */
-export const SubscriptionPatch = z
-  .strictObject({
-    quantity: Quantity.optional(),
-    validFrom: IsoDate.optional(),
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const SubscriptionPatch = subscriptionBodies.patch
 export type SubscriptionPatch = z.infer<typeof SubscriptionPatch>
 
 /**
@@ -231,29 +208,28 @@ export type AgreementTerminated = z.infer<typeof AgreementTerminated>
  * resumes it. One pause of a subscription is in force at a time, inside the
  * subscription's period; the project is the subscription's.
  */
-export const SubscriptionPause = z
-  .object({
+export const SubscriptionPause = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     subscriptionId: Id,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type SubscriptionPause = z.infer<typeof SubscriptionPause>
 
-/** A pause's period; the subscription is the path's (`POST /subscriptions/:id/pauses`). It begins today or later, which only the route can judge. */
-export const SubscriptionPauseCreate = z.strictObject({ ...ValidityCreate }).refine(validityOrdered, endsAfterItStarts)
+/**
+ * A pause's period; the subscription is the path's (`POST
+ * /subscriptions/:id/pauses`). It begins today or later, which only the route
+ * can judge. Moving one moves its first day while it has not begun, and its
+ * end — the day collections resume, a resume today included — while it has
+ * not ended; a null end leaves it open, a pause until it is resumed.
+ */
+const subscriptionPauseBodies = effectiveDatedBodies({})
+
+export const SubscriptionPauseCreate = subscriptionPauseBodies.create
 export type SubscriptionPauseCreate = z.infer<typeof SubscriptionPauseCreate>
 
-/** Moving a pause: its first day while it has not begun, its end — the day collections resume, a resume today included — while it has not ended. */
-export const SubscriptionPausePatch = z
-  .strictObject({
-    validFrom: IsoDate.optional(),
-    /** Null leaves it open, a pause until it is resumed. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const SubscriptionPausePatch = subscriptionPauseBodies.patch
 export type SubscriptionPausePatch = z.infer<typeof SubscriptionPausePatch>
 
 /** `POST /subscription-pauses/:id/cancel`: a pause that has not begun, removed. Takes nothing. */

@@ -17,14 +17,14 @@
 // `inForceOn`.
 import { validityOrdered } from "@waste/domain/periods"
 import { appealTextNeeded, APPEAL_TEXT_NEEDED, decisionPeriodRefusal, ONE_PLACE } from "@waste/domain/registry/applications"
+import { placesNamed } from "@waste/domain/registry/served-places"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES } from "@waste/domain/registry/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { Paragraph } from "./text"
 import { endsAfterItStarts } from "./validity"
 
@@ -37,7 +37,7 @@ export type ApplicationChannel = z.infer<typeof ApplicationChannel>
 export const DecisionOutcome = z.enum(DECISION_OUTCOMES)
 export type DecisionOutcome = z.infer<typeof DecisionOutcome>
 
-const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) => body.propertyId == null || body.sharedCollectionPointId == null
+const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) => placesNamed(body) <= 1
 const onePlaceAt = { message: ONE_PLACE, path: ["sharedCollectionPointId"] }
 
 export const Decision = z.object({
@@ -77,8 +77,9 @@ export const Application = z.object({
 })
 export type Application = z.infer<typeof Application>
 
-export const ApplicationCreate = z
-  .strictObject({
+/** A patch is what the office may correct while the Application is undecided; the project and the customer are its own — another customer's request is another Application. */
+const applicationBodies = resourceBodies(
+  {
     projectId: Id,
     kind: ApplicationKind,
     channel: ApplicationChannel,
@@ -88,23 +89,14 @@ export const ApplicationCreate = z
     sharedCollectionPointId: Id.nullable().optional(),
     subscriptionId: Id.nullable().optional(),
     statement: Paragraph,
-  })
-  .refine(onePlace, onePlaceAt)
+  },
+  { keys: ["projectId", "customerId"] },
+)
+
+export const ApplicationCreate = applicationBodies.create.refine(onePlace, onePlaceAt)
 export type ApplicationCreate = z.infer<typeof ApplicationCreate>
 
-/** What the office may correct while the Application is undecided; the project and the customer are its own — another customer's request is another Application. */
-export const ApplicationPatch = z
-  .strictObject({
-    kind: ApplicationKind.optional(),
-    channel: ApplicationChannel.optional(),
-    receivedOn: IsoDate.optional(),
-    propertyId: Id.nullable().optional(),
-    sharedCollectionPointId: Id.nullable().optional(),
-    subscriptionId: Id.nullable().optional(),
-    statement: Paragraph.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(onePlace, onePlaceAt)
+export const ApplicationPatch = applicationBodies.patch.refine(onePlace, onePlaceAt)
 export type ApplicationPatch = z.infer<typeof ApplicationPatch>
 
 /** `POST /applications/{id}/decide`: the outcome, what it holds the customer to, its period, and how to appeal it. */

@@ -15,9 +15,7 @@
 // A visit is an append the attendant's check-in or the gate's read makes,
 // admitted or refused with the reason, and voided with a reason, never
 // deleted: the ledger is the bookkeeping evidence for its charges.
-import { dayWindowOrdered } from "@waste/domain/days"
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { CREDENTIAL_TYPED_MAX, CREDENTIAL_VALUE_SHAPE, EACH_VISIT_FRACTION_ONCE, isCredentialValue, ONE_HOLDER, oneHolder, VISIT_ADDRESS_MAX, VISIT_ADDRESS_QUERY, VISIT_FRACTIONS_MAX } from "@waste/domain/visits/charges"
 import { ACCESS_CREDENTIAL_KINDS, SITE_VISIT_IDENTIFICATIONS, SITE_VISIT_OUTCOMES, SITE_VISIT_REFUSAL_REASONS, SITE_VISIT_SOURCES, VISIT_CHARGE_BASES } from "@waste/domain/visits/vocabulary"
 import { BLOCK_REASONS } from "@waste/domain/finance/vocabulary"
@@ -25,10 +23,11 @@ import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
-import { ProjectScopedListQuery, dayWindowIsOrdered } from "./queries"
-import { Minor, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
+import { QueryFlag } from "./query-strings"
+import { Minor, NonNegativeInt, PositiveInt, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 export const AccessCredentialKind = z.enum(ACCESS_CREDENTIAL_KINDS)
 export type AccessCredentialKind = z.infer<typeof AccessCredentialKind>
@@ -51,8 +50,8 @@ export const CredentialValue = z
 
 const oneHolderAt = { message: ONE_HOLDER, path: ["propertyId"] }
 
-export const AccessCredential = z
-  .object({
+export const AccessCredential = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     kind: AccessCredentialKind,
@@ -68,13 +67,13 @@ export const AccessCredential = z
     /** Set while the credential is blocked: a blocked one turns its visits away. */
     blockedAt: IsoDateTime.nullable(),
     blockedReason: Paragraph.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type AccessCredential = z.infer<typeof AccessCredential>
 
-export const AccessCredentialCreate = z
-  .strictObject({
+/** A patch moves the label and the end, a null reopening the credential: the kind, the value and the holder are what the credential is, and its start its period's — end it and register another. */
+const accessCredentialBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     kind: AccessCredentialKind,
     value: CredentialValue,
@@ -82,20 +81,14 @@ export const AccessCredentialCreate = z
     customerId: Id.nullable().optional(),
     agreementId: Id.nullable().optional(),
     propertyId: Id.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
-  .refine(oneHolder, oneHolderAt)
+  },
+  { keys: ["projectId", "kind", "value", "customerId", "agreementId", "propertyId", "validFrom"] },
+)
+
+export const AccessCredentialCreate = accessCredentialBodies.create.refine(oneHolder, oneHolderAt)
 export type AccessCredentialCreate = z.infer<typeof AccessCredentialCreate>
 
-/** The label and the end: the kind, the value and the holder are what the credential is, and its start its period's — end it and register another. */
-export const AccessCredentialPatch = z
-  .strictObject({
-    label: Label.nullable().optional(),
-    /** Null reopens the credential; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const AccessCredentialPatch = accessCredentialBodies.patch
 export type AccessCredentialPatch = z.infer<typeof AccessCredentialPatch>
 
 /** `POST /access-credentials/:id/block`: why it is blocked, as the office will read it. */
@@ -109,7 +102,7 @@ export const AccessCredentialListQuery = ProjectScopedListQuery.extend({
   customerId: Id.optional(),
   propertyId: Id.optional(),
   validOn: IsoDate.optional(),
-  blocked: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  blocked: QueryFlag.optional(),
 })
 export type AccessCredentialListQuery = z.infer<typeof AccessCredentialListQuery>
 
@@ -207,15 +200,12 @@ export const SiteVisitVoid = z.strictObject({ reason: Paragraph })
 export type SiteVisitVoid = z.infer<typeof SiteVisitVoid>
 
 /** A page of the ledger, newest first: one project's, one site's, a window of days, one Property's, one Customer's, one source's or one outcome's. */
-export const SiteVisitListQuery = ProjectScopedListQuery.extend({
-  siteId: Id.optional(),
-  from: IsoDate.optional(),
-  to: IsoDate.optional(),
+export const SiteVisitListQuery = dayWindow(ProjectScopedListQuery.extend({ siteId: Id.optional() })).safeExtend({
   propertyId: Id.optional(),
   customerId: Id.optional(),
   source: SiteVisitSource.optional(),
   outcome: SiteVisitOutcome.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+})
 export type SiteVisitListQuery = z.infer<typeof SiteVisitListQuery>
 
 /** `GET /site-visits/frequent`: one project's likely trades on a day, the project's today when absent. */

@@ -8,7 +8,7 @@ import { IsoDate, IsoTime } from "./dates"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectBranding, PublicSlug } from "./organisation"
-import { QueryWhole } from "./query-numbers"
+import { QueryWhole } from "./query-strings"
 import { DropOffPointKind } from "./resources"
 import { Slug } from "./text"
 

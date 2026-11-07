@@ -13,8 +13,6 @@
 // project's and not on the create. Whether a price's period lies inside its
 // assignment's is the route's question. A Service Provider's manager reads
 // the prices of its own assignments through the list, bounded by the route.
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
 import { PROVIDER_OR_AWARD } from "@waste/domain/service-providers/service-areas"
 import * as z from "zod"
 
@@ -23,12 +21,12 @@ import { IsoDate } from "./dates"
 import { IndexBase, indexBody } from "./finance"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { Int4, NonNegativeMinor, somethingToChange, stamped } from "./resource"
+import { Int4, NonNegativeMinor, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
-export const ServiceProviderPrice = z
-  .object({
+export const ServiceProviderPrice = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     /** The award priced: provider and area at once. */
@@ -48,32 +46,31 @@ export const ServiceProviderPrice = z
     /** What was multiplied: the bid, or the fee it replaced. */
     indexBase: IndexBase.nullable(),
     notes: Paragraph.nullable(),
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type ServiceProviderPrice = z.infer<typeof ServiceProviderPrice>
 
-/** `POST /service-provider-prices`: the first row of a chain; the fee is the bid when absent, the currency the project's. */
-export const ServiceProviderPriceCreate = z
-  .strictObject({
+/**
+ * `POST /service-provider-prices`: the first row of a chain; the fee is the
+ * bid when absent, the currency the project's. `PATCH
+ * /service-provider-prices/:id` moves the notes and the end, a null reopening
+ * the price; the bid never, the fee by `index` alone.
+ */
+const priceBodies = effectiveDatedBodies(
+  {
     serviceAreaAssignmentId: Id,
     productId: Id,
     bidMinor: NonNegativeMinor,
     unitPriceMinor: NonNegativeMinor.optional().describe("The bid when absent: a price starts at what was bid."),
     notes: Paragraph.nullable().optional(),
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  },
+  { keys: ["serviceAreaAssignmentId", "productId", "bidMinor", "unitPriceMinor", "validFrom"] },
+)
+
+export const ServiceProviderPriceCreate = priceBodies.create
 export type ServiceProviderPriceCreate = z.infer<typeof ServiceProviderPriceCreate>
 
-/** `PATCH /service-provider-prices/:id`: the notes and the end; the bid never, the fee by `index` alone. */
-export const ServiceProviderPricePatch = z
-  .strictObject({
-    notes: Paragraph.nullable().optional(),
-    /** Null reopens the price; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ServiceProviderPricePatch = priceBodies.patch
 export type ServiceProviderPricePatch = z.infer<typeof ServiceProviderPricePatch>
 
 /** `POST /service-provider-prices/:id/index`: the indexation as a new row from `appliedFrom`, this row ended on it. */

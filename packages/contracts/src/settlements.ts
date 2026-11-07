@@ -39,28 +39,28 @@ import { endsAfterItStarts } from "./validity"
 /** The end of a settlement's period, required: the sentence for a missing one, zod's own for a malformed day. */
 const SettlementEnd = z.iso.date({ error: (issue) => (issue.input === undefined || issue.input === null ? A_PERIOD_ENDS : undefined) })
 
-/** A settlement's fields, spelled once for the two resources that carry them; each refines `validityOrdered` again, since spreading takes the fields and not the rule. */
-const settlementFields = {
-  ...stamped,
-  projectId: Id,
-  /** Whose period it settles; the provider and the area through it. */
-  serviceAreaAssignmentId: Id,
-  status: SettlementStatus,
-  /** The project's. */
-  currency: Currency,
-  calculatedAt: IsoDateTime.nullable(),
-  closedAt: IsoDateTime.nullable(),
-  closedBy: Id.nullable(),
-  /** The calculation's totals; frozen at close. */
-  lineCount: NonNegativeInt,
-  netMinor: Minor,
-  /** The first day of the period. */
-  validFrom: IsoDate,
-  /** The first day after it; required, the one effective-dated resource whose end is. */
-  validTo: SettlementEnd,
-}
-
-export const Settlement = z.object(settlementFields).refine(validityOrdered, endsAfterItStarts)
+/** A settlement: the resource its detail extends, its period's rule with it. */
+export const Settlement = z
+  .object({
+    ...stamped,
+    projectId: Id,
+    /** Whose period it settles; the provider and the area through it. */
+    serviceAreaAssignmentId: Id,
+    status: SettlementStatus,
+    /** The project's. */
+    currency: Currency,
+    calculatedAt: IsoDateTime.nullable(),
+    closedAt: IsoDateTime.nullable(),
+    closedBy: Id.nullable(),
+    /** The calculation's totals; frozen at close. */
+    lineCount: NonNegativeInt,
+    netMinor: Minor,
+    /** The first day of the period. */
+    validFrom: IsoDate,
+    /** The first day after it; required, the one effective-dated resource whose end is. */
+    validTo: SettlementEnd,
+  })
+  .refine(validityOrdered, endsAfterItStarts)
 export type Settlement = z.infer<typeof Settlement>
 
 const pricedTogether = { message: PRICED_TOGETHER, path: ["serviceProviderPriceId"] }
@@ -96,12 +96,7 @@ export const SettlementEvent = z.object({
 export type SettlementEvent = z.infer<typeof SettlementEvent>
 
 /** A settlement with its lines, by event. */
-export const SettlementDetail = z
-  .object({
-    ...settlementFields,
-    lines: z.array(SettlementLine),
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+export const SettlementDetail = Settlement.safeExtend({ lines: z.array(SettlementLine) })
 export type SettlementDetail = z.infer<typeof SettlementDetail>
 
 /** `POST /settlements`: the assignment and the period, both days given; the project is the assignment's and the currency the project's. */

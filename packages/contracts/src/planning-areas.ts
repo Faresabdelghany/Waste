@@ -32,8 +32,6 @@
 // project-wide one (`PlanningAreaBoundaryListQuery`, the Layers control's,
 // by project, area and day) and one area's own (`PlanningAreaBoundaryVersionsQuery`,
 // by day alone, since the path says the area and the area the project).
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
@@ -42,10 +40,10 @@ import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { PlanningAreaPurpose } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { QueryDecimal } from "./query-numbers"
-import { somethingToChange, stamped } from "./resource"
+import { QueryDecimal } from "./query-strings"
+import { resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 export const PlanningArea = z.object({
   ...stamped,
@@ -58,45 +56,50 @@ export const PlanningArea = z.object({
 })
 export type PlanningArea = z.infer<typeof PlanningArea>
 
-export const PlanningAreaBoundary = z
-  .object({
+export const PlanningAreaBoundary = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     planningAreaId: Id,
     /** The outline in force over the period: a closed ring of four or more positions, holes allowed. */
     boundary: FlatPolygon,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type PlanningAreaBoundary = z.infer<typeof PlanningAreaBoundary>
 
-/** A new version: the area is the path's, the project the area's. A period overlapping another version is the route's 409. */
-export const PlanningAreaBoundaryCreate = z
-  .strictObject({
-    boundary: FlatPolygon,
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+/**
+ * A new version: the area is the path's, the project the area's. A period
+ * overlapping another version is the route's 409. A patch moves the end, a
+ * null reopening the version, and may redraw the outline; the start does not
+ * move, since a version begins where the earlier one ended. Whether the new
+ * end still meets the next version is the route's question.
+ */
+const boundaryBodies = effectiveDatedBodies({ boundary: FlatPolygon }, { keys: ["validFrom"] })
+
+export const PlanningAreaBoundaryCreate = boundaryBodies.create
 export type PlanningAreaBoundaryCreate = z.infer<typeof PlanningAreaBoundaryCreate>
 
-/** The end moves and the outline may be redrawn; the start does not move, since a version begins where the earlier one ended. Whether the new end still meets the next version is the route's question. */
-export const PlanningAreaBoundaryPatch = z
-  .strictObject({
-    /** Null reopens the version; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-    boundary: FlatPolygon.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const PlanningAreaBoundaryPatch = boundaryBodies.patch
 export type PlanningAreaBoundaryPatch = z.infer<typeof PlanningAreaBoundaryPatch>
 
-export const PlanningAreaCreate = z.strictObject({
-  projectId: Id,
-  code: Label,
-  name: Label,
-  purpose: PlanningAreaPurpose,
-  /** The first version, written in the same transaction; an area may also be registered first and drawn later. */
-  boundary: PlanningAreaBoundaryCreate.optional(),
-})
+/**
+ * The first version is written in the same transaction; an area may also be
+ * registered first and drawn later. A patch takes the name and the purpose;
+ * the code is the reference the rest of the system quotes, and the boundaries
+ * are versions with routes of their own.
+ */
+const planningAreaBodies = resourceBodies(
+  {
+    projectId: Id,
+    code: Label,
+    name: Label,
+    purpose: PlanningAreaPurpose,
+    boundary: PlanningAreaBoundaryCreate.optional(),
+  },
+  { keys: ["projectId", "code", "boundary"] },
+)
+
+export const PlanningAreaCreate = planningAreaBodies.create
 export type PlanningAreaCreate = z.infer<typeof PlanningAreaCreate>
 
 /** What a create answers: the area as written, and the first version beside it when the body drew one — null when it did not — so the client has both ids from the one request. */
@@ -105,13 +108,7 @@ export const PlanningAreaCreated = PlanningArea.extend({
 })
 export type PlanningAreaCreated = z.infer<typeof PlanningAreaCreated>
 
-/** The name and the purpose; the code is the reference the rest of the system quotes, and the boundaries are versions with routes of their own. */
-export const PlanningAreaPatch = z
-  .strictObject({
-    name: Label.optional(),
-    purpose: PlanningAreaPurpose.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const PlanningAreaPatch = planningAreaBodies.patch
 export type PlanningAreaPatch = z.infer<typeof PlanningAreaPatch>
 
 /** A page of planning areas, from one project and of one purpose. */

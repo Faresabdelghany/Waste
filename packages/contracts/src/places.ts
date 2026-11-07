@@ -30,7 +30,7 @@
 // replaced whole through `PUT /unloading-stations/:id/fractions`; a create
 // may carry the set it starts with, a patch never does.
 import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
-import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { eachOnce, SET_MAX } from "@waste/domain/requests"
 import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape, providerShapeGiven } from "@waste/domain/resources/places"
 import * as z from "zod"
 
@@ -39,7 +39,7 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { DepotOwnership, DepotStatus, UnloadingStationOwnership, UnloadingStationStatus, WarehouseStatus } from "./resources"
 import { Label, Paragraph } from "./text"
 
@@ -73,29 +73,24 @@ export const Warehouse = z.object({
 })
 export type Warehouse = z.infer<typeof Warehouse>
 
-export const WarehouseCreate = z.strictObject({
-  projectId: Id,
-  code: Label,
-  name: Label,
-  address: Paragraph,
-  location: FlatPoint.nullable().optional(),
-  depotId: Id.nullable().optional(),
-  status: WarehouseStatus.default("active").describe("Defaults to active when absent: a warehouse is registered because stock already moves through it."),
-  notes: Paragraph.nullable().optional(),
-})
-export type WarehouseCreate = z.infer<typeof WarehouseCreate>
-
-/** Everything but the project, the code and the stamps. */
-export const WarehousePatch = z
-  .strictObject({
-    name: Label.optional(),
-    address: Paragraph.optional(),
+const warehouseBodies = resourceBodies(
+  {
+    projectId: Id,
+    code: Label,
+    name: Label,
+    address: Paragraph,
     location: FlatPoint.nullable().optional(),
     depotId: Id.nullable().optional(),
-    status: WarehouseStatus.optional(),
+    status: WarehouseStatus.default("active").describe("Defaults to active when absent: a warehouse is registered because stock already moves through it."),
     notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+  },
+  { keys: ["projectId", "code"] },
+)
+
+export const WarehouseCreate = warehouseBodies.create
+export type WarehouseCreate = z.infer<typeof WarehouseCreate>
+
+export const WarehousePatch = warehouseBodies.patch
 export type WarehousePatch = z.infer<typeof WarehousePatch>
 
 export const Depot = z.object({
@@ -120,8 +115,9 @@ export const Depot = z.object({
 })
 export type Depot = z.infer<typeof Depot>
 
-export const DepotCreate = z
-  .strictObject({
+/** The two shape rules are held on a patch where it carries both halves, and by the route against the stored row otherwise. */
+const depotBodies = resourceBodies(
+  {
     projectId: Id,
     code: Label,
     name: Label,
@@ -134,28 +130,14 @@ export const DepotCreate = z
     vehicleCapacity: VehicleCapacity.nullable().optional(),
     status: DepotStatus.default("active").describe("Defaults to active when absent: a depot is registered because routes already leave from it."),
     notes: Paragraph.nullable().optional(),
-  })
-  .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
-  .refine(hoursShapeGiven, bothHoursOrNeither)
+  },
+  { keys: ["projectId", "code"] },
+)
+
+export const DepotCreate = depotBodies.create.refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership).refine(hoursShapeGiven, bothHoursOrNeither)
 export type DepotCreate = z.infer<typeof DepotCreate>
 
-/** Everything but the project, the code and the stamps; the two shape rules are held here where the patch carries both halves, and by the route against the stored row otherwise. */
-export const DepotPatch = z
-  .strictObject({
-    name: Label.optional(),
-    address: Paragraph.optional(),
-    location: FlatPoint.optional(),
-    ownership: DepotOwnership.optional(),
-    serviceProviderId: Id.nullable().optional(),
-    opensAt: IsoTime.nullable().optional(),
-    closesAt: IsoTime.nullable().optional(),
-    vehicleCapacity: VehicleCapacity.nullable().optional(),
-    status: DepotStatus.optional(),
-    notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership)
-  .refine(hoursShape, bothHoursOrNeither)
+export const DepotPatch = depotBodies.patch.refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership).refine(hoursShape, bothHoursOrNeither)
 export type DepotPatch = z.infer<typeof DepotPatch>
 
 const eachFractionOnce = { message: EACH_FRACTION_ONCE, path: ["wasteFractionIds"] }
@@ -187,9 +169,9 @@ export const UnloadingStation = z.object({
 })
 export type UnloadingStation = z.infer<typeof UnloadingStation>
 
-/** The station is the company's, so no project is here; the ownership has no default, since the plant the company delivers to is as common as its own. */
-export const UnloadingStationCreate = z
-  .strictObject({
+/** The station is the company's, so no project is here; the ownership has no default, since the plant the company delivers to is as common as its own. A patch takes everything but the code and the fractions, a set with its own route. */
+const unloadingStationBodies = resourceBodies(
+  {
     code: Label,
     name: Label,
     address: Paragraph,
@@ -203,30 +185,17 @@ export const UnloadingStationCreate = z
     status: UnloadingStationStatus.default("active").describe("Defaults to active when absent: a station is registered because routes already empty there."),
     notes: Paragraph.nullable().optional(),
     wasteFractionIds: WasteFractionIdsBody.default([]).describe("The fractions the station starts out accepting; none when absent."),
-  })
+  },
+  { keys: ["code", "wasteFractionIds"] },
+)
+
+export const UnloadingStationCreate = unloadingStationBodies.create
   .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
   .refine(hoursShapeGiven, bothHoursOrNeither)
   .refine((body) => eachOnce(body.wasteFractionIds), eachFractionOnce)
 export type UnloadingStationCreate = z.infer<typeof UnloadingStationCreate>
 
-/** Everything but the code, the fractions and the stamps. */
-export const UnloadingStationPatch = z
-  .strictObject({
-    name: Label.optional(),
-    address: Paragraph.optional(),
-    location: FlatPoint.optional(),
-    ownership: UnloadingStationOwnership.optional(),
-    serviceProviderId: Id.nullable().optional(),
-    opensAt: IsoTime.nullable().optional(),
-    closesAt: IsoTime.nullable().optional(),
-    weighbridge: z.boolean().optional(),
-    transfer: z.boolean().optional(),
-    status: UnloadingStationStatus.optional(),
-    notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership)
-  .refine(hoursShape, bothHoursOrNeither)
+export const UnloadingStationPatch = unloadingStationBodies.patch.refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership).refine(hoursShape, bothHoursOrNeither)
 export type UnloadingStationPatch = z.infer<typeof UnloadingStationPatch>
 
 /** The whole set of fractions the station accepts, replacing what it had. */
