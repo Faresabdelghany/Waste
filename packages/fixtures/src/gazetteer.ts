@@ -21,9 +21,7 @@
 // anchors are approximate real coordinates of the low-number end, with the
 // bearing the numbers grow along — the picture only has to be plausible and
 // stable. ./__tests__/gazetteer.test.ts holds the table and the generator
-// together, and apps/web/lib/data/__tests__/street-gazetteer.test.ts the
-// table and the explicit fixtures: a fixture street without an anchor fails
-// in one of them.
+// together: a seeded street without an anchor fails there.
 import type { Gazetteer } from "./positions"
 
 export const FIXTURE_GAZETTEER: Gazetteer = {

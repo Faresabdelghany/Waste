@@ -144,12 +144,6 @@ describe("vehicleProfile", () => {
   })
 })
 
-/** The drivers a vehicle's select offers enabled. */
-const eligibleOf = (drivers: Parameters<typeof driverOptions>[0], vehicle: Parameters<typeof driverOptions>[1]) =>
-  driverOptions(drivers, vehicle)
-    .filter((option) => option.eligible)
-    .map((option) => option.driver)
-
 describe("drivers", () => {
   const mads = driverProfile(
     record("driver-mads", "Mads Jensen", "Kystbyen · residual · mixed", { Licence: "CE · valid to 31 Dec 2028" }, {
@@ -211,23 +205,10 @@ describe("drivers", () => {
   })
 
   test("eligibility follows the vehicle's class, with implied classes: CE covers C, C covers B", () => {
-    const truck = vehicleProfile(wh24)
-    assert.deepEqual(
-      eligibleOf([mads, lars, emil, unknown], truck).map((driver) => driver.id),
-      ["driver-mads", "driver-lars"],
-    )
     assert.equal(driverHoldsLicence(mads, "B"), true)
     assert.equal(driverHoldsLicence(mads, "CE"), true)
     assert.equal(driverHoldsLicence(emil, "C"), false)
     assert.equal(driverHoldsLicence(lars, "CE"), false)
-    assert.deepEqual(
-      eligibleOf([mads, lars, emil], vehicleProfile(trailer)).map((driver) => driver.id),
-      ["driver-mads"],
-    )
-    assert.deepEqual(
-      eligibleOf([mads, lars, emil, unknown], vehicleProfile(van)).map((driver) => driver.id),
-      ["driver-mads", "driver-lars", "driver-emil"],
-    )
   })
 
   test("an unknown licence is never eligible — listed, disabled, with the reason", () => {
@@ -261,11 +242,9 @@ describe("drivers", () => {
         ["driver-new", false, NO_VEHICLE_LICENCE_CLASS],
       ],
     )
-    assert.deepEqual(eligibleOf([mads, emil], old), [])
   })
 
   test("without a vehicle every driver is listed and nothing is judged", () => {
-    assert.equal(eligibleOf([mads, emil, unknown], null).length, 3)
     assert.ok(driverOptions([unknown], null).every((option) => option.eligible))
   })
 

@@ -21,6 +21,7 @@ runs:
       with:
         node-version-file: .nvmrc
         cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+    # The filtered install keeps dev dependencies (`--filter`, never `--prod` or `--filter-prod`): every pilot-database job loads packages/db's seed through its phases, and the seed reads its devDependency @waste/fixtures.
     - name: Install the dependencies
       shell: bash
       env:

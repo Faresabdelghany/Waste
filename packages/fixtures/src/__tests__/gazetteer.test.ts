@@ -1,9 +1,6 @@
 // The fixture gazetteer against the generator beside it: every seeded
 // property stands on a street the table anchors, so no generated address
 // falls back to a hashed spot on the web's map or to no point in the seed.
-// The explicit fixtures' streets are the web's to pin
-// (apps/web/lib/data/__tests__/street-gazetteer.test.ts), since only the web
-// holds those records.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
