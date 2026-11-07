@@ -19,7 +19,7 @@ import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
 import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./clock"
+import { dayIn, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal, requiredText, tokenOf } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -36,7 +36,7 @@ const projectKept = "An application stays in its project: record another applica
 
 /** The decided Application's reading on the project's day: "Granted · in force", "Refused", or its status where undecided. */
 function readingOf(application: Application, context: MappingContext, timezone: string | undefined): string {
-  const day = dayIn(context.now ?? new Date(), timezone)
+  const day = todayIn(context, timezone)
   return applicationReading(application.status, application.decision, day)
 }
 

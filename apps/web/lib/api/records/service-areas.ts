@@ -34,7 +34,7 @@ import { ASSIGNMENT_PREFIX, ASSIGNMENT_RECORD_KIND, isAssignmentRecord, isServic
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { serviceProviderAdapter } from "./organisation"
 import { planningAreaAdapter } from "./planning"
 import { projectDay } from "./pricing"
@@ -71,6 +71,8 @@ const fractionsOf = (record: BusinessRecord, context: MappingContext) => setOf(r
 
 const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",")
 
+const SERVICE_AREAS_KEY = moduleKeyOf(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
+
 /** The provider an area is awarded to on the day, by name and web id — the holder in force, else the first one to come; an ended holder holds nothing — from the assignments the resource carries, else from the ones the store holds. */
 function holderOf(area: ServiceAreaResource, day: string, context: MappingContext): { name: string; webId?: string } | undefined {
   const carried = area.assignments ?? ("assignment" in area && area.assignment !== null ? [area.assignment] : undefined)
@@ -84,7 +86,7 @@ function holderOf(area: ServiceAreaResource, day: string, context: MappingContex
     const areaWebId = typed(record, "serviceAreaId")
     return isAssignmentRecord(record) && record.status === status && areaWebId !== undefined && referencedServerId(areaWebId, SERVICE_AREA_PREFIX, context) === area.id
   }
-  const held = context.resolve.find(ofArea("Active")) ?? context.resolve.find(ofArea("Upcoming"))
+  const held = context.resolve.find(SERVICE_AREAS_KEY, ofArea("Active")) ?? context.resolve.find(SERVICE_AREAS_KEY, ofArea("Upcoming"))
   const name = held?.facts["Service provider"]
   return name === undefined ? undefined : { name, webId: held === undefined ? undefined : typed(held, "serviceProviderId") }
 }
@@ -309,7 +311,7 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
     const validFrom = typed(record, "validFrom")
     if (validFrom === undefined) return refusal("validFrom", "An assignment needs the first day it holds the area")
     // Left open, it ends with its award, as the form's hint says: the API refuses an open end under a bounded award.
-    const area = context.resolve.find((candidate) => candidate.id === areaWebId)
+    const area = context.resolve.find(SERVICE_AREAS_KEY, (candidate) => candidate.id === areaWebId)
     const lastDay = typed(record, "validTo") ?? (area === undefined ? undefined : typed(area, "validTo"))
     const notes = typed(record, "notes")
     const write: AssignmentWrite = {

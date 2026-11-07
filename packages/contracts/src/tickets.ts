@@ -43,9 +43,7 @@
 // `ticketEventShape` as a refine at `kind`
 // (@waste/domain/resolution/event-shapes, the `ProofOfService` precedent), so
 // a row that disagrees with its kind does not parse on the client either.
-import { dayWindowOrdered } from "@waste/domain/days"
 import { ticketLabel } from "@waste/domain/numbering"
-import { changesSomething } from "@waste/domain/requests"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import {
@@ -72,9 +70,10 @@ import { ExecutionSource, ObjectKey, PickupOutcome, PickupReason, PickupService,
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindow, ProjectScopedListQuery } from "./queries"
+import { QueryFlag } from "./query-strings"
 import { TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
-import { PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { PositiveInt, recorded, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 import { TicketFieldValues, TicketFieldValuesBody, TicketFieldValuesPatch } from "./ticket-types"
 
@@ -244,8 +243,18 @@ export const TicketLinksSet = z.strictObject({
 export type TicketLinksSet = z.infer<typeof TicketLinksSet>
 
 /** `POST /tickets`: the office opens a case. The number, the status, the stamps and the provenance are the server's; the source is one of the office's doors. */
-export const TicketCreate = z
-  .strictObject({
+/**
+ * `PATCH /tickets/:id` takes the case's own fields — never the status, the
+ * assignee, the source, the project, the number, the resolution or the
+ * stamps. Another kind alone takes the kind's default type, and with a type
+ * the type's kind; another type of the company that is offered (#545 of
+ * #544) takes its kind with it. Its field values are merged into the stored
+ * ones: a value replaces one, null clears it, a key not named stays. Its team
+ * hands the case to another team, or to none with null; the assignee stays
+ * as it is.
+ */
+const ticketBodies = resourceBodies(
+  {
     projectId: Id,
     subject: Label,
     description: Paragraph,
@@ -279,31 +288,17 @@ export const TicketCreate = z
      * False opens it for the office to judge instead.
      */
     answerFromRecord: z.boolean().default(true).describe("Defaults to true: a missed collection the stop's record answers is answered, not opened."),
-  })
+  },
+  { createOnly: { projectId: true, source: true, occurredAt: true, assigneeUserAccountId: true, alertId: true, answerFromRecord: true }, patch: { fieldValues: TicketFieldValuesPatch.optional() } },
+)
+
+export const TicketCreate = ticketBodies.create
   // zod 4 runs a check on a body whose fields failed, so the links are read with care.
   .refine((body) => pickupWithItsRoute(body.links), pickupWithItsRouteAt)
   .refine((body) => body.kind !== undefined || body.ticketTypeId !== undefined, { message: TYPE_OR_KIND, path: ["ticketTypeId"] })
 export type TicketCreate = z.infer<typeof TicketCreate>
 
-/** `PATCH /tickets/:id`: the case's own fields — never the status, the assignee, the source, the project, the number, the resolution or the stamps. */
-export const TicketPatch = z
-  .strictObject({
-    subject: Label.optional(),
-    description: Paragraph.optional(),
-    /** Another kind, alone: the kind's default type. With a type, the type's kind. */
-    kind: TicketKind.optional(),
-    /** Another type of the company that is offered (#545 of #544); the kind follows it. */
-    ticketTypeId: Id.optional(),
-    /** Merged into the stored values: a value replaces one, null clears it, a key not named stays. */
-    fieldValues: TicketFieldValuesPatch.optional(),
-    priority: TicketPriority.optional(),
-    dueAt: IsoDateTime.nullable().optional(),
-    /** Hands the case to another team, or to none with null; the assignee stays as it is. */
-    teamId: Id.nullable().optional(),
-    links: TicketLinksSet.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((body) => pickupWithItsRouteOnPatch(body.links), pickupWithItsRouteAt)
+export const TicketPatch = ticketBodies.patch.refine((body) => pickupWithItsRouteOnPatch(body.links), pickupWithItsRouteAt)
 export type TicketPatch = z.infer<typeof TicketPatch>
 
 /** `POST /tickets/:id/assign`: who works it, or null for nobody, with a note if any. */
@@ -392,12 +387,13 @@ export const TicketComment = z.strictObject({
 export type TicketComment = z.infer<typeof TicketComment>
 
 /** A page of tickets: one project's, by status or open at all, overdue or not, by kind, priority or source, by assignee or team, assigned or not, about a customer, a property, a route, a pickup, a container or a driver, over a window of when they happened. */
-export const TicketListQuery = ProjectScopedListQuery.extend({
+export const TicketListQuery = dayWindow(
+  ProjectScopedListQuery.extend({
   status: TicketStatus.optional(),
   /** A query string spells a boolean as `true` or `false`, exactly; `true` is the four open statuses, `false` the two closed. */
-  open: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  open: QueryFlag.optional(),
   /** Likewise: `true` is an open ticket past its due date (O4 of #290), `false` every other. */
-  overdue: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  overdue: QueryFlag.optional(),
   kind: TicketKind.optional(),
   /** One type's tickets (#545 of #544). */
   ticketTypeId: Id.optional(),
@@ -407,7 +403,7 @@ export const TicketListQuery = ProjectScopedListQuery.extend({
   /** One team's tickets (O30 of #290, row 7.20); with `open=true` and `unassigned=true`, its queue. */
   teamId: Id.optional(),
   /** Likewise a boolean: `true` is a ticket nobody works, `false` one somebody does. */
-  unassigned: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  unassigned: QueryFlag.optional(),
   /** The portal's read: the tickets naming the customer, or a property they are a party to. */
   customerId: Id.optional(),
   propertyId: Id.optional(),
@@ -415,11 +411,8 @@ export const TicketListQuery = ProjectScopedListQuery.extend({
   pickupId: Id.optional(),
   containerId: Id.optional(),
   driverId: Id.optional(),
-  /** The first day of the window over `occurredAt`, inclusive. */
-  from: IsoDate.optional(),
-  /** The last day, inclusive. */
-  to: IsoDate.optional(),
-}).refine(dayWindowOrdered, dayWindowIsOrdered)
+  }),
+)
 export type TicketListQuery = z.infer<typeof TicketListQuery>
 
 /** A page of one ticket's history: by kind, and by who may read it — `customer` is what the portal reads. */

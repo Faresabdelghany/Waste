@@ -8,7 +8,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { dayInTimezone, instantOnDay, lastDayInside, timeInTimezone, wallClockIn } from "../clock"
+import { dayInTimezone, instantOnDay, instantWindowOrdered, lastDayInside, timeInTimezone, wallClockIn } from "../clock"
 
 const HOUR = 3600
 
@@ -86,5 +86,18 @@ describe("instantOnDay", () => {
     // Auckland repeats 02:00–03:00 on 5 April and skips 02:00–03:00 on 27 September.
     assert.equal(instantOnDay("2026-04-05", 2.5 * HOUR, "Pacific/Auckland").toISOString(), "2026-04-04T14:30:00.000Z", "the second 02:30, winter time's")
     assert.equal(instantOnDay("2026-09-27", 2.5 * HOUR, "Pacific/Auckland").toISOString(), "2026-09-26T14:30:00.000Z", "02:30 read as winter time, which is 03:30 summer time")
+  })
+})
+
+describe("instantWindowOrdered", () => {
+  test("compares the instants and not their spelling: an offset moves the clock, not the order", () => {
+    assert.equal(instantWindowOrdered({ from: "2026-10-05T11:00:00Z", to: "2026-10-05T11:00:00Z" }), true, "an end on its start")
+    assert.equal(instantWindowOrdered({ from: "2026-10-05T11:00:00Z", to: "2026-10-05T12:30:00+02:00" }), false, "10:30 in UTC, before the start")
+    assert.equal(instantWindowOrdered({ from: "2026-10-05T11:00:00+02:00", to: "2026-10-05T09:30:00Z" }), true, "09:00 to 09:30 in UTC")
+  })
+
+  test("says nothing of a window given by half", () => {
+    assert.equal(instantWindowOrdered({ from: "2026-10-05T11:00:00Z" }), true)
+    assert.equal(instantWindowOrdered({ to: "2026-10-05T11:00:00Z" }), true)
   })
 })

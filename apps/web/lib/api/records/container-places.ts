@@ -3,9 +3,8 @@
 // names a subscription, the subscription a property or a shared collection
 // point, and the place its point. So the container's record reads that chain
 // through the store's resolver — the organisation, the agreements and their
-// subscriptions, the properties, the points and the areas load before the
-// containers, and the store reads the containers again once one of them
-// changes (`containersModule.derivedFrom`) — in two readings.
+// subscriptions, the properties, the points and the areas, which the store
+// reads the containers again by once one of them moves — in two readings.
 //
 // The rule preview's (`SERVING_KEY`, lib/prototype/route-schemes/matching):
 // for each placement not ended by the project's day, the period it serves
@@ -50,9 +49,9 @@ import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { isPropertyRecord, isSharedPointRecord, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { firstDayOut, inForceOn } from "@waste/domain/periods"
 
-import { typed, type MappingContext, type Resolver } from "./adapter"
+import { moduleKeyOf, typed, type MappingContext, type Resolver } from "./adapter"
 import { planningAreaAdapter } from "./planning"
-import { dayIn } from "./clock"
+import { todayIn } from "./clock"
 import { nameVia, referencedServerId } from "./references"
 
 /**
@@ -108,7 +107,7 @@ const areasUnder = new WeakMap<Resolver, readonly LoadedArea[]>()
 function loadedAreas(resolve: Resolver): readonly LoadedArea[] {
   let areas = areasUnder.get(resolve)
   if (areas === undefined) {
-    areas = resolve.filter(planningAreaAdapter.owns).flatMap((area) => {
+    areas = resolve.filter(moduleKeyOf(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId), planningAreaAdapter.owns).flatMap((area) => {
       const geometry = planningAreaGeometry(area)
       return geometry === null ? [] : [{ area, rings: geometry.coordinates.map((ring) => ring.map(([lng, lat]) => ({ lng, lat }))) }]
     })
@@ -175,7 +174,7 @@ function areasAt(at: LngLat, projectWebId: string, context: MappingContext): Bus
  * container's.
  */
 export function containerPlace(shown: ContainerServicePlacement | undefined, placements: readonly ContainerServicePlacement[], projectWebId: string, timezone: string | undefined, context: MappingContext): ContainerPlace {
-  const day = dayIn(context.now ?? new Date(), timezone)
+  const day = todayIn(context, timezone)
   // Each placement read through once: its chain, its point and its areas serve its period and, for the one shown, the map's readings.
   const read = new Map(
     placements.map((placement) => {

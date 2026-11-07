@@ -88,7 +88,7 @@ describe("the schemas that take a label", () => {
       user: { id: ID, email: "olivia.larsen@kystbyen.example", fullName: "Olivia Larsen", status: "active", allProjects: true, primaryAdministrator: true },
       company: { id: ID, name: "Kystbyen Renovation" },
       role: { id: ID, key: "company-administrator", name: "Company Administrator", scope: "Company", system: true, grants: [] },
-      projects: [{ id: ID, name: "Copenhagen Central" }],
+      projects: [{ id: ID, name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" }],
       serviceProvider: null,
       driver: null,
     }

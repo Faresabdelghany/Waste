@@ -11,8 +11,11 @@ import * as z from "zod"
 import { IsoTime } from "./dates"
 import { PositiveInt } from "./resource"
 
+/** A window of one day's clock, `HH:MM` to `HH:MM`, its order its holder's rule. */
+const timesOfDay = z.strictObject({ from: IsoTime, to: IsoTime })
+
 /** A window of one day, `HH:MM` to a later `HH:MM`: a window across midnight is not one. */
-export const TimeWindow = z.strictObject({ from: IsoTime, to: IsoTime }).refine(windowIsOrdered, { message: WINDOW_CLOSES_AFTER_IT_OPENS, path: ["to"] })
+export const TimeWindow = timesOfDay.refine(windowIsOrdered, { message: WINDOW_CLOSES_AFTER_IT_OPENS, path: ["to"] })
 export type TimeWindow = z.infer<typeof TimeWindow>
 
 /** A driver's working day: from a time to a later one, with at most one break of so many minutes, inside a window of its own or anywhere in the shift. */
@@ -22,7 +25,7 @@ export const DriverShift = z
     to: IsoTime,
     breakMinutes: PositiveInt.min(BREAK_MINUTES.min).max(BREAK_MINUTES.max).nullable(),
     // Its ends unrefined here: the shift's own rule orders them, so a reversed window is told once.
-    breakWindow: z.strictObject({ from: IsoTime, to: IsoTime }).nullable(),
+    breakWindow: timesOfDay.nullable(),
   })
   .superRefine((shift, context) => {
     const problem = shiftProblem(shift)

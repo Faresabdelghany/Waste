@@ -21,7 +21,7 @@ import { problemSentence } from "../problem"
 import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter } from "../records/containers"
 import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
+import { isServerBacked, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -125,11 +125,8 @@ const formRecord = (values: Record<string, string>): BusinessRecord => ({
 })
 
 describe("the containers module", () => {
-  test("is switched, after the organisation, the master data and the warehouses its rows name", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("resources", "containers"))
-    for (const named of ["configure.organization", "configure.master", "resources.warehouses"]) {
-      assert.ok(SERVER_MODULE_KEYS.indexOf("resources.containers") > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
   })
 
   test("reads the containers and the placements together and files every placement under its container", async () => {
@@ -471,9 +468,8 @@ describe("the inventory module", () => {
   const containerRecord = containerAdapter.toRecord({ ...inStock, placements: [] }, context())
   const withContainers: ServerRecordsState = new Map([...state, ["resources.containers", loaded({ records: [containerRecord], serverIds: new Map([[containerRecord.id, inStock.id]]) }, 1)]])
 
-  test("is switched after the containers its movements name", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("resources", "inventory"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("resources.inventory") > SERVER_MODULE_KEYS.indexOf("resources.containers"))
   })
 
   test("lists the ledger across containers, oldest first, each movement a row naming its container by label", async () => {

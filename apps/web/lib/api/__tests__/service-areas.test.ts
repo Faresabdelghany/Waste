@@ -26,7 +26,7 @@ import { assignmentsOf } from "../../data/provider-money"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { assignmentAdapter, NO_PLANNING_AREA, serviceAreaAdapter, serviceAreasModule } from "../records/service-areas"
 import { loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -105,11 +105,8 @@ const AREA_FORM = {
 }
 
 describe("the service areas module", () => {
-  test("is switched after the organisation, the providers, the planning areas and the master data an award names, ahead of the schemes (it names no route)", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("service-providers", "service-areas"))
-    const at = SERVER_MODULE_KEYS.indexOf("service-providers.service-areas")
-    for (const before of ["configure.organization", "service-providers.service-providers", "configure.areas", "configure.master"]) assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
-    assert.ok(at < SERVER_MODULE_KEYS.indexOf("route-studio.schemes"))
     assert.deepEqual(serviceAreasModule.resources, [serviceAreaAdapter, assignmentAdapter])
   })
 

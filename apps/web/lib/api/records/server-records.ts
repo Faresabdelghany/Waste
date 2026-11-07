@@ -62,6 +62,18 @@
 //   `touches`, and once it is done the store reads the module again through
 //   the read the load makes (`readModuleInto`, `rereadsOf`), keeping the
 //   rows it has while the read is out (Issue #198).
+//
+//   A load's mapping is handed a resolver and a clock that note what it asks
+//   (`MappingReads`): the rows of other modules it named, the modules it
+//   scanned, the ids it found nowhere, and the project's day on each clock it
+//   read one on. Nothing declares them, so the store reads a module again
+//   once a row it named has moved, a module it missed a row of comes to hold
+//   it, or the day it read has turned (`readsChanged`, `dayTurnRereads`) — a
+//   module read before the one it names is read again once that one lands,
+//   so the order the store reads them in decides how many reads a load
+//   takes, never which rows it shows. A row a read maps the same as the one
+//   the store holds stays the object the store holds, so a module read again
+//   to no change moves nothing that read it.
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
@@ -83,9 +95,33 @@ export type ModuleState = {
   problem: Problem | null
   /** The clock of the last successful read. */
   loadedAt: number | null
-  /** A module read through others (`ServerModule.derivedFrom`, #232): their rows, by key, as the snapshot its last read began with held them, null where one was not ready. */
-  mappedAgainst?: ReadonlyMap<string, readonly BusinessRecord[] | null>
+  /** What the last read's mapping read beside the module's own rows; absent until a read has landed. */
+  reads?: MappingReads
 }
+
+/**
+ * What a module's last read was mapped against beside its own rows, as the
+ * resolver and the clock saw the mapping ask (#232): the store's reason to
+ * read the module again, and nothing an adapter declares.
+ */
+export type MappingReads = {
+  /** Each other module's rows a lookup answered, by module key and web id: what of the row the mapping read, and the row as the store held it when the read began. */
+  rows: ReadonlyMap<string, ReadonlyMap<string, RowRead>>
+  /** Each other module a mapping scanned whole (`find`, `filter`). */
+  scanned: ReadonlySet<string>
+  /** The server ids and web ids a lookup found in no other module: a module that comes to hold one holds a row the mapping missed. */
+  missed: { serverIds: ReadonlySet<string>; webIds: ReadonlySet<string> }
+  /** Every other module's rows as the read began, null where one was not ready: a module holding these rows still has nothing new. */
+  seen: ReadonlyMap<string, readonly BusinessRecord[] | null>
+  /** The project's day the mapping read, by the clock it read it on, `""` the browser's. */
+  days: ReadonlyMap<string, string>
+}
+
+/** The fields of one row a mapping read: each whole, or — a row's `facts` and `submittedValues` — key by key. A row only named by web id read none. */
+export type FieldsRead = ReadonlyMap<string, true | ReadonlySet<string>>
+
+/** One row a mapping named: the fields it read, and the row as the store held it when the read began, undefined where it held none. */
+export type RowRead = { record: BusinessRecord | undefined; fields: FieldsRead }
 
 export type ServerRecordsState = ReadonlyMap<string, ModuleState>
 
@@ -154,6 +190,90 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
   return module.resources.find((resource) => resource.owns(record))
 }
 
+/** The rows a load has mapped so far, under the key of the module it is loading. */
+export type MappingRows = { key?: string; records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string>; byServerId: ReadonlyMap<string, BusinessRecord> }
+
+/** The fields of one row a mapping is reading, as it reads them. */
+type FieldsNoted = Map<string, true | Set<string>>
+
+/** What a load's resolver and clock note as its mapping asks, before the read's stamp is put on it (`readsOf`). */
+type Noted = {
+  rows: Map<string, Map<string, FieldsNoted>>
+  /** The view of each row the mapping is handed, one per row, so a row is the same object every time it is asked for. */
+  views: WeakMap<BusinessRecord, BusinessRecord>
+  scanned: Set<string>
+  missedServerIds: Set<string>
+  missedWebIds: Set<string>
+  days: Map<string, string>
+}
+
+const noting = (): Noted => ({ rows: new Map(), views: new WeakMap(), scanned: new Set(), missedServerIds: new Set(), missedWebIds: new Set(), days: new Map() })
+
+/** The fields noted of one row of a module, made the first time the row is named. */
+function fieldsOf(noted: Noted, key: string, webId: string): FieldsNoted {
+  const byId = noted.rows.get(key) ?? new Map<string, FieldsNoted>()
+  noted.rows.set(key, byId)
+  const fields = byId.get(webId) ?? new Map()
+  byId.set(webId, fields)
+  return fields
+}
+
+/**
+ * A row as a mapping is handed it: the row itself, behind a view that notes
+ * each field read — whole, or key by key for a field that is an object (its
+ * `facts`, its `submittedValues`) — so a row that moves only in what the
+ * mapping never read (a live route's position) moves nothing that named it.
+ */
+function watched(record: BusinessRecord, fields: FieldsNoted): BusinessRecord {
+  const whole = (field: string) => {
+    fields.set(field, true)
+  }
+  const keyOf = (field: string, key: string) => {
+    const keys = fields.get(field)
+    if (keys === undefined) fields.set(field, new Set([key]))
+    else if (keys !== true) keys.add(key)
+  }
+  const inner = new Map<string, object>()
+  const objectView = (field: string, value: object): object => {
+    let view = inner.get(field)
+    if (view === undefined) {
+      view = new Proxy(value, {
+        get: (target, key, receiver) => {
+          if (typeof key === "string") keyOf(field, key)
+          return Reflect.get(target, key, receiver)
+        },
+        has: (target, key) => {
+          if (typeof key === "string") keyOf(field, key)
+          return Reflect.has(target, key)
+        },
+        ownKeys: (target) => {
+          whole(field)
+          return Reflect.ownKeys(target)
+        },
+      })
+      inner.set(field, view)
+    }
+    return view
+  }
+  return new Proxy(record, {
+    get: (target, field, receiver) => {
+      const value: unknown = Reflect.get(target, field, receiver)
+      if (typeof field !== "string") return value
+      if (typeof value === "object" && value !== null && !Array.isArray(value)) return objectView(field, value)
+      whole(field)
+      return value
+    },
+    has: (target, field) => {
+      if (typeof field === "string") whole(field)
+      return Reflect.has(target, field)
+    },
+    ownKeys: (target) => {
+      for (const field of Object.keys(target)) whole(field)
+      return Reflect.ownKeys(target)
+    },
+  })
+}
+
 /**
  * A resolver over every loaded module's rows, and over the rows a load has
  * mapped so far (`extra`), so an adapter listed after another in one module
@@ -166,48 +286,77 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
  * files each as it is mapped — a route's stops ask for their route and its
  * container by the hundred, and most of those miss. By server id the load's
  * row comes first: a module read again holds the row in the store as well,
- * under the same web id (#240), and the load's is the one just listed.
+ * under the same web id (#240), and the load's is the one just listed. A
+ * load's resolver notes, in `noted`, every row of another module it answered
+ * and the fields of it the mapping read (`watched`), every module it scanned
+ * and every id it found nowhere; the loading module's own rows it does not
+ * note.
  */
-export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string>; byServerId: ReadonlyMap<string, BusinessRecord> }): Resolver {
-  const modules = [...state.values()].filter((module) => module.status === "ready")
-  const sources = extra === undefined ? modules : [...modules, { records: extra.records, serverIds: extra.serverIds }]
-  let loadedByServerId: Map<string, BusinessRecord | undefined> | undefined
+export function resolverOver(state: ServerRecordsState, extra?: MappingRows, noted?: Noted): Resolver {
+  const own = extra?.key
+  const modules = [...state].filter(([, module]) => module.status === "ready")
+  const sources: (readonly [string | undefined, { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string> }])[] = extra === undefined ? modules : [...modules, [own, extra]]
+  let loadedByServerId: Map<string, { key: string; record: BusinessRecord | undefined }> | undefined
   const indexOfLoaded = () => {
     if (loadedByServerId === undefined) {
       loadedByServerId = new Map()
-      for (const module of modules) {
-        const byWebId = new Map(module.records.map((record) => [record.id, record]))
-        for (const [webId, id] of module.serverIds) if (!loadedByServerId.has(id)) loadedByServerId.set(id, byWebId.get(webId))
+      for (const [key, module] of modules) {
+        const byWebId = rowsById(module.records)
+        for (const [webId, id] of module.serverIds) if (!loadedByServerId.has(id)) loadedByServerId.set(id, { key, record: byWebId.get(webId) })
       }
     }
     return loadedByServerId
+  }
+  const answered = (key: string, record: BusinessRecord): BusinessRecord => {
+    if (noted === undefined || key === own) return record
+    const fields = fieldsOf(noted, key, record.id)
+    let view = noted.views.get(record)
+    if (view === undefined) {
+      view = watched(record, fields)
+      noted.views.set(record, view)
+    }
+    return view
+  }
+  const rowsOf = (moduleKey: string): readonly (readonly BusinessRecord[])[] => {
+    if (moduleKey !== own) noted?.scanned.add(moduleKey)
+    const loaded = state.get(moduleKey)
+    return [...(loaded?.status === "ready" ? [loaded.records] : []), ...(extra !== undefined && moduleKey === own ? [extra.records] : [])]
   }
   return {
     byServerId: (serverId) => {
       const mapping = extra?.byServerId.get(serverId)
       if (mapping !== undefined) return mapping
-      return indexOfLoaded().get(serverId)
+      const loaded = indexOfLoaded().get(serverId)
+      if (loaded?.record === undefined) {
+        noted?.missedServerIds.add(serverId)
+        return undefined
+      }
+      return answered(loaded.key, loaded.record)
     },
     serverIdOf: (webId) => {
-      for (const source of sources) {
+      for (const [key, source] of sources) {
         const found = source.serverIds.get(webId)
+        if (found === undefined) continue
+        // Named, and nothing of it read: it moves the mapping only by going.
+        if (noted !== undefined && key !== undefined && key !== own) fieldsOf(noted, key, webId)
+        return found
+      }
+      noted?.missedWebIds.add(webId)
+      return undefined
+    },
+    find: (moduleKey, predicate) => {
+      for (const records of rowsOf(moduleKey)) {
+        const found = records.find(predicate)
         if (found !== undefined) return found
       }
       return undefined
     },
-    find: (predicate) => {
-      for (const source of sources) {
-        const found = source.records.find(predicate)
-        if (found !== undefined) return found
-      }
-      return undefined
-    },
-    filter: (predicate) => {
+    filter: (moduleKey, predicate) => {
       // A module read again while ready is both in the state and the extra: each record once, the loaded first, as `find` prefers it.
       const seen = new Set<string>()
       const found: BusinessRecord[] = []
-      for (const source of sources) {
-        for (const record of source.records) {
+      for (const records of rowsOf(moduleKey)) {
+        for (const record of records) {
           if (seen.has(record.id)) continue
           seen.add(record.id)
           if (predicate(record)) found.push(record)
@@ -218,13 +367,28 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
   }
 }
 
-export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string> }
+const indexes = new WeakMap<readonly BusinessRecord[], ReadonlyMap<string, BusinessRecord>>()
+
+/** A module's rows by web id, indexed once per rows. */
+function rowsById(records: readonly BusinessRecord[]): ReadonlyMap<string, BusinessRecord> {
+  let index = indexes.get(records)
+  if (index === undefined) {
+    index = new Map(records.map((record) => [record.id, record]))
+    indexes.set(records, index)
+  }
+  return index
+}
+
+export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string>; reads?: MappingReads }
 
 export type LoadOptions = {
   /** Everything loaded so far, for the resolver. */
   state: ServerRecordsState
   now?: Date
 }
+
+/** A load's options: beside what it is mapped against, the store as its read began, which its reads are stamped with (the state mapped against, where none is given). */
+export type MapOptions = LoadOptions & { began?: ServerRecordsState }
 
 /** Each adapter's list, in the module's order: null for one that lists nothing. */
 export type ModuleLists = readonly (readonly Resource[] | null)[]
@@ -256,18 +420,29 @@ function heldIdsOf(held: ModuleState | undefined, lists: ModuleLists): Map<strin
  * a row read before stays under the one it was read under, whatever the
  * mapping derives now. Those ids are claimed before any row is mapped, so
  * which one a row keeps never hangs on the list's order; a session's first
- * read takes the adapter's.
+ * read takes the adapter's. What the mapping asked of the resolver and the
+ * clock comes back as its `reads`, stamped with the store as the read began
+ * (`began`). A row mapped the same as the one the store holds under its id is
+ * that one (`keptWhereSame`).
  */
-export function mapModule(module: ServerModule, lists: ModuleLists, { state, now }: LoadOptions): LoadResult {
+export function mapModule(module: ServerModule, lists: ModuleLists, { state, now, began = state }: MapOptions): LoadResult {
+  const key = moduleKeyOf(module.workspaceId, module.moduleId)
   const records: BusinessRecord[] = []
   const serverIds = new Map<string, string>()
   const byServerId = new Map<string, BusinessRecord>()
-  const heldIds = heldIdsOf(state.get(moduleKeyOf(module.workspaceId, module.moduleId)), lists)
+  const held = state.get(key)
+  const heldIds = heldIdsOf(held, lists)
   const claimed = new Set(heldIds.values())
+  const noted = noting()
+  const today = (timezone: string | undefined) => {
+    const day = dayIn(now ?? new Date(), timezone)
+    noted.days.set(timezone ?? "", day)
+    return day
+  }
   for (const [index, adapter] of module.resources.entries()) {
     const resources = lists[index]
     if (resources === null) continue
-    const context: MappingContext = { resolve: resolverOver(state, { records, serverIds, byServerId }), now }
+    const context: MappingContext = { resolve: resolverOver(state, { key, records, serverIds, byServerId }, noted), now, today }
     for (const resource of resources) {
       const mapped = adapter.toRecord(resource, context)
       // A row the mapping names by an id another row holds or is held under
@@ -281,7 +456,7 @@ export function mapModule(module: ServerModule, lists: ModuleLists, { state, now
       byServerId.set(resource.id, record)
     }
   }
-  return { records, serverIds }
+  return { records: keptWhereSame(held?.status === "ready" ? held.records : [], records), serverIds, reads: readsOf(noted, began, key) }
 }
 
 /** Every row of a module: its lists, then their mapping against `state`. */
@@ -289,59 +464,155 @@ export async function loadModule(client: ApiClient, module: ServerModule, option
   return mapModule(module, await listModule(client, module), options)
 }
 
+/** The members of a value that say something, as its JSON would: one holding undefined says nothing. */
+const membersOf = (value: object): string[] => Object.keys(value).filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+
+/** Whether two values a mapping made read the same, as their JSON would, stopping at the first difference: a row's fields, its facts, its lists. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => sameValue(item, b[index]))
+  const keys = membersOf(a)
+  return keys.length === membersOf(b).length && keys.every((key) => sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
+}
+
+/**
+ * A read's rows with every one mapped the same as the row the store holds
+ * under its id kept as the store's, and the store's rows themselves where
+ * none moved: identity is what tells the modules that read them that a row
+ * has moved (`readsChanged`), so a read again to no change moves nothing.
+ */
+function keptWhereSame(held: readonly BusinessRecord[], read: BusinessRecord[]): BusinessRecord[] {
+  if (held.length === 0) return read
+  const byId = rowsById(held)
+  let unmoved = held.length === read.length
+  const rows = read.map((record, index) => {
+    const before = byId.get(record.id)
+    const kept = before !== undefined && sameValue(before, record) ? before : record
+    if (kept !== held[index]) unmoved = false
+    return kept
+  })
+  return unmoved ? (held as BusinessRecord[]) : rows
+}
+
+const readyRowsOf = (module: ModuleState | undefined): readonly BusinessRecord[] | null => (module?.status === "ready" ? module.records : null)
+
+/** What a load's mapping noted, stamped with the store as the read began: the rows it named as they stood then, and every other module's rows. */
+function readsOf(noted: Noted, began: ServerRecordsState, key: string): MappingReads {
+  const rows = new Map(
+    [...noted.rows].map(([source, named]) => {
+      const held = readyRowsOf(began.get(source))
+      const byId = held === null ? undefined : rowsById(held)
+      return [source, new Map([...named].map(([id, fields]): [string, RowRead] => [id, { record: byId?.get(id), fields }]))] as const
+    }),
+  )
+  const seen = new Map([...began].filter(([source]) => source !== key).map(([source, module]) => [source, readyRowsOf(module)] as const))
+  return { rows, scanned: noted.scanned, missed: { serverIds: noted.missedServerIds, webIds: noted.missedWebIds }, seen, days: noted.days }
+}
+
 /** The state after a read began. */
 export function loading(module: ModuleState): ModuleState {
   return { ...module, status: module.status === "ready" ? "ready" : "loading", problem: null }
 }
 
-/** The state after a read answered, stamped with what a module read through others was mapped against. */
-export function loaded(result: LoadResult, now: number, mappedAgainst?: ReadonlyMap<string, readonly BusinessRecord[] | null>): ModuleState {
-  return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now, ...(mappedAgainst === undefined ? {} : { mappedAgainst }) }
+/** The state after a read answered, with what its mapping read. */
+export function loaded(result: LoadResult, now: number): ModuleState {
+  return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now, ...(result.reads === undefined ? {} : { reads: result.reads }) }
 }
 
-const readyRowsOf = (module: ModuleState | undefined): readonly BusinessRecord[] | null => (module?.status === "ready" ? module.records : null)
+/** Whether a row reads now as it did to the mapping that named it: there still, or not there still, and the same in every field it read. */
+function readTheSame(now: BusinessRecord | undefined, { record, fields }: RowRead): boolean {
+  if (now === record) return true
+  if (now === undefined || record === undefined) return false
+  const fieldOf = (row: BusinessRecord, field: string): unknown => (row as Record<string, unknown>)[field]
+  for (const [field, read] of fields) {
+    if (read === true) {
+      if (!sameValue(fieldOf(now, field), fieldOf(record, field))) return false
+      continue
+    }
+    const keyOf = (row: BusinessRecord, key: string): unknown => (fieldOf(row, field) as Record<string, unknown> | undefined)?.[key]
+    for (const key of read) if (!sameValue(keyOf(now, key), keyOf(record, key))) return false
+  }
+  return true
+}
 
-/** What a read of a module read through others is mapped against (#232): their rows, by key, in `state` — the snapshot the read began with — null where one is not ready; undefined for any other module. */
-export function mappedAgainstOf(module: ServerModule, state: ServerRecordsState): ReadonlyMap<string, readonly BusinessRecord[] | null> | undefined {
-  if (module.derivedFrom === undefined) return undefined
-  return new Map(module.derivedFrom.map((key) => [key, readyRowsOf(state.get(key))]))
+/** Whether a module holds a row by one of the ids a mapping found nowhere. */
+function holdsMissed(module: ModuleState, missed: MappingReads["missed"]): boolean {
+  if (missed.serverIds.size === 0 && missed.webIds.size === 0) return false
+  const held = serverIdsHeld(module.serverIds)
+  for (const serverId of missed.serverIds) if (held.has(serverId)) return true
+  for (const webId of missed.webIds) if (module.serverIds.has(webId)) return true
+  return false
+}
+
+const heldServerIds = new WeakMap<ReadonlyMap<string, string>, ReadonlySet<string>>()
+
+/** The server ids a module holds rows by, gathered once per module's ids. */
+function serverIdsHeld(serverIds: ReadonlyMap<string, string>): ReadonlySet<string> {
+  let held = heldServerIds.get(serverIds)
+  if (held === undefined) {
+    held = new Set(serverIds.values())
+    heldServerIds.set(serverIds, held)
+  }
+  return held
+}
+
+const movedUnder = new WeakMap<MappingReads, Map<string, { rows: readonly BusinessRecord[]; moved: boolean }>>()
+
+/** Whether a module has moved under what a read was mapped against, worked out once per rows of it: the store asks after every change. */
+function movedUnderReads(reads: MappingReads, source: string, current: ModuleState): boolean {
+  const known = movedUnder.get(reads) ?? new Map<string, { rows: readonly BusinessRecord[]; moved: boolean }>()
+  movedUnder.set(reads, known)
+  const last = known.get(source)
+  if (last?.rows === current.records) return last.moved
+  const named = reads.rows.get(source)
+  const byId = rowsById(current.records)
+  const moved = reads.scanned.has(source) || (named !== undefined && [...named].some(([id, read]) => !readTheSame(byId.get(id), read))) || holdsMissed(current, reads.missed)
+  known.set(source, { rows: current.records, moved })
+  return moved
 }
 
 /**
- * The modules a derived module is read through that have new rows since it
- * was mapped (#232): a write, a read again, one ready after it was read. The
- * rows' identity says so, never a module state's, so one not ready now —
- * loading, failed, not granted — says nothing new: it never counts, and a
- * read again of the derived module stamped with it unready never asks for
- * another. Nothing while the derived module is not ready or was never
- * stamped.
+ * The other modules that have moved under what a ready module's last read
+ * was mapped against (#232): a row it named that has moved in a field it
+ * read, or gone, a module it scanned with new rows, a module that now holds a
+ * row it found nowhere — a write, a read again, a module ready after it was
+ * read, or one read before it. Rows say so, never a module state, so one not
+ * ready now — loading, failed, not granted — says nothing new. Nothing while
+ * the module is not ready or no read of it has landed.
  */
-export function derivedFromChanged(derived: ModuleState | undefined, state: ServerRecordsState): string[] {
-  if (derived?.status !== "ready" || derived.mappedAgainst === undefined) return []
-  return [...derived.mappedAgainst].filter(([key, rows]) => {
-    const now = readyRowsOf(state.get(key))
-    return now !== null && now !== rows
-  }).map(([key]) => key)
+export function readsChanged(state: ServerRecordsState, key: string): string[] {
+  const module = state.get(key)
+  const reads = module?.reads
+  if (module?.status !== "ready" || reads === undefined) return []
+  const changed: string[] = []
+  for (const [source, current] of state) {
+    if (source === key || current.status !== "ready" || current.records === (reads.seen.get(source) ?? null)) continue
+    if (movedUnderReads(reads, source, current)) changed.push(source)
+  }
+  return changed
 }
 
 /**
- * The rows a derived module's sources hold now, in its stamp's order: what
- * the store remembers a read again was asked for at, so a read that failed
- * is not asked for again until a source changes once more.
+ * The rows now of the modules that have moved under a module's last read
+ * (`readsChanged`): what the store remembers a read again was asked for at,
+ * so a read that failed is not asked for again until one of them moves once
+ * more — a module it never read moving says nothing.
  */
-export function derivedSourcesNow(derived: ModuleState | undefined, state: ServerRecordsState): readonly (readonly BusinessRecord[] | null)[] {
-  return [...(derived?.mappedAgainst?.keys() ?? [])].map((key) => readyRowsOf(state.get(key)))
+export function readSourcesNow(state: ServerRecordsState, key: string): ReadonlyMap<string, readonly BusinessRecord[] | null> {
+  return new Map(readsChanged(state, key).map((source) => [source, readyRowsOf(state.get(source))] as const))
 }
 
 /** Whether two readings of the sources are the same rows. */
-export function sameSources(a: readonly (readonly BusinessRecord[] | null)[] | undefined, b: readonly (readonly BusinessRecord[] | null)[]): boolean {
-  return a !== undefined && a.length === b.length && a.every((rows, index) => rows === b[index])
+export function sameSources(a: ReadonlyMap<string, readonly BusinessRecord[] | null> | undefined, b: ReadonlyMap<string, readonly BusinessRecord[] | null>): boolean {
+  return a !== undefined && a.size === b.size && [...b].every(([key, rows]) => a.has(key) && a.get(key) === rows)
 }
 
-/** The timezones of the projects the organisation module holds, the clocks a derived module's day turns on. */
-export function projectTimezonesOf(state: ServerRecordsState): string[] {
-  const zones = (readyRowsOf(state.get("configure.organization")) ?? []).map((record) => record.submittedValues?.timezone)
-  return [...new Set(zones.filter((zone): zone is string => typeof zone === "string" && zone !== ""))]
+/** The clocks the ready modules' reads read the project's day on, the browser's as undefined: the turns the store watches for. */
+export function clocksRead(state: ServerRecordsState): (string | undefined)[] {
+  const zones = new Set<string>()
+  for (const module of state.values()) if (module.status === "ready") for (const zone of module.reads?.days.keys() ?? []) zones.add(zone)
+  return [...zones].map((zone) => (zone === "" ? undefined : zone))
 }
 
 const zonesOr = (timezones: readonly (string | undefined)[]) => (timezones.length === 0 ? [undefined] : timezones)
@@ -353,19 +624,17 @@ export function dayTurned(then: number, now: number, timezones: readonly (string
 
 /**
  * The modules to read again at the turn of a project's day (#232): each
- * ready one that reads the day (`readsTheDay`) and was read before it turned
- * — but not one read through another that is read again too, since that
- * read's new rows bring it after (`derivedFromChanged`), mapped against the
- * day's readings rather than yesterday's.
+ * ready one whose last read read a day that is no longer the day on its
+ * clock. Each is read again whatever else is: a module read through another
+ * that is read again too is read again by that one's new rows as well, where
+ * they moved.
  */
-export function dayTurnRereads(state: ServerRecordsState, modules: readonly ServerModule[], now: number, timezones: readonly (string | undefined)[]): ServerModule[] {
-  const keyOf = (module: ServerModule) => moduleKeyOf(module.workspaceId, module.moduleId)
-  const turned = modules.filter((module) => {
-    const current = state.get(keyOf(module))
-    return module.readsTheDay === true && current?.status === "ready" && current.loadedAt !== null && dayTurned(current.loadedAt, now, timezones)
+export function dayTurnRereads(state: ServerRecordsState, modules: readonly ServerModule[], now: number): ServerModule[] {
+  return modules.filter((module) => {
+    const current = state.get(moduleKeyOf(module.workspaceId, module.moduleId))
+    if (current?.status !== "ready") return false
+    return [...(current.reads?.days ?? [])].some(([zone, day]) => dayIn(new Date(now), zone === "" ? undefined : zone) !== day)
   })
-  const again = new Set(turned.map(keyOf))
-  return turned.filter((module) => !(module.derivedFrom ?? []).some((source) => again.has(source)))
 }
 
 /** How long from `now` until the first of the projects' days turns, to the second. */
@@ -450,10 +719,10 @@ export async function readModuleInto(store: ServerStore, client: ApiClient, modu
     if (lists === undefined || !alive()) return null
     // Mapped against the store as the answer lands, so a row made while the
     // read was out keeps the id it was minted under and the rows that name it
-    // name that one (#240). The stamp is the snapshot the read began with:
-    // the server's answer is no newer.
-    const result = mapModule(module, lists, { state: store.getSnapshot() })
-    store.set((state) => new Map(state).set(key, loaded(result, now(), mappedAgainstOf(module, started))))
+    // name that one (#240). Its reads are stamped with the snapshot the read
+    // began with: the server's answer is no newer.
+    const result = mapModule(module, lists, { state: store.getSnapshot(), began: started })
+    store.set((state) => new Map(state).set(key, loaded(result, now())))
     return null
   } catch (error) {
     const problem = problemOfError(error)

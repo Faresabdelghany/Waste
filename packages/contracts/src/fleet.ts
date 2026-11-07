@@ -26,7 +26,7 @@
 // `employment` with a sentence of its own, since a driver body has no
 // ownership to be told about.
 import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, COMPARTMENT_FRACTIONS_MAX, COMPARTMENTS_MAX, poweredVehicleHasACompartment, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import { providerShape, providerShapeGiven } from "@waste/domain/resources/places"
 import * as z from "zod"
@@ -35,7 +35,7 @@ import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { providerWithProviderOwnership } from "./places"
 import { ProjectScopedListQuery } from "./queries"
-import { PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { DriverStatus, EmploymentType, FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "./resources"
 import { DriverShift } from "./shifts"
 import { Label, Paragraph } from "./text"
@@ -103,8 +103,9 @@ export const Vehicle = z.object({
 })
 export type Vehicle = z.infer<typeof Vehicle>
 
-export const VehicleCreate = z
-  .strictObject({
+/** A patch takes everything but the project, the kind and the compartments: a vehicle does not become a trailer, and its compartments have a route of their own. */
+const vehicleBodies = resourceBodies(
+  {
     projectId: Id,
     registration: Label,
     callsign: Label.nullable().optional(),
@@ -119,31 +120,17 @@ export const VehicleCreate = z
     fuel: FuelType.nullable().optional(),
     telematicsDeviceId: Label.nullable().optional(),
     notes: Paragraph.nullable().optional(),
-    /** In position order, 1..n; at least one for a powered vehicle. */
     compartments: CompartmentsBody.default([]).describe("The compartments in position order, 1..n; a powered vehicle has at least one, a trailer may have none."),
-  })
+  },
+  { createOnly: { projectId: true, kind: true, compartments: true } },
+)
+
+export const VehicleCreate = vehicleBodies.create
   .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
   .refine((body) => poweredVehicleHasACompartment(body.kind, body.compartments), aPoweredVehicleHasACompartment)
 export type VehicleCreate = z.infer<typeof VehicleCreate>
 
-/** Everything but the project, the kind, the compartments and the stamps: a vehicle does not become a trailer, and its compartments have a route of their own. */
-export const VehiclePatch = z
-  .strictObject({
-    registration: Label.optional(),
-    callsign: Label.nullable().optional(),
-    vehicleTypeId: Id.optional(),
-    ownership: VehicleOwnership.optional(),
-    serviceProviderId: Id.nullable().optional(),
-    status: VehicleStatus.optional(),
-    capacityKg: Amount.nullable().optional(),
-    requiredLicenceClass: LicenceClass.optional(),
-    homeDepotId: Id.nullable().optional(),
-    fuel: FuelType.nullable().optional(),
-    telematicsDeviceId: Label.nullable().optional(),
-    notes: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership)
+export const VehiclePatch = vehicleBodies.patch.refine((patch) => providerShape(patch.ownership, patch), providerWithProviderOwnership)
 export type VehiclePatch = z.infer<typeof VehiclePatch>
 
 /** The whole list in position order, replacing what the vehicle had; whether it may be empty depends on the stored kind, which the route knows. */
@@ -174,8 +161,9 @@ export const Driver = z.object({
 })
 export type Driver = z.infer<typeof Driver>
 
-export const DriverCreate = z
-  .strictObject({
+/** A patch takes everything but the project; its shift is written whole, the break with it, and a null clears it. */
+const driverBodies = resourceBodies(
+  {
     projectId: Id,
     name: Label,
     workforceReference: Label.nullable().optional(),
@@ -189,29 +177,14 @@ export const DriverCreate = z
     status: DriverStatus.default("active").describe("Defaults to active when absent: a driver is registered in order to drive."),
     notes: Paragraph.nullable().optional(),
     shift: DriverShift.nullable().optional(),
-  })
-  .refine((body) => providerShapeGiven(body.employment, body), providerWithProviderEmployment)
+  },
+  { createOnly: { projectId: true } },
+)
+
+export const DriverCreate = driverBodies.create.refine((body) => providerShapeGiven(body.employment, body), providerWithProviderEmployment)
 export type DriverCreate = z.infer<typeof DriverCreate>
 
-/** Everything but the project and the stamps. */
-export const DriverPatch = z
-  .strictObject({
-    name: Label.optional(),
-    workforceReference: Label.nullable().optional(),
-    employment: EmploymentType.optional(),
-    serviceProviderId: Id.nullable().optional(),
-    homeDepotId: Id.nullable().optional(),
-    licenceClass: LicenceClass.nullable().optional(),
-    licenceNumber: Label.nullable().optional(),
-    licenceExpiry: IsoDate.nullable().optional(),
-    userAccountId: Id.nullable().optional(),
-    status: DriverStatus.optional(),
-    notes: Paragraph.nullable().optional(),
-    /** Written whole, the break with it; null clears it. */
-    shift: DriverShift.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((patch) => providerShape(patch.employment, patch), providerWithProviderEmployment)
+export const DriverPatch = driverBodies.patch.refine((patch) => providerShape(patch.employment, patch), providerWithProviderEmployment)
 export type DriverPatch = z.infer<typeof DriverPatch>
 
 /** A page of vehicles: one project's, of one kind, one type, one status, based at one depot. */

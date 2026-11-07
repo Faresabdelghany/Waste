@@ -11,47 +11,32 @@
 //
 // The prototype's `weekStart` and `timezone` are not here: the working week is
 // the Project's (`weekend`) and so is the timezone.
-import { validityOrdered } from "@waste/domain/periods"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { somethingToChange, stamped } from "./resource"
+import { stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
-export const CollectionCalendar = z
-  .object({
+export const CollectionCalendar = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     /** What a person reads: `Copenhagen Central 2027`. Unique per project. */
     name: Label,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type CollectionCalendar = z.infer<typeof CollectionCalendar>
 
-export const CollectionCalendarCreate = z
-  .strictObject({
-    projectId: Id,
-    name: Label,
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+/** A patch changes the name and the period; a null end reopens it. */
+const collectionCalendarBodies = effectiveDatedBodies({ projectId: Id, name: Label }, { createOnly: { projectId: true } })
+
+export const CollectionCalendarCreate = collectionCalendarBodies.create
 export type CollectionCalendarCreate = z.infer<typeof CollectionCalendarCreate>
 
-/** The name and the period. */
-export const CollectionCalendarPatch = z
-  .strictObject({
-    name: Label.optional(),
-    validFrom: IsoDate.optional(),
-    /** Null reopens the period; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine(validityOrdered, endsAfterItStarts)
+export const CollectionCalendarPatch = collectionCalendarBodies.patch
 export type CollectionCalendarPatch = z.infer<typeof CollectionCalendarPatch>
 
 /** A page of calendars, from one project, in force on a day. */

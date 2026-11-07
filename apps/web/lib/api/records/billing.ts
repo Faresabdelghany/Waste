@@ -78,11 +78,12 @@ import {
   OFFICE_CANCEL_REASONS,
   PAYMENT_STATUS_LABELS,
   PRICE_ROW_PREFIX,
+  PRICE_ROWS_MODULE,
   PRODUCT_PREFIX,
 } from "@/lib/data/commercial"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { NO_PRESENTATION, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf, NO_PRESENTATION, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -157,6 +158,9 @@ function originOf(event: BillableEvent, context: MappingContext): string {
   }
 }
 
+/** Where the price lists are read: the first kind of the price rows' module. */
+const PRICE_LISTS_KEY = moduleKeyOf(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+
 /** A price row's conditions, by the keys Explain price's form names them under: what an event its row won matched. */
 const ROW_CONDITIONS = ["planningAreaId", "customerKind", "containerType", "wasteFraction", "customerId"] as const
 
@@ -202,8 +206,8 @@ export function eventQuestion(event: BusinessRecord, resolve: Resolver): Busines
     (agreement === undefined
       ? undefined
       : agreementList === undefined
-        ? resolve.find((record) => ofProject(record) && record.submittedValues?.isDefault === true)?.id
-        : resolve.find((record) => ofProject(record) && (record.id === agreementList || record.name === agreementList))?.id)
+        ? resolve.find(PRICE_LISTS_KEY, (record) => ofProject(record) && record.submittedValues?.isDefault === true)?.id
+        : resolve.find(PRICE_LISTS_KEY, (record) => ofProject(record) && (record.id === agreementList || record.name === agreementList))?.id)
   const read: Record<(typeof ROW_CONDITIONS)[number], string | undefined> = {
     planningAreaId: valueOf(scheme, "planningAreaId"),
     customerKind: customer === undefined ? undefined : customerKindOf(customer),

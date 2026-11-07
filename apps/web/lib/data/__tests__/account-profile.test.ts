@@ -10,9 +10,9 @@ import { initialsOf, profileOf } from "../account-profile"
 const COMPANY = { id: "01a0d2a4-a280-7001-8000-000000000001", name: "Kystbyen Renovation" }
 const ROLE = { id: "01a0d2a4-a280-7004-8000-000000000001", key: "company-administrator", name: "Company Administrator", scope: "Company", system: true, grants: [] }
 const PROJECTS = [
-  { id: "01a0d2a4-a280-7002-8000-000000000003", name: "Cairo Operations" },
-  { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central" },
-  { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" },
+  { id: "01a0d2a4-a280-7002-8000-000000000003", name: "Cairo Operations", timezone: "Africa/Cairo", currency: "EGP" },
+  { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" },
+  { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", timezone: "Europe/Copenhagen", currency: "DKK" },
 ]
 
 const fares: Me = {

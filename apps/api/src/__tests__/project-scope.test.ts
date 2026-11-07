@@ -14,7 +14,7 @@ const copenhagen = testId()
 const harbor = testId()
 
 /** A principal is a big record and these three functions read one field of it, so a test builds only what they read. */
-const principalWith = (projects: { id: string; name: string }[]): Principal =>
+const principalWith = (projects: Pick<Principal["projects"][number], "id" | "name">[]): Principal =>
   ({ companyId: testId(), projects }) as Principal
 
 const withProjects = principalWith([

@@ -12,7 +12,7 @@ import { SensorCreate, SensorPairingCreate, SensorPairingPatch, SensorPatch, typ
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { CHANGE_PAIRING, PAIR_SENSOR, pairingLine, readingLine, SENSOR_COMMANDS, sensorAdapter } from "../records/sensors"
 import { loaded, resolverOver } from "../records/server-records"
@@ -84,10 +84,9 @@ describe("a sensor on the adapter", () => {
     assert.deepEqual(commandBody(CHANGE_PAIRING, { lastDayIn: "" }, unpaired), { path: "", message: "70B3D57ED0051A2F measures no container today" })
   })
 
-  test("its lines and its place among the switched modules: after the containers its pairings name", () => {
+  test("its lines, and the module is switched", () => {
     assert.equal(readingLine({ fillPercent: 40, batteryPercent: null, rssiDbm: -101 }), "40% · -101 dBm")
     assert.equal(pairingLine({ validFrom: "2026-10-01", validTo: null, fullThresholdPercent: 85, booksEmptying: false }, "BIN-82014"), "BIN-82014 from 2026-10-01 · full at 85%")
     assert.ok(isServerBacked("resources", "sensors"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("resources.containers") < SERVER_MODULE_KEYS.indexOf("resources.sensors"))
   })
 })

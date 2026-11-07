@@ -5,8 +5,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
-import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG, reportWindowFits } from "@waste/domain/insight/reports"
+import { DAY_WINDOW_ORDERED, dayWindowFits } from "@waste/domain/days"
+import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG } from "@waste/domain/insight/reports"
 
 import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery } from "../reports"
 import { refusal } from "./expect"
@@ -35,9 +35,9 @@ describe("the report queries", () => {
       assert.equal(query.safeParse({ from: "2028-01-01", to: "2028-12-31" }).success, true, `${name}: a leap year is ${REPORT_WINDOW_MAX_DAYS} days`)
       assert.deepEqual(refusal(query.safeParse({ from: "2026-10-01", to: "2026-10-31", interval: "quarter" })).map((issue) => issue.path), ["interval"], name)
     }
-    assert.equal(reportWindowFits({ from: "2026-01-01", to: "2026-12-31" }), true)
-    assert.equal(reportWindowFits({ from: "2026-01-01", to: "2027-01-01" }), true, "366 days")
-    assert.equal(reportWindowFits({ from: "2026-01-01", to: "2027-01-02" }), false)
+    assert.equal(dayWindowFits({ from: "2026-01-01", to: "2026-12-31" }, REPORT_WINDOW_MAX_DAYS), true)
+    assert.equal(dayWindowFits({ from: "2026-01-01", to: "2027-01-01" }, REPORT_WINDOW_MAX_DAYS), true, "366 days")
+    assert.equal(dayWindowFits({ from: "2026-01-01", to: "2027-01-02" }, REPORT_WINDOW_MAX_DAYS), false)
   })
 
   test("tell a day that is not one its own sentence and no second one, and refuse a day before the first a report reads", () => {
@@ -49,7 +49,7 @@ describe("the report queries", () => {
       ], `${name}: Postgres has no year 0`)
       assert.equal(query.safeParse({ from: REPORT_FIRST_DAY, to: REPORT_FIRST_DAY }).success, true, name)
     }
-    assert.equal(reportWindowFits({ from: "2026-10-05", to: "nope" }), true, "a window it cannot measure is the day's to refuse")
+    assert.equal(dayWindowFits({ from: "2026-10-05", to: "nope" }, REPORT_WINDOW_MAX_DAYS), true, "a window it cannot measure is the day's to refuse")
   })
 
   test("are strict: a parameter the report does not read is refused by name, never ignored", () => {

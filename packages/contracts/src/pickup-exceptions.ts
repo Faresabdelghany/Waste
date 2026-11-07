@@ -14,9 +14,8 @@
 // the last repeating.
 import { CONTAMINANT_CODE_FRACTIONS_MAX, PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_HISTORY_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EXCEPTION_WINDOW_DAYS, REASON_AND_CODE, reasonAndCode } from "@waste/domain/execution/pickup-exceptions"
 import { CONTAMINANT_CODE_STATUSES, PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
-import { validityOrdered } from "@waste/domain/periods"
 import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
-import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
@@ -24,9 +23,9 @@ import { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Slug } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { effectiveDated, effectiveDatedBodies } from "./validity"
 
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const ContaminantCodeStatus = z.enum(CONTAMINANT_CODE_STATUSES)
@@ -51,21 +50,21 @@ export const ContaminantCode = z.object({
 })
 export type ContaminantCode = z.infer<typeof ContaminantCode>
 
-export const ContaminantCodeCreate = z.strictObject({
-  code: Slug(),
-  name: Label,
-  status: ContaminantCodeStatus.default("active"),
-  wasteFractionIds: FractionIds.default([]),
-})
+/** A patch takes the name and the status: the code is the slug the rest of the system quotes, and a code that needs another one is another code; the fractions are a set, `PUT …/fractions`. */
+const contaminantCodeBodies = resourceBodies(
+  {
+    code: Slug(),
+    name: Label,
+    status: ContaminantCodeStatus.default("active"),
+    wasteFractionIds: FractionIds.default([]),
+  },
+  { createOnly: { code: true, wasteFractionIds: true } },
+)
+
+export const ContaminantCodeCreate = contaminantCodeBodies.create
 export type ContaminantCodeCreate = z.infer<typeof ContaminantCodeCreate>
 
-/** The name and the status: the code is the slug the rest of the system quotes, and a code that needs another one is another code; the fractions are a set, `PUT …/fractions`. */
-export const ContaminantCodePatch = z
-  .strictObject({
-    name: Label.optional(),
-    status: ContaminantCodeStatus.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const ContaminantCodePatch = contaminantCodeBodies.patch
 export type ContaminantCodePatch = z.infer<typeof ContaminantCodePatch>
 
 /** `PUT /contaminant-codes/:id/fractions`: the whole set; empty is every fraction. */
@@ -87,8 +86,8 @@ const WindowDays = PositiveInt.max(PICKUP_EXCEPTION_WINDOW_DAYS.max)
 
 const reasonAndCodeAt = { message: REASON_AND_CODE, path: ["reason"] }
 
-export const PickupExceptionRule = z
-  .object({
+export const PickupExceptionRule = effectiveDated(
+  z.object({
     ...stamped,
     projectId: Id,
     outcome: PickupOutcome,
@@ -100,13 +99,13 @@ export const PickupExceptionRule = z
     windowDays: WindowDays,
     /** The products charged by occurrence once the free count is spent, the last repeating. */
     ladder: Ladder,
-    ...Validity.shape,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+  }),
+)
 export type PickupExceptionRule = z.infer<typeof PickupExceptionRule>
 
-export const PickupExceptionRuleCreate = z
-  .strictObject({
+/** A patch takes the free count, the window, the ladder replaced whole, and the end, a null reopening the rule; the outcome, reason and code are the rule's key and its start its period's — end it and add another. */
+const pickupExceptionRuleBodies = effectiveDatedBodies(
+  {
     projectId: Id,
     outcome: PickupOutcome,
     reason: PickupExceptionReason.nullable().optional(),
@@ -114,22 +113,14 @@ export const PickupExceptionRuleCreate = z
     freeCount: FreeCount,
     windowDays: WindowDays,
     ladder: Ladder,
-    ...ValidityCreate,
-  })
-  .refine(validityOrdered, endsAfterItStarts)
-  .refine(reasonAndCode, reasonAndCodeAt)
+  },
+  { createOnly: { projectId: true, outcome: true, reason: true, contaminantCodeId: true, validFrom: true } },
+)
+
+export const PickupExceptionRuleCreate = pickupExceptionRuleBodies.create.refine(reasonAndCode, reasonAndCodeAt)
 export type PickupExceptionRuleCreate = z.infer<typeof PickupExceptionRuleCreate>
 
-/** The free count, the window, the ladder replaced whole, and the end; the outcome, reason and code are the rule's key and its start its period's — end it and add another. */
-export const PickupExceptionRulePatch = z
-  .strictObject({
-    freeCount: FreeCount.optional(),
-    windowDays: WindowDays.optional(),
-    ladder: Ladder.optional(),
-    /** Null reopens the rule; a day ends it. */
-    validTo: IsoDate.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const PickupExceptionRulePatch = pickupExceptionRuleBodies.patch
 export type PickupExceptionRulePatch = z.infer<typeof PickupExceptionRulePatch>
 
 /** A page of rules: one project's, in force on a day where `validOn` says. */

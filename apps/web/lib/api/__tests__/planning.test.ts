@@ -20,7 +20,7 @@ import { COLLECTION_CALENDARS_MODULE, createCollectionCalendarRecord } from "../
 import { createPlanningAreaRecord, PLANNING_AREAS_MODULE, planningAreaFormValues, planningAreaPurpose, planningAreaTableRow } from "../../data/planning-areas"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { companyAdapter, projectAdapter } from "../records/organisation"
 import {
   BOUNDARY_VERSIONS_KEY,
@@ -532,12 +532,10 @@ describe("an edited collection calendar", () => {
 })
 
 describe("the modules", () => {
-  test("configure.areas and configure.calendars are switched, after the organisation the two resolve their projects against", () => {
+  test("configure.areas and configure.calendars are switched", () => {
     assert.deepEqual([planningAreasModule.workspaceId, planningAreasModule.moduleId], [PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId])
     assert.deepEqual([collectionCalendarsModule.workspaceId, collectionCalendarsModule.moduleId], [COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId])
     assert.ok(isServerBacked("configure", "areas"))
     assert.ok(isServerBacked("configure", "calendars"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("configure.organization") < SERVER_MODULE_KEYS.indexOf("configure.areas"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("configure.organization") < SERVER_MODULE_KEYS.indexOf("configure.calendars"))
   })
 })

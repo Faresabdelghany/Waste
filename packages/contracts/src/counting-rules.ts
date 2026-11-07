@@ -10,7 +10,6 @@
 // whole periods, and each property that would have received a ticket is
 // listed with its period and the day its count reached the limit, the
 // earliest first, `SIMULATION_TICKETS_SHOWN` at most, beside the total.
-import { changesSomething } from "@waste/domain/requests"
 import { COUNTING_LIMIT_MAX, simulationWindowIssue } from "@waste/domain/resolution/counting-rules"
 import { COUNTING_PERIODS, COUNTING_RULE_STATUSES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
@@ -18,7 +17,7 @@ import * as z from "zod"
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
 export const CountingPeriod = z.enum(COUNTING_PERIODS)
@@ -52,7 +51,8 @@ export const CountingRule = z.object({
 })
 export type CountingRule = z.infer<typeof CountingRule>
 
-export const CountingRuleCreate = z.strictObject({
+/** A patch takes any of a rule's own fields; switching it on or off is its status. */
+const countingRuleBodies = resourceBodies({
   name: Label,
   status: CountingRuleStatus.default("inactive").describe("Defaults to inactive: a rule is simulated before it is switched on."),
   period: CountingPeriod,
@@ -63,22 +63,11 @@ export const CountingRuleCreate = z.strictObject({
   teamId: Id,
   notifiesTeam: z.boolean().default(false),
 })
+
+export const CountingRuleCreate = countingRuleBodies.create
 export type CountingRuleCreate = z.infer<typeof CountingRuleCreate>
 
-/** Any of a rule's own fields; switching it on or off is its status. */
-export const CountingRulePatch = z
-  .strictObject({
-    name: Label.optional(),
-    status: CountingRuleStatus.optional(),
-    period: CountingPeriod.optional(),
-    limit: CountingLimit.optional(),
-    wasteFractionId: Id.nullable().optional(),
-    containerTypeId: Id.nullable().optional(),
-    ticketTypeId: Id.optional(),
-    teamId: Id.optional(),
-    notifiesTeam: z.boolean().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const CountingRulePatch = countingRuleBodies.patch
 export type CountingRulePatch = z.infer<typeof CountingRulePatch>
 
 export const CountingRuleListQuery = PageRequest.extend({ status: CountingRuleStatus.optional() })

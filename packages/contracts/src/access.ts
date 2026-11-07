@@ -29,13 +29,12 @@
 // `system` flag are its for life: neither write body names them.
 import { AT_MOST_ONE_WAY, EXACTLY_ONE_WAY } from "@waste/domain/access/accounts"
 import { USER_STATUSES } from "@waste/domain/access/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { Grant } from "./permissions"
-import { somethingToChange, stamped } from "./resource"
+import { resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
 /**
@@ -86,31 +85,28 @@ export type User = z.infer<typeof User>
  * the route lowercases it before the database sees it, and the database's
  * check is the backstop, so what arrives here is what the caller typed.
  */
-export const UserInvite = z
-  .strictObject({
+/**
+ * A patch is what an administrator may change about an account: its name,
+ * its role, and the one way it reaches something. The access half is
+ * optional as a whole — a patch that names none of the three leaves the
+ * account's access alone — and naming two of them is a mistake, not a merge.
+ * The e-mail is the invitation's and the status is derived, so neither is
+ * there.
+ */
+const userBodies = resourceBodies(
+  {
     email: z.email(),
     fullName: Label,
     roleId: Id,
     ...access,
-  })
-  .refine((body) => waysGiven(body) === 1, exactlyOneWay)
+  },
+  { createOnly: { email: true } },
+)
+
+export const UserInvite = userBodies.create.refine((body) => waysGiven(body) === 1, exactlyOneWay)
 export type UserInvite = z.infer<typeof UserInvite>
 
-/**
- * What an administrator may change about an account: its name, its role, and
- * the one way it reaches something. The access half is optional as a whole —
- * a patch that names none of the three leaves the account's access alone —
- * and naming two of them is a mistake, not a merge. The e-mail is the
- * invitation's and the status is derived, so neither is here.
- */
-export const UserPatch = z
-  .strictObject({
-    fullName: Label.optional(),
-    roleId: Id.optional(),
-    ...access,
-  })
-  .refine(changesSomething, somethingToChange)
-  .refine((patch) => waysGiven(patch) <= 1, atMostOneWay)
+export const UserPatch = userBodies.patch.refine((patch) => waysGiven(patch) <= 1, atMostOneWay)
 export type UserPatch = z.infer<typeof UserPatch>
 
 export const Role = z.object({
@@ -127,23 +123,21 @@ export const Role = z.object({
 })
 export type Role = z.infer<typeof Role>
 
-/** A custom role: the server writes `key: null` and `system: false`, so neither is here. */
-export const RoleCreate = z.strictObject({
-  name: Label,
-  scope: Label,
-  description: Label,
-  grants: z.array(Grant).default([]).describe("Defaults to none when absent: a role that may do nothing until its matrix is set."),
-})
+/** A custom role: the server writes `key: null` and `system: false`, so neither is here. A patch changes the copy of a role, a seeded one included; the matrix has a route of its own. */
+const roleBodies = resourceBodies(
+  {
+    name: Label,
+    scope: Label,
+    description: Label,
+    grants: z.array(Grant).default([]).describe("Defaults to none when absent: a role that may do nothing until its matrix is set."),
+  },
+  { createOnly: { grants: true } },
+)
+
+export const RoleCreate = roleBodies.create
 export type RoleCreate = z.infer<typeof RoleCreate>
 
-/** The copy of a role, a seeded one included. Its key and its system flag are not a caller's to change. */
-export const RolePatch = z
-  .strictObject({
-    name: Label.optional(),
-    scope: Label.optional(),
-    description: Label.optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const RolePatch = roleBodies.patch
 export type RolePatch = z.infer<typeof RolePatch>
 
 /** The whole matrix, replacing what the role had. An empty list is a role that may do nothing. */

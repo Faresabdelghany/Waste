@@ -15,7 +15,7 @@ import { SettlementCreate, SettlementReopen, type SettlementDetail, type Settlem
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { productAdapter } from "../records/pricing"
 import {
@@ -82,11 +82,8 @@ function made(id: string, recordKind: string, values: Record<string, string>): B
 }
 
 describe("the service provider prices module", () => {
-  test("is switched after the products and the service areas a price names, ahead of the schemes", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("commercial", "service-provider-prices"))
-    const at = SERVER_MODULE_KEYS.indexOf("commercial.service-provider-prices")
-    for (const before of ["commercial.products", "service-providers.service-areas"]) assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
-    assert.ok(at < SERVER_MODULE_KEYS.indexOf("route-studio.schemes"))
     assert.deepEqual(providerPricesModule.resources, [providerPriceAdapter])
   })
 
@@ -150,7 +147,6 @@ describe("the service provider prices module", () => {
     // 23:30 UTC on its last day is the first of March in Copenhagen, the project's clock.
     assert.equal(offered(first, new Date("2026-02-28T23:30:00Z")), false)
     assert.equal(providerPriceIndexOffered({ ...providerPriceAdapter.toRecord(indexed, context()), submittedValues: {} }), false, "a record that does not say its day is offered nothing")
-    assert.equal(providerPricesModule.readsTheDay, true)
   })
 
   test("says why an ended price takes no index, naming its end as its details do: the last day in (#281)", () => {
@@ -194,9 +190,8 @@ describe("the settlements module", () => {
     ],
   }
 
-  test("is switched after the events its lines settle", () => {
+  test("is switched, a settlement of its own", () => {
     assert.ok(isServerBacked("commercial", "settlements"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.settlements") > SERVER_MODULE_KEYS.indexOf("commercial.events"))
     assert.deepEqual(settlementsModule.resources, [settlementAdapter])
   })
 

@@ -46,8 +46,8 @@ function resolverOf(rows: readonly [BusinessRecord, string][]): Resolver {
   return {
     byServerId: (serverId) => rows.find(([, id]) => id === serverId)?.[0],
     serverIdOf: (webId) => rows.find(([row]) => row.id === webId)?.[1],
-    find: (predicate) => rows.map(([row]) => row).find(predicate),
-    filter: (predicate) => rows.map(([row]) => row).filter(predicate),
+    find: (_module, predicate) => rows.map(([row]) => row).find(predicate),
+    filter: (_module, predicate) => rows.map(([row]) => row).filter(predicate),
   }
 }
 

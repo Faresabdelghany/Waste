@@ -31,7 +31,7 @@ import {
   vehicleAdapter,
 } from "../records/fleet"
 import { vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import { depotAdapter } from "../records/places"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -121,16 +121,9 @@ const formValuesOf = (record: BusinessRecord) => {
 }
 
 describe("the fleet modules", () => {
-  test("are switched, after every module a vehicle or a driver names a row of", () => {
+  test("are switched", () => {
     assert.ok(isServerBacked("fleet", "vehicles"))
     assert.ok(isServerBacked("fleet", "drivers"))
-    const at = (key: string) => SERVER_MODULE_KEYS.indexOf(key)
-    for (const earlier of ["configure.organization", "service-providers.service-providers", "configure.master", "resources.depots"]) {
-      assert.ok(at(earlier) < at("fleet.vehicles"), `${earlier} loads before the vehicles`)
-    }
-    for (const earlier of ["configure.organization", "service-providers.service-providers", "configure.access", "resources.depots"]) {
-      assert.ok(at(earlier) < at("fleet.drivers"), `${earlier} loads before the drivers`)
-    }
   })
 
   test("each lists its one resource and files every row under its own prefix; no fixture lends its id", async () => {

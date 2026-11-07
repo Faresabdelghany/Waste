@@ -29,13 +29,12 @@
 import { ADJUSTMENT_MOVES_STOCK, NAME_THE_CARRIER, SAME_STATION } from "@waste/domain/execution/haul-out"
 import { weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
 import { OUTBOUND_LOAD_STATUSES } from "@waste/domain/execution/vocabulary"
-import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { Int4, NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { Int4, NonNegativeInt, PositiveInt, recorded, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 import { bothGrossAndTare, netIsGrossLessTare } from "./unloads"
 
@@ -93,9 +92,14 @@ export const OutboundLoad = z
   .refine(weightsAddUp, netIsGrossLessTare)
 export type OutboundLoad = z.infer<typeof OutboundLoad>
 
-/** `POST /outbound-loads`: the load departs; the status and the receipt are the server's. */
-export const OutboundLoadCreate = z
-  .strictObject({
+/**
+ * `POST /outbound-loads`: the load departs; the status and the receipt are
+ * the server's. A patch records the costs, our ticket or the note as they
+ * become known, a null clearing one; the stations, the carrier and the
+ * weights are the load's, and a wrong one is cancelled and sent again.
+ */
+const outboundLoadBodies = resourceBodies(
+  {
     projectId: Id,
     fromStationId: Id,
     toStationId: Id,
@@ -111,22 +115,26 @@ export const OutboundLoadCreate = z
     haulCostMinor: NonNegativeInt.optional(),
     disposalCostMinor: NonNegativeInt.optional(),
     note: Paragraph.optional(),
-  })
+  },
+  {
+    createOnly: { projectId: true, fromStationId: true, toStationId: true, wasteFractionId: true, vehicleId: true, serviceProviderId: true, vehicleRegistration: true, departedAt: true, netKg: true, grossKg: true, tareKg: true },
+    patch: {
+      outboundTicket: Label.nullable().optional(),
+      haulCostMinor: NonNegativeInt.nullable().optional(),
+      disposalCostMinor: NonNegativeInt.nullable().optional(),
+      note: Paragraph.nullable().optional(),
+    },
+  },
+)
+
+export const OutboundLoadCreate = outboundLoadBodies.create
   .refine((body) => body.fromStationId !== body.toStationId, stationsApart)
   .refine((body) => body.vehicleId !== undefined || body.vehicleRegistration !== undefined, { message: NAME_THE_CARRIER, path: ["vehicleRegistration"] })
   .refine(weightsPaired, bothGrossAndTare)
   .refine(weightsAddUp, netIsGrossLessTare)
 export type OutboundLoadCreate = z.infer<typeof OutboundLoadCreate>
 
-/** Records the costs, our ticket or the note as they become known; the stations, the carrier and the weights are the load's, and a wrong one is cancelled and sent again. */
-export const OutboundLoadPatch = z
-  .strictObject({
-    outboundTicket: Label.nullable().optional(),
-    haulCostMinor: NonNegativeInt.nullable().optional(),
-    disposalCostMinor: NonNegativeInt.nullable().optional(),
-    note: Paragraph.nullable().optional(),
-  })
-  .refine(changesSomething, somethingToChange)
+export const OutboundLoadPatch = outboundLoadBodies.patch
 export type OutboundLoadPatch = z.infer<typeof OutboundLoadPatch>
 
 /** `POST /outbound-loads/:id/receive`: the receiving site's ticket. Given again on a received or disputed load, it corrects the receipt. */

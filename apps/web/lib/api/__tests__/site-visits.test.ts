@@ -17,7 +17,7 @@ import { type BusinessRecord } from "../../data/business-modules"
 import { mintedRecord } from "../../data/containers"
 import { CREDENTIAL_KIND_KEY, CREDENTIAL_VALUE_KEY, SITE_ACCESS_MODULE, SITE_VISITS_MODULE } from "../../data/site-visits"
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { ACCESS_CREDENTIAL_COMMANDS, accessCredentialAdapter, BLOCK_CREDENTIAL, CREDENTIAL_LAST_DAY_KEY, CREDENTIAL_RECORD_KIND, toAccessCredentialCreateBody, toAccessCredentialPatchBody, toAccessCredentialRecord } from "../records/site-access"
 import { LEDGER_KEPT, SITE_VISIT_COMMANDS, siteVisitAdapter, siteVisitsWindowFrom, toSiteVisitRecord, VOID_VISIT } from "../records/site-visits"
 import { checkInVisit, readFrequentVisitors, readVisitSites, searchVisitAddresses } from "../site-visits"
@@ -141,13 +141,8 @@ const admitted: SiteVisit = {
 }
 
 describe("a site visit as a record", () => {
-  test("is read over its window, newest first, and is the ledger's on the API, after the modules it names", async () => {
+  test("is read over its window, newest first, and is the ledger's on the API", async () => {
     assert.ok(isServerBacked(SITE_VISITS_MODULE.workspaceId, SITE_VISITS_MODULE.moduleId))
-    const at = (key: string) => SERVER_MODULE_KEYS.indexOf(key)
-    for (const named of ["resources.drop-off-points", "configure.master", "customers.properties", "customers.contacts", "customers.agreements", "commercial.products", "configure.access"]) {
-      assert.ok(at(named) < at("operate.site-visits"), `${named} before the ledger`)
-    }
-    assert.ok(at("customers.agreements") < at("customers.site-access"))
     const { fetch, calls } = scripted([() => json({ items: [], nextCursor: null })])
     await siteVisitAdapter.list?.(clientOver(fetch))
     assert.deepEqual(

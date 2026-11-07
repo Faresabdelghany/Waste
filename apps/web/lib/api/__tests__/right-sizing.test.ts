@@ -14,7 +14,7 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 import { type BusinessRecord } from "../../data/business-modules"
 import { RIGHT_SIZING_MODULE } from "../../data/right-sizing"
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { APPROVE_PROPOSAL, DISMISS_PROPOSAL, proposalCommandsOffered, rightSizingAdapter, runRightSizing, toProposalRecord } from "../records/right-sizing"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
@@ -49,9 +49,8 @@ const smaller: RightSizingProposal = {
 }
 
 describe("a right-sizing proposal as a record", () => {
-  test("is the module's on the API, after the agreements and the products it names, by its subscription and what it proposes", () => {
+  test("is the module's on the API, by its subscription and what it proposes", () => {
     assert.ok(isServerBacked(RIGHT_SIZING_MODULE.workspaceId, RIGHT_SIZING_MODULE.moduleId))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.right-sizing") > SERVER_MODULE_KEYS.indexOf("customers.agreements"))
     const record = toProposalRecord(smaller, context)
     assert.equal(record.id, `right-sizing-proposal-${smaller.id}`)
     assert.deepEqual([record.name, record.context, record.status, record.value], [`subscription-${id(3)} · a size down`, `product-${id(4)} → product-${id(5)}`, "Open", "a quarter full, half full, empty, a quarter full"])

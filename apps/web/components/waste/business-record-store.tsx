@@ -25,22 +25,22 @@ import {
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf, type CommandInput, type Resolver, type ServerModule } from "@/lib/api/records/adapter"
-import { ME_PROJECTS, withMeProjects } from "@/lib/api/records/me-projects"
+import { ME_PROJECTS, withMeProjects, type MeProject } from "@/lib/api/records/me-projects"
 import { MODULES_WITHOUT_ME, SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
   adapterFor,
+  clocksRead,
   commandRecord,
   dayTurnRereads,
-  derivedFromChanged,
-  derivedSourcesNow,
   IDLE,
   KEPT_ON_API,
   paneAnswerOf,
   problemOfError,
-  projectTimezonesOf,
   readModuleInto,
+  readsChanged,
+  readSourcesNow,
   rereadRecord,
   rereadsOf,
   resolverOver,
@@ -208,6 +208,8 @@ export type BusinessRecordStores = {
    * read the session outlives is abandoned as the load is (Issue #198).
    */
   sessionSignal: ExternalStore<AbortSignal | null>
+  /** Whether the session's load is still reading its modules: a module read again for what it read waits for it, since a module the load has yet to read may answer what the mapping missed. */
+  loading: ExternalStore<boolean>
 }
 
 // The context carries the stable store handles, never the state itself — see
@@ -350,6 +352,127 @@ function rereadModule(stores: BusinessRecordStores, module: ServerModule, outliv
   })
 }
 
+/** How often a module may be read again for what it read within a minute before a development build says it looks like a loop. */
+const REREADS_BEFORE_A_LOOP = 5
+
+/** The page coming back into view, which a timer sleeping with the machine missed: the browser's `visibilitychange` and `focus`. */
+function pageReturns(back: () => void): () => void {
+  const onReturn = () => {
+    if (document.visibilityState === "visible") back()
+  }
+  document.addEventListener("visibilitychange", onReturn)
+  window.addEventListener("focus", onReturn)
+  return () => {
+    document.removeEventListener("visibilitychange", onReturn)
+    window.removeEventListener("focus", onReturn)
+  }
+}
+
+export type WatchOptions = {
+  /** Subscribes to the page coming back into view; the browser's events by default. */
+  onReturn?: (back: () => void) => () => void
+  /** Told when a module is read again for what it read more often than a minute should need, in a development build: two modules reading each other. */
+  onLoop?: (moduleKey: string) => void
+}
+
+/**
+ * The store's watcher (#232), framework-free so a test drives it: a module
+ * is read again once something its last read's mapping read has moved since
+ * that read began (`readsChanged`) — a row it named, a module it scanned, a
+ * module now holding a row it found nowhere — and once the project's day it
+ * read has turned (`dayTurnRereads`), checked again when the page comes back.
+ * A burst collapses into one read a second after its last change, after any
+ * write still out (its answer is the change that counts) and after the
+ * session's load, queued as every read is (`rereadModule`). A read that failed
+ * is asked for again half a minute on, or once what moved moves again — never
+ * for a module it never read. The write, read and command paths are as they
+ * were; this only watches what they leave. Answers the stop.
+ */
+export function watchReads(stores: BusinessRecordStores, { onReturn = pageReturns, onLoop = warnOfLoop }: WatchOptions = {}): () => void {
+  const timers = new Set<ReturnType<typeof setTimeout>>()
+  const after = (ms: number, run: () => void) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer)
+      run()
+    }, ms)
+    timers.add(timer)
+    return timer
+  }
+  const due = new Map<string, ReturnType<typeof setTimeout>>()
+  const asked = new Map<string, ReturnType<typeof readSourcesNow>>()
+  const sent = new Map<string, number[]>()
+  const counted = (key: string) => {
+    const now = Date.now()
+    const recent = [...(sent.get(key) ?? []).filter((at) => now - at < 60_000), now]
+    sent.set(key, recent)
+    if (recent.length === REREADS_BEFORE_A_LOOP + 1) onLoop(key)
+  }
+  const readAgain = (module: ServerModule, forWhatItRead: boolean) => {
+    const key = moduleKey(module.workspaceId, module.moduleId)
+    const pending = due.get(key)
+    if (pending !== undefined) {
+      clearTimeout(pending)
+      timers.delete(pending)
+    }
+    const send = () => {
+      if (stores.pendingWrites.size > 0 || stores.loading.getSnapshot()) {
+        due.set(key, after(1_000, send))
+        return
+      }
+      due.delete(key)
+      const client = stores.client.getSnapshot()
+      if (client === null) return
+      if (forWhatItRead) counted(key)
+      const generation = stores.generation.getSnapshot()
+      void rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client).finally(() => {
+        if (stores.server.getSnapshot().get(key)?.problem == null) return
+        after(30_000, () => {
+          asked.delete(key)
+          check(false)
+        })
+      })
+    }
+    due.set(key, after(1_000, send))
+  }
+  let zones = ""
+  let midnight: ReturnType<typeof setTimeout> | undefined
+  const check = (dayToo: boolean) => {
+    const state = stores.server.getSnapshot()
+    const timezones = clocksRead(state)
+    for (const module of SERVER_MODULES) {
+      const key = moduleKey(module.workspaceId, module.moduleId)
+      if (readsChanged(state, key).length === 0) continue
+      const sources = readSourcesNow(state, key)
+      if (sameSources(asked.get(key), sources)) continue
+      asked.set(key, sources)
+      readAgain(module, true)
+    }
+    if (dayToo) for (const module of dayTurnRereads(state, SERVER_MODULES, Date.now())) readAgain(module, false)
+    // The next turn of the projects' day, armed again whenever their clocks are first known or change.
+    if (dayToo || timezones.join() !== zones) {
+      zones = timezones.join()
+      if (midnight !== undefined) {
+        clearTimeout(midnight)
+        timers.delete(midnight)
+      }
+      midnight = after(untilDayTurns(Date.now(), timezones) + 1_000, () => check(true))
+    }
+  }
+  const unsubscribe = stores.server.subscribe(() => check(false))
+  const stopReturns = onReturn(() => check(true))
+  check(true)
+  return () => {
+    unsubscribe()
+    stopReturns()
+    for (const timer of timers) clearTimeout(timer)
+  }
+}
+
+/** A development build's word on a module read again and again for what it read: a loop costs reads, never rows, so production stays quiet. */
+function warnOfLoop(moduleKey: string) {
+  if (process.env.NODE_ENV !== "production") console.warn(`${moduleKey} was read again ${REREADS_BEFORE_A_LOOP + 1} times in a minute for what it read: does it read a module that reads it?`)
+}
+
 export function BusinessRecordStoreProvider({
   children,
 }: {
@@ -364,6 +487,7 @@ export function BusinessRecordStoreProvider({
     pendingReads: new Map(),
     generation: createExternalStore(0),
     sessionSignal: createExternalStore<AbortSignal | null>(null),
+    loading: createExternalStore(false),
   }))
   const client = useApiClient()
   const identity = useApiSessionIdentity()
@@ -394,7 +518,7 @@ export function BusinessRecordStoreProvider({
   // request in flight reads the current client from `stores.client` at the
   // moment it is sent. No session (signed out, adapter off, expired and not
   // refreshed) empties them. The switched modules load in SERVER_MODULES' order, one after the
-  // other, since a later module's mapping resolves the earlier ones' rows (a
+  // other, so a later module's mapping resolves the earlier ones' rows (a
   // user names its role and its projects); each lands as it arrives, and a
   // module that fails is reported once and shows no rows — unless the API
   // refused the account itself (Issue #150): the client has ended the
@@ -419,9 +543,10 @@ export function BusinessRecordStoreProvider({
     const initial = stores.client.getSnapshot()
     if (initial === null) return
     stores.sessionSignal.set(controller.signal)
+    stores.loading.set(true)
     const run = async () => {
       let modules = MODULES_WITHOUT_ME
-      let projects: readonly { id: string; name: string }[] | undefined
+      let projects: readonly MeProject[] | undefined
       try {
         const me = await loadMe()
         modules = viewableModules(me.role.grants, SERVER_MODULES, { provider: me.serviceProvider !== null })
@@ -455,99 +580,17 @@ export function BusinessRecordStoreProvider({
         reportRead(key, problem)
       }
     }
-    void run()
+    void run().finally(() => {
+      if (!controller.signal.aborted) stores.loading.set(false)
+    })
     return () => {
       controller.abort()
+      stores.loading.set(false)
     }
   }, [identity, stores, loadMe])
 
-  // A module read through others (`derivedFrom`, #232) is read again once
-  // one of them has new rows since its read began (`derivedFromChanged`),
-  // and a module read on the project's day once that day turns
-  // (`dayTurnRereads`), checked again when the page comes back, since a timer
-  // sleeps with the machine. A burst collapses into one read a second after
-  // its last change, after any write still out (its answer is the change
-  // that counts), queued as every read is (`rereadModule`). A read that
-  // failed is asked for again half a minute on, not at once. The write, read
-  // and command paths are as they were; this only watches what they leave.
-  useEffect(() => {
-    const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
-    const timers = new Set<ReturnType<typeof setTimeout>>()
-    const after = (ms: number, run: () => void) => {
-      const timer = setTimeout(() => {
-        timers.delete(timer)
-        run()
-      }, ms)
-      timers.add(timer)
-      return timer
-    }
-    const due = new Map<string, ReturnType<typeof setTimeout>>()
-    const asked = new Map<string, ReturnType<typeof derivedSourcesNow>>()
-    const readAgain = (module: ServerModule) => {
-      const key = moduleKey(module.workspaceId, module.moduleId)
-      const pending = due.get(key)
-      if (pending !== undefined) {
-        clearTimeout(pending)
-        timers.delete(pending)
-      }
-      const send = () => {
-        if (stores.pendingWrites.size > 0) {
-          due.set(key, after(1_000, send))
-          return
-        }
-        due.delete(key)
-        const client = stores.client.getSnapshot()
-        if (client === null) return
-        const generation = stores.generation.getSnapshot()
-        void rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client).finally(() => {
-          if (stores.server.getSnapshot().get(key)?.problem == null) return
-          after(30_000, () => {
-            asked.delete(key)
-            check(false)
-          })
-        })
-      }
-      due.set(key, after(1_000, send))
-    }
-    let zones = ""
-    let midnight: ReturnType<typeof setTimeout> | undefined
-    const check = (dayToo: boolean) => {
-      const state = stores.server.getSnapshot()
-      const timezones = projectTimezonesOf(state)
-      for (const module of derived) {
-        const key = moduleKey(module.workspaceId, module.moduleId)
-        const current = state.get(key)
-        if (derivedFromChanged(current, state).length === 0) continue
-        const sources = derivedSourcesNow(current, state)
-        if (sameSources(asked.get(key), sources)) continue
-        asked.set(key, sources)
-        readAgain(module)
-      }
-      if (dayToo) for (const module of dayTurnRereads(state, SERVER_MODULES, Date.now(), timezones)) readAgain(module)
-      // The next turn of the projects' day, armed again whenever their clocks are first known or change.
-      if (dayToo || timezones.join() !== zones) {
-        zones = timezones.join()
-        if (midnight !== undefined) {
-          clearTimeout(midnight)
-          timers.delete(midnight)
-        }
-        midnight = after(untilDayTurns(Date.now(), timezones) + 1_000, () => check(true))
-      }
-    }
-    const unsubscribe = stores.server.subscribe(() => check(false))
-    const onReturn = () => {
-      if (document.visibilityState === "visible") check(true)
-    }
-    document.addEventListener("visibilitychange", onReturn)
-    window.addEventListener("focus", onReturn)
-    check(true)
-    return () => {
-      unsubscribe()
-      document.removeEventListener("visibilitychange", onReturn)
-      window.removeEventListener("focus", onReturn)
-      for (const timer of timers) clearTimeout(timer)
-    }
-  }, [stores])
+  // The watcher: what a module's last read read, and the day it read (`watchReads`).
+  useEffect(() => watchReads(stores), [stores])
 
   return (
     <BusinessRecordStoreContext.Provider value={stores}>
@@ -883,6 +926,20 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
     stores.server.getServerSnapshot,
   )
   return switchedModuleState(serverModules, useApiConfigured(), workspaceId, moduleId)
+}
+
+/**
+ * Whether the store's read of a switched module is behind: something its
+ * last read's mapping read has moved since (`readsChanged`), so the store is
+ * about to read it again. False for a module on the browser's own path.
+ */
+export function useReadBehind(workspaceId: WorkspaceId, moduleId: string): boolean {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error("useReadBehind must be used within BusinessRecordStoreProvider")
+  }
+  const serverModules = useSyncExternalStore(stores.server.subscribe, stores.server.getSnapshot, stores.server.getServerSnapshot)
+  return useApiConfigured() && readsChanged(serverModules, moduleKey(workspaceId, moduleId)).length > 0
 }
 
 /**

@@ -41,7 +41,7 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
   let routes: Record<"inside" | "beforeAssignment" | "firstDay" | "lastDay" | "afterArea" | "noArea" | "unheld", string>
 
   /** A principal as the request path would build it, with only what the two predicates read. */
-  const principalOf = (provider: { id: string; legalName: string } | null, projects: { id: string; name: string }[]): Principal => ({
+  const principalOf = (provider: { id: string; legalName: string } | null, projects: Principal["projects"]): Principal => ({
     userId: testId(),
     companyId: tenant.companyId,
     user: { id: testId(), email: "someone@example", fullName: "Someone", allProjects: false, primaryAdministrator: false },

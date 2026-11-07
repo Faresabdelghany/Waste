@@ -22,9 +22,9 @@ const olivia = {
     grants: [{ moduleKey: "configure.access", actions: ["view", "edit", "create", "delete"] }],
   },
   projects: [
-    { id: "01a0d2a4-a280-7002-8000-000000000003", name: "Cairo Operations" },
-    { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central" },
-    { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" },
+    { id: "01a0d2a4-a280-7002-8000-000000000003", name: "Cairo Operations", timezone: "Africa/Cairo", currency: "EGP" },
+    { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" },
+    { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", timezone: "Europe/Copenhagen", currency: "DKK" },
   ],
   serviceProvider: null,
   driver: null,
@@ -90,5 +90,8 @@ describe("Me", () => {
     assert.equal(Me.safeParse(withoutProjects).success, false, "projects is a list, empty for a provider user")
     const { driver: _driver, ...withoutDriver } = olivia
     assert.equal(Me.safeParse(withoutDriver).success, false, "driver is null, never absent")
+    const [{ timezone: _timezone, ...clockless }] = olivia.projects
+    assert.equal(Me.safeParse({ ...olivia, projects: [clockless] }).success, false, "a project names its clock")
+    assert.equal(Me.safeParse({ ...olivia, projects: [{ ...olivia.projects[0], currency: "dkk" }] }).success, false, "and its currency, by shape")
   })
 })

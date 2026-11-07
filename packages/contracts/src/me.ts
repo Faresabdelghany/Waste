@@ -8,15 +8,17 @@
 // the Service Provider it belongs to or null, and the active driver profile
 // bound to it or null (Issue #150).
 //
-// Summaries, not resources: a project is its id and name here, the full
-// Project is `organisation.ts`'s and the full User and Role are `access.ts`'s
-// (slices 4 and 5), the full Driver `fleet.ts`'s. The frontend reads this once
-// after sign-in to draw the sidebar and the permission gates, and to land the
-// person: a driver on `/driver`, everyone else on `/operate`. A change to a
-// grant or a project shows on the next call, since nothing here is cached
-// server-side.
+// Summaries, not resources: a project is its id, its name, and the clock and
+// the currency a role that does not view the organisation reads its rows on;
+// the full Project is `organisation.ts`'s, the full User and Role are
+// `access.ts`'s (slices 4 and 5), the full Driver `fleet.ts`'s. The frontend
+// reads this once after sign-in to draw the sidebar and the permission gates,
+// and to land the person: a driver on `/driver`, everyone else on `/operate`.
+// A change to a grant or a project shows on the next call, since nothing here
+// is cached server-side.
 import * as z from "zod"
 
+import { Currency, Timezone } from "./codes"
 import { Id } from "./ids"
 import { Grant } from "./permissions"
 import { Label } from "./text"
@@ -53,6 +55,8 @@ const MeRole = z.object({
 const MeProject = z.object({
   id: Id,
   name: Label,
+  timezone: Timezone,
+  currency: Currency,
 })
 
 const MeServiceProvider = z.object({

@@ -17,7 +17,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "../records/live"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, scripted } from "./scripted-fetch"
@@ -74,13 +74,8 @@ const state: ServerRecordsState = new Map([
 const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ resolve: resolver, now: NOW })
 
 describe("the live module", () => {
-  test("is switched, after the fleet and the schemes its rows name, and ahead of the routes and the stops, the long windowed reads", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId))
-    const at = SERVER_MODULE_KEYS.indexOf("route-studio.live")
-    for (const named of ["configure.organization", "fleet.vehicles", "fleet.drivers", "route-studio.schemes"]) {
-      assert.ok(at > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
-    for (const later of ["route-studio.routes", "route-studio.pickups"]) assert.ok(at < SERVER_MODULE_KEYS.indexOf(later), `before ${later}`)
   })
 
   test("while the board is watched it is read again every 30 s, on one interval, and no more once it is left", (t) => {
