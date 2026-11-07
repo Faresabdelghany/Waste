@@ -27,6 +27,7 @@ import { id, projectScoped, recorded, timestamps, validity, validPeriod } from "
 import { container } from "./containers"
 import { property } from "./customers"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -70,6 +71,8 @@ export const tankInstallation = wms.table(
     tenantIndex(t, t.projectId),
   ],
 )
+
+export const tankInstallationPolicies = policies(tankInstallation, { audited: { parent: tankInstallation.propertyId } })
 
 export const tankInspection = wms.table(
   "tank_inspection",

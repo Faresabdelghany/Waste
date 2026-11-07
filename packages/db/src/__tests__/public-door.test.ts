@@ -1,21 +1,28 @@
-// The public door's migrations — 0017's role, the Collection Days' 0021 and the Drop-off Points' — against Postgres (Issue #293, ADR-0010), on a fresh database
+// The public door (Issue #293, ADR-0010) against Postgres, on a fresh database
 // of this file's own: the public role as the catalog shows it, the exact
-// columns it may read and the nothing else it may do, and what a public
-// transaction (`withPublishedProject`) sees — a published project's own
-// rows on the map, never a draft, an unpublished project or another company.
+// columns it may read and the rows' one policy per table, as the tables
+// declare them (`PUBLIC_DOOR_TABLES`), and the nothing else it may do, and
+// what a public transaction (`withPublishedProject`) sees — a published
+// project's own rows on the map, never a draft, an unpublished project or
+// another company. Without a database, each table's policy is in a migration
+// as `publicPolicyStatements` spells it.
 import assert from "node:assert/strict"
+import { readdirSync, readFileSync } from "node:fs"
+import path from "node:path"
 import { after, before, describe, test } from "node:test"
 import { getTableName, sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
-import { migrateDatabase } from "../migrate"
+import { migrateDatabase, MIGRATIONS_FOLDER } from "../migrate"
 import { columnName } from "../names"
 import { withPublishedProject } from "../public-door"
 import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { wasteFraction } from "../schema/catalogue"
 import { company, project } from "../schema/organisation"
 import { dropOffPoint, dropOffPointHours } from "../schema/drop-off-points"
-import { PUBLIC_DOOR_TABLES } from "../sql/public-door"
+import { normalised, statementsOf } from "../sql/hand-written"
+import { PUBLIC_DOOR_POLICY, publicGrantStatements, publicPolicyStatements } from "../sql/public-door"
+import { PUBLIC_DOOR_TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
@@ -33,7 +40,15 @@ const pointId = (n: "a" | "b", m: number) => `018f7c34-${n}00${m}-7000-8000-0000
 const allowedColumns = (): string[] =>
   PUBLIC_DOOR_TABLES.flatMap(({ table, columns }) => columns.map((column) => `${getTableName(table)}.${columnName(column)}`)).sort()
 
-describe("migration 0017, the public door's role", { skip: database.skip }, () => {
+describe("the public door in the migrations", () => {
+  test("every table the door reads carries its one policy as publicPolicyStatements spells it", () => {
+    const statements = new Set(readdirSync(MIGRATIONS_FOLDER).filter((file) => file.endsWith(".sql")).flatMap((file) => statementsOf(readFileSync(path.join(MIGRATIONS_FOLDER, file), "utf8"))))
+    const missing = publicPolicyStatements(PUBLIC_DOOR_TABLES).filter((statement) => !statements.has(normalised(statement)))
+    assert.deepEqual(missing, [], `paste these into the migration that opens the table:\n${missing.join("\n")}`)
+  })
+})
+
+describe("the public door's role", { skip: database.skip }, () => {
   let fresh: FreshDatabase
   let owner: Database
 
@@ -103,10 +118,11 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
       where n.nspname = 'wms' and c.relkind in ('r', 'v', 'm', 'p') and has_column_privilege(${PUBLIC_ROLE}, c.oid, a.attnum, 'SELECT')
       order by 1`
-    assert.deepEqual(
-      readable.map((row) => row.column),
-      allowedColumns(),
+    const readableColumns = readable.map((row) => row.column)
+    const grants = publicGrantStatements(
+      PUBLIC_DOOR_TABLES.map(({ table, columns }) => ({ table, columns: columns.filter((column) => !readableColumns.includes(`${getTableName(table)}.${columnName(column)}`)) })).filter(({ columns }) => columns.length > 0),
     )
+    assert.deepEqual(readableColumns, allowedColumns(), grants.length === 0 ? undefined : `a migration grants these:\n${grants.join("\n")}`)
     const rights = await owner.sql<{ table: string }[]>`
       select c.relname as table
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -124,6 +140,15 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       assert.deepEqual(later, { select: false })
       await tx`drop table wms.public_door_specimen_later`
     })
+  })
+
+  test("reads the rows of exactly the tables it reads columns of, through one policy each", async () => {
+    const policies = await owner.sql<{ table: string; policy: string }[]>`
+      select tablename as table, policyname as policy from pg_policies where schemaname = 'wms' and ${PUBLIC_ROLE} = any(roles) order by 1, 2`
+    assert.deepEqual(
+      policies.map((row) => [row.table, row.policy]),
+      PUBLIC_DOOR_TABLES.map(({ table }) => [getTableName(table), `${getTableName(table)}_${PUBLIC_DOOR_POLICY}`]).sort(([a], [b]) => a.localeCompare(b)),
+    )
   })
 
   test("reads no column of a table about people, agreements, money or tickets: customers, parties, contacts, accounts, agreements, prices, events, invoices, tickets and alerts stay the office's (#293)", async () => {

@@ -158,6 +158,7 @@ import { pickup, route } from "./execution"
 import { driver, vehicle } from "./fleet"
 import { outboundLoad } from "./haul-out"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { wms } from "./wms"
 
@@ -184,6 +185,8 @@ export const team = wms.table(
   (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, TEAM_STATUSES)],
 )
 
+export const teamPolicies = policies(team, { audited: {} })
+
 /** A team's members: one row per account, the set `PUT /teams/:id/members` replaces whole. */
 export const teamMember = wms.table(
   "team_member",
@@ -203,6 +206,8 @@ export const teamMember = wms.table(
     tenantIndex(t, t.userAccountId),
   ],
 )
+
+export const teamMemberPolicies = policies(teamMember, { audited: { parent: teamMember.teamId } })
 
 // The Ticket Type (#545 of #544): the company's own name for a kind of case —
 // "Bulky waste collection", "Container size change" — inside one kind, which
@@ -244,6 +249,8 @@ export const ticketType = wms.table(
   ],
 )
 
+export const ticketTypePolicies = policies(ticketType, { audited: {} })
+
 // A Ticket Type's custom fields (#545 of #544), in order: the key a ticket's
 // values are held by, fixed once made; the label and help text a person
 // reads; the input it takes; the choices a choice field offers, and only a
@@ -283,6 +290,8 @@ export const ticketTypeField = wms.table(
   ],
 )
 
+export const ticketTypeFieldPolicies = policies(ticketTypeField, { audited: { parent: ticketTypeField.ticketTypeId } })
+
 // Who may give a ticket of a type each status command (#545 of #544): one row
 // per role a type names for a command, and a command naming none is anyone's
 // who works tickets. The set is replaced whole (`PUT
@@ -307,6 +316,8 @@ export const ticketTypePermission = wms.table(
     tenantIndex(t, t.roleId),
   ],
 )
+
+export const ticketTypePermissionPolicies = policies(ticketTypePermission, { audited: { parent: ticketTypePermission.ticketTypeId } })
 
 /** One `WHEN` of an action's kind CASE: the parameters its kind carries and the ones it does not, a completion's resolution with it. */
 function actionKindClause(kind: TicketActionKind, columns: Record<keyof TicketActionParameters, PgColumn>): SQL {
@@ -381,6 +392,8 @@ export const ticketTypeAction = wms.table(
   ],
 )
 
+export const ticketTypeActionPolicies = policies(ticketTypeAction, { audited: { parent: ticketTypeAction.ticketTypeId } })
+
 // A Counting Rule (#547 of #544): the completed emptyings at each property
 // over a calendar period — optionally of one waste fraction, of one container
 // type — counted by the worker as each emptying completes, and a ticket of
@@ -429,6 +442,8 @@ export const countingRule = wms.table(
     tenantIndex(t, t.teamId),
   ],
 )
+
+export const countingRulePolicies = policies(countingRule, { audited: {} })
 
 export const ticket = wms.table(
   "ticket",
@@ -583,6 +598,8 @@ export const ticket = wms.table(
     tenantIndex(t, t.bookedRouteId),
   ],
 )
+
+export const ticketPolicies = policies(ticket, { exempt: "a ticket's history is its ledger, ticket_event, appended by every command" })
 
 /** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns. */
 function kindClause(kind: (typeof TICKET_EVENT_KINDS)[number], columns: { status: PgColumn; body: PgColumn; objectKey: PgColumn; visibility: PgColumn; resolution: PgColumn }): SQL {
@@ -767,6 +784,8 @@ export const alert = wms.table(
   ],
 )
 
+export const alertPolicies = policies(alert, { exempt: "an alert's history is its stamps, held to its status" })
+
 // The SLA (O4 of #290): the hours a project gives a ticket of a priority from
 // when it happened to its due date, for every kind (`kind` null) or for one kind, the
 // kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). Since
@@ -804,6 +823,8 @@ export const ticketSla = wms.table(
   ],
 )
 
+export const ticketSlaPolicies = policies(ticketSla, { audited: { parent: ticketSla.projectId } })
+
 // The team a project's ticket of a kind goes to when its opener names none
 // (O30 of #290, row 7.20): one per kind and project, read by `openTicket` as
 // it opens a ticket, the office's and the consumer's alike, as the SLA is.
@@ -834,3 +855,5 @@ export const ticketTeamDefault = wms.table(
     tenantIndex(t, t.ticketTypeId),
   ],
 )
+
+export const ticketTeamDefaultPolicies = policies(ticketTeamDefault, { audited: { parent: ticketTeamDefault.projectId } })

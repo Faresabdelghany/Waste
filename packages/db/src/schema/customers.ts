@@ -86,6 +86,7 @@ import { lowercase, oneOf, positive, timeWindow } from "./checks"
 import { id, projectScoped, tenant, timestamps, validity, validPeriod } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -125,6 +126,8 @@ export const customer = wms.table(
   ],
 )
 
+export const customerPolicies = policies(customer, { audited: {} })
+
 // A Contact Person (#291 C14): a named person who speaks for an organisation
 // Customer, with a role and the channels they are reached on. Messaging
 // (C15) addresses them, so a contact is reachable on one channel at least
@@ -156,6 +159,8 @@ export const customerContact = wms.table(
     check(tableObjectName(t.id.table, "channel_shape", "customerContact"), sql`${t.email} is not null or ${t.phone} is not null`),
   ],
 )
+
+export const customerContactPolicies = policies(customerContact, { audited: { parent: customerContact.customerId } })
 
 export const property = wms.table(
   "property",
@@ -210,6 +215,14 @@ export const property = wms.table(
   ],
 )
 
+export const propertyPolicies = policies(property, {
+  audited: {},
+  door: {
+    columns: [property.id, property.companyId, property.projectId, property.address],
+    rows: inPublishedProject("property"),
+  },
+})
+
 export const propertyParty = wms.table(
   "property_party",
   {
@@ -235,6 +248,8 @@ export const propertyParty = wms.table(
   ],
 )
 
+export const propertyPartyPolicies = policies(propertyParty, { audited: { parent: propertyParty.propertyId } })
+
 export const propertyGroup = wms.table(
   "property_group",
   {
@@ -259,6 +274,8 @@ export const propertyGroup = wms.table(
   ],
 )
 
+export const propertyGroupPolicies = policies(propertyGroup, { audited: {} })
+
 export const propertyGroupMember = wms.table(
   "property_group_member",
   {
@@ -280,6 +297,8 @@ export const propertyGroupMember = wms.table(
     oneOf(t.role, PROPERTY_GROUP_MEMBER_ROLES),
   ],
 )
+
+export const propertyGroupMemberPolicies = policies(propertyGroupMember, { audited: { parent: propertyGroupMember.propertyGroupId } })
 
 export const sharedCollectionPoint = wms.table(
   "shared_collection_point",
@@ -323,6 +342,8 @@ export const sharedCollectionPoint = wms.table(
   ],
 )
 
+export const sharedCollectionPointPolicies = policies(sharedCollectionPoint, { audited: {} })
+
 export const sharedCollectionPointMember = wms.table(
   "shared_collection_point_member",
   {
@@ -348,3 +369,7 @@ export const sharedCollectionPointMember = wms.table(
     oneOf(t.role, SHARED_COLLECTION_POINT_MEMBER_ROLES),
   ],
 )
+
+export const sharedCollectionPointMemberPolicies = policies(sharedCollectionPointMember, {
+  audited: { parent: sharedCollectionPointMember.sharedCollectionPointId },
+})

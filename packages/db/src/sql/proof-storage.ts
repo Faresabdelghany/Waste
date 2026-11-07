@@ -1,6 +1,7 @@
 // The proofs' bucket (O1 of #290): the private Storage bucket a driver's
 // photos and signatures live in, made by the migration that owns it, the one
-// spelling `proof-storage-rendering.test.ts` holds the file to. Private: no
+// spelling the file was copied from and `proof-storage.test.ts` holds to the
+// formats an object key may name. Private: no
 // object is read without a URL the API signs, and the API alone holds the key
 // that signs (`@waste/db/storage`). The size and the formats are the bucket's
 // own refusal of anything else, whatever an upload URL says.

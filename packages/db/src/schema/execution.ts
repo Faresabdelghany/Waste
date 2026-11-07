@@ -154,11 +154,15 @@ import { company, project, serviceProvider } from "./organisation"
 import { bulkyBooking } from "./bulky"
 import { contaminantCode } from "./pickup-exceptions"
 import { depot, unloadingStation, warehouse } from "./places"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
 
 const instant = () => timestamp({ withTimezone: true })
+
+/** Why the route, its stops and its sessions keep no audit trail. */
+const WRITTEN_IN_BULK = "execution: written in bulk by generation and the driver door; its ledgers and the outbox say what happened"
 
 export const route = wms.table(
   "route",
@@ -271,6 +275,24 @@ export const route = wms.table(
     tenantIndex(t, t.activePlanId),
   ],
 )
+
+export const routePolicies = policies(route, {
+  exempt: WRITTEN_IN_BULK,
+  door: {
+    columns: [
+      route.id,
+      route.companyId,
+      route.projectId,
+      route.collectionGroupId,
+      route.serviceDate,
+      route.operatingDate,
+      route.status,
+      route.cancelledByGeneration,
+      route.heldAt,
+    ],
+    rows: inPublishedProject("route"),
+  },
+})
 
 export const pickup = wms.table(
   "pickup",
@@ -408,6 +430,8 @@ export const pickup = wms.table(
   ],
 )
 
+export const pickupPolicies = policies(pickup, { exempt: WRITTEN_IN_BULK })
+
 export const session = wms.table(
   "session",
   {
@@ -450,12 +474,13 @@ export const session = wms.table(
   ],
 )
 
-/** The kinds by what they say of the pickup, from the domain's table: a stop's kinds name one, the route's own name none, the rest may stand on the route alone. */
-/** The kinds whose shape names a pickup as given, as SQL literals; exported for the test that rebuilds the table as an earlier migration left it. */
-export const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
+export const sessionPolicies = policies(session, { exempt: WRITTEN_IN_BULK })
 
-/** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns; exported for the same test. */
-export function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; volumeLitres: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
+/** The kinds by what they say of the pickup, from the domain's table: a stop's kinds name one, the route's own name none, the rest may stand on the route alone. */
+const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
+
+/** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns. */
+function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; volumeLitres: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
   const shape = PROOF_SHAPES[kind]
   const terms: SQL[] = []
   for (const column of ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const) {
@@ -688,6 +713,10 @@ export const sessionPosition = wms.table(
   ],
 )
 
+export const sessionPositionPolicies = policies(sessionPosition, {
+  exempt: "a ledger of where a session's vehicle was, appended by the driver door in bulk and removed only by the retention purge (O8 of #290); a trail of it would keep the coordinates the purge removes",
+})
+
 export const outboxEvent = wms.table(
   "outbox_event",
   {
@@ -717,3 +746,5 @@ export const outboxEvent = wms.table(
     tenantIndex(t, t.aggregateId),
   ],
 )
+
+export const outboxEventPolicies = policies(outboxEvent, { exempt: "the outbox: a transport, stamped as it is relayed" })

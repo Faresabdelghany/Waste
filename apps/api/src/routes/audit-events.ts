@@ -2,8 +2,9 @@
 // first, one row's history — the row's own changes, and those of the sets it
 // is the parent of two levels down (a role's grants, a vehicle's compartments
 // and their fractions, a scheme's groups and their picks) — read under `view`
-// on the module the table belongs to (the audit list,
-// @waste/db/sql/audit-trail), the grant its own routes are read under. A row
+// on the module the table is audited under (`AUDITED_TABLES`,
+// @waste/domain/audit/vocabulary), the grant its own routes are read under. A
+// table the audit trail does not keep is the contract's 400 on `table`. A row
 // of a project the caller does not work in is not there, as anywhere else; a
 // company-wide row (a customer, a role) is.
 //
@@ -15,9 +16,8 @@ import { AuditEvent, AuditEventListQuery } from "@waste/contracts/audit"
 import { Page } from "@waste/contracts/pagination"
 import { userAccount } from "@waste/db/schema/access"
 import { auditEvent } from "@waste/db/schema/audit"
-import { AUDITED } from "@waste/db/sql/audit-trail"
-import type { ModuleKey } from "@waste/domain/access/modules"
-import { and, desc, eq, getTableName, isNull, lt, or, sql } from "drizzle-orm"
+import { AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -25,13 +25,10 @@ import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { requireAllowed } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import { describeProblem, validate } from "../problem"
 import { describeJson } from "./shared"
 
 const AuditPage = Page(AuditEvent)
-
-/** The module each audited table's history is read under, by the table's name. */
-const MODULE_OF: ReadonlyMap<string, ModuleKey> = new Map(AUDITED.map((entry) => [getTableName(entry.table), entry.module]))
 
 const columns = {
   id: auditEvent.id,
@@ -104,9 +101,7 @@ export function auditEventRoutes(guard: MiddlewareHandler<AuthEnv>) {
       const after = afterCursor(cursor)
       const tx = c.get("tx")
       const principal = c.get("principal")
-      const module = MODULE_OF.get(table)
-      if (module === undefined) throw invalidRequest("query", [{ path: "table", message: "Not an audited table" }])
-      requireAllowed(principal.grants, module, "view")
+      requireAllowed(principal.grants, AUDITED_TABLES[table], "view")
       // The row, its sets, and their sets: two levels, which every parent of the audit list is within.
       const children = sql`select ${auditEvent.rowId} from ${auditEvent} where ${auditEvent.companyId} = ${principal.companyId} and ${auditEvent.parentTable} = ${table} and ${auditEvent.parentId} = ${rowId}`
       const ofRow = or(and(eq(auditEvent.tableName, table), eq(auditEvent.rowId, rowId)), and(eq(auditEvent.parentTable, table), eq(auditEvent.parentId, rowId)), sql`${auditEvent.parentId} in (${children})`)

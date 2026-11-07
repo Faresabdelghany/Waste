@@ -925,7 +925,7 @@ constraint wms.company company_status_one_of CHECK ((status = ANY (ARRAY['active
 constraint wms.company company_vat_number_shape CHECK ((vat_number ~ '^[A-Z]{2}[0-9A-Z]{2,13}$'::text))
 index wms.company company_country_registration_number_key CREATE UNIQUE INDEX company_country_registration_number_key ON wms.company USING btree (country, registration_number)
 index wms.company company_pkey CREATE UNIQUE INDEX company_pkey ON wms.company USING btree (id)
-trigger wms.company company_audit_trail enabled=O CREATE TRIGGER company_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number')
+trigger wms.company company_audit_trail enabled=O CREATE TRIGGER company_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number', 'next_scale_ticket_number')
 trigger wms.company company_touch_updated_at enabled=O CREATE TRIGGER company_touch_updated_at BEFORE UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.company company_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -5197,4 +5197,5 @@ journal 1793952149939 ae5d9ea5151ab1c6d9546163ac5bcdaf3fcaa731d85bb01586b3684f50
 journal 1793954181730 4695abc819cd6ddcbf7028781d8cded88ec465531dc76ed40e859747885ab300
 journal 1793955942536 a6e59802616e92b100c765800949a9c45787ccdd84a971d2d1358c90e7d7a6a6
 journal 1793999801743 14acae7eefb8b1ed9ef716bf85624c7fe51587e4c4e0fa1567ae3b05e5a1c006
+journal 1794006194741 749a7e751b94b359bae840e2d2af7b19999bab671a7985cf6476681d5004765e
 pgboss-version 42

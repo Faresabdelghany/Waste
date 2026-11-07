@@ -7,8 +7,7 @@
 // database refuses would answer 500 on a write that looked fine.
 //
 // No database: both lists are source. The check constraints themselves are
-// pinned by organisation-access-rendering.test.ts and proved against Postgres
-// by organisation-access.test.ts.
+// proved against Postgres by organisation-access.test.ts.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

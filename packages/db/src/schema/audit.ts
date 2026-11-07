@@ -1,8 +1,8 @@
 // The audit log (#291, slice 9; ADR-0005: "the history of edits is the audit
 // log, not the domain model"). One ledger, `audit_event`, written by a
 // trigger and by nothing else: `wms.audit_row()` (migration 0019,
-// sql/audit-trail.ts) runs AFTER INSERT, UPDATE or DELETE on every table the
-// audit list names and appends what the row underwent, so the history is
+// sql/audit-trail.ts) runs AFTER INSERT, UPDATE or DELETE on every table
+// declared audited (schema/policies.ts) and appends what the row underwent, so the history is
 // complete by construction — the office's writes, the worker's and the
 // seed's alike — and no write route has a call to forget.
 //
@@ -42,6 +42,7 @@ import { tableObjectName } from "../names"
 import { oneOf } from "./checks"
 import { id, recorded, tenant } from "./columns"
 import { company } from "./organisation"
+import { policies } from "./policies"
 import { companyReference } from "./references"
 import { wms } from "./wms"
 
@@ -79,3 +80,5 @@ export const auditEvent = wms.table(
       .where(sql`${t.parentId} is not null`),
   ],
 )
+
+export const auditEventPolicies = policies(auditEvent, { exempt: "the audit log itself" })

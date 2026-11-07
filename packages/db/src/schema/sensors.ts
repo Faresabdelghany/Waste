@@ -35,6 +35,7 @@ import { oneOf } from "./checks"
 import { id, projectScoped, recorded, timestamps, validity, validPeriod } from "./columns"
 import { container } from "./containers"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -59,6 +60,8 @@ export const sensor = wms.table(
     oneOf(t.status, SENSOR_STATUSES),
   ],
 )
+
+export const sensorPolicies = policies(sensor, { audited: {} })
 
 export const sensorPairing = wms.table(
   "sensor_pairing",
@@ -85,6 +88,8 @@ export const sensorPairing = wms.table(
     // The container's pairings are found through the exclusion constraint's index over (company_id, container_id, the period).
   ],
 )
+
+export const sensorPairingPolicies = policies(sensorPairing, { audited: { parent: sensorPairing.sensorId } })
 
 export const fillReading = wms.table(
   "fill_reading",
@@ -119,3 +124,7 @@ export const fillReading = wms.table(
     tenantIndex(t, t.projectId),
   ],
 )
+
+export const fillReadingPolicies = policies(fillReading, {
+  exempt: "a ledger of what a fill-level sensor sent, appended by the ingest in bulk; a trail of it would repeat every reading",
+})

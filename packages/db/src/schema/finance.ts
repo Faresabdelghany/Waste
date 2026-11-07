@@ -108,6 +108,7 @@ import { customer } from "./customers"
 import { pickup, route, unload } from "./execution"
 import { company, project, serviceProvider } from "./organisation"
 import { planningArea } from "./planning-areas"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { ticket, ticketType } from "./resolution"
 import { scaleTicketLine } from "./scale-house"
@@ -145,6 +146,8 @@ export const priceList = wms.table(
     tenantIndex(t, t.projectId, t.name),
   ],
 )
+
+export const priceListPolicies = policies(priceList, { audited: {} })
 
 export const priceListRow = wms.table(
   "price_list_row",
@@ -211,6 +214,8 @@ export const priceListRow = wms.table(
   ],
 )
 
+export const priceListRowPolicies = policies(priceListRow, { audited: { parent: priceListRow.priceListId } })
+
 export const serviceArea = wms.table(
   "service_area",
   {
@@ -234,6 +239,8 @@ export const serviceArea = wms.table(
   ],
 )
 
+export const serviceAreaPolicies = policies(serviceArea, { audited: {} })
+
 export const serviceAreaPlanningArea = wms.table(
   "service_area_planning_area",
   {
@@ -256,6 +263,8 @@ export const serviceAreaPlanningArea = wms.table(
   ],
 )
 
+export const serviceAreaPlanningAreaPolicies = policies(serviceAreaPlanningArea, { audited: { parent: serviceAreaPlanningArea.serviceAreaId } })
+
 export const serviceAreaWasteFraction = wms.table(
   "service_area_waste_fraction",
   {
@@ -275,6 +284,8 @@ export const serviceAreaWasteFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const serviceAreaWasteFractionPolicies = policies(serviceAreaWasteFraction, { audited: { parent: serviceAreaWasteFraction.serviceAreaId } })
 
 export const serviceAreaAssignment = wms.table(
   "service_area_assignment",
@@ -299,6 +310,8 @@ export const serviceAreaAssignment = wms.table(
     tenantIndex(t, t.serviceProviderId),
   ],
 )
+
+export const serviceAreaAssignmentPolicies = policies(serviceAreaAssignment, { audited: { parent: serviceAreaAssignment.serviceAreaId } })
 
 export const serviceProviderPrice = wms.table(
   "service_provider_price",
@@ -349,6 +362,8 @@ export const serviceProviderPrice = wms.table(
     tenantIndex(t, t.indexedFromId),
   ],
 )
+
+export const serviceProviderPricePolicies = policies(serviceProviderPrice, { audited: { parent: serviceProviderPrice.serviceAreaAssignmentId } })
 
 export const billableEvent = wms.table(
   "billable_event",
@@ -517,6 +532,10 @@ export const billableEvent = wms.table(
   ],
 )
 
+export const billableEventPolicies = policies(billableEvent, {
+  exempt: "the money the work makes: recorded by the worker per pickup and by the billing run per subscription and charge period, its stamps saying who repriced or cancelled it",
+})
+
 export const billingRun = wms.table(
   "billing_run",
   {
@@ -552,6 +571,8 @@ export const billingRun = wms.table(
     tenantIndex(t, t.requestedBy),
   ],
 )
+
+export const billingRunPolicies = policies(billingRun, { exempt: "a run's row is the record of the run, written once" })
 
 export const billingRunExclusion = wms.table(
   "billing_run_exclusion",
@@ -741,6 +762,8 @@ export const settlement = wms.table(
   ],
 )
 
+export const settlementPolicies = policies(settlement, { audited: {} })
+
 export const settlementLine = wms.table(
   "settlement_line",
   {
@@ -770,6 +793,10 @@ export const settlementLine = wms.table(
     tenantIndex(t, t.projectId),
   ],
 )
+
+export const settlementLinePolicies = policies(settlementLine, {
+  exempt: "a settlement's calculation, replaced whole on every calculate; the settlement's ledger says who",
+})
 
 export const settlementEvent = wms.table(
   "settlement_event",
@@ -863,6 +890,8 @@ export const ticketKindProduct = wms.table(
     tenantIndex(t, t.ticketTypeId),
   ],
 )
+
+export const ticketKindProductPolicies = policies(ticketKindProduct, { audited: { parent: ticketKindProduct.projectId } })
 
 /**
  * A payment (#291 C6): money as it arrived, registered by the office or read

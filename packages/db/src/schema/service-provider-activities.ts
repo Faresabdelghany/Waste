@@ -27,6 +27,7 @@ import { oneOf, positive, subsetOf } from "./checks"
 import { id, projectScoped, timestamps } from "./columns"
 import { serviceArea } from "./finance"
 import { company, project, serviceProvider } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { container } from "./containers"
 import { wasteFraction } from "./catalogue"
@@ -114,6 +115,8 @@ export const serviceProviderActivity = wms.table(
   ],
 )
 
+export const serviceProviderActivityPolicies = policies(serviceProviderActivity, { audited: {} })
+
 /**
  * A stop-set change's containers (#474, part 3), in stop order: the list it
  * asks a group that picks its stops to run on, replaced whole by a
@@ -145,6 +148,10 @@ export const serviceProviderActivityContainer = wms.table(
   ],
 )
 
+export const serviceProviderActivityContainerPolicies = policies(serviceProviderActivityContainer, {
+  audited: { parent: serviceProviderActivityContainer.activityId },
+})
+
 /**
  * A waste-fraction change's fractions (#474, part 4): the set a rule group's
  * Stop Matching Rule should collect, replaced whole by a correction, as a
@@ -171,3 +178,7 @@ export const serviceProviderActivityFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const serviceProviderActivityFractionPolicies = policies(serviceProviderActivityFraction, {
+  audited: { parent: serviceProviderActivityFraction.activityId },
+})

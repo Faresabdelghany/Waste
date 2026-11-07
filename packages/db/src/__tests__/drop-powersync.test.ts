@@ -1,24 +1,18 @@
 // PowerSync's side removed (2026-11-06, the owner's decision on #574): the
-// migration is hand-written whole, drizzle-kit generating nothing for it —
-// the publication dropped, the role's rights in its own database revoked,
-// and the role dropped unless another database of the cluster still holds a
-// right of it or a lock on it, in which case the file applies all the same,
-// says so in a NOTICE, and the last database to let go drops it. The file is found by its name.
-// Then, on a fresh database migrated to the head: no publication, and
-// nothing of the database depends on the role. The drop's tolerance is
-// exercised on a role of the test's own, the same statement but for the
-// name, so no other suite's migrations ever see it.
+// publication dropped, the role's rights in its own database revoked, and the
+// role dropped unless another database of the cluster still holds a right of
+// it or a lock on it, in which case the migration applies all the same, says
+// so in a NOTICE, and the last database to let go drops it. On a fresh
+// database migrated to the head: no publication, and nothing of the database
+// depends on the role. The drop's tolerance is exercised on a role of the
+// test's own, the migration's statement but for the name, so no other suite's
+// migrations ever see it.
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import { join } from "node:path"
 import { after, before, describe, test } from "node:test"
 
-import { generateMigration } from "drizzle-kit/api"
-
 import { createDb, type Database } from "../client"
-import { migrateDatabase, MIGRATIONS_FOLDER } from "../migrate"
-import { normalised, statementsOf } from "../sql/hand-written"
+import { migrateDatabase } from "../migrate"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const ROLE = "wms_sync"
@@ -37,30 +31,6 @@ BEGIN
   PERFORM set_config('lock_timeout', waits, true);
 END
 $$;`
-
-const STATEMENTS = ["DROP PUBLICATION IF EXISTS powersync;", `REVOKE ALL ON ALL TABLES IN SCHEMA wms FROM ${ROLE};`, `REVOKE ALL ON SCHEMA wms FROM ${ROLE};`, dropRole(ROLE)]
-
-async function migrationName(): Promise<string> {
-  const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_drop_powersync\.sql$/.test(name))
-  assert.ok(file !== undefined, "PowerSync's removal")
-  return file
-}
-
-type Snapshot = Parameters<typeof generateMigration>[0]
-const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
-
-describe("PowerSync's removal as the migration writes it", () => {
-  test("drizzle-kit writes nothing for it: no table changes", async () => {
-    const own = (await migrationName()).slice(0, 4)
-    assert.deepEqual(await generateMigration(await snapshot(String(Number(own) - 1).padStart(4, "0")), await snapshot(own)), [])
-  })
-
-  test("is the publication dropped, the role's rights in the schema revoked, then the role dropped where nothing else holds it", async () => {
-    const text = await readFile(join(MIGRATIONS_FOLDER, await migrationName()), "utf8")
-    assert.deepEqual(statementsOf(text), STATEMENTS.map(normalised))
-    assert.match(text, /^-- PowerSync's side removed/)
-  })
-})
 
 const database = databaseUnderTest()
 

@@ -3,7 +3,7 @@
 // `0011_worker.sql` the way `0002_organisation_access.sql` carries the access
 // token hook below its tables. Neither is a table's, so the gate in
 // hand-written.ts knows nothing of them, and this module is the one spelling
-// the file is copied from and the rendering test holds it to.
+// the file was copied from.
 //
 // `wms_worker` carries what the worker's sweeps need and nothing else:
 // `BYPASSRLS`, because the one kind of statement in the system that reads
@@ -30,7 +30,7 @@
 // `pgboss.version` is not the one the library expects, so a pg-boss upgrade
 // that moves its schema version is a new migration file carrying
 // `getMigrationPlans(PGBOSS_SCHEMA, <the version 0011 installed>)` through
-// `pgbossStatementsOf`, and the rendering test says so when the two drift.
+// `pgbossStatementsOf`, and `pgboss.test.ts` says so when the two drift.
 // The pin is exact — `"pg-boss": "12.34.0"` in this package and in
 // `apps/worker`, no caret — so a `pnpm update` cannot move the library, and
 // with it the plan and `PGBOSS_SCHEMA_VERSION`, without someone writing the

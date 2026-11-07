@@ -40,6 +40,7 @@ import { id, projectScoped, recorded, timestamps } from "./columns"
 import { container } from "./containers"
 import { property } from "./customers"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -84,6 +85,8 @@ export const fieldInspection = wms.table(
     tenantIndex(t, t.inspectorId),
   ],
 )
+
+export const fieldInspectionPolicies = policies(fieldInspection, { audited: {} })
 
 export const fieldInspectionPhoto = wms.table(
   "field_inspection_photo",
@@ -159,3 +162,5 @@ export const rightSizingProposal = wms.table(
     tenantIndex(t, t.decidedBy),
   ],
 )
+
+export const rightSizingProposalPolicies = policies(rightSizingProposal, { audited: {} })

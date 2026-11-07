@@ -52,7 +52,7 @@ import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-or
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
-import { company } from "../schema/organisation"
+import { company, COMPANY_COUNTERS } from "../schema/organisation"
 import { exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
 
 // The SQLSTATE readers live in ../sqlstate, where the API's problem.ts and
@@ -208,12 +208,12 @@ export async function lockRows(tx: Tx, table: TenantTable, companyId: string, id
     .for("no key update")
 }
 
-/** The counters a company's row carries, one per document series. */
-export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber" | "nextScaleTicketNumber"
+/** A company's document series: one of the counters its row declares (`COMPANY_COUNTERS`), which its audit trail ignores and the reset to the seed puts back. */
+export type Series = keyof typeof COMPANY_COUNTERS
 
 /** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
 export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
-  const column = company[series]
+  const column = COMPANY_COUNTERS[series]
   const [row] = await tx
     .update(company)
     .set({ [series]: sql`${column} + 1` } as Partial<Record<Series, SQL>>)

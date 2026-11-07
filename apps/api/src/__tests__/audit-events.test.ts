@@ -117,9 +117,13 @@ describe("the audit log through the API", { skip: database.skip }, () => {
     assert.equal(refused.status, 403)
     assert.match((await readProblem(refused)).detail ?? "", /view on customers\.contacts/)
     assert.equal((await viewer(`/audit-events?table=role&rowId=${a.roles.viewer.id}`)).status, 200, "the viewer views configure.access")
-    const unknown = await olivia(`/audit-events?table=route&rowId=${customer.id}`)
-    assert.equal(unknown.status, 400)
-    assert.deepEqual((await readProblem(unknown)).errors?.map((error) => error.path), ["table"])
+    // A table the trail does not keep and a table that does not exist are one refusal, the table's declaration being the only list.
+    for (const table of ["route", "no_such_table"]) {
+      const unknown = await olivia(`/audit-events?table=${table}&rowId=${customer.id}`)
+      assert.equal(unknown.status, 400, table)
+      const problem = await readProblem(unknown)
+      assert.deepEqual({ status: problem.status, detail: problem.detail, errors: problem.errors }, { status: 400, detail: "The request query is invalid", errors: [{ path: "table", message: "Not an audited table" }] }, table)
+    }
     const half = await olivia("/audit-events?table=customer")
     assert.equal(half.status, 400)
     assert.deepEqual((await readProblem(half)).errors?.map((error) => error.path), ["rowId"])

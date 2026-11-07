@@ -28,6 +28,7 @@ import { oneOf } from "./checks"
 import { id, projectScoped, timestamps } from "./columns"
 import { vehicle } from "./fleet"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -70,6 +71,8 @@ export const vehicleMaintenancePlan = wms.table(
   ],
 )
 
+export const vehicleMaintenancePlanPolicies = policies(vehicleMaintenancePlan, { audited: { parent: vehicleMaintenancePlan.vehicleId } })
+
 export const maintenanceOrder = wms.table(
   "maintenance_order",
   {
@@ -111,3 +114,5 @@ export const maintenanceOrder = wms.table(
     tenantIndex(t, t.closedBy),
   ],
 )
+
+export const maintenanceOrderPolicies = policies(maintenanceOrder, { audited: { parent: maintenanceOrder.vehicleId } })

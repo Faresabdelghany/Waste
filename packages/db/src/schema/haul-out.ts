@@ -38,6 +38,7 @@ import { id, projectScoped, recorded, timestamps } from "./columns"
 import { vehicle } from "./fleet"
 import { company, project, serviceProvider } from "./organisation"
 import { unloadingStation } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -114,6 +115,8 @@ export const outboundLoad = wms.table(
     tenantIndex(t, t.projectId, t.departedAt),
   ],
 )
+
+export const outboundLoadPolicies = policies(outboundLoad, { audited: {} })
 
 export const materialAdjustment = wms.table(
   "material_adjustment",
