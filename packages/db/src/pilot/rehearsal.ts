@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url"
 import { createDb } from "../client"
 import { compareFingerprints, fingerprintDatabase } from "../fingerprint"
 import { readAppliedMigrations } from "../journal-check"
+import { readSupabaseConfig } from "../local-stack/config"
 import { isLocalHost } from "../local-host"
 import { checkDatabaseJournal, OWNED_SCHEMAS } from "../migrate"
 import { checkRestoreTarget, DROP_OWNED_SCHEMAS, FINGERPRINT_COPY, majorOf, verifyBackup } from "./backup"
@@ -30,13 +31,14 @@ import { databaseIdentity } from "./identity"
 
 const SCRIPTS = fileURLToPath(new URL("../../scripts", import.meta.url))
 
-/** Whether this machine has what the backup and restore scripts need: PostgreSQL client 17 and age. The reason when not. */
+/** Whether this machine has what the backup and restore scripts need: the PostgreSQL client of the server's major (supabase/config.toml) and age. The reason when not. */
 export function rehearsalTools(): string | undefined {
+  const major = readSupabaseConfig().postgresMajor
   const version = spawnSync("pg_dump", ["--version"], { encoding: "utf8" })
-  if (version.status !== 0) return "pg_dump is not on PATH (install PostgreSQL client 17)"
-  if (majorOf(version.stdout.trim()) !== 17) return `pg_dump is ${version.stdout.trim()}, not PostgreSQL client 17`
+  if (version.status !== 0) return `pg_dump is not on PATH (install PostgreSQL client ${major})`
+  if (majorOf(version.stdout.trim()) !== major) return `pg_dump is ${version.stdout.trim()}, not PostgreSQL client ${major}`
   const psql = spawnSync("psql", ["--version"], { encoding: "utf8" })
-  if (psql.status !== 0 || majorOf(psql.stdout.trim()) !== 17) return "psql 17 is not on PATH"
+  if (psql.status !== 0 || majorOf(psql.stdout.trim()) !== major) return `psql ${major} is not on PATH`
   for (const tool of ["age", "age-keygen"]) {
     if (spawnSync(tool, ["--version"], { encoding: "utf8" }).status !== 0) return `${tool} is not on PATH`
   }
@@ -62,7 +64,7 @@ export type Rehearsal = { fingerprint: string; journalRows: number; logins?: str
 export async function rehearseRestore(url: string, { barrier = false, log = () => {} }: RehearsalOptions = {}): Promise<Rehearsal> {
   if (!isLocalHost(url)) throw new Error("the restore rehearsal drops schemas: it runs against the local stack only")
   const missing = rehearsalTools()
-  if (missing !== undefined) throw new Error(`the restore rehearsal needs PostgreSQL client 17 and age: ${missing}`)
+  if (missing !== undefined) throw new Error(`the restore rehearsal needs the PostgreSQL client and age: ${missing}`)
   const work = mkdtempSync(path.join(tmpdir(), "waste-rehearsal-"))
   const owner = createDb(url, { max: 1 })
   try {

@@ -25,11 +25,13 @@
 import type { Sql } from "postgres"
 
 import { textList } from "../query/text-list"
-import { API_ROLE, PLAIN_ROLE, WORKER_ROLE } from "../roles"
+import { DATABASE_ROLES, GRANTED_ROLES, PLAIN_ROLE } from "../roles"
 import { COMMIT_ID, type RunRef } from "./github"
 
-/** The roles the barrier closes: the two the Pilot's processes log in as. */
-export const BARRIER_ROLES = [API_ROLE, WORKER_ROLE] as const
+export const BARRIER_ROLES: readonly string[] = DATABASE_ROLES.filter((role) => role.barrier).map((role) => role.name)
+
+/** The roles that log in wherever the API runs: NOLOGIN on any of them is a barrier an earlier run left closed. */
+const ALWAYS_LOGGING_IN = GRANTED_ROLES.filter((role) => role.login === "always").map((role) => role.name)
 
 /** The operations that close the barrier, and the only ones whose record `recover-logins` accepts. */
 export const BARRIER_OPERATIONS = ["restore", "reset-to-seed"] as const
@@ -76,11 +78,16 @@ export function loginRecord(input: Omit<LoginRecord, "schema">): LoginRecord {
 }
 
 /** What wms_api NOLOGIN means wherever it is found, the check's failure and the record's refusal alike: an earlier run's barrier, never a state of its own. */
-export const BARRIER_CLOSED = "wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first (supabase/README.md)."
+export const BARRIER_CLOSED = `${ALWAYS_LOGGING_IN.join(" or ")} cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first (supabase/README.md).`
+
+/** Whether the logins read say the barrier is open: every role that logs in wherever the API runs can. */
+export function barrierOpen(logins: Record<string, boolean | null>): boolean {
+  return ALWAYS_LOGGING_IN.every((role) => logins[role] === true)
+}
 
 /** Refuses to close a barrier while one is closed: wms_api NOLOGIN is an earlier run's barrier, never a state worth recording. */
 export function requireBarrierOpen(logins: Record<string, boolean>): void {
-  if (logins[API_ROLE] !== true) throw new Error(`${BARRIER_CLOSED} A record taken now would record the closed state and restore nothing.`)
+  if (!barrierOpen(logins)) throw new Error(`${BARRIER_CLOSED} A record taken now would record the closed state and restore nothing.`)
 }
 
 /** Holds a record to the run, the commit and the database it must be of. */

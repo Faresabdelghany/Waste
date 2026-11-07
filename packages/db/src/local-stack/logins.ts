@@ -17,19 +17,19 @@
 // `LOCAL_LOGIN_PASSWORD` or the public local default below. Idempotent: an
 // address Auth already knows is left as it is, password included.
 import { isLocalHost } from "../local-host"
+import { readSupabaseConfig } from "./config"
 
 /**
  * The one password every local Login gets unless `LOCAL_LOGIN_PASSWORD` says
  * otherwise. Public on purpose — it opens a stack on somebody's own machine
- * and nothing else — and longer than the eight characters
- * `minimum_password_length = 8` in supabase/config.toml asks for, locally as
- * on the Pilot (#164).
+ * and nothing else — and longer than `[auth] minimum_password_length` in
+ * supabase/config.toml asks for, locally as on the Pilot (#164).
  * apps/web/e2e-api/env.ts spells the same value as the suite's default.
  */
 export const DEFAULT_LOCAL_LOGIN_PASSWORD = "local-waste-password"
 
-/** The shortest password local Auth accepts: `[auth] minimum_password_length` in supabase/config.toml, eight as on the Pilot (#164). */
-export const MINIMUM_PASSWORD_LENGTH = 8
+/** The shortest password local Auth accepts, as on the Pilot (#164). */
+export const MINIMUM_PASSWORD_LENGTH = readSupabaseConfig().minimumPasswordLength
 
 /**
  * The API e2e suite's tester (apps/web/e2e-api/env.ts spells the same

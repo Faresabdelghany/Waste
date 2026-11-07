@@ -1,5 +1,6 @@
 // The `grant-logins` operation (src/pilot/grant-logins.ts): LOGIN for exactly
-// wms_api and wms_worker, with the passwords the `pilot` environment's
+// the roles the table (src/roles.ts) gives a URL of their own — wms_api and
+// wms_worker — with the passwords the `pilot` environment's
 // PILOT_DATABASE_URL and PILOT_WORKER_DATABASE_URL carry, through the owner's
 // DATABASE_ADMIN_URL. Every URL is held to the Pilot's session pooler
 // (PILOT_DATABASE_HOST), the Supabase project (PILOT_SUPABASE_REF), the database and its
@@ -10,6 +11,7 @@ import { createDb } from "../../src/client"
 import { planPilotLogins } from "../../src/pilot/grant-logins"
 import { expectPilot } from "../../src/pilot/identity"
 import { readLogins, spellLogins } from "../../src/pilot/barrier"
+import { GRANTED_ROLES, OWNER } from "../../src/roles"
 import { required, step, summary } from "../step"
 
 await step(async () => {
@@ -17,12 +19,13 @@ await step(async () => {
   const adminUrl = required("DATABASE_ADMIN_URL")
   const ref = required("PILOT_SUPABASE_REF")
   expectPilot(adminUrl, ref)
-  const plan = planPilotLogins({ adminUrl, apiUrl: required("PILOT_DATABASE_URL"), workerUrl: required("PILOT_WORKER_DATABASE_URL") }, { ref, host: required("PILOT_DATABASE_HOST") })
+  const urls = Object.fromEntries([[OWNER.urls.pilot, adminUrl], ...GRANTED_ROLES.map((role) => [role.urls.pilot, required(role.urls.pilot)])])
+  const plan = planPilotLogins(urls, { ref, host: required("PILOT_DATABASE_HOST") })
   for (const secret of plan.secrets) console.log(`::add-mask::${secret}`)
   for (const login of plan.logins) await grantLogin(adminUrl, login)
   const { sql, close } = createDb(adminUrl, { max: 1 })
   try {
-    summary(`Granted LOGIN with the environment's passwords: ${spellLogins(await readLogins(sql))}`)
+    summary(`Granted LOGIN with the environment's passwords: ${spellLogins(await readLogins(sql, plan.logins.map((login) => login.role)))}`)
   } finally {
     await close()
   }

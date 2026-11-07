@@ -13,7 +13,8 @@
 #                           recorded in the manifest (Actions sets them)
 #
 # What it does, in order, stopping at the first failure:
-#  1. PostgreSQL client 17 (PGDG on the runner) and a server no newer than it;
+#  1. the PostgreSQL client of supabase/config.toml's `[db] major_version`
+#     (PGDG on the runner) and a server no newer than it;
 #  2. one snapshot for every dump: a session exports a snapshot and holds its
 #     read-only transaction open until the dumps are done;
 #  3. six plain-SQL dumps — schema and data of wms, drizzle and pgboss (pgboss
@@ -67,7 +68,7 @@ unset libpq
 # 1. The client, pinned, and the server it dumps.
 client_version="$(pg_dump --version)"
 client_major="$(printf '%s' "$client_version" | sed -E 's/^[^0-9]*([0-9]+).*/\1/')"
-[ "$client_major" = 17 ] || fail "pg_dump is major $client_major ($client_version); the workflow pins PostgreSQL client 17"
+[ "$client_major" = "$PILOT_CLIENT_MAJOR" ] || fail "pg_dump is major $client_major ($client_version); the workflow pins PostgreSQL client $PILOT_CLIENT_MAJOR"
 server_number="$(psql -X -A -t -c 'show server_version_num')" \
   || fail "cannot reach the database${PILOT_PAUSED_HINT:+ ($PILOT_PAUSED_HINT)}"
 server_major=$((server_number / 10000))

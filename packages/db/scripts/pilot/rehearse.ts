@@ -2,7 +2,8 @@
 // rehearsed on the local stack (src/pilot/rehearsal.ts), write barrier
 // included on the real app roles, so it is CI's step before the suites and
 // never something to run while an API or a worker is using the database.
-// Needs PostgreSQL client 17 and age on PATH; refuses any host but this one.
+// Needs the PostgreSQL client of supabase/config.toml's major and age on
+// PATH; refuses any host but this one.
 import { rehearseRestore } from "../../src/pilot/rehearsal"
 import { required, step, summary } from "../step"
 

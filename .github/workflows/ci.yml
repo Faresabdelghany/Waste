@@ -80,7 +80,7 @@ jobs:
       # restored by pilot-restore.sh inside the write barrier, and proved by
       # the journal check and its own fingerprint. The suites below then run
       # against the restored database, which makes every one of them a smoke
-      # test of the restore. Client 17 is required here: its absence fails
+      # test of the restore. The client is required here: its absence fails
       # the rehearsal and, through REQUIRE_DATABASE, pilot-rehearsal.test.ts.
       - uses: ./.github/actions/postgres-client
       - run: pnpm --filter @waste/db rehearse-restore
