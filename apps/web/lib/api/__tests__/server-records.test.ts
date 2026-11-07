@@ -697,12 +697,14 @@ describe("what a module's mapping read", () => {
     assert.deepEqual(readsChanged(new Map([["resources.inventory", ready([])], ["configure.organization", ready([])]]), "resources.inventory"), [], "never read")
   })
 
-  test("a read again is asked for once per change of the store: a failed one is not asked for again until something moves once more", () => {
-    const written: ServerRecordsState = new Map([["configure.organization", ready(parents)], ["resources.inventory", ready([])]])
+  test("a read again is asked for once per move of what it read: a failed one is not asked for again until that moves once more, whatever else does", async () => {
+    const store = await read(new Map([["configure.organization", ready(parents)]]), childrenOf([thing("c1", "Child", "p1")]))
+    const written = new Map(store.getSnapshot()).set("configure.organization", ready([record("p-p1", "Parent renamed"), parents[1]]))
     const asked = readSourcesNow(written, "resources.inventory")
-    assert.equal(sameSources(asked, readSourcesNow(new Map(written), "resources.inventory")), true, "the same change: asked for already")
-    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("configure.organization", ready([parents[0]])), "resources.inventory")), false, "a new one")
-    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("resources.inventory", ready([record("c-c1", "Child")])), "resources.inventory")), true, "its own rows are not its sources")
+    assert.deepEqual([...asked.keys()], ["configure.organization"])
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written), "resources.inventory")), true, "the same move: asked for already")
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("route-studio.live", ready([record("route-1", "RC-1042")])), "resources.inventory")), true, "a module it never read moving")
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("configure.organization", ready([record("p-p1", "Parent renamed again"), parents[1]])), "resources.inventory")), false, "a new move")
     assert.equal(sameSources(undefined, asked), false, "never asked")
   })
 

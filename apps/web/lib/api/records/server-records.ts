@@ -464,16 +464,16 @@ export async function loadModule(client: ApiClient, module: ServerModule, option
   return mapModule(module, await listModule(client, module), options)
 }
 
-const written = new WeakMap<BusinessRecord, string>()
+/** The members of a value that say something, as its JSON would: one holding undefined says nothing. */
+const membersOf = (value: object): string[] => Object.keys(value).filter((key) => (value as Record<string, unknown>)[key] !== undefined)
 
-/** A record as text, once per record: what two mappings of one row are compared by. */
-function textOf(record: BusinessRecord): string {
-  let text = written.get(record)
-  if (text === undefined) {
-    text = JSON.stringify(record)
-    written.set(record, text)
-  }
-  return text
+/** Whether two values a mapping made read the same, as their JSON would, stopping at the first difference: a row's fields, its facts, its lists. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => sameValue(item, b[index]))
+  const keys = membersOf(a)
+  return keys.length === membersOf(b).length && keys.every((key) => sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
 }
 
 /**
@@ -488,7 +488,7 @@ function keptWhereSame(held: readonly BusinessRecord[], read: BusinessRecord[]):
   let unmoved = held.length === read.length
   const rows = read.map((record, index) => {
     const before = byId.get(record.id)
-    const kept = before !== undefined && textOf(before) === textOf(record) ? before : record
+    const kept = before !== undefined && sameValue(before, record) ? before : record
     if (kept !== held[index]) unmoved = false
     return kept
   })
@@ -519,8 +519,6 @@ export function loading(module: ModuleState): ModuleState {
 export function loaded(result: LoadResult, now: number): ModuleState {
   return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now, ...(result.reads === undefined ? {} : { reads: result.reads }) }
 }
-
-const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
 /** Whether a row reads now as it did to the mapping that named it: there still, or not there still, and the same in every field it read. */
 function readTheSame(now: BusinessRecord | undefined, { record, fields }: RowRead): boolean {
@@ -596,12 +594,13 @@ export function readsChanged(state: ServerRecordsState, key: string): string[] {
 }
 
 /**
- * Every other module's rows now: what the store remembers a read again was
- * asked for at, so a read that failed is not asked for again until something
- * moves once more.
+ * The rows now of the modules that have moved under a module's last read
+ * (`readsChanged`): what the store remembers a read again was asked for at,
+ * so a read that failed is not asked for again until one of them moves once
+ * more — a module it never read moving says nothing.
  */
 export function readSourcesNow(state: ServerRecordsState, key: string): ReadonlyMap<string, readonly BusinessRecord[] | null> {
-  return new Map([...state].filter(([source]) => source !== key).map(([source, module]) => [source, readyRowsOf(module)] as const))
+  return new Map(readsChanged(state, key).map((source) => [source, readyRowsOf(state.get(source))] as const))
 }
 
 /** Whether two readings of the sources are the same rows. */

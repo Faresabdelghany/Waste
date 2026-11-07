@@ -90,13 +90,58 @@ describe("a module whose mapping reads the project's day", () => {
     })
   }
 
-  test("reads it through the mapping's clock alone, which notes the read: no adapter reads the day off `now` itself", () => {
-    const records = join(import.meta.dirname, "..", "records")
-    const offTheClock = /\b(dayIn|wallClockIn)\(\(?context\.now/
-    const readers = readdirSync(records).filter((file) => file.endsWith(".ts") && file !== "clock.ts" && offTheClock.test(readFileSync(join(records, file), "utf8")))
-    assert.deepEqual(readers, [])
+  test("reads it through the mapping's clock alone, which notes the read: no adapter, nor a helper beside one, reads the day off the clock itself", () => {
+    assert.deepEqual(daysOffTheClock(), [])
   })
 })
+
+/** The one place each day is read off the clock on purpose: the clock itself, and the engine's clock a load's mapping is handed. */
+const THE_CLOCK = new Set(["api/records/clock.ts", "api/records/server-records.ts"])
+
+/**
+ * Read when listed, never mapped: which default list a product's price is read from is the browser's day's (findings X3), a
+ * read no mapping makes, so no day turn follows it. Named here until the list reads it on the project's clock.
+ */
+const READ_WHEN_LISTED = new Set(["api/records/pricing.ts: dayIn(new Date()"])
+
+/** The functions that make a day, or a time of day, out of an instant. */
+const DAY_OF = /\b(dayIn|dayInTimezone|wallClockIn|projectToday|todayIso)\(/g
+
+/** The text of a call's first argument, from just inside its parenthesis: up to the first comma or the close at its own depth. */
+function firstArgument(source: string, from: number): string {
+  let depth = 0
+  for (let at = from; at < source.length; at += 1) {
+    const character = source[at]
+    if ("([{".includes(character)) depth += 1
+    else if (")]}".includes(character)) {
+      if (depth === 0) return source.slice(from, at).trim()
+      depth -= 1
+    } else if (character === "," && depth === 0) return source.slice(from, at).trim()
+  }
+  return source.slice(from).trim()
+}
+
+/**
+ * Every day made out of the clock outside the clock, in the record layer and the helpers its mappings call (lib/data,
+ * lib/prototype, lib/commercial): a call whose instant is the clock's now — `context.now`, `new Date()`, nothing at all, or a
+ * name bound to either in the same file (`const now = context.now ?? new Date()`).
+ */
+function daysOffTheClock(): string[] {
+  const lib = join(import.meta.dirname, "..", "..")
+  const files = ["api/records", "data", "prototype", "commercial"].flatMap((folder) => readdirSync(join(lib, folder), { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".ts") && !file.includes("__tests__")).map((file) => `${folder}/${file}`))
+  const found: string[] = []
+  for (const file of files.filter((candidate) => !THE_CLOCK.has(candidate))) {
+    const source = readFileSync(join(lib, file), "utf8")
+    const clocks = [...source.matchAll(/\b(?:const|let)\s+(\w+)\s*=\s*(?:context\.now|new Date\(\s*\))/g)].map((bound) => bound[1])
+    for (const call of source.matchAll(DAY_OF)) {
+      const argument = firstArgument(source, (call.index ?? 0) + call[0].length)
+      const offTheClock = argument === "" || /context\.now|new Date\(\s*\)/.test(argument) || clocks.some((name) => new RegExp(`^${name}\\b`).test(argument))
+      const named = `${file}: ${call[1]}(${argument.split("\n")[0]}`
+      if (offTheClock && !READ_WHEN_LISTED.has(named)) found.push(named)
+    }
+  }
+  return found
+}
 
 // Bug: `/me` named a project by its id and name alone, so for a role that does not view the organisation the
 // project's clock was the browser's: every day and time its rows read was the browser's, not the project's.
