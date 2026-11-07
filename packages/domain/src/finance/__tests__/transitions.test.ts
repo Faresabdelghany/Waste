@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { closedSettlement, correctedUnload, notCalculated, periodNotBegun, periodNotEnded, priceEnded, priceEndedBy, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand, type Transition } from "../transitions"
+import { closedSettlement, correctedUnload, notCalculated, periodNotBegun, periodNotEnded, priceEnded, priceEndedBy, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand } from "../transitions"
+import type { Transition } from "../../machine"
 import { SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS, WEIGHT_REVIEW_STATUSES, type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "../vocabulary"
 
 const LABEL = "NordRen · July 2026"

@@ -15,13 +15,6 @@
 // relay stamps a row in `wms` and enqueues its job in `pgboss` in one — is in
 // the backup whole or not at all, while the API and the worker keep running.
 //
-// A schema dump holds no publication membership (pg_dump writes it only with
-// the publication, which a dump of three schemas leaves out), and dropping
-// the schemas drops it: so the manifest records the `powersync`
-// publication's tables as they were, and the restore adds them back inside
-// its one transaction (restorePlan), which the rehearsal holds to the
-// fingerprint.
-//
 // `pgboss` is dumped only where it exists: the Pilot before migration 0011
 // has none, and the adoption release backs it up in that state. Every other
 // owned schema is required, the manifest holds the dumps to the schemas the
@@ -39,7 +32,6 @@ import { textList } from "../query/text-list"
 import { wms } from "../schema/wms"
 import { sha256OfFile } from "../sha256"
 import { PGBOSS_SCHEMA } from "../sql/pgboss"
-import { PUBLICATION } from "../sql/publication"
 import type { RunRef } from "./github"
 import { databaseIdentity } from "./identity"
 
@@ -48,8 +40,6 @@ const OPTIONAL_SCHEMAS: readonly string[] = [PGBOSS_SCHEMA]
 export const MANIFEST_FILE = "manifest.json"
 export const FINGERPRINT_COPY = "fingerprint.txt"
 export const BACKUP_MANIFEST_SCHEMA = "waste.pilot.backup/1"
-/** A published table as the manifest names it: an owned schema and a plain identifier. */
-const PUBLISHED_TABLE = new RegExp(`^(?:${OWNED_SCHEMAS.join("|")})\\.[a-z_][a-z0-9_]*$`)
 /** What a restore runs first, inside its one transaction. */
 export const DROP_OWNED_SCHEMAS = `DROP SCHEMA IF EXISTS ${[...OWNED_SCHEMAS].reverse().join(", ")} CASCADE`
 
@@ -82,8 +72,6 @@ export type BackupManifest = {
   journal: { applied: number; last: string | null; rows: { when: string | null; hash: string }[] }
   files: { name: string; bytes: number; sha256: string }[]
   fingerprint: { file: typeof FINGERPRINT_COPY; sha256: string }
-  /** The publication's tables among the owned schemas, or null where the database has no such publication. */
-  publication: { name: typeof PUBLICATION; tables: string[] } | null
 }
 
 /** The client major a `pg_dump --version` line names: `pg_dump (PostgreSQL) 17.6` is 17. */
@@ -123,7 +111,6 @@ export async function writeManifest(dir: string, { url, run, commit, clientVersi
   let server: BackupManifest["server"]
   let identity: string
   let rows: Awaited<ReturnType<typeof readAppliedMigrations>>
-  let publication: BackupManifest["publication"]
   try {
     const present = await sql<{ name: string }[]>`select nspname as name from pg_namespace where nspname = any(${textList(sql, OWNED_SCHEMAS)})`
     schemas = OWNED_SCHEMAS.filter((schema) => present.some((row) => row.name === schema))
@@ -132,12 +119,6 @@ export async function writeManifest(dir: string, { url, run, commit, clientVersi
     server = { version, major: Math.floor(Number(number) / 10_000) }
     identity = await databaseIdentity(sql, url)
     rows = await readAppliedMigrations(sql)
-    const [published] = await sql<{ tables: string }[]>`
-      select coalesce((select json_agg(n.nspname || '.' || c.relname order by n.nspname, c.relname)
-                       from pg_publication_rel pr join pg_class c on c.oid = pr.prrelid join pg_namespace n on n.oid = c.relnamespace
-                       where pr.prpubid = p.oid and n.nspname = any(${textList(sql, OWNED_SCHEMAS)})), '[]')::text as tables
-      from pg_publication p where p.pubname = ${PUBLICATION}`
-    publication = published === undefined ? null : { name: PUBLICATION, tables: JSON.parse(published.tables) as string[] }
   } finally {
     await close()
   }
@@ -156,7 +137,6 @@ export async function writeManifest(dir: string, { url, run, commit, clientVersi
     journal: { applied: ordered.length, last: ordered.at(-1)?.createdAt ?? null, rows: ordered.map((row) => ({ when: row.createdAt, hash: row.hash })) },
     files: dumpFiles(schemas).map((name) => ({ name, bytes: statSync(path.join(dir, name)).size, sha256: sha256OfFile(path.join(dir, name)) })),
     fingerprint: { file: FINGERPRINT_COPY, sha256: fingerprintDigest(fingerprint) },
-    publication,
   }
   writeFileSync(path.join(dir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`)
   return manifest
@@ -184,9 +164,6 @@ export function verifyBackup(dir: string): BackupManifest {
     const actual = sha256OfFile(path.join(dir, file.name))
     if (actual !== file.sha256) throw new Error(`${file.name} does not match its manifest: sha256 ${actual}, recorded ${file.sha256}`)
   }
-  if (manifest.publication !== null && (manifest.publication?.name !== PUBLICATION || !manifest.publication.tables.every((table) => PUBLISHED_TABLE.test(table)))) {
-    throw new Error(`${MANIFEST_FILE} names a publication or a published table this workflow does not restore`)
-  }
   const fingerprint = path.join(dir, FINGERPRINT_COPY)
   if (!existsSync(fingerprint) || fingerprintDigest(readFileSync(fingerprint, "utf8")) !== manifest.fingerprint.sha256) {
     throw new Error(`${FINGERPRINT_COPY} does not match its manifest`)
@@ -205,21 +182,12 @@ export function checkRestoreTarget(manifest: BackupManifest, { identity, commit,
 
 /**
  * What `pilot-restore.sh apply` hands psql, in order, for one transaction:
- * the owned schemas dropped, every schema dump, the publication's tables
- * added back, every data dump. Built from a verified manifest only.
+ * the owned schemas dropped, every schema dump, every data dump. Built from a
+ * verified manifest only.
  */
 export function restorePlan(manifest: BackupManifest, dir: string): string[] {
   const plan = ["-c", DROP_OWNED_SCHEMAS]
   for (const schema of manifest.schemas) plan.push("-f", path.join(dir, schemaFileOf(schema)))
-  const tables = manifest.publication?.tables ?? []
-  if (tables.length > 0) {
-    const members = tables.map((table) => {
-      if (!PUBLISHED_TABLE.test(table)) throw new Error(`${table} is not a table this workflow restores`)
-      const [schema, name] = table.split(".")
-      return `ONLY "${schema}"."${name}"`
-    })
-    plan.push("-c", `ALTER PUBLICATION ${PUBLICATION} ADD TABLE ${members.join(", ")}`)
-  }
   for (const schema of manifest.schemas) plan.push("-f", path.join(dir, dataFileOf(schema)))
   return plan
 }

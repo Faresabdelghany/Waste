@@ -31,7 +31,7 @@ import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import { chargedDays, chargePeriodsOfRun, priceCharge, RECURRING_UNIT, type ChargePeriod } from "@waste/domain/finance/recurring"
 import type { BlockReason } from "@waste/domain/finance/vocabulary"
 import type { BillingCadence } from "@waste/domain/registry/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm"
 
 import type { Tx } from "../client"

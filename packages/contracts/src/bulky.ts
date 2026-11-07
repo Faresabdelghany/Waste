@@ -13,6 +13,7 @@
 // stop the office's Add stop (`PickupAdd.bulkyBookingId`).
 import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
 import { BULKY_BOOKING_STATUSES } from "@waste/domain/execution/vocabulary"
+import { daysInclusive } from "@waste/domain/days"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
@@ -172,7 +173,6 @@ export type BulkyBookingListQuery = z.infer<typeof BulkyBookingListQuery>
 
 /** What a window wider than an availability read takes is told. */
 export const WINDOW_TOO_WIDE = `Ask for ${BULKY_WINDOW_DAYS_MAX} days at most`
-const spanDays = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1
 
 /** `GET /bulky-bookings/availability`: the place, optionally under the project it is of, and the window of days, both ends included. */
 export const BulkyAvailabilityQuery = z
@@ -185,7 +185,7 @@ export const BulkyAvailabilityQuery = z
   })
   .refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] })
   .refine(dayWindowOrdered, dayWindowIsOrdered)
-  .refine((query) => query.to < query.from || spanDays(query.from, query.to) <= BULKY_WINDOW_DAYS_MAX, { message: WINDOW_TOO_WIDE, path: ["to"] })
+  .refine((query) => query.to < query.from || daysInclusive(query.from, query.to) <= BULKY_WINDOW_DAYS_MAX, { message: WINDOW_TOO_WIDE, path: ["to"] })
 export type BulkyAvailabilityQuery = z.infer<typeof BulkyAvailabilityQuery>
 
 /** One day the place may be booked on, with its slots, and the schedule and area they are counted under. */

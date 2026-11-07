@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react"
 import {
-  ArrowLeft,
   Buildings,
   Funnel,
   Info,
@@ -30,6 +29,7 @@ import {
   type Project,
   type UpdateCompanyInput,
 } from "@/components/settings/organization-store"
+import { RecordPageHeader } from "@/components/page-layout"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -436,9 +436,6 @@ function CompanyList({
 
   return (
     <AssetPanelShell
-      heading="Company & projects"
-      title="Companies"
-      description="Manage company identities, administrators, projects, and tenant-level operational data."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] max-w-md flex-1">
@@ -821,30 +818,13 @@ function CompanyDetails({
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label="Back to Companies"
-              onClick={onBack}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-base font-medium text-foreground">
-                  {company.name}
-                </p>
-                <ProjectStatusBadge status={company.status} />
-              </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {company.legalName}
-              </p>
-            </div>
-          </div>
-        </div>
+        <RecordPageHeader
+          backLabel="Back to Companies"
+          onBack={onBack}
+          name={company.name}
+          badge={<ProjectStatusBadge status={company.status} />}
+          line={company.legalName}
+        />
         <div className="flex flex-col gap-3 px-4 py-3">
           <div className="overflow-x-auto pb-0.5">
             <Tabs value={activeTab} onValueChange={setActiveTab}>

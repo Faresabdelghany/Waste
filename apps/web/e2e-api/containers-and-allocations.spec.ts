@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test"
+import { formatDayMonth } from "@waste/domain/days"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
@@ -135,7 +136,7 @@ test("Vehicle Planning: allocated over a window of its own, confirmed and releas
 
   // The new allocation's details open on the API's answer: its day and its vehicle, its window on the project's clock.
   const details = page.getByRole("dialog").filter({ has: page.getByTestId("allocation-commands") })
-  await expect(details.getByRole("heading", { name: new RegExp(`^${day.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })} · WH-31`) })).toBeVisible()
+  await expect(details.getByRole("heading", { name: new RegExp(`^${formatDayMonth(date)} · WH-31`) })).toBeVisible()
   await expect(details.getByText(`${date} 06:00 – ${date} 14:00`)).toBeVisible()
 
   const [confirmed] = await Promise.all([answerOf(page, "POST", new RegExp(`^/vehicle-allocations/${allocation.id}/confirm$`)), details.getByRole("button", { name: "Confirm", exact: true }).click()])

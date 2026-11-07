@@ -43,7 +43,7 @@ import {
 } from "@waste/domain/route-schemes/estimates"
 import { formatClockTime } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 import type { WizardRecords } from "./use-wizard-records"

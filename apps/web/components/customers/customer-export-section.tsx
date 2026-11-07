@@ -22,13 +22,13 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
 import { customerExportFileName, customerExportOf } from "@/lib/data/customer-export"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { projectToday } from "@/lib/data/route-schemes"
+import { dayIn } from "@/lib/api/records/clock"
 
 export function CustomerExportSection({ record }: { record: BusinessRecord }) {
   const client = useApiClient()
   const { me } = useApiSession()
   const serverId = useServerModuleState(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId)?.serverIds.get(record.id)
-  const today = projectToday(useProjectTimezone(record.projectIds?.[0]))
+  const today = dayIn(new Date(), useProjectTimezone(record.projectIds?.[0]))
   const [exporting, setExporting] = useState(false)
   const [notIncluded, setNotIncluded] = useState<{ section: string; reason: string }[] | null>(null)
 

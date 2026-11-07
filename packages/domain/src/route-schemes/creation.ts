@@ -25,14 +25,8 @@ import {
 } from "./generation"
 import { recordSchemeGeneration } from "./lifecycle"
 import { setPlanAhead } from "./plan-ahead"
-import {
-  addDays,
-  formatServiceDate,
-  isIsoDate,
-  type RecurrenceFrequency,
-  type ServiceDay,
-  type WeekRotation,
-} from "./recurrence"
+import type { RecurrenceFrequency, WeekRotation } from "./recurrence"
+import { addDays, formatShortDay, isIsoDate, type ServiceDay } from "../days"
 import { count } from "../text"
 import { COLLECTION_GROUPS_KEY } from "./groups"
 import { schemeGenerationCalendar } from "./project-calendar"
@@ -209,7 +203,7 @@ export function planSchemeCreation(
   // the run so even a failed generation leaves the scheme armed.
   const armed = setPlanAhead(scheme, true)
   const generationWindow = initialGenerationWindow(today, stringValueOf(scheme, "effectiveFrom"))
-  const windowLabel = `${formatServiceDate(generationWindow.from)} → ${formatServiceDate(generationWindow.to)}`
+  const windowLabel = `${formatShortDay(generationWindow.from)} → ${formatShortDay(generationWindow.to)}`
   const failed = (): SchemeCreationPlan => ({
     scheme: armed,
     routes: [],

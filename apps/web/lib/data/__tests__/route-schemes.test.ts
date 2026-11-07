@@ -13,7 +13,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the guided setup's routes a week, as it says them (#280)", () => {
   test("whole counts as they are, one route in the singular", () => {
@@ -149,12 +149,6 @@ describe("the wizard's validation over the API's containers", () => {
 // midnight.
 describe("the day a group's driver is judged on", () => {
   const lateEvening = new Date("2026-09-30T22:30:00Z") // 00:30 on 1 October in Copenhagen
-
-  test("today is the project's day, in the project's timezone", () => {
-    assert.equal(projectToday("Europe/Copenhagen", lateEvening), "2026-10-01")
-    assert.equal(projectToday("Europe/Copenhagen", new Date("2026-09-30T21:30:00Z")), "2026-09-30")
-    assert.equal(projectToday("America/New_York", lateEvening), "2026-09-30")
-  })
 
   test("the scheme's first day when it is later than today, else today", () => {
     assert.deepEqual(licenceDayOf("2026-10-05", "Europe/Copenhagen", lateEvening), { day: "2026-10-05", meaning: "the scheme starts" })

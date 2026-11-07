@@ -31,7 +31,7 @@ export default async function Page({ searchParams }: PageProps) {
   }
 
   // On the Pilot the home is where `/me` lands the person (Issue #150), which
-  // only the browser can ask; the prototype's home stays the legacy dashboard.
+  // only the browser can ask; without the API it is the office's, Operate.
   if (API_CONFIG !== null) return <SignedInLanding />
-  redirect("/performance")
+  redirect("/operate")
 }

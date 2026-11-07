@@ -55,7 +55,7 @@ import {
 } from "@waste/contracts/scale-house"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/db/commands/days"
+import { dayInTimezone } from "@waste/domain/clock"
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { nextNumber } from "@waste/db/commands/shared"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"

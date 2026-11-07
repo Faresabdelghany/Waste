@@ -37,14 +37,8 @@ import {
   type StopMatchRule,
 } from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
-import {
-  SERVICE_DAYS,
-  isRecurrenceFrequency,
-  parseServiceDays,
-  type RecurrenceFrequency,
-  type ServiceDay,
-  type WeekRotation,
-} from "./recurrence"
+import { isRecurrenceFrequency, parseServiceDays, type RecurrenceFrequency, type WeekRotation } from "./recurrence"
+import { SERVICE_DAYS, type ServiceDay } from "../days"
 import { isSchemeServiceType } from "./scope"
 
 /**

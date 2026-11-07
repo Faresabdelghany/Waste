@@ -21,17 +21,9 @@
 // knows which weekdays a weekend holds. Weekend days only matter as shift
 // targets: a scheme whose service days include Saturday collects on Saturdays.
 
+import { addDays, addMonthsRolling, formatShortDay, type HolidayList, isIsoDate, isoWeek, MONTH_SHORT_LABELS, type ServiceDay, serviceDayOf } from "../days"
 import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../planning/vocabulary"
-import {
-  addDays,
-  isIsoDate,
-  isoWeek,
-  matchesRecurrence,
-  serviceDayOf,
-  SERVICE_DAY_SHORT_LABELS,
-  type SchemeRecurrence,
-  type ServiceDay,
-} from "./recurrence"
+import { matchesRecurrence, type SchemeRecurrence } from "./recurrence"
 import { seasonOn } from "./seasons"
 
 // The list lives in ../planning/vocabulary since Issue #97, where the database
@@ -48,11 +40,6 @@ export const HOLIDAY_POLICY_LABELS: Record<HolidayPolicy, string> = {
 
 export const isHolidayPolicy = (value: unknown): value is HolidayPolicy =>
   typeof value === "string" && (HOLIDAY_POLICIES as readonly string[]).includes(value)
-
-/** ISO date → holiday name. The list generation and the preview judge dates against. */
-export type HolidayList = ReadonlyMap<string, string>
-
-export const NO_HOLIDAYS: HolidayList = new Map()
 
 /**
  * The calendar a scheme's dates are judged against — its project's holiday
@@ -110,24 +97,10 @@ export type OccurrencePreview = {
  */
 export const PREVIEW_HORIZON_MONTHS = 12
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-/** ISO + n months, rolling over like Date#setMonth (31 Jan + 1 → 3 Mar). */
-export function addMonths(iso: string, months: number): string {
-  const [year, month, day] = iso.split("-").map(Number)
-  return new Date(Date.UTC(year, month - 1 + months, day)).toISOString().slice(0, 10)
-}
-
 /** "05 Oct 2026" — the preview table's date cell. */
 export function formatOccurrenceDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number)
-  return `${String(day).padStart(2, "0")} ${MONTHS[month - 1]} ${year}`
-}
-
-/** "Thu 24 Dec" — the shifted-from note. */
-export function formatOccurrenceShortDate(iso: string): string {
-  const [, month, day] = iso.split("-").map(Number)
-  return `${SERVICE_DAY_SHORT_LABELS[serviceDayOf(iso)]} ${day} ${MONTHS[month - 1]}`
+  return `${String(day).padStart(2, "0")} ${MONTH_SHORT_LABELS[month - 1]} ${year}`
 }
 
 /** "06:30" — zero-padded clock time; empty input stays empty. */
@@ -246,7 +219,7 @@ export function occurrencePreview(input: OccurrencePreviewInput, from?: string):
     from !== undefined && isIsoDate(from) && from > recurrence.effectiveFrom
       ? from
       : recurrence.effectiveFrom
-  const to = ongoing ? addMonths(start, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
+  const to = ongoing ? addMonthsRolling(start, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
   if (!isIsoDate(to) || to < start) return EMPTY(ongoing, isIsoDate(to) ? to : null)
 
   const rows = generateOccurrences({ recurrence, window: { from: start, to }, holidayPolicy, calendar })
@@ -260,5 +233,5 @@ export function occurrencePreview(input: OccurrencePreviewInput, from?: string):
 
 /** "from Thu 24 Dec · Christmas Eve" — the badge text for a shifted row. */
 export function shiftedNote(row: Occurrence): string {
-  return `from ${formatOccurrenceShortDate(row.plannedDate)}${row.note ? ` · ${row.note}` : ""}`
+  return `from ${formatShortDay(row.plannedDate)}${row.note ? ` · ${row.note}` : ""}`
 }

@@ -12,9 +12,9 @@
 // columns, constraints, indexes, triggers, row-level security, policies and
 // grants; their functions with security mode, search path and a digest of the
 // whole definition; their types and default ACLs; the two extensions the
-// foundation installs and the schema they live in; the three service roles'
-// attributes, settings and memberships; the `powersync` publication and the
-// tables in it; the one function the migrations put outside those schemas,
+// foundation installs and the schema they live in; the service roles'
+// attributes, settings and memberships; the one function the migrations put
+// outside those schemas,
 // the access token hook; the drizzle journal's rows (so an edited migration
 // changes the fingerprint too); and pg-boss's schema version.
 //
@@ -49,17 +49,16 @@ import type { PendingQuery, Row, Sql } from "postgres"
 import { createDb } from "./client"
 import { MIGRATIONS_FOLDER, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, OWNED_SCHEMAS } from "./migrate"
 import { textList } from "./query/text-list"
-import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
+import { API_ROLE, WORKER_ROLE } from "./roles"
 import { wms } from "./schema/wms"
 import { sha256 } from "./sha256"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
-import { PUBLICATION } from "./sql/publication"
 
 /** The committed fingerprint of a database migrated from this checkout's files. `_`-prefixed: drizzle-kit reads every other file of `meta/` as a snapshot. */
 export const FINGERPRINT_FILE = path.join(MIGRATIONS_FOLDER, "meta", "_fingerprint.txt")
 
 /** The service roles the migrations create. */
-export const FINGERPRINT_ROLES = [API_ROLE, SYNC_ROLE, WORKER_ROLE] as const
+export const FINGERPRINT_ROLES = [API_ROLE, WORKER_ROLE] as const
 /** The extensions the foundation installs into `extensions`. */
 const EXTENSIONS = ["btree_gist", "postgis"] as const
 /** The functions the migrations put outside their own schemas, as `schema.name`. */
@@ -379,28 +378,6 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
     from pg_default_acl d join pg_namespace n on n.oid = d.defaclnamespace
     where n.nspname = any(${schemas}) order by n.nspname, d.defaclobjtype, pg_get_userbyid(d.defaclrole)`) {
     lines.push(`default-acl ${entry.schema} ${OBJECT_TYPES[entry.objects] ?? entry.objects} for=${role(entry.role)} acl=${acl(entry.acl)}`)
-  }
-
-  const [publication] = await sql<{ owner: string; spelled: string }[]>`
-    select pg_get_userbyid(pubowner) as owner,
-           format('all-tables=%s insert=%s update=%s delete=%s truncate=%s via-root=%s', puballtables::text, pubinsert::text, pubupdate::text, pubdelete::text, pubtruncate::text, pubviaroot::text) as spelled
-    from pg_publication where pubname = ${PUBLICATION}`
-  if (publication === undefined) {
-    lines.push(`publication ${PUBLICATION} missing`)
-  } else {
-    lines.push(`publication ${PUBLICATION} owner=${role(publication.owner)} ${publication.spelled}`)
-    for (const table of await sql<{ name: string; columns: string | null; filter: string | null }[]>`
-      select pr.prrelid::regclass::text as name,
-             case when pr.prattrs is not null then (select json_agg(a.attname order by a.attnum)::text from pg_attribute a where a.attrelid = pr.prrelid and a.attnum = any(pr.prattrs::int2[])) end as columns,
-             pg_get_expr(pr.prqual, pr.prrelid) as filter
-      from pg_publication_rel pr join pg_publication p on p.oid = pr.prpubid where p.pubname = ${PUBLICATION} order by 1`) {
-      const named = parse<string[]>(table.columns)
-      lines.push(`publication-table ${PUBLICATION} ${table.name}${named === null ? "" : ` columns=${named.join(",")}`}${table.filter === null ? "" : ` where=${table.filter}`}`)
-    }
-    for (const schema of await sql<{ name: string }[]>`
-      select pn.pnnspid::regnamespace::text as name from pg_publication_namespace pn join pg_publication p on p.oid = pn.pnpubid where p.pubname = ${PUBLICATION} order by 1`) {
-      lines.push(`publication-schema ${PUBLICATION} ${schema.name}`)
-    }
   }
 
   const [{ journal, version }] = await sql<{ journal: boolean; version: boolean }[]>`

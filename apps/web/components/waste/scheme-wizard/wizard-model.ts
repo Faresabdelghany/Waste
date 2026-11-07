@@ -56,13 +56,8 @@ import {
   type SchemeCalendar,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import {
-  recurrenceCadenceLabel,
-  serviceDaysRangeLabel,
-  sortServiceDays,
-  type SchemeRecurrence,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { recurrenceCadenceLabel, serviceDaysRangeLabel, sortServiceDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
+import type { ServiceDay } from "@waste/domain/days"
 import type { SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import type { WizardRecords } from "./use-wizard-records"

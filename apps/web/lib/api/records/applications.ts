@@ -19,7 +19,7 @@ import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./planning"
+import { dayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal, requiredText, tokenOf } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"

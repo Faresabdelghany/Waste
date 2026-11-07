@@ -15,9 +15,10 @@ import { ProjectFooter, ProjectMark } from "@/components/public/project-brand"
 import { PublicNav } from "@/components/public/public-nav"
 import { Badge } from "@/components/ui/badge"
 import { doorFor, readDropOffPoints } from "@/lib/public/door"
-import { dropOffHrefOf, fractionKeyOf, mapPointsOf, openingTextOf, pointAnchorOf, shortDayOf } from "@/lib/public/drop-off-points"
+import { dropOffHrefOf, fractionKeyOf, mapPointsOf, openingTextOf, pointAnchorOf } from "@/lib/public/drop-off-points"
 import { DROP_OFF_COPY as COPY } from "@/lib/public/drop-off-points-copy"
 import type { PublicDropOffPoint } from "@waste/contracts/public"
+import { formatShortDay } from "@waste/domain/days"
 
 type DropOffPageProps = {
   params: Promise<{ slug: string }>
@@ -151,7 +152,7 @@ function PointCard({ point, language }: { point: PublicDropOffPoint; language: s
             {point.week.map((day) => (
               <div key={day.date} className="contents">
                 <dt className="text-muted-foreground">
-                  <time dateTime={day.date}>{shortDayOf(day.date)}</time>
+                  <time dateTime={day.date}>{formatShortDay(day.date)}</time>
                 </dt>
                 <dd>
                   {openingTextOf(day)}

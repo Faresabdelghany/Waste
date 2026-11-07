@@ -14,13 +14,14 @@
 // Offered on the Pilot alone, beside the Ticket teams.
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowDown, ArrowLeft, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowDown, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
 import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import type { TicketCommand } from "@waste/domain/resolution/transitions"
 import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "@waste/domain/resolution/vocabulary"
+import { RecordPageHeader } from "@/components/page-layout"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
 import { Button } from "@/components/ui/button"
@@ -34,7 +35,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
 import { vehicleAdapter } from "@/lib/api/records/fleet"
@@ -74,7 +75,6 @@ const NO_RECORDS: readonly BusinessRecord[] = []
  * `openTypeId` is the type whose own page stands in the list's place, by the API's id, or null for the list; `onOpenType` opens one, or the list with null.
  */
 export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: ReactNode; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
-  const configured = useApiConfigured()
   const session = useApiSession()
   const { me } = session
   const access = ticketTypesAccessOf(me?.role.grants)
@@ -131,9 +131,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
 
-  const emptyMessage = !configured
-    ? "The ticket types are kept on the API: sign in on the Pilot to read and write them."
-    : accessUnknownSentence(session) ?? (types.pending
+  const emptyMessage = accessUnknownSentence(session) ?? (types.pending
       ? "Reading the ticket types from the API…"
       : types.notGranted
         ? "The ticket types are not shown to your role."
@@ -149,7 +147,6 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
 
   return (
     <AssetPanelShell
-      heading="Tickets"
       tabs={tabs}
       title="Ticket types"
       description="The company's own types of case, each inside one kind. A type carries the fields the office fills in and may name the roles that move it from one status to the next."
@@ -158,7 +155,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
         shown={rows.length}
         total={rows.length}
         actions={
-          <Button size="sm" disabled={!configured || !access.create || !types.ready || saving} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!access.create || !types.ready || saving} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" weight="bold" />
             New type
           </Button>
@@ -228,29 +225,12 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   )
 }
 
-/** The header a type's page stands under: the way back to the list, the type's name and what it is, and the page's own buttons. */
-function TicketTypeHeader({ onBack, children, action }: { onBack: () => void; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to ticket types" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">{children}</div>
-      </div>
-      {action}
-    </div>
-  )
-}
-
 /** The page of a type the address names that is not listed: still being read, not shown to the role, or not there. */
 function TicketTypeMissing({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="border-b border-border/40">
-        <TicketTypeHeader onBack={onBack}>
-          <p className="truncate text-base font-medium text-foreground">Ticket type</p>
-        </TicketTypeHeader>
+        <RecordPageHeader backLabel="Back to ticket types" onBack={onBack} name="Ticket type" />
       </header>
       <p className="p-8 text-center text-sm text-muted-foreground">{message}</p>
     </div>
@@ -318,26 +298,27 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex min-w-0 flex-1 flex-col gap-0">
       <header className="flex flex-col border-b border-border/40">
-        <TicketTypeHeader
+        <RecordPageHeader
+          backLabel="Back to ticket types"
           onBack={onBack}
-          action={
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              {refusal !== null && <p className="max-w-xl text-sm text-destructive">{refusal}</p>}
-              {editable && (
-                <Button size="sm" onClick={save} disabled={saving}>
-                  Save type
-                </Button>
-              )}
-            </div>
+          name={record.name}
+          badge={
+            <>
+              <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
+              {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
+            </>
           }
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-base font-medium text-foreground">{record.name}</h1>
-            <StatusBadge tone={record.status === "Active" ? "success" : "warning"}>{record.status}</StatusBadge>
-            {isDefault && <span className="text-xs text-muted-foreground">Default</span>}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.facts.Kind}</p>
-        </TicketTypeHeader>
+          line={record.facts.Kind}
+          actions={
+            editable ? (
+              <Button size="sm" onClick={save} disabled={saving}>
+                Save type
+              </Button>
+            ) : undefined
+          }
+        />
+        {/* What the API refused of the last save, under the header rather than among its buttons. */}
+        {refusal !== null && <p className="border-b border-border px-4 py-2 text-sm text-destructive">{refusal}</p>}
         <div className="overflow-x-auto px-4 py-3">
           <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket type">
             <TabsTrigger value="details" className={tabClass}>

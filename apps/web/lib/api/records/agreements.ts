@@ -76,10 +76,11 @@ import {
   SUBSCRIPTION_RECORD_KIND,
 } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { command, create, listAll, patch, post } from "../client"
 import { inheritedPresentation, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn, firstDayOut, lastDayIn } from "./planning"
+import { dayIn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
 
@@ -382,12 +383,8 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
 /** What a subscription's create carries: the agreement it is posted under, and the body the contract accepts. */
 type SubscriptionWrite = { agreementId: string; body: unknown }
 
-/** The subscription's status as a reading of its period on the project's day: not yet in force, in force, or ended. */
-function periodStatus(subscription: Subscription, day: string): "Pending" | "Active" | "Expired" {
-  if (subscription.validFrom > day) return "Pending"
-  if (subscription.validTo !== null && subscription.validTo <= day) return "Expired"
-  return "Active"
-}
+/** The subscription's status as a reading of its period on the project's day. */
+const SUBSCRIPTION_STATUS: Record<PeriodStanding, "Pending" | "Active" | "Expired"> = { upcoming: "Pending", "in-force": "Active", ended: "Expired" }
 
 export const subscriptionAdapter: ResourceAdapter<Subscription> = {
   prefix: SUBSCRIPTION_PREFIX,
@@ -416,7 +413,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
       id: webIdOf(SUBSCRIPTION_PREFIX, subscription.id),
       name: `${number} · ${product.name}`,
       context: agreement?.context ?? number,
-      status: periodStatus(subscription, day),
+      status: SUBSCRIPTION_STATUS[periodOn(subscription, day)],
       ...inheritedPresentation(undefined),
       ...stampFacts(subscription, context.now),
       value: periodLabel(subscription.validFrom, subscription.validTo),

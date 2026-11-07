@@ -11,25 +11,24 @@
 // The form and the bodies it becomes are lib/data/pickup-exception-rules.ts'.
 // Offered on the Pilot alone.
 
-import { useState, type FormEvent } from "react"
+import type { FormEvent } from "react"
 import { PencilSimple, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
-import { toast } from "sonner"
 
 import type { Product } from "@waste/contracts/catalogue"
 import type { ContaminantCode, PickupExceptionRule } from "@waste/contracts/pickup-exceptions"
-import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { dayIn, lastDayIn } from "@/lib/api/records/planning"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { dayIn } from "@/lib/api/records/clock"
+import { lastDayIn } from "@waste/domain/periods"
 import {
   allowanceSentence,
   ANY,
@@ -59,103 +58,60 @@ type Read = { rules: PickupExceptionRule[]; products: Product[]; codes: Contamin
 type Editing = { rule: PickupExceptionRule | null; form: RuleForm }
 
 export function PickupExceptionChargesSettings() {
-  const client = useApiClient()
   const { me } = useApiSession()
-  const projects = me?.projects ?? []
   const access = ruleAccessOf(me?.role.grants)
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
-  // Bumped by a save, so the rules are read again as the API now holds them.
-  const [version, setVersion] = useState(0)
-
-  const read = useReport<Read>(project === null || !access.view ? null : `exception-charges:${project.id}:${version}`, async (asking) => {
-    const projectId = project?.id ?? ""
-    const [rules, products, codes] = await Promise.all([
-      listAll<PickupExceptionRule>(asking, "/pickup-exception-rules", { projectId }),
-      access.products ? listAll<Product>(asking, "/products", { projectId }) : Promise.resolve([]),
-      access.codes ? listAll<ContaminantCode>(asking, "/contaminant-codes") : Promise.resolve([]),
-    ])
-    return { rules, products, codes }
+  const setting = useProjectSetting<Read, Editing, RuleRefusal>({
+    name: "exception-charges",
+    readable: access.view,
+    read: async (asking, projectId) => {
+      const [rules, products, codes] = await Promise.all([
+        listAll<PickupExceptionRule>(asking, "/pickup-exception-rules", { projectId }),
+        access.products ? listAll<Product>(asking, "/products", { projectId }) : Promise.resolve([]),
+        access.codes ? listAll<ContaminantCode>(asking, "/contaminant-codes") : Promise.resolve([]),
+      ])
+      return { rules, products, codes }
+    },
   })
-  const shown = read.shown
+  const { project, shown, draft: editing, refusal, saving } = setting
   const rules = shown === null ? [] : rulesInOrder(shown.rules)
   const productName = (id: string) => shown?.products.find((candidate) => candidate.id === id)?.name ?? id
   const codeName = (id: string) => shown?.codes.find((candidate) => candidate.id === id)?.name ?? id
 
-  const [editing, setEditing] = useState<Editing | null>(null)
-  const [refusal, setRefusal] = useState<RuleRefusal | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const open = (rule: PickupExceptionRule | null) => {
-    setRefusal(null)
-    setEditing({ rule, form: rule === null ? newRuleForm(dayIn(new Date(), undefined)) : ruleFormOf(rule) })
-  }
-  const change = (values: Partial<RuleForm>) => {
-    if (editing === null) return
-    setEditing({ ...editing, form: withPick(editing.form, values) })
-    setRefusal(null)
-  }
+  const open = (rule: PickupExceptionRule | null) => setting.edit({ rule, form: rule === null ? newRuleForm(dayIn(new Date(), undefined)) : ruleFormOf(rule) })
+  const change = (values: Partial<RuleForm>) => editing !== null && setting.edit({ ...editing, form: withPick(editing.form, values) })
   const changeStep = (index: number, id: string) => editing !== null && change({ ladder: editing.form.ladder.map((step, at) => (at === index ? id : step)) })
 
   const save = (event: FormEvent) => {
     event.preventDefault()
-    if (client === null || project === null || editing === null) return
+    if (project === null || editing === null) return
     const { rule, form } = editing
     const body = rule === null ? ruleCreateBodyOf(project.id, form) : rulePatchBodyOf(rule, form)
-    if (body === null) {
-      setEditing(null)
-      return
-    }
-    if (isRuleRefusal(body)) {
-      setRefusal(body)
-      return
-    }
-    setSaving(true)
-    const writing = rule === null ? create<PickupExceptionRule>(client, "/pickup-exception-rules", body).then((answer) => answer.body) : patch<PickupExceptionRule>(client, `/pickup-exception-rules/${rule.id}`, body)
-    writing
-      .then(
-        (written) => {
-          setEditing(null)
-          setVersion((current) => current + 1)
-          toast.success(rule === null ? "Rule added" : "Rule saved", { description: `${ruleMatchSentence(written, codeName)}: ${ladderSentence(written.ladder, productName)}.` })
-        },
-        (error: unknown) => toast.error(rule === null ? "The rule was not added" : "The rule was not saved", { description: problemSentence(problemOfError(error)) }),
-      )
-      .finally(() => setSaving(false))
+    if (body === null) return setting.discard()
+    if (isRuleRefusal(body)) return setting.refuse(body)
+    setting.save(
+      (client) => (rule === null ? create<PickupExceptionRule>(client, "/pickup-exception-rules", body).then((answer) => answer.body) : patch<PickupExceptionRule>(client, `/pickup-exception-rules/${rule.id}`, body)),
+      {
+        saved: (written) => ({ title: rule === null ? "Rule added" : "Rule saved", description: `${ruleMatchSentence(written, codeName)}: ${ladderSentence(written.ladder, productName)}.` }),
+        failed: rule === null ? "The rule was not added" : "The rule was not saved",
+      },
+    )
   }
 
   const emptyMessage = !access.view
     ? "The exception charges are not shown to your role."
     : project === null
       ? "No project to charge exceptions in."
-      : read.problem !== null
-        ? `The rules could not be read from the API: ${problemSentence(read.problem)}`
+      : setting.problem !== null
+        ? `The rules could not be read from the API: ${problemSentence(setting.problem)}`
         : shown === null
           ? "Reading the rules from the API…"
           : `${project.name} charges no exceptions: a missed or tagged collection costs the customer nothing.`
 
   return (
     <AssetPanelShell
-      heading="Commercial"
-      title="Exception charges"
-      description="What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="exception-charges-project" className="text-sm text-muted-foreground">
-            Project
-          </Label>
-          <Select value={project?.id ?? ""} onValueChange={setChosenProjectId} disabled={projects.length === 0}>
-            <SelectTrigger id="exception-charges-project" className="w-64">
-              <SelectValue placeholder="Pick a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectPicker id="exception-charges-project" setting={setting} />
         </div>
       }
     >
@@ -203,7 +159,7 @@ export function PickupExceptionChargesSettings() {
         </div>
       </RecordsSection>
 
-      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
+      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setting.discard()}>
         {/* An edit says why what the rule matches and its start do not move; an add says nothing. */}
         <DialogContent className="sm:max-w-xl" {...(editing === null || editing.rule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && project !== null && (
@@ -216,7 +172,7 @@ export function PickupExceptionChargesSettings() {
               productName={productName}
               onChange={change}
               onStep={changeStep}
-              onCancel={() => setEditing(null)}
+              onCancel={setting.discard}
               onSubmit={save}
             />
           )}

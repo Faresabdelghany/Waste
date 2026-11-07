@@ -51,6 +51,7 @@ import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
+import { lastDayIn } from "@waste/domain/periods"
 import {
   BILLING_MODULE,
   BILLING_RUN_PREFIX,
@@ -83,7 +84,6 @@ import { command, create, get, getFile, listAll, type ApiFile } from "../client"
 import { inheritedPresentation, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
-import { lastDayIn } from "./planning"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerKindOf } from "./registry"
 import { kilograms } from "./weights"

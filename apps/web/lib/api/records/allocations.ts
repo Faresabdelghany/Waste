@@ -27,6 +27,7 @@
 // then. An allocation names no work: no route and no group, its purpose is
 // its note.
 import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
+import { formatDayMonth } from "@waste/domain/days"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { masterDataKindOf } from "@/lib/data/master-data"
@@ -48,7 +49,7 @@ export const RELEASE_ALLOCATION = "release"
 const ALLOCATION_PREFIX = "allocation"
 
 /** "1 Oct" for a wall-clock time, as the fixtures name an allocation's day. */
-const dayLabel = (wall: string) => new Date(`${wall.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
+const dayLabel = (wall: string) => formatDayMonth(wall.slice(0, 10))
 
 // ---------------------------------------------------------------------------
 // The record, and the bodies it becomes

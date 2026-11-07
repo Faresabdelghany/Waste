@@ -52,9 +52,6 @@ export const TICKET_TYPES_MODULE: ModuleLocation = TICKET_TEAMS_MODULE
 
 export const TICKET_TYPE_PREFIX = "ticket-type"
 
-/** The pane, offered on the Pilot alone: the types are the API's. */
-export const TICKET_TYPES_SETTINGS_PANE_ID = "ticket-types"
-
 /** The record's custom fields, as the wire's list in JSON: what the pane edits and the ticket's forms read. */
 export const TICKET_TYPE_FIELDS_KEY = "fieldsJson"
 

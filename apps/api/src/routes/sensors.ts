@@ -60,10 +60,11 @@ import {
   type SensorStatus,
 } from "@waste/contracts/sensors"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/db/commands/days"
+import { dayInTimezone } from "@waste/domain/clock"
 import { project } from "@waste/db/schema/organisation"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { inForceOn } from "@waste/domain/periods"
 import { Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
@@ -197,9 +198,6 @@ async function timezonesOf(tx: Tx, companyId: string, projectIds: readonly strin
   return new Map(rows.map((row) => [row.id, row.timezone]))
 }
 
-/** Whether a period holds a day: on or after its start and before its first day out. */
-const holds = (period: { validFrom: string; validTo: string | null }, day: string): boolean => period.validFrom <= day && (period.validTo === null || day < period.validTo)
-
 /**
  * The sensors as the wire spells them: the pairing in force today on each
  * one's project's clock, and each one's newest reading, two statements for
@@ -226,7 +224,7 @@ async function sensorsOf(tx: Tx, companyId: string, rows: readonly SensorRow[], 
     .orderBy(fillReading.sensorId, desc(fillReading.measuredAt))
   const newest = new Map(latestReadings.map((row) => [row.sensorId, row]))
   return rows.map((row) => {
-    const inForce = pairings.find((pairing) => pairing.sensorId === row.id && holds(pairing, today(row.projectId)))
+    const inForce = pairings.find((pairing) => pairing.sensorId === row.id && inForceOn(pairing, today(row.projectId)))
     const reading = newest.get(row.id)
     return {
       id: row.id,
@@ -315,7 +313,7 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
       continue
     }
     const day = dayOf(known, reading.measuredAt)
-    const pairing = pairings.find((candidate) => candidate.sensorId === known.id && holds(candidate, day))
+    const pairing = pairings.find((candidate) => candidate.sensorId === known.id && inForceOn(candidate, day))
     const [written] = await tx
       .insert(fillReading)
       .values({

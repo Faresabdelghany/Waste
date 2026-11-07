@@ -22,7 +22,7 @@ import { at, dropFinanceTenant, FIXTURE_DAY, seedFinanceTenant, testId, type Fin
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
-const skip = database.skip ?? owner.skip
+const skip = database.skip || owner.skip
 const NOON = new Date("2026-10-06T12:00:00Z")
 
 describe("a Scale Ticket's charges", { skip }, () => {

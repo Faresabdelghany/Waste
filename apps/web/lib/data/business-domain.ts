@@ -1,3 +1,5 @@
+import type { SettingsPaneId } from "./settings-panes"
+
 export const blueprintModuleIds = [
   "M01",
   "M02",
@@ -26,138 +28,6 @@ export const blueprintModuleIds = [
 ] as const
 
 export type BlueprintModuleId = (typeof blueprintModuleIds)[number]
-
-export type BlueprintModuleDefinition = {
-  id: BlueprintModuleId
-  name: string
-  primaryHref: string
-}
-
-export const blueprintModuleCatalog: Record<
-  BlueprintModuleId,
-  BlueprintModuleDefinition
-> = {
-  M01: {
-    id: "M01",
-    name: "Organization, projects, users, and access",
-    primaryHref: "/settings?pane=company",
-  },
-  M02: {
-    id: "M02",
-    name: "Company, project, and platform configuration",
-    primaryHref: "/settings?pane=operations-setup",
-  },
-  M03: {
-    id: "M03",
-    name: "Customer and property CRM",
-    primaryHref: "/customers?module=properties",
-  },
-  M04: {
-    id: "M04",
-    name: "Shared collection points and shared services",
-    primaryHref: "/customers?module=shared",
-  },
-  M05: {
-    id: "M05",
-    name: "Products, contracts, services, and pricing",
-    primaryHref: "/commercial?module=products",
-  },
-  M06: {
-    id: "M06",
-    name: "Containers, assets, and IoT devices",
-    primaryHref: "/resources?module=containers",
-  },
-  M07: {
-    id: "M07",
-    name: "Inventory and warehouses",
-    primaryHref: "/resources?module=inventory",
-  },
-  M08: {
-    id: "M08",
-    name: "Fleet, drivers, depots, and workforce capacity",
-    primaryHref: "/fleet",
-  },
-  M09: {
-    id: "M09",
-    name: "Collection calendars, route schemes, and operational master data",
-    primaryHref: "/route-studio?module=schemes",
-  },
-  M10: {
-    id: "M10",
-    name: "Route Studio",
-    primaryHref: "/route-studio",
-  },
-  M11: {
-    id: "M11",
-    name: "Routes and daily operations",
-    primaryHref: "/route-studio?module=routes",
-  },
-  M12: {
-    id: "M12",
-    name: "Live Operations",
-    primaryHref: "/route-studio?module=live",
-  },
-  M13: {
-    id: "M13",
-    name: "Tickets, customer service, and case management",
-    primaryHref: "/tickets",
-  },
-  M14: {
-    id: "M14",
-    name: "Autopilot and workflow automation",
-    primaryHref: "/improve?module=autopilot",
-  },
-  M15: {
-    id: "M15",
-    name: "Service providers and haulers",
-    primaryHref: "/service-providers",
-  },
-  M16: {
-    id: "M16",
-    name: "Billable events, invoicing, credits, and legacy billing",
-    primaryHref: "/commercial?module=events",
-  },
-  M17: {
-    id: "M17",
-    name: "Alerts, notifications, messages, and communication",
-    primaryHref: "/tickets?module=exceptions",
-  },
-  M18: {
-    id: "M18",
-    name: "Data, analytics, imports, and exports",
-    primaryHref: "/improve?module=analytics",
-  },
-  M19: {
-    id: "M19",
-    name: "Intelligence and Insights",
-    primaryHref: "/improve?module=intelligence",
-  },
-  M20: {
-    id: "M20",
-    name: "Integrations, registries, and external data exchange",
-    primaryHref: "/settings?pane=integrations",
-  },
-  M21: {
-    id: "M21",
-    name: "Citizen and customer portal",
-    primaryHref: "/portal",
-  },
-  M22: {
-    id: "M22",
-    name: "Driver and Navigation App",
-    primaryHref: "/tickets",
-  },
-  M23: {
-    id: "M23",
-    name: "Documents, audit, history, privacy, and compliance",
-    primaryHref: "/improve?module=compliance",
-  },
-  M24: {
-    id: "M24",
-    name: "Waste control center, sales, subscriptions, and marketplace",
-    primaryHref: "/control-center",
-  },
-}
 
 export type PublicBusinessWorkspaceId =
   | "operate"
@@ -1080,8 +950,8 @@ export type SettingsModuleDomain = {
   key: `configure.${string}`
   workspaceId: "configure"
   moduleId: string
-  /** The SettingsDialog pane that renders the module. */
-  settingsPaneId: string
+  /** The Settings pane that renders the module. */
+  settingsPaneId: SettingsPaneId
   primaryBlueprintModule: BlueprintModuleId
   supportingBlueprintModules: BlueprintModuleId[]
   canonicalOwner: string
@@ -1143,21 +1013,3 @@ export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
       "Settings owns the company's catalogue vocabulary — waste fractions, container types, service frequencies, vehicle types. Products, containers, the fleet and route schemes name its rows and never redefine them.",
   },
 ]
-
-export function getPublicModuleDomain(
-  workspaceId: PublicBusinessWorkspaceId,
-  moduleId: string,
-): PublicModuleDomain | undefined {
-  return publicModuleDomains.find(
-    (assignment) =>
-      assignment.workspaceId === workspaceId && assignment.moduleId === moduleId,
-  )
-}
-
-export function getPublicWorkspaceDomain(
-  workspaceId: PublicBusinessWorkspaceId,
-): PublicWorkspaceDomain | undefined {
-  return publicWorkspaceDomains.find(
-    (assignment) => assignment.workspaceId === workspaceId,
-  )
-}

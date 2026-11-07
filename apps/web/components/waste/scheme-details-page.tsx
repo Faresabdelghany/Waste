@@ -65,7 +65,7 @@ import {
   weekendLabel,
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
-import { holidaySettingsHref } from "@/lib/data/business-links"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
 import { schemeEditPolicy } from "@waste/domain/route-schemes/edit"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
@@ -81,14 +81,8 @@ import {
   withRouteWasteFractions,
   withStopServiceDate,
 } from "@waste/domain/route-schemes/scheme-tabs"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  formatServiceDate,
-  recurrenceFromValues,
-  recurrenceSentence,
-  serviceDaysFromValues,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { stringValue } from "@waste/domain/route-schemes/validation"
 import { recordCountLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
@@ -116,16 +110,16 @@ import {
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChipOverflow } from "@/components/chip-overflow"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
-import { StatRow } from "@/components/projects/StatRow"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
+import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { validationWhenUnplaced } from "@/lib/data/route-schemes"
-import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, useStoreRecords, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import { SchemeSeasonsCard } from "@/components/waste/scheme-seasons"
 import {
@@ -139,7 +133,6 @@ import {
   recordStatusTone,
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
-import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import { readableKey } from "@/lib/data/record-key"
 
 const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
@@ -196,8 +189,8 @@ function effectivePeriodLabel(
   effectiveTo: string | undefined,
 ): string {
   if (!effectiveFrom) return "—"
-  const from = formatServiceDate(effectiveFrom)
-  return effectiveTo ? `${from} → ${formatServiceDate(effectiveTo)}` : `${from} → ongoing`
+  const from = formatShortDay(effectiveFrom)
+  return effectiveTo ? `${from} → ${formatShortDay(effectiveTo)}` : `${from} → ongoing`
 }
 
 export function SchemeDetailsPage({
@@ -231,22 +224,22 @@ export function SchemeDetailsPage({
   const [generateOpen, setGenerateOpen] = useState(false)
   // The lifecycle's dialogs on the Pilot (O21 of #290): the Plan Ahead window, the next version, the archive.
   const [lifecycleDialog, setLifecycleDialog] = useState<"window" | "successor" | "archive" | null>(null)
-  const schemes = useModuleRecords("route-studio", "schemes")
-  const allRoutes = useModuleRecords("route-studio", "routes")
-  const allPickups = useModuleRecords("route-studio", "pickups")
-  const calendarRecords = useModuleRecords(
+  const schemes = useStoreRecords("route-studio", "schemes")
+  const allRoutes = useStoreRecords("route-studio", "routes")
+  const allPickups = useStoreRecords("route-studio", "pickups")
+  const calendarRecords = useStoreRecords(
     COLLECTION_CALENDARS_MODULE.workspaceId,
     COLLECTION_CALENDARS_MODULE.moduleId,
   )
-  const projects = useModuleRecords("configure", "organization")
+  const projects = useStoreRecords("configure", "organization")
   // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178), on the project's clock (#255).
   const schemeProject = projects.find((project) => project.id === stringValueOf(record, "projectId"))
   const generation = useSchemeGenerationRuns(record, schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
-  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
-  const allocations = useModuleRecords("fleet", "vehicle-planning")
-  const containers = useModuleRecords("resources", "containers")
-  const vehicles = useModuleRecords("fleet", "vehicles")
-  const drivers = useModuleRecords("fleet", "drivers")
+  const areas = useStoreRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
+  const allocations = useStoreRecords("fleet", "vehicle-planning")
+  const containers = useStoreRecords("resources", "containers")
+  const vehicles = useStoreRecords("fleet", "vehicles")
+  const drivers = useStoreRecords("fleet", "drivers")
 
   const today = todayIso()
   const values = record.submittedValues ?? {}
@@ -540,7 +533,6 @@ export function SchemeDetailsPage({
             calendar={projectCalendar}
             policy={holidayPolicy}
             today={today}
-            projectId={schemeProjectId(record)}
           />
         </TabsContent>
       </Tabs>
@@ -586,7 +578,7 @@ function SchemeDetailsTab({
   onEdit?: () => void
   onEditGroups?: () => void
 }) {
-  const serviceProviders = useModuleRecords("service-providers", "service-providers")
+  const serviceProviders = useStoreRecords("service-providers", "service-providers")
   const facts = record.facts ?? {}
   const recurrence = recurrenceFromValues(values)
   const serviceDays = serviceDaysFromValues(values)
@@ -1081,7 +1073,7 @@ function SchemeRoutesTab({
                           <TableCell className="min-w-[180px]">
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-foreground">
-                                {operatingDate ? formatServiceDate(operatingDate) : "—"}
+                                {operatingDate ? formatShortDay(operatingDate) : "—"}
                               </p>
                               {deviationNote && (
                                 <p className="max-w-[340px] truncate text-xs text-warning-foreground">
@@ -1254,7 +1246,7 @@ function SchemeStopsTab({
                       <TableCell className="min-w-[200px]">
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-foreground">
-                            {date ? formatServiceDate(date) : "—"}
+                            {date ? formatShortDay(date) : "—"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {pickup.facts.Route ?? "—"}
@@ -1308,17 +1300,14 @@ function SchemeHolidaysTab({
   calendar,
   policy,
   today,
-  projectId,
 }: {
   calendar: ProjectCalendar
   policy: HolidayPolicy
   today: string
-  /** The scheme's project — Settings opens on its holiday list. */
-  projectId: string | undefined
 }) {
   const settingsLink = (
     <Button size="sm" variant="outline" asChild>
-      <Link href={holidaySettingsHref(projectId)}>
+      <Link href={settingsHref("holiday-lists")}>
         <ArrowSquareOut className="h-4 w-4" />
         View in Settings
       </Link>
@@ -1378,7 +1367,7 @@ function SchemeHolidaysTab({
                   variant="outline"
                   className="rounded-full px-2 py-0.5 text-[11px] font-normal"
                 >
-                  {formatServiceDate(date)} · {name}
+                  {formatShortDay(date)} · {name}
                 </Badge>
               ))}
             </div>
@@ -1391,7 +1380,7 @@ function SchemeHolidaysTab({
                   variant="outline"
                   className="rounded-full px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
                 >
-                  {formatServiceDate(date)} · {name}
+                  {formatShortDay(date)} · {name}
                 </Badge>
               ))}
             </div>

@@ -20,18 +20,17 @@
 // is not one is refused by `licenceRefusal` with a thrown error, not judged.
 // The caller that has an instant turns it into a day first: the allocation
 // route (#101, slice 6) takes the window's end, `plannedTo`, renders it as a
-// calendar day in the project's timezone (`Intl.DateTimeFormat` with the
-// project's `timezone`, `en-CA` for `YYYY-MM-DD`), and asks whether the
-// licence holds on that day — the day the reservation ends, where the driver
-// is still meant to be driving. A collection group asks on the day its
-// scheme's period starts or today, whichever is later.
+// calendar day in the project's timezone (`dayInTimezone`, ../clock), and
+// asks whether the licence holds on that day — the day the reservation ends,
+// where the driver is still meant to be driving. A collection group asks on
+// the day its scheme's period starts or today, whichever is later.
 //
 // `licenceRefusal` says why a driver may not, or nothing when they may, and
 // `licenceSentence` spells it for the API's 400 and the adapter's form alike,
 // so an allocation and a collection group refuse in the same words. The
 // class is spelled uppercase in a sentence (`a C licence`), as a person
 // reads it off the card.
-import { isIsoDate } from "../route-schemes/recurrence"
+import { isIsoDate } from "../days"
 import { LICENCE_CLASSES, type LicenceClass } from "./vocabulary"
 
 /** The classes whose holder may drive a vehicle of the key's class: `ce` implies `c`, `c` implies `b`. */

@@ -43,9 +43,6 @@ export const PLANNING_AREAS_MODULE: ModuleLocation = {
   moduleId: areasDomain.moduleId,
 }
 
-/** The SettingsDialog pane that manages the module. */
-export const PLANNING_AREAS_SETTINGS_PANE_ID = areasDomain.settingsPaneId
-
 export type PlanningAreaPurpose =
   | "route-planning"
   | "service-operations"

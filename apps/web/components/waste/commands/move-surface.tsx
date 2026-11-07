@@ -24,7 +24,7 @@ import { useBusinessRecordStore, useServerModuleState } from "@/components/waste
 import { useModuleReady, useProjectRecords, useServerNames } from "@/components/waste/commands/use-command-support"
 import { isLocalRefusal, typed } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { problemSentence } from "@/lib/api/problem"
 import { customerKindOf } from "@/lib/api/records/registry"
 import { problemOfError } from "@/lib/api/records/server-records"

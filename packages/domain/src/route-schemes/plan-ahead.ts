@@ -21,7 +21,8 @@ import {
   type GenerationWindow,
 } from "./generation"
 import { effectiveSchemeStatus, recordGenerationRun } from "./lifecycle"
-import { addDays, recurrenceFromValues } from "./recurrence"
+import { recurrenceFromValues } from "./recurrence"
+import { addDays } from "../days"
 
 /** How far ahead an auto-run covers, from tomorrow: the worker's SQL renders "today" per project and reads the window's end off this. */
 export const PLAN_AHEAD_DAYS = 7

@@ -1,7 +1,8 @@
 // Which build this process is (Issue #152): the commit an image was built
 // from, read once at startup from the file its Dockerfile wrote from the
-// `SOURCE_COMMIT` build argument (apps/api/Dockerfile, beside the OCI
-// `org.opencontainers.image.revision` label). Immutable build metadata, never
+// `SOURCE_COMMIT` build argument or the release's `release.json`
+// (apps/pilot/Dockerfile, beside the OCI `org.opencontainers.image.revision`
+// label). Immutable build metadata, never
 // an environment variable a host could set: the Pilot's release proves a
 // deployment live by reading `build.commit` off GET /healthz. A checkout has
 // no such file and answers null; an image whose file is there and says

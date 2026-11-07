@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import type { SchemeEditApplication, SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
-import { formatServiceDate } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 
 const CHOICES: readonly SchemeEditApplication[] = ["future", "single"]
@@ -81,7 +81,7 @@ function SchemeEditPolicyQuestion({
           {schemeName} is running: {count(question.futureRoutes, "future route")}{" "}
           {question.futureRoutes === 1 ? "is" : "are"} planned and can still follow this edit
           {question.nextCollectionDate
-            ? `; the next collection is ${formatServiceDate(question.nextCollectionDate)}.`
+            ? `; the next collection is ${formatShortDay(question.nextCollectionDate)}.`
             : "."}
         </DialogDescription>
       </DialogHeader>

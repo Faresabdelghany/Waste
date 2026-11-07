@@ -38,6 +38,7 @@ import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { isProductRecord, PRODUCT_PREFIX, UNIT_SUFFIX } from "@/lib/data/commercial"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import {
   ASSIGNMENT_PREFIX,
   INDEXED_PRICE_RECORD_KIND,
@@ -56,7 +57,6 @@ import {
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
-import { firstDayOut, lastDayIn } from "./planning"
 import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"
 import { referenced, refusal } from "./places"

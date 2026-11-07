@@ -14,10 +14,11 @@ import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ArrowRight, Check, X } from "@phosphor-icons/react/dist/ssr"
 
-import { Stepper } from "@/components/project-wizard/Stepper"
+import { Stepper } from "@/components/ui/stepper"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { formatShortDay, isoWeek } from "@waste/domain/days"
 
 /* ----------------------------- fixture data ----------------------------- */
 
@@ -92,13 +93,6 @@ function effectiveDayPlans(draft: SchemeDraft): { day: DayKey; containerIds: str
 
 /* --------------------------- recurrence helpers ------------------------- */
 
-function isoWeek(d: Date): number {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
-  t.setUTCDate(t.getUTCDate() + 3 - ((t.getUTCDay() + 6) % 7))
-  const w1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 4))
-  return 1 + Math.round(((+t - +w1) / 864e5 - 3 + ((w1.getUTCDay() + 6) % 7)) / 7)
-}
-
 function matchesDraft(date: Date, draft: SchemeDraft): boolean {
   const iso = toISODate(date)
   if (draft.effectiveFrom && iso < draft.effectiveFrom) return false
@@ -106,7 +100,7 @@ function matchesDraft(date: Date, draft: SchemeDraft): boolean {
   const dayKey = DAY_KEYS[(date.getDay() + 6) % 7]
   if (!draft.serviceDays.includes(dayKey)) return false
   if (draft.frequency === "every-2-weeks") {
-    const parity = isoWeek(date) % 2 === 1 ? "odd" : "even"
+    const parity = isoWeek(iso) % 2 === 1 ? "odd" : "even"
     if (parity !== draft.weekParity) return false
   }
   // "Once a month" = the first occurrence of each selected weekday in the month.
@@ -125,8 +119,7 @@ function nextServiceDates(draft: SchemeDraft, count: number): Date[] {
   return out
 }
 
-const fmtDate = (d: Date) =>
-  d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+const fmtDate = (d: Date) => formatShortDay(toISODate(d))
 
 function recurrenceSentence(draft: SchemeDraft): string {
   if (draft.serviceDays.length === 0) return "No service days selected"

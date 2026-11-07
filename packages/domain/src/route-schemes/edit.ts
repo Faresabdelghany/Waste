@@ -76,7 +76,8 @@ import { schemeGenerationCalendar } from "./project-calendar"
 import { recordSchemeGeneration, schemeGenerationRecorded, schemeLiveValidation } from "./lifecycle"
 import { generateOccurrences, type SchemeCalendar } from "./occurrences"
 import { schemeHolidayPolicy } from "./holidays"
-import { addDays, formatServiceDate, recurrenceFromValues } from "./recurrence"
+import { recurrenceFromValues } from "./recurrence"
+import { addDays, formatShortDay } from "../days"
 import { count } from "../text"
 import type { SchemeValidationResult } from "./validation"
 
@@ -635,7 +636,7 @@ export function planSchemeEditReconciliation(
       // keeps its configuration and its own generation history — this was
       // not the template's run, so its stamps are not moved.
       const written = result.summary.created + result.summary.refreshed
-      const when = formatServiceDate(window.to)
+      const when = formatShortDay(window.to)
       const parts = [
         written > 0 ? `${count(written, "route")} updated` : null,
         result.summary.cancelled > 0 ? `${count(result.summary.cancelled, "route")} cancelled` : null,

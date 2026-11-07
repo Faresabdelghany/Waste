@@ -2,21 +2,7 @@
 // weights, volumes, and the long dates the quantities range reads in. Month
 // names are hand-rolled like the rest of the prototype so SSR and the
 // browser agree. Pure functions.
-
-const LONG_MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const
+import { MONTH_LABELS, MONTH_SHORT_LABELS } from "@waste/domain/days"
 
 const enUS = (value: number, fractionDigits = 0) =>
   value.toLocaleString("en-US", {
@@ -46,7 +32,7 @@ export function formatVolume(litres: number): string {
 /** "2026-09-16" → "September 16, 2026". */
 export function formatLongDate(iso: string): string {
   const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
-  const monthName = LONG_MONTHS[(month ?? 1) - 1] ?? LONG_MONTHS[0]
+  const monthName = MONTH_LABELS[(month ?? 1) - 1] ?? MONTH_LABELS[0]
   return `${monthName} ${day}, ${year}`
 }
 
@@ -56,12 +42,10 @@ export function formatDateRange(range: { from: string; to: string }): string {
   return `${formatLongDate(range.from)} – ${formatLongDate(range.to)}`
 }
 
-const SHORT_MONTHS = LONG_MONTHS.map((month) => month.slice(0, 3))
-
 /** "2026-09-18" → "18 Sep 2026", the registry's own date shape. */
 export function formatShortDate(iso: string): string {
   const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
-  return `${day} ${SHORT_MONTHS[(month ?? 1) - 1] ?? SHORT_MONTHS[0]} ${year}`
+  return `${day} ${MONTH_SHORT_LABELS[(month ?? 1) - 1] ?? MONTH_SHORT_LABELS[0]} ${year}`
 }
 
 /** "850 m" under a kilometre, "12.4 km" above. */

@@ -44,14 +44,16 @@ import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced, type SchemeOneOff } from "@/lib/data/route-schemes"
+import { dayIn } from "@/lib/api/records/clock"
+import { schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced, type SchemeOneOff } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
   type SchemeEditQuestion,
 } from "@waste/domain/route-schemes/edit"
 import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
-import { formatServiceDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 
 /** What the save writes to the scheme's audit trail besides what the planner decides: the event's id, action and reason, and the evidence line read off the saved scheme. */
@@ -138,7 +140,7 @@ export function useSchemeEditCommit({
           if ((await sendCommand("route-studio", "routes", move.routeId, move.command, move.input)).kind === "refused") break
           done.set(move.routeId, (done.get(move.routeId) ?? 0) + 1)
         }
-        const on = formatServiceDate(oneOff.date)
+        const on = formatShortDay(oneOff.date)
         if (done.size === 0) {
           if (oneOff.scheme !== null) toast.warning(`${scheme.name} saved; its next collection is not moved`, { description: `Its name and policy are saved. No route on ${on} was moved.` })
           return
@@ -186,7 +188,7 @@ export function useSchemeEditCommit({
     ) => {
       if (schemesOnApi) {
         const projectId = typeof before.submittedValues?.projectId === "string" ? before.submittedValues.projectId : undefined
-        const today = projectToday(timezoneOfProject(moduleRecords("configure", "organization"), projectId))
+        const today = dayIn(new Date(), timezoneOfProject(moduleRecords("configure", "organization"), projectId))
         const decided = schemeEditOnApi(before, after, apiRoutes, today, apply)
         if (decided.kind === "ask") {
           setPendingSchemeEdit({ before, after, audit, onSaved, question: decided.question })

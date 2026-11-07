@@ -10,8 +10,9 @@
 // the agreement and the fraction stay — cancel it and book again. The words
 // are lib/data/bulky.ts'; the routes apps/api/src/routes/bulky-bookings.ts.
 import type { BulkyAvailability, BulkyAvailableDay, BulkyBooking, BulkyBookingCreate, BulkyBookingPatch, BulkyItem } from "@waste/contracts/bulky"
+import { formatShortDay } from "@waste/domain/days"
 
-import { BULKY_BOOKINGS_MODULE, BULKY_DAY_KEY, BULKY_ITEMS_KEY, BULKY_SERVER_ID_KEY, BULKY_STATUS_KEY, BULKY_STATUS_LABELS, itemsSentence, shortDay } from "@/lib/data/bulky"
+import { BULKY_BOOKINGS_MODULE, BULKY_DAY_KEY, BULKY_ITEMS_KEY, BULKY_SERVER_ID_KEY, BULKY_STATUS_KEY, BULKY_STATUS_LABELS, itemsSentence } from "@/lib/data/bulky"
 import { AGREEMENT_PREFIX, isAgreementRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
@@ -65,7 +66,7 @@ export function toBulkyBookingRecord(booking: BulkyBooking, context: MappingCont
   const reference = (prefix: string, serverId: string | null) => (serverId === null ? "" : webIdVia(context, prefix, serverId))
   return {
     id: webIdOf(BULKY_BOOKING_PREFIX, booking.id),
-    name: `Bulky collection · ${place} · ${shortDay(booking.day)}`,
+    name: `Bulky collection · ${place} · ${formatShortDay(booking.day)}`,
     context: `${customer} · ${place}`,
     status: BULKY_STATUS_LABELS[booking.status],
     ...inheritedPresentation(undefined),

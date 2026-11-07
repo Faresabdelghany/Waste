@@ -13,7 +13,7 @@
 // transient — the network, the provider's own 5xx, a response it could not
 // read — and is pg-boss's to retry. The quota engine (quota.ts) sits above
 // this and decides what each answer means for the job.
-import type { LineString, Position2D } from "@waste/contracts/geojson"
+import type { LineString, Position2D } from "@waste/domain/geo"
 import type { Reload } from "@waste/domain/routing/reloads"
 import type { RoutingQuotaFamily } from "@waste/domain/routing/vocabulary"
 

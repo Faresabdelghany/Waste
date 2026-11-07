@@ -23,6 +23,7 @@ import { project } from "@waste/db/schema/organisation"
 import type { PickupReason, PickupService, PickupStatus, ProofKind } from "@waste/domain/execution/vocabulary"
 import { replyFromRecord, stopEvidenceOf, answeredByRecord, type Coordinates } from "@waste/domain/resolution/evidence"
 import type { TicketKind, TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { timeInTimezone } from "@waste/domain/clock"
 import { and, eq } from "drizzle-orm"
 
 import { emit } from "../outbox"
@@ -33,7 +34,7 @@ import { appendTicketEvent, type TicketRef } from "./ticket-writes"
 /** An instant as the reply quotes it, on the project's clock: `07:42 on Saturday 24 October`. */
 export function whenOn(instant: string, timezone: string): string {
   const at = new Date(instant)
-  const time = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at)
+  const time = timeInTimezone(at, timezone)
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "long", day: "numeric", month: "long" }).format(at)
   return `${time} on ${day}`
 }

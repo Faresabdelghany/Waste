@@ -44,10 +44,9 @@
 // request is a refusal, final, since asking again would pay for the same
 // answer. A body the answer does not read is let go, so the pooled
 // connection is free for the next call.
-import type { Position2D } from "@waste/contracts/geojson"
+import { type Position2D, samePosition } from "@waste/domain/geo"
 import { UNLOAD_SECONDS } from "@waste/domain/routing/reloads"
 
-import { samePosition } from "./geodesy"
 import { decodePolyline } from "./polyline"
 import type { MeasureRequest, MeasureResult, OptimiseRequest, OptimiseResult, Provenance, ProviderAnswer, QuotaReading, RoutingProvider } from "./provider"
 import { legsBetween, waypointIndices, type Waypoint } from "./split"

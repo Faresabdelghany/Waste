@@ -10,8 +10,7 @@
 // dialog with the module's own schema; the record shape is owned by
 // lib/data/collection-calendars.ts.
 
-import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useMemo, useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -24,6 +23,8 @@ import {
   sortByView,
   type AssetView,
 } from "@/components/settings/asset-management-settings"
+import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -71,10 +72,9 @@ const ACTOR_NAME = "Olivia Larsen"
 
 const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })
 
-export function CollectionCalendarsSettings() {
+export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
-  const searchParams = useSearchParams()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [projects, setProjects] = useState<string[]>([])
@@ -130,18 +130,7 @@ export function CollectionCalendarsSettings() {
     [schema],
   )
 
-  // A deep link (/settings?pane=collection-calendars&record=…) opens that
-  // calendar for editing — once the store has loaded and, on the Pilot, once
-  // the module's rows are here, so a user-created calendar and an API
-  // calendar are found too. Later edits keep their own state, so the records
-  // list is deliberately not a dependency.
-  const requestedRecordId = searchParams.get("record")
-  useEffect(() => {
-    if (!hydrated || !calendars.ready || !requestedRecordId) return
-    const record = calendarRecords.find((candidate) => candidate.id === requestedRecordId)
-    if (record) setEditingCalendar(record)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, calendars.ready, requestedRecordId])
+  useLinkedRecord(params.record, calendarRecords, hydrated && calendars.ready, setEditingCalendar)
 
   const projectLabel = (record: BusinessRecord): string => {
     const ids = record.projectIds ?? []
@@ -224,9 +213,6 @@ export function CollectionCalendarsSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Collection calendars"
-      description={calendarsModule.description}
       toolbar={
         <AssetToolbar
           searchPlaceholder="Search collection calendars"

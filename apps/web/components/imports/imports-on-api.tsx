@@ -28,7 +28,7 @@ import type { ImportKind, ImportRowResult, ImportRun } from "@waste/contracts/im
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
 import type { ImportRow } from "@waste/domain/imports/csv"
 
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -44,7 +44,8 @@ import { importTemplate, previewImport, sendImportBatch, startImportRun } from "
 import { ApiProblem, genericProblem, problemSentence, type Problem } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { REASON_MAX } from "@/lib/data/action-decision"
-import { getBusinessModuleHref, masterDataSettingsHref } from "@/lib/data/business-links"
+import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
 import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, templateSeparatorFor, textOf, type FileReading } from "@/lib/imports/import-file"
 
@@ -411,11 +412,11 @@ function recordsHref(kind: ImportKind): string {
     case "agreements":
       return "/customers?module=agreements"
     case "waste-fractions":
-      return masterDataSettingsHref("waste-fraction")
+      return settingsHref("master-data", { kind: "waste-fraction" })
     case "container-types":
-      return masterDataSettingsHref("container-type")
+      return settingsHref("master-data", { kind: "container-type" })
     case "vehicle-types":
-      return masterDataSettingsHref("vehicle-type")
+      return settingsHref("master-data", { kind: "vehicle-type" })
     case "vehicles":
       return getBusinessModuleHref("fleet", "vehicles")
     case "drivers":

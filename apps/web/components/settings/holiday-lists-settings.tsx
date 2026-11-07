@@ -32,8 +32,7 @@ import {
 import { toast } from "sonner"
 
 import { ChipOverflow } from "@/components/chip-overflow"
-import { PageActions, TableCard } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { RecordPageHeader, TableCard } from "@/components/page-layout"
 import { AssetPanelShell } from "@/components/settings/asset-management-settings"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -104,7 +103,8 @@ import { holidayListCountry, holidayListEntries, holidayListName, holidayListYea
 import { knownHolidaysOfYear, type HolidayEntry } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/route-schemes/holiday-names"
 import { projectHolidayListName, projectWeekend } from "@waste/domain/route-schemes/project-calendar"
-import { formatServiceDate, isIsoDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
@@ -361,7 +361,6 @@ function HolidayListsIndex({
 
   return (
     <AssetPanelShell
-      heading={null}
       toolbar={
         <div className="flex flex-col gap-2">
           <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
@@ -672,7 +671,7 @@ function HolidayListPage({
   const yearOptions = [...new Set([...years, thisYear])].sort((a, b) => b - a)
   const ofYear = year === ALL_YEARS ? entries : entries.filter((entry) => entry.date.startsWith(`${year}-`))
   const needle = query.trim().toLowerCase()
-  const shown = needle === "" ? ofYear : ofYear.filter((entry) => [entry.date, formatServiceDate(entry.date), shownHolidayName(entry, country)].join(" ").toLowerCase().includes(needle))
+  const shown = needle === "" ? ofYear : ofYear.filter((entry) => [entry.date, formatShortDay(entry.date), shownHolidayName(entry, country)].join(" ").toLowerCase().includes(needle))
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(shown)
   const copied = year === ALL_YEARS ? [] : nextYearEntries(record, Number(year))
   const suggested = (date: string) => (isIsoDate(date) ? holidayNamesForCountry(country)(date) : undefined)
@@ -693,7 +692,7 @@ function HolidayListPage({
     if (problem) return setIssue(problem)
     onSaveEntries(
       entries.map((entry) => (entry.date === editingDate ? editDraft : entry)),
-      `${formatServiceDate(editDraft.date)} updated`,
+      `${formatShortDay(editDraft.date)} updated`,
     )
     cancelEdit()
   }
@@ -701,7 +700,7 @@ function HolidayListPage({
     const problem = holidayListEntryIssue(entries, addDraft.date)
     if (problem) return setIssue(problem)
     const entry = { date: addDraft.date, name: addDraft.name.trim() || suggested(addDraft.date) || "" }
-    onSaveEntries([...entries, entry], `${entry.name || "Holiday"} added on ${formatServiceDate(entry.date)}`)
+    onSaveEntries([...entries, entry], `${entry.name || "Holiday"} added on ${formatShortDay(entry.date)}`)
     setAddDraft(EMPTY_ENTRY)
     setIssue(null)
     // Show the year the holiday went into.
@@ -729,64 +728,59 @@ function HolidayListPage({
 
   return (
     <AssetPanelShell
-      heading={null}
+      header={
+        <RecordPageHeader
+          backLabel="Back to holiday lists"
+          onBack={onBack}
+          name={name}
+          badge={<HolidayListStatusBadge status={status} />}
+          line={[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  Actions
+                  <CaretDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuItem onSelect={onEdit}>
+                  <PencilSimple className="h-4 w-4" />
+                  Edit list
+                </DropdownMenuItem>
+                {year !== ALL_YEARS && (
+                  <DropdownMenuItem onSelect={copyToNextYear} disabled={copied.length === 0}>
+                    <CopySimple className="h-4 w-4" />
+                    Copy {year} to {Number(year) + 1}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {/* A list a project rests on is not removed: the project moves first. */}
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onRemove} disabled={projects.length > 0}>
+                  <Trash className="h-4 w-4" />
+                  Remove list
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+        />
+      }
       toolbar={
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Breadcrumbs items={[{ label: "Holiday lists", onClick: onBack }, { label: name }]} />
-                <HolidayListStatusBadge status={status} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {[country ? countryName(country) : "No country", count(entries.length, "holiday"), projects.length === 0 ? "No project rests on it" : `Used by ${projects.map((project) => project.name).join(", ")}`].join(" · ")}
-              </p>
-            </div>
-            <PageActions>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    Actions
-                    <CaretDown className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52">
-                  <DropdownMenuItem onSelect={onEdit}>
-                    <PencilSimple className="h-4 w-4" />
-                    Edit list
-                  </DropdownMenuItem>
-                  {year !== ALL_YEARS && (
-                    <DropdownMenuItem onSelect={copyToNextYear} disabled={copied.length === 0}>
-                      <CopySimple className="h-4 w-4" />
-                      Copy {year} to {Number(year) + 1}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  {/* A list a project rests on is not removed: the project moves first. */}
-                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onRemove} disabled={projects.length > 0}>
-                    <Trash className="h-4 w-4" />
-                    Remove list
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </PageActions>
-          </div>
-          <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-            <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holidays" />
-            <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="h-8 w-36 rounded-lg border-border/60 text-sm" aria-label="Year">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_YEARS}>All years</SelectItem>
-                {yearOptions.map((option) => (
-                  <SelectItem key={option} value={String(option)}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
+          <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holidays" />
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="h-8 w-36 rounded-lg border-border/60 text-sm" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_YEARS}>All years</SelectItem>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       }
     >
@@ -852,7 +846,7 @@ function HolidayListPage({
                       <TableCell>
                         <Input type="date" value={editDraft.date} aria-label="Holiday date" onChange={(event) => setEditDraft({ ...editDraft, date: event.target.value })} className="h-8" />
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{isIsoDate(editDraft.date) ? formatServiceDate(editDraft.date).slice(0, 3) : "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{isIsoDate(editDraft.date) ? formatShortDay(editDraft.date).slice(0, 3) : "—"}</TableCell>
                       <TableCell>
                         <Input
                           value={editDraft.name}
@@ -881,7 +875,7 @@ function HolidayListPage({
                   ) : (
                     <TableRow key={entry.date} data-testid="holiday-row">
                       <TableCell className="text-sm font-medium tabular-nums text-foreground">{entry.date}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatServiceDate(entry.date)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatShortDay(entry.date)}</TableCell>
                       <TableCell className="text-sm">{entry.name ? entry.name : <span className="text-muted-foreground">{shownHolidayName(entry, country)}</span>}</TableCell>
                       <TableCell className="whitespace-nowrap pr-3 text-right">
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => startEdit(entry)} aria-label={`Edit ${entry.date}`}>

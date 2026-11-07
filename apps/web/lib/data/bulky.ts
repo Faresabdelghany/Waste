@@ -13,20 +13,18 @@ import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
-import { addDays, OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, serviceDayOf } from "@waste/domain/route-schemes/recurrence"
+import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAYS } from "@waste/domain/days"
+import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 
 import { allows, type Grants } from "../api/grants"
-import { firstDayOut, lastDayIn } from "../api/records/planning"
 import { itemsSentence } from "./pickup-services"
 
 /** Where the bookings are: Operate › Bulky Bookings. */
 export const BULKY_BOOKINGS_MODULE = { workspaceId: "operate", moduleId: "bulky-bookings" } as const satisfies ModuleLocation
-
-/** Settings › Operations › Bulky schedules. */
-export const BULKY_SCHEDULES_SETTINGS_PANE_ID = "operations-bulky-schedules"
 
 /** The record's keys the surfaces read beside the facts. */
 export const BULKY_SERVER_ID_KEY = "bulkyServerId"
@@ -70,17 +68,9 @@ export function itemsOf(rows: readonly ItemRow[]): { description: string; quanti
 
 export { itemsSentence }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-/** "Tue 9 Mar": a day as a picker shows it. */
-export function shortDay(day: string): string {
-  const [, month, date] = day.split("-").map(Number)
-  return `${SERVICE_DAY_SHORT_LABELS[serviceDayOf(day)]} ${date} ${MONTHS[month - 1]}`
-}
-
 /** A day the place may be booked on, as the dialog offers it: its slots left, a full one said so and not offered. */
 export function dayOption(day: BulkyAvailableDay): { value: string; label: string; disabled: boolean } {
-  return { value: day.day, label: `${shortDay(day.day)} · ${day.left === 0 ? "full" : `${day.left} of ${day.slots} left`}`, disabled: day.left === 0 }
+  return { value: day.day, label: `${formatShortDay(day.day)} · ${day.left === 0 ? "full" : `${day.left} of ${day.slots} left`}`, disabled: day.left === 0 }
 }
 
 /** The window an availability read asks for: from the project's today, as far ahead as the API answers in one read, so a monthly schedule's next day is in it. */
@@ -103,7 +93,7 @@ export type BookingDraft = {
 export function bookingRecordOf(draft: BookingDraft, placeName: string, now: number): BusinessRecord {
   return mintedRecord({
     id: `bulky-bookings-bulky-booking-${now}`,
-    name: `Bulky collection · ${placeName} · ${shortDay(draft.day)}`,
+    name: `Bulky collection · ${placeName} · ${formatShortDay(draft.day)}`,
     status: BULKY_STATUS_LABELS.booked,
     recordKind: "Bulky booking",
     values: {

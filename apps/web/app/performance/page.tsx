@@ -2,11 +2,11 @@
 
 import dynamic from "next/dynamic"
 
-const PerformancePage = dynamic(
-  () => import("@/components/performance-page").then((module) => module.PerformancePage),
+const DashboardPage = dynamic(
+  () => import("@/components/insight/dashboard-page").then((module) => module.DashboardPage),
   { ssr: false },
 )
 
 export default function Page() {
-  return <PerformancePage />
+  return <DashboardPage />
 }

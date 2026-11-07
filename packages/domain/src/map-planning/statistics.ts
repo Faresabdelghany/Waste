@@ -11,7 +11,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
-import { addDays, isIsoDate } from "../route-schemes/recurrence"
+import { addDays, isIsoDate } from "../days"
 import { containerFractions, rankFractions } from "./points"
 import { containerPropertyKey } from "./positions"
 import { nextCollectionDate, parseDisplayDate } from "./schedule"

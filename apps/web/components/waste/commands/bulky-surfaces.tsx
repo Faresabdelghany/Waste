@@ -26,7 +26,7 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/co
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers } from "@/components/waste/commands/use-command-support"
 import { problemSentence } from "@/lib/api/problem"
 import { bulkyAvailability, CANCEL_BOOKING, ROUTE_BOOKING } from "@/lib/api/records/bulky-bookings"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord } from "@/lib/data/agreements"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { ClipboardText, Drop } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 import type { TankInspection, TankInstallation } from "@waste/contracts/tanks"
+import { periodOn } from "@waste/domain/periods"
 import { TANK_INSPECTION_OUTCOMES, TANK_KINDS, TANK_OUTLETS } from "@waste/domain/registry/vocabulary"
 
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,7 @@ import { useProjectRecords, useRowHistory, useServerNames } from "@/components/w
 import { problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, typed } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { problemOfError } from "@/lib/api/records/server-records"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import {
@@ -109,7 +110,7 @@ function TankItem({ tank, today, containerName, editable }: { tank: TankInstalla
   const [version, setVersion] = useState(0)
   const [inspecting, setInspecting] = useState(false)
   const inspections = useInspections(tank.id, version)
-  const ended = tank.validTo !== null && tank.validTo <= today
+  const ended = periodOn(tank, today) === "ended"
 
   return (
     <li className="space-y-1 rounded-md border border-border px-3 py-2 text-sm" data-testid="tank">

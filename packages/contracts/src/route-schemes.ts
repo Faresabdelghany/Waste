@@ -68,6 +68,7 @@
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { MONTH_DAY_SOURCE, overlappingSeasons, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
+import { daysBetween } from "@waste/domain/days"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
@@ -563,10 +564,6 @@ export const OCCURRENCE_WINDOW_MAX_DAYS = 366
 
 export const WINDOW_ORDERED = "to is the last day of the window, so it comes on or after from"
 export const WINDOW_AT_MOST_A_YEAR = `A window spans at most ${OCCURRENCE_WINDOW_MAX_DAYS} days`
-
-const DAY_MS = 86_400_000
-/** The days from one calendar day to another; both are `YYYY-MM-DD`, so the UTC midnight of each is exact. */
-const daysBetween = (from: string, to: string): number => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS
 
 /** A window of calendar days, both ends inclusive: the occurrence read's, and the generation command's (generation.ts), which holds it to the same two rules. */
 type DayWindow = { from: string; to: string }

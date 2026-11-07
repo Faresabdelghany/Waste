@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { planLocalBootstrap, planSyncBootstrap, planWorkerBootstrap } from "../bootstrap"
-import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "../roles"
+import { planLocalBootstrap, planWorkerBootstrap } from "../bootstrap"
+import { API_ROLE, WORKER_ROLE } from "../roles"
 
 const adminUrl = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
@@ -35,23 +35,8 @@ describe("planLocalBootstrap", () => {
   })
 })
 
-describe("planSyncBootstrap", () => {
-  test("takes the sync role's password from SYNC_DATABASE_URL, the same rules under the other name (Issue #104)", () => {
-    assert.deepEqual(planSyncBootstrap({ adminUrl, syncUrl: `postgresql://${SYNC_ROLE}:s%40ync@127.0.0.1:54322/postgres` }), { adminUrl, role: SYNC_ROLE, password: "s@ync" })
-  })
-
-  test("refuses a hosted admin URL, a SYNC_DATABASE_URL logging in as anyone else, and an empty password, naming the variable", () => {
-    assert.throws(
-      () => planSyncBootstrap({ adminUrl: "postgresql://postgres.ref:pw@aws-0-eu-north-1.pooler.supabase.com:5432/postgres", syncUrl: `postgresql://${SYNC_ROLE}:pw@127.0.0.1:54322/postgres` }),
-      /local stack.*ALTER ROLE wms_sync WITH LOGIN PASSWORD/,
-    )
-    assert.throws(() => planSyncBootstrap({ adminUrl, syncUrl: `postgresql://${API_ROLE}:pw@127.0.0.1:54322/postgres` }), /SYNC_DATABASE_URL logs in as "wms_api", not "wms_sync"/)
-    assert.throws(() => planSyncBootstrap({ adminUrl, syncUrl: `postgresql://${SYNC_ROLE}@127.0.0.1:54322/postgres` }), /SYNC_DATABASE_URL carries no password for the wms_sync role/)
-  })
-})
-
 describe("planWorkerBootstrap", () => {
-  test("takes the worker role's password from WORKER_DATABASE_URL, the same rules under the third name (Issue #97 part B)", () => {
+  test("takes the worker role's password from WORKER_DATABASE_URL, the same rules under the other name (Issue #97 part B)", () => {
     assert.deepEqual(planWorkerBootstrap({ adminUrl, workerUrl: `postgresql://${WORKER_ROLE}:w%40rker@127.0.0.1:54322/postgres` }), { adminUrl, role: WORKER_ROLE, password: "w@rker" })
   })
 

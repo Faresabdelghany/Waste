@@ -12,13 +12,11 @@
 // customer-notices-section.tsx): which template each notice of a bulky
 // collection is sent from.
 
-import { useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
-import { toast } from "sonner"
 
 import type { MessageTemplate } from "@waste/contracts/messaging"
-import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { CustomerNoticesSection } from "@/components/settings/customer-notices-section"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,15 +26,13 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
 import {
   CHANNEL_LABELS,
   isTemplateRefusal,
   NEW_TEMPLATE,
-  PLACEHOLDERS,
   PURPOSE_LABELS,
   templateCreateBody,
   templateDraftOf,
@@ -48,90 +44,46 @@ import {
 } from "@/lib/data/message-templates"
 
 export function MessageTemplatesSettings() {
-  const client = useApiClient()
   const { me } = useApiSession()
-  const projects = me?.projects ?? []
   const access = templatesAccessOf(me?.role.grants)
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
-  // Bumped after each save, so the list is read again.
-  const [version, setVersion] = useState(0)
-  const read = useReport<MessageTemplate[]>(project === null || !access.view ? null : `message-templates:${project.id}:${version}`, (asking) =>
-    listAll<MessageTemplate>(asking, "/message-templates", { projectId: project?.id ?? "" }),
-  )
-  const templates = read.report ?? []
-  const [draft, setDraft] = useState<TemplateDraft | null>(null)
-  const [refusal, setRefusal] = useState<TemplateRefusal | null>(null)
-  const [saving, setSaving] = useState(false)
+  const setting = useProjectSetting<MessageTemplate[], TemplateDraft, TemplateRefusal>({
+    name: "message-templates",
+    readable: access.view,
+    read: (asking, projectId) => listAll<MessageTemplate>(asking, "/message-templates", { projectId }),
+  })
+  const { project, base, draft, refusal, saving } = setting
+  const templates = base ?? []
 
-  const open = (next: TemplateDraft) => {
-    setDraft(next)
-    setRefusal(null)
-  }
-  const change = (values: Partial<TemplateDraft>) => {
-    if (draft === null) return
-    setDraft({ ...draft, ...values })
-    setRefusal(null)
-  }
+  const open = (next: TemplateDraft) => setting.edit(next)
+  const change = (values: Partial<TemplateDraft>) => draft !== null && setting.edit({ ...draft, ...values })
 
   const save = () => {
-    if (client === null || project === null || draft === null) return
+    if (project === null || draft === null) return
     const stored = draft.id === undefined ? undefined : templates.find((template) => template.id === draft.id)
     const body = stored === undefined ? templateCreateBody(project.id, draft) : templatePatchBody(stored, draft)
-    if (isTemplateRefusal(body)) {
-      setRefusal(body)
-      return
-    }
-    if (body === null) {
-      setDraft(null)
-      return
-    }
-    setSaving(true)
-    const write = stored === undefined ? create<MessageTemplate>(client, "/message-templates", body).then((made) => made.body) : patch<MessageTemplate>(client, `/message-templates/${stored.id}`, body)
-    write
-      .then(
-        (template) => {
-          setDraft(null)
-          setVersion((count) => count + 1)
-          toast.success(stored === undefined ? "Template added" : "Template saved", { description: `${template.name}: ${templateLine(template)}.` })
-        },
-        (error: unknown) => toast.error("The template was not saved", { description: problemSentence(problemOfError(error)) }),
-      )
-      .finally(() => setSaving(false))
+    if (isTemplateRefusal(body)) return setting.refuse(body)
+    if (body === null) return setting.discard()
+    setting.save(
+      (client) => (stored === undefined ? create<MessageTemplate>(client, "/message-templates", body).then((made) => made.body) : patch<MessageTemplate>(client, `/message-templates/${stored.id}`, body)),
+      { saved: (template) => ({ title: stored === undefined ? "Template added" : "Template saved", description: `${template.name}: ${templateLine(template)}.` }), failed: "The template was not saved" },
+    )
   }
 
   const emptyMessage = !access.view
     ? "The message templates are not shown to your role."
     : project === null
       ? "No project to write templates for."
-      : read.problem !== null
-        ? `The templates could not be read from the API: ${problemSentence(read.problem)}`
-        : read.report === null
+      : setting.problem !== null
+        ? `The templates could not be read from the API: ${problemSentence(setting.problem)}`
+        : base === null
           ? "Reading the templates from the API…"
           : `${project.name} has no message template yet.`
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Message templates"
-      description={`The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing. A service message reaches only a customer who allows them; a billing message is sent whatever the customer chose. A text names its values as ${PLACEHOLDERS.join(", ")}.`}
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="message-templates-project" className="text-sm text-muted-foreground">
-            Project
-          </Label>
-          <Select value={project?.id ?? ""} onValueChange={setChosenProjectId} disabled={projects.length === 0}>
-            <SelectTrigger id="message-templates-project" className="w-64">
-              <SelectValue placeholder="Pick a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectPicker id="message-templates-project" setting={setting} />
         </div>
       }
     >
@@ -140,7 +92,7 @@ export function MessageTemplatesSettings() {
         shown={templates.length}
         total={templates.length}
         actions={
-          <Button size="sm" disabled={!access.create || project === null || read.report === null} onClick={() => open({ ...NEW_TEMPLATE })}>
+          <Button size="sm" disabled={!access.create || project === null || base === null} onClick={() => open({ ...NEW_TEMPLATE })}>
             <Plus className="h-4 w-4" weight="bold" />
             Add template
           </Button>
@@ -159,7 +111,7 @@ export function MessageTemplatesSettings() {
             </TableHeader>
             <TableBody>
               {templates.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint={access.create && read.report !== null ? "Add a template for each message the office sends." : ""} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={access.create && base !== null ? "Add a template for each message the office sends." : ""} />
               ) : (
                 templates.map((template) => (
                   <TableRow key={template.id}>
@@ -183,9 +135,9 @@ export function MessageTemplatesSettings() {
           </Table>
         </div>
       </RecordsSection>
-      {project !== null && read.report !== null && <CustomerNoticesSection key={project.id} project={project} templates={templates} access={access} />}
+      {project !== null && base !== null && <CustomerNoticesSection key={project.id} project={project} templates={templates} access={access} />}
       {draft !== null && (
-        <Dialog open onOpenChange={(isOpen) => !isOpen && setDraft(null)}>
+        <Dialog open onOpenChange={(isOpen) => !isOpen && setting.discard()}>
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>{draft.id === undefined ? "Add template" : "Edit template"}</DialogTitle>
@@ -257,7 +209,7 @@ export function MessageTemplatesSettings() {
               )}
             </div>
             <DialogFooter>
-              <Button variant="ghost" disabled={saving} onClick={() => setDraft(null)}>
+              <Button variant="ghost" disabled={saving} onClick={setting.discard}>
                 Cancel
               </Button>
               <Button disabled={saving} onClick={save}>

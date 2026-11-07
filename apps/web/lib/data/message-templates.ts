@@ -12,9 +12,6 @@ import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders } from "@wast
 
 import { allows, type Grants } from "../api/grants"
 
-/** The pane, offered on the Pilot alone: the templates are the API's. */
-export const MESSAGE_TEMPLATES_SETTINGS_PANE_ID = "message-templates"
-
 /** The module the templates are granted under: Tickets & communication's. */
 export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates"
 

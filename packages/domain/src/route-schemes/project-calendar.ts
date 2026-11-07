@@ -20,8 +20,9 @@ import { formatWorkingDays } from "./calendar-list"
 import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
 import { holidayNamesFor, withCarriedNames } from "./holiday-names"
 import { holidayListFromDates, schemeProjectId } from "./holidays"
-import { NO_HOLIDAYS, type HolidayList, type SchemeCalendar } from "./occurrences"
-import { parseServiceDays, type ServiceDay } from "./recurrence"
+import type { SchemeCalendar } from "./occurrences"
+import { type HolidayList, NO_HOLIDAYS, type ServiceDay } from "../days"
+import { parseServiceDays } from "./recurrence"
 
 /** The weekend a project takes when it has none set. */
 export const DEFAULT_WEEKEND: readonly ServiceDay[] = ["saturday", "sunday"]

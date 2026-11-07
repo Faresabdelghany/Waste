@@ -4,7 +4,7 @@
 // of the next, so each response splits at its `way_points` into one leg per
 // pair and no leg is duplicated or omitted. W points are ceil((W − 1) /
 // (max − 1)) requests: 2 for a 50-stop full trip, 5 for 200 stops.
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 /** The points split into requests of at most `max` waypoints, each chunk starting where the one before it ends. */
 export function chunkPoints(points: readonly Position2D[], max: number): Position2D[][] {

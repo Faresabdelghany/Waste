@@ -12,7 +12,7 @@
 // `decided` with the Decision it had (`moveOf`'s `decided`). Whether a grant is
 // upcoming, in force or expired is a reading of its period against a day,
 // never a status anyone has to remember to change.
-import { addDays } from "../route-schemes/recurrence"
+import { lastDayIn } from "../periods"
 import type { ApplicationKind, ApplicationStatus, DecisionOutcome } from "./vocabulary"
 
 /** The commands that move an Application. */
@@ -86,7 +86,7 @@ export function applicationReading(status: ApplicationStatus, decision: Decision
     case "in-force":
       return `${outcome} · in force`
     case "expired":
-      return `${outcome} · expired ${addDays(decision.validTo as string, -1)}`
+      return `${outcome} · expired ${lastDayIn(decision.validTo as string)}`
   }
 }
 

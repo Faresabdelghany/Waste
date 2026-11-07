@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { holidaySettingsHref } from "@/lib/data/business-links"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import {
   PREVIEW_HORIZON_MONTHS,
@@ -29,15 +29,8 @@ import {
   formatOccurrenceDate,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import {
-  SERVICE_DAYS,
-  SERVICE_DAY_LABELS,
-  SERVICE_DAY_SHORT_LABELS,
-  serviceDayOf,
-  sortServiceDays,
-  todayIso,
-  type ServiceDay,
-} from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 import { AllDatesDialog } from "./all-dates-dialog"
@@ -190,7 +183,7 @@ export function StepRecurrence({
               className="h-auto shrink-0 p-0 text-xs text-current"
               asChild
             >
-              <Link href={holidaySettingsHref(data.projectId)}>Settings</Link>
+              <Link href={settingsHref("holiday-lists")}>Settings</Link>
             </Button>
           </div>
         </div>

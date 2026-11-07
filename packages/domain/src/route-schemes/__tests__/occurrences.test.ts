@@ -3,21 +3,8 @@ import { describe, test } from "node:test"
 
 import { danishHolidayName } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
-import {
-  NO_HOLIDAYS,
-  PREVIEW_HORIZON_MONTHS,
-  addMonths,
-  formatClockTime,
-  formatOccurrenceDate,
-  formatOccurrenceShortDate,
-  generateOccurrences,
-  isWorkingDay,
-  occurrencePreview,
-  SHIFT_SEARCH_DAYS,
-  shiftedNote,
-  shiftToWorkingDay,
-} from "../occurrences"
-import { addDays } from "../recurrence"
+import { PREVIEW_HORIZON_MONTHS, formatClockTime, formatOccurrenceDate, generateOccurrences, isWorkingDay, occurrencePreview, SHIFT_SEARCH_DAYS, shiftedNote, shiftToWorkingDay } from "../occurrences"
+import { addDays, addMonthsRolling, formatShortDay, NO_HOLIDAYS } from "../../days"
 import {
   DANISH_WEEKEND,
   EGYPT_WEEKEND,
@@ -235,7 +222,7 @@ describe("occurrencePreview — window edge cases", () => {
   test("a later `from` (today) starts the walk there and carries an open-ended horizon with it", () => {
     const fromToday = occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar }, "2026-12-21")
     assert.equal(fromToday.rows[0]?.date, "2026-12-21")
-    assert.equal(fromToday.horizon, addMonths("2026-12-21", PREVIEW_HORIZON_MONTHS))
+    assert.equal(fromToday.horizon, addMonthsRolling("2026-12-21", PREVIEW_HORIZON_MONTHS))
     // The cadence keeps its anchor: every 4 weeks from Wed 16 Sep still lands
     // on the same Tuesdays when read from a later date.
     const anchored = occurrencePreview(
@@ -263,14 +250,9 @@ describe("occurrencePreview — window edge cases", () => {
 })
 
 describe("date helpers", () => {
-  test("addMonths rolls over like Date#setMonth", () => {
-    assert.equal(addMonths("2026-09-13", 12), "2027-09-13")
-    assert.equal(addMonths("2026-01-31", 1), "2026-03-03")
-  })
-
   test("formatters", () => {
     assert.equal(formatOccurrenceDate("2026-10-05"), "05 Oct 2026")
-    assert.equal(formatOccurrenceShortDate("2026-12-24"), "Thu 24 Dec")
+    assert.equal(formatShortDay("2026-12-24"), "Thu 24 Dec")
     assert.equal(formatClockTime("6:30"), "06:30")
     assert.equal(formatClockTime(""), "")
   })

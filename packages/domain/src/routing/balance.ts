@@ -24,6 +24,7 @@
 // No provider is asked: distances are straight lines, each metre read as a
 // road's `DETOUR_FACTOR` at `BALANCE_SPEED` — an estimate the office reads as
 // one, the routes' new Plans measuring the drive once the moves are applied.
+import { haversineMetres } from "../geo"
 import { routeShift, secondsOfDay, type DriverShift } from "../execution/shift"
 import { emptiedAlready, type MovingStop } from "../execution/stop-moves"
 import { firstMisfit, type FitVehicle } from "../resources/fleet-fit"
@@ -94,21 +95,13 @@ export type BalanceProposal = {
   routes: { routeId: string; before: DayLoad; after: DayLoad }[]
 }
 
-const haversine = (a: BalancePosition, b: BalancePosition): number => {
-  const radians = Math.PI / 180
-  const dLat = (b[1] - a[1]) * radians
-  const dLon = (b[0] - a[0]) * radians
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * radians) * Math.cos(b[1] * radians) * Math.sin(dLon / 2) ** 2
-  return 2 * 6_371_000 * Math.asin(Math.sqrt(h))
-}
-
 /** Straight-line metres as seconds of road. */
 const roadSeconds = (metres: number): number => Math.round((metres * DETOUR_FACTOR) / BALANCE_SPEED)
 
 /** A route's drive where it has no measured Plan: its open stops in their order, stop to stop. */
 function estimatedDrive(stops: readonly BalanceStop[]): number {
   const located = stops.filter((stop) => stop.status === "planned" && stop.at !== null).map((stop) => stop.at as BalancePosition)
-  return located.slice(1).reduce((sum, at, index) => sum + roadSeconds(haversine(located[index], at)), 0)
+  return located.slice(1).reduce((sum, at, index) => sum + roadSeconds(haversineMetres(located[index], at)), 0)
 }
 
 /** The detour a stop costs a route, there and back from the nearest of its other open stops; null where it has none located. */
@@ -117,7 +110,7 @@ function detourSeconds(stop: BalanceStop, stops: readonly BalanceStop[]): number
   let nearest = Number.POSITIVE_INFINITY
   for (const other of stops) {
     if (other.id === stop.id || other.status !== "planned" || other.at === null) continue
-    nearest = Math.min(nearest, haversine(stop.at, other.at))
+    nearest = Math.min(nearest, haversineMetres(stop.at, other.at))
   }
   return nearest === Number.POSITIVE_INFINITY ? null : 2 * roadSeconds(nearest)
 }

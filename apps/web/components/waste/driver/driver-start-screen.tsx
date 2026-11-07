@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import { NativeSelect } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
-import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
+import { DriverLink, KeptNotice, RejectionList, progressLine } from "@/components/waste/driver/driver-parts"
+import { formatShortDay } from "@waste/domain/days"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
 import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
@@ -87,7 +88,7 @@ function RouteCard({ route, me }: { route: Route; me: DriverMe }) {
         <div>
           <h2 className="text-lg font-semibold">{route.label}</h2>
           <p className="text-sm text-muted-foreground">
-            {operatingDay(route.operatingDate)}
+            {formatShortDay(route.operatingDate)}
             {route.plannedStartTime !== null && ` · starts ${route.plannedStartTime.slice(0, 5)}`}
           </p>
           <p className="text-sm text-muted-foreground">{progressLine(route.progress)}</p>

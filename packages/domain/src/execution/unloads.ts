@@ -8,7 +8,7 @@
 // read against what the stops of its fraction weighed on board since the
 // route's last unload of it (`onBoardByUnload`), within the project's
 // tolerance or above it (`loadReading`).
-import { roundHalfAwayFromZero } from "../finance/money"
+import { roundHalfAwayFromZero } from "../rounding"
 import type { UnloadRefusalReason } from "./vocabulary"
 
 /** The tolerance a project starts with, in percent of the on-board load: the prototype's "Above 5% tolerance". */

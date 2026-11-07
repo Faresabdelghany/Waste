@@ -15,7 +15,7 @@ import { useApiConfigured } from "@/components/waste/api-session-store"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { PageTopBar } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import {
   Table,
   TableBody,

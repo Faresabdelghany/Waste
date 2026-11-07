@@ -27,7 +27,7 @@
 // hourly `messaging.collection-reminders` (C18 of #291), the next day's
 // reminders, bounded per run and per day. And right-sizing's nightly
 // `customers.propose-right-sizing` (M23b of #293).
-import { alertRulesJob, ALERT_RULES_QUEUE, rulesSchedule } from "./alert-rules"
+import { alertRulesJob } from "./alert-rules"
 import { collectionRemindersJob } from "./collection-reminders"
 import type { AnyJob } from "./definition"
 import { generateRoutes } from "./generate-routes"
@@ -45,10 +45,6 @@ import { sendMessageJob } from "./send-message"
 import { OUTBOX_CONSUMERS } from "../outbox/routes"
 
 export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob, purgePositionsJob, sendMessageJob, collectionRemindersJob, proposeRightSizingJob]
-
-/** The registry with the alert rules on the cadence `WORKER_RULES_INTERVAL_SECONDS` sets (O4 of #290); the registry as it is where it is unset. */
-export const jobsWithRulesEvery = (seconds: number | undefined): readonly AnyJob[] =>
-  seconds === undefined ? JOBS : JOBS.map((job) => (job.queue === ALERT_RULES_QUEUE ? { ...job, schedule: rulesSchedule(seconds) } : job))
 
 export type { AnyJob, JobContext, JobDefinition, JobQueueOptions, PublishedQueue } from "./definition"
 export { defineJob } from "./definition"

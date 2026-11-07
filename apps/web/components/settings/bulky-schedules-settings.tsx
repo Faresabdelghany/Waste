@@ -10,16 +10,15 @@
 // it. The form and the bodies it becomes are lib/data/bulky.ts'. Offered on
 // the Pilot alone.
 
-import { useState, type FormEvent } from "react"
+import type { FormEvent } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
-import { toast } from "sonner"
 
 import type { BulkySchedule } from "@waste/contracts/bulky"
 import type { Product } from "@waste/contracts/catalogue"
 import type { PlanningArea } from "@waste/contracts/planning-areas"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
-import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -27,11 +26,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { dayIn } from "@/lib/api/records/planning"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { dayIn } from "@/lib/api/records/clock"
 import {
   bulkyProductLabel,
   bulkyProductsOffered,
@@ -58,25 +56,21 @@ type Read = { schedules: BulkySchedule[]; areas: PlanningArea[]; products: Produ
 type Editing = { schedule: BulkySchedule | null; form: ScheduleForm }
 
 export function BulkySchedulesSettings() {
-  const client = useApiClient()
   const { me } = useApiSession()
-  const projects = me?.projects ?? []
   const access = scheduleAccessOf(me?.role.grants)
-  const [chosenProjectId, setChosenProjectId] = useState<string | null>(null)
-  const project = projects.find((candidate) => candidate.id === chosenProjectId) ?? projects[0] ?? null
-  // Bumped by a save, so the schedules are read again as the API now holds them.
-  const [version, setVersion] = useState(0)
-
-  const read = useReport<Read>(project === null || !access.view ? null : `bulky-schedules:${project.id}:${version}`, async (asking) => {
-    const projectId = project?.id ?? ""
-    const [schedules, areas, products] = await Promise.all([
-      listAll<BulkySchedule>(asking, "/bulky-schedules", { projectId }),
-      access.areas ? listAll<PlanningArea>(asking, "/planning-areas", { projectId }) : Promise.resolve([]),
-      access.products ? listAll<Product>(asking, "/products", { projectId }) : Promise.resolve([]),
-    ])
-    return { schedules, areas, products }
+  const setting = useProjectSetting<Read, Editing, ScheduleRefusal>({
+    name: "bulky-schedules",
+    readable: access.view,
+    read: async (asking, projectId) => {
+      const [schedules, areas, products] = await Promise.all([
+        listAll<BulkySchedule>(asking, "/bulky-schedules", { projectId }),
+        access.areas ? listAll<PlanningArea>(asking, "/planning-areas", { projectId }) : Promise.resolve([]),
+        access.products ? listAll<Product>(asking, "/products", { projectId }) : Promise.resolve([]),
+      ])
+      return { schedules, areas, products }
+    },
   })
-  const shown = read.shown
+  const { project, shown, draft: editing, refusal, saving } = setting
   const areaName = (id: string) => shown?.areas.find((candidate) => candidate.id === id)?.name ?? id
   const productName = (id: string) => {
     const found = shown?.products.find((candidate) => candidate.id === id)
@@ -84,53 +78,31 @@ export function BulkySchedulesSettings() {
   }
   const schedules = shown === null ? [] : schedulesInOrder(shown.schedules, areaName)
 
-  const [editing, setEditing] = useState<Editing | null>(null)
-  const [refusal, setRefusal] = useState<ScheduleRefusal | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const open = (schedule: BulkySchedule | null) => {
-    setRefusal(null)
-    setEditing({ schedule, form: schedule === null ? newScheduleForm(dayIn(new Date(), undefined)) : scheduleFormOf(schedule) })
-  }
-  const change = (values: Partial<ScheduleForm>) => {
-    if (editing === null) return
-    setEditing({ ...editing, form: { ...editing.form, ...values } })
-    setRefusal(null)
-  }
+  const open = (schedule: BulkySchedule | null) => setting.edit({ schedule, form: schedule === null ? newScheduleForm(dayIn(new Date(), undefined)) : scheduleFormOf(schedule) })
+  const change = (values: Partial<ScheduleForm>) => editing !== null && setting.edit({ ...editing, form: { ...editing.form, ...values } })
 
   const save = (event: FormEvent) => {
     event.preventDefault()
-    if (client === null || project === null || editing === null) return
+    if (project === null || editing === null) return
     const { schedule, form } = editing
     const body = schedule === null ? scheduleCreateBodyOf(project.id, form) : schedulePatchBodyOf(schedule, form)
-    if (body === null) {
-      setEditing(null)
-      return
-    }
-    if (isScheduleRefusal(body)) {
-      setRefusal(body)
-      return
-    }
-    setSaving(true)
-    const writing = schedule === null ? create<BulkySchedule>(client, "/bulky-schedules", body).then((answer) => answer.body) : patch<BulkySchedule>(client, `/bulky-schedules/${schedule.id}`, body)
-    writing
-      .then(
-        (written) => {
-          setEditing(null)
-          setVersion((current) => current + 1)
-          toast.success(schedule === null ? "Schedule added" : "Schedule saved", { description: `${areaName(written.planningAreaId)}: ${recurrenceSentence(written)}, ${slotsSentence(written.slotsPerDay)}.` })
-        },
-        (error: unknown) => toast.error(schedule === null ? "The schedule was not added" : "The schedule was not saved", { description: problemSentence(problemOfError(error)) }),
-      )
-      .finally(() => setSaving(false))
+    if (body === null) return setting.discard()
+    if (isScheduleRefusal(body)) return setting.refuse(body)
+    setting.save(
+      (client) => (schedule === null ? create<BulkySchedule>(client, "/bulky-schedules", body).then((answer) => answer.body) : patch<BulkySchedule>(client, `/bulky-schedules/${schedule.id}`, body)),
+      {
+        saved: (written) => ({ title: schedule === null ? "Schedule added" : "Schedule saved", description: `${areaName(written.planningAreaId)}: ${recurrenceSentence(written)}, ${slotsSentence(written.slotsPerDay)}.` }),
+        failed: schedule === null ? "The schedule was not added" : "The schedule was not saved",
+      },
+    )
   }
 
   const emptyMessage = !access.view
     ? "The bulky schedules are not shown to your role."
     : project === null
       ? "No project to schedule bulky collections in."
-      : read.problem !== null
-        ? `The schedules could not be read from the API: ${problemSentence(read.problem)}`
+      : setting.problem !== null
+        ? `The schedules could not be read from the API: ${problemSentence(setting.problem)}`
         : shown === null
           ? "Reading the schedules from the API…"
           : `${project.name} collects no bulky waste by booking: no area has a schedule.`
@@ -139,26 +111,9 @@ export function BulkySchedulesSettings() {
 
   return (
     <AssetPanelShell
-      heading="Operations"
-      title="Bulky schedules"
-      description="The days each planning area collects bulky waste on, how many bookings a day takes, and what a booking is charged once collected."
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="bulky-schedules-project" className="text-sm text-muted-foreground">
-            Project
-          </Label>
-          <Select value={project?.id ?? ""} onValueChange={setChosenProjectId} disabled={projects.length === 0}>
-            <SelectTrigger id="bulky-schedules-project" className="w-64">
-              <SelectValue placeholder="Pick a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProjectPicker id="bulky-schedules-project" setting={setting} />
         </div>
       }
     >
@@ -208,7 +163,7 @@ export function BulkySchedulesSettings() {
         </div>
       </RecordsSection>
 
-      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
+      <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setting.discard()}>
         {/* An edit says why the area, its days and the start do not move; an add says nothing. */}
         <DialogContent className="sm:max-w-xl" {...(editing === null || editing.schedule === null ? { "aria-describedby": undefined } : {})}>
           {editing !== null && shown !== null && (
@@ -219,7 +174,7 @@ export function BulkySchedulesSettings() {
               areas={shown.areas}
               products={productOptions(editing.schedule?.productId)}
               onChange={change}
-              onCancel={() => setEditing(null)}
+              onCancel={setting.discard}
               onSubmit={save}
             />
           )}

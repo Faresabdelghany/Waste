@@ -6,13 +6,11 @@
  * and each list's dated, named holidays on its own record among the
  * calendars (`configure.calendars`, @waste/domain/route-schemes/
  * holiday-list-records). This module is the one place that knows how a
- * project's calendar settings and a list's entries become record writes. The pane's id and address live in
- * business-links.ts (`HOLIDAY_LISTS_SETTINGS_PANE_ID`, `holidaySettingsHref`)
- * beside every other Settings link, since that module cannot import this one
- * without a cycle through the fixture registry.
+ * project's calendar settings and a list's entries become record writes.
  */
 
 import type { SubmittedValues } from "@waste/domain/prototype-record"
+import { formatShortDay, type ServiceDay } from "@waste/domain/days"
 
 import type { BusinessRecord } from "./business-modules"
 import { countryName } from "./countries"
@@ -26,7 +24,7 @@ import {
 } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
 import { weekendLabel } from "@waste/domain/route-schemes/project-calendar"
-import { formatServiceDate, sortServiceDays, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 
 export type ProjectCalendarSettings = {
   /** The list's name; null when the project has no holiday list. */
@@ -221,7 +219,7 @@ export function holidayListRows(lists: readonly BusinessRecord[], projectCount: 
       country,
       countryLabel: country ? countryName(country) : "—",
       holidays: entries.length,
-      nextHoliday: next ? `${formatServiceDate(next.date)} · ${shownHolidayName(next, country)}` : "—",
+      nextHoliday: next ? `${formatShortDay(next.date)} · ${shownHolidayName(next, country)}` : "—",
       projects,
       status: projects > 0 ? "In use" : "Not in use",
     }

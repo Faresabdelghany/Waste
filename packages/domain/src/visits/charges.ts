@@ -36,7 +36,8 @@
 // (`toISOString`), so they order as text; days are ISO days, and the module
 // reads no clock.
 import type { AgreementStatus } from "../registry/vocabulary"
-import { addDays } from "../route-schemes/recurrence"
+import { addDays } from "../days"
+import { inForceOn } from "../periods"
 import type { SiteVisitOutcome, SiteVisitRefusalReason, VisitChargeBasis } from "./vocabulary"
 
 /** Whom a visit was for: a household's Property with the Agreement it pays under, or a business's Customer and the Agreement its credential names. */
@@ -136,11 +137,9 @@ export type VisitFacts = {
 /** What a rule says a visit costs: the rule, why, whether it counted, its place among the Property's counted visits this year (a household's), and the product charged, null where nothing is. */
 export type VisitCharge = { ruleId: string | null; basis: VisitChargeBasis; counted: boolean; n: number | null; productId: string | null }
 
-const inForce = (rule: VisitRuleFacts, day: string): boolean => rule.validFrom <= day && (rule.validTo === null || day < rule.validTo)
-
 /** The rule in force on a day; the database holds one at a time per project, and the id breaks any other tie. */
 export function ruleOn(rules: readonly VisitRuleFacts[], day: string): VisitRuleFacts | null {
-  return rules.filter((rule) => inForce(rule, day)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0] ?? null
+  return rules.filter((rule) => inForceOn(rule, day)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0] ?? null
 }
 
 /** Whether a household's visit counts under a rule: it brought something other than free fractions, or nothing recorded at all. */

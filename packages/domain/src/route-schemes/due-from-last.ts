@@ -7,6 +7,7 @@
 // generation run (planning/generation.ts `resolveStops`) and every read of a
 // tank's next emptying reckon it here.
 // Pure date math — no UI, store, or fixture dependencies.
+import { addMonthsClamped } from "../days"
 
 /** What the cadence reads of an installation: the day it was last emptied, if ever, and its interval. */
 export type TankCadence = {
@@ -16,18 +17,9 @@ export type TankCadence = {
   intervalMonths: number
 }
 
-/** `iso` moved by `months` calendar months; a day the month lacks lands on its last day (30 November + 3 months is 28 February). */
-export function addMonths(iso: string, months: number): string {
-  const [year, month, day] = iso.split("-").map(Number) as [number, number, number]
-  const index = year * 12 + (month - 1) + months
-  const targetYear = Math.floor(index / 12)
-  const targetMonth = (index % 12) + 1
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate()
-  return `${String(targetYear).padStart(4, "0")}-${String(targetMonth).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`
-}
 
 /** The day the next emptying falls due: the last one plus the interval; null for a tank never emptied, which is due now. */
-export const tankDueOn = (cadence: TankCadence): string | null => (cadence.lastEmptiedOn === null ? null : addMonths(cadence.lastEmptiedOn, cadence.intervalMonths))
+export const tankDueOn = (cadence: TankCadence): string | null => (cadence.lastEmptiedOn === null ? null : addMonthsClamped(cadence.lastEmptiedOn, cadence.intervalMonths))
 
 /** The day a run judges, and the tanks with a stop held on an earlier date of it: a planned stop not yet completed, or one the run planned. */
 export type TankGate = { day: string; held: ReadonlySet<string> }

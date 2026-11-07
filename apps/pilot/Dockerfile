@@ -11,9 +11,9 @@
 #
 # Two stages. The first installs the closures of the API, the worker and this
 # package with the pnpm the root manifest pins, lets `pnpm deploy` lay each
-# app out as its own image would (apps/api/Dockerfile, apps/worker/Dockerfile:
-# the source, the production dependencies and the workspace packages it runs,
-# each with its `src/`), and then bundles each app's entry with esbuild
+# app out as one self-contained directory (the source, the production
+# dependencies and the workspace packages it runs, each with its `src/`), and
+# then bundles each app's entry with esbuild
 # (src/bundle.ts) into one ESM file beside its source — src/server.mjs and
 # src/main.mjs, so the API's ../build.json still resolves — and the
 # supervisor's entry into /app/apps/pilot/main.mjs. The second stage is Node
@@ -118,7 +118,7 @@ COPY --from=build --chown=node:node /app /app
 # The commit the image is built from (Issue #152): build.json beside the
 # API's package.json, which its GET /healthz reads as build.commit — what a
 # Pilot release proves live — and, where the build argument is given, the OCI
-# revision label as apps/api/Dockerfile carries it. Two sources, the file
+# revision label. Two sources, the file
 # first: on the deploy branch apps/pilot/release.json names the released
 # commit of main — the release wrote it into the branch's tree
 # (packages/db/src/pilot/release.ts) and the build stage kept it above — and

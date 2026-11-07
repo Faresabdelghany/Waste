@@ -8,7 +8,7 @@
 // day-granular ISO.
 
 import type { BusinessRecord } from "../prototype-record"
-import { isIsoDate } from "./recurrence"
+import { isIsoDate } from "../days"
 import { stringValue } from "./validation"
 
 export type CollectionCalendar = {

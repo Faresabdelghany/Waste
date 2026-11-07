@@ -137,7 +137,7 @@ import {
 import type { HolidayPolicy, RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"

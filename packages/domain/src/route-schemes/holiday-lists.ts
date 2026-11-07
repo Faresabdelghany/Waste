@@ -10,7 +10,7 @@
 import { formatValidity } from "./calendar-list"
 import type { HolidayNameLookup } from "./holiday-names"
 import { serializeHolidayNames } from "./holidays"
-import { addDays, isIsoDate } from "./recurrence"
+import { addDays, isIsoDate } from "../days"
 
 /** One holiday on a list: its ISO date and its name, "" while it has none. */
 export type HolidayEntry = {

@@ -38,20 +38,12 @@ describe("libpqEnvironment", () => {
 })
 
 describe("restorePlan", () => {
-  const manifest = (overrides: Partial<BackupManifest> = {}) => ({ schemas: ["wms", "drizzle", "pgboss"], publication: { name: "powersync", tables: ["wms.company", "wms.route"] }, ...overrides }) as BackupManifest
-
-  test("drops the three schemas, restores every schema dump, adds the published tables back, then every data dump", () => {
-    assert.deepEqual(restorePlan(manifest(), "/r"), [
+  test("drops the three schemas, restores every schema dump, then every data dump", () => {
+    assert.deepEqual(restorePlan({ schemas: ["wms", "drizzle", "pgboss"] } as BackupManifest, "/r"), [
       "-c", "DROP SCHEMA IF EXISTS pgboss, drizzle, wms CASCADE",
       "-f", "/r/wms-schema.sql", "-f", "/r/drizzle-schema.sql", "-f", "/r/pgboss-schema.sql",
-      "-c", 'ALTER PUBLICATION powersync ADD TABLE ONLY "wms"."company", ONLY "wms"."route"',
       "-f", "/r/wms-data.sql", "-f", "/r/drizzle-data.sql", "-f", "/r/pgboss-data.sql",
     ])
-  })
-
-  test("leaves the publication alone where the backup names no table, and refuses a table name it would have to quote", () => {
-    assert.ok(!restorePlan(manifest({ schemas: ["wms", "drizzle"], publication: null }), "/r").some((argument) => argument.startsWith("ALTER PUBLICATION")))
-    assert.throws(() => restorePlan(manifest({ publication: { name: "powersync", tables: ['wms.company"; drop table wms.route; --'] } }), "/r"), /is not a table this workflow restores/)
   })
 })
 

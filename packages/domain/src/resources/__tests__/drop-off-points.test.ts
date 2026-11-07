@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { NO_HOLIDAYS } from "../../route-schemes/occurrences"
+import { NO_HOLIDAYS } from "../../days"
 import { exceptionIssues, hoursIssues, openingDaysOf, type DropOffOpening } from "../drop-off-points"
 
 const centre: DropOffOpening = {

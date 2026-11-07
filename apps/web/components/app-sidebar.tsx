@@ -41,6 +41,7 @@ import {
 } from "@/components/waste/active-routes-store"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { footerItems, navBadgeOf, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 
@@ -87,24 +88,12 @@ export function AppSidebar() {
 
   const isItemActive = (id: NavItemId): boolean => {
     if (id === "operate")
-      return (
-        pathname === "/" ||
-        pathname.startsWith("/operate") ||
-        pathname.startsWith("/projects") ||
-        pathname.startsWith("/tasks") ||
-        pathname.startsWith("/tickets") ||
-        pathname.startsWith("/inbox")
-      )
+      return pathname === "/" || pathname.startsWith("/operate") || pathname.startsWith("/tickets")
     if (id === "plan") return pathname.startsWith("/plan")
     if (id === "route-studio")
       return pathname.startsWith("/route-studio") || pathname.startsWith("/routes")
     if (id === "fleet") return pathname.startsWith("/fleet")
-    if (id === "customers")
-      return (
-        pathname.startsWith("/customers") ||
-        pathname.startsWith("/clients") ||
-        pathname.startsWith("/portal")
-      )
+    if (id === "customers") return pathname.startsWith("/customers") || pathname.startsWith("/portal")
     if (id === "resources") return pathname.startsWith("/resources")
     if (id === "service-providers")
       return pathname.startsWith("/service-providers") || pathname.startsWith("/service-provider-workspace")
@@ -211,8 +200,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu className="gap-0.5">
           {footerItems.map((item) => {
-            const pane = item.id === "settings" ? "account" : "ticket-comms"
-            const href = `/settings?pane=${pane}&from=${encodeURIComponent(pathname)}`
+            const href = settingsHref(item.pane, { from: pathname })
 
             return (
               <SidebarMenuItem key={item.label}>

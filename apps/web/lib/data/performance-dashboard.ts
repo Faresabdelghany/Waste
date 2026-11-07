@@ -16,7 +16,6 @@ export type RoutePerformanceRow = {
   status: RouteHealthStatus
   issue: string
   issueDetail: string
-  trend: number[]
 }
 
 export type TicketImpact = "High" | "Medium" | "Low"
@@ -52,196 +51,13 @@ export type PerformancePortfolioSummary = {
 
 export const PERFORMANCE_REFERENCE_DATE = new Date(2026, 7, 12)
 
-export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
-  {
-    id: "RC-1042",
-    name: "Central Residual",
-    area: "Central",
-    serviceType: "Residual",
-    stopsCompleted: 186,
-    stopsPlanned: 232,
-    onTimePercent: 62,
-    proofComplete: 145,
-    exceptions: 5,
-    openTickets: 4,
-    ticketSlaPercent: 71,
-    slaPercent: 62,
-    status: "At risk",
-    issue: "SLA misses",
-    issueDetail: "5 in last 7 days",
-    trend: [76, 74, 72, 72, 68, 66, 64, 62],
-  },
-  {
-    id: "RC-1048",
-    name: "Østerbro Organic",
-    area: "Østerbro",
-    serviceType: "Organic",
-    stopsCompleted: 512,
-    stopsPlanned: 624,
-    onTimePercent: 79,
-    proofComplete: 466,
-    exceptions: 4,
-    openTickets: 1,
-    ticketSlaPercent: 78,
-    slaPercent: 79,
-    status: "Monitor",
-    issue: "Open exceptions",
-    issueDetail: "4 exceptions",
-    trend: [76, 78, 77, 80, 79, 81, 78, 79],
-  },
-  {
-    id: "RC-1017",
-    name: "Frederiksberg Mixed",
-    area: "Frederiksberg",
-    serviceType: "Mixed",
-    stopsCompleted: 468,
-    stopsPlanned: 492,
-    onTimePercent: 93,
-    proofComplete: 440,
-    exceptions: 1,
-    openTickets: 0,
-    ticketSlaPercent: 97,
-    slaPercent: 93,
-    status: "On track",
-    issue: "Stable service",
-    issueDetail: "No action needed",
-    trend: [86, 88, 87, 89, 90, 91, 92, 93],
-  },
-  {
-    id: "RC-1051",
-    name: "Amager Glass",
-    area: "Amager",
-    serviceType: "Glass",
-    stopsCompleted: 198,
-    stopsPlanned: 256,
-    onTimePercent: 58,
-    proofComplete: 144,
-    exceptions: 9,
-    openTickets: 5,
-    ticketSlaPercent: 64,
-    slaPercent: 58,
-    status: "At risk",
-    issue: "Proof incomplete",
-    issueDetail: "68 stops",
-    trend: [73, 70, 68, 66, 64, 61, 60, 58],
-  },
-  {
-    id: "RC-1009",
-    name: "Vesterbro Mixed",
-    area: "Vesterbro",
-    serviceType: "Mixed",
-    stopsCompleted: 430,
-    stopsPlanned: 488,
-    onTimePercent: 88,
-    proofComplete: 413,
-    exceptions: 0,
-    openTickets: 0,
-    ticketSlaPercent: 98,
-    slaPercent: 88,
-    status: "On track",
-    issue: "Stable service",
-    issueDetail: "No action needed",
-    trend: [82, 84, 83, 85, 86, 85, 87, 88],
-  },
-  {
-    id: "RC-1022",
-    name: "Nørrebro Mixed",
-    area: "Nørrebro",
-    serviceType: "Mixed",
-    stopsCompleted: 544,
-    stopsPlanned: 596,
-    onTimePercent: 84,
-    proofComplete: 484,
-    exceptions: 2,
-    openTickets: 2,
-    ticketSlaPercent: 86,
-    slaPercent: 84,
-    status: "Monitor",
-    issue: "Route over time",
-    issueDetail: "+18% vs plan",
-    trend: [88, 87, 87, 86, 84, 85, 84, 84],
-  },
-  {
-    id: "RC-1033",
-    name: "Vesterbro Paper",
-    area: "Vesterbro",
-    serviceType: "Paper",
-    stopsCompleted: 446,
-    stopsPlanned: 492,
-    onTimePercent: 81,
-    proofComplete: 428,
-    exceptions: 3,
-    openTickets: 2,
-    ticketSlaPercent: 84,
-    slaPercent: 81,
-    status: "Monitor",
-    issue: "Stops behind",
-    issueDetail: "12 stops",
-    trend: [86, 85, 83, 82, 84, 82, 81, 81],
-  },
-  {
-    id: "RC-1039",
-    name: "Vesterbro Paper",
-    area: "Vesterbro",
-    serviceType: "Paper",
-    stopsCompleted: 676,
-    stopsPlanned: 711,
-    onTimePercent: 96,
-    proofComplete: 663,
-    exceptions: 0,
-    openTickets: 0,
-    ticketSlaPercent: 99,
-    slaPercent: 96,
-    status: "On track",
-    issue: "Stable service",
-    issueDetail: "No action needed",
-    trend: [91, 92, 92, 93, 94, 94, 95, 96],
-  },
-  {
-    id: "RC-1044",
-    name: "Nørrebro Residual",
-    area: "Nørrebro",
-    serviceType: "Residual",
-    stopsCompleted: 548,
-    stopsPlanned: 576,
-    onTimePercent: 91,
-    proofComplete: 532,
-    exceptions: 1,
-    openTickets: 1,
-    ticketSlaPercent: 95,
-    slaPercent: 91,
-    status: "On track",
-    issue: "Stable service",
-    issueDetail: "No action needed",
-    trend: [87, 88, 89, 88, 89, 90, 90, 91],
-  },
-  {
-    id: "RC-1055",
-    name: "Frederiksberg Textile",
-    area: "Frederiksberg",
-    serviceType: "Textile",
-    stopsCompleted: 538,
-    stopsPlanned: 621,
-    onTimePercent: 76,
-    proofComplete: 463,
-    exceptions: 2,
-    openTickets: 1,
-    ticketSlaPercent: 88,
-    slaPercent: 76,
-    status: "Monitor",
-    issue: "Stops behind",
-    issueDetail: "12 stops",
-    trend: [82, 81, 80, 78, 79, 77, 76, 76],
-  },
-]
-
 const CURRENT_PERIOD_VALUES = [
   128, 154, 172, 149, 188, 205, 167, 143, 132, 156,
   176, 201, 184, 165, 147, 139, 158, 193, 219, 205,
   237, 254, 221, 232, 243, 214, 193, 204, 221, 191,
 ]
 
-export const THROUGHPUT_SERIES: ThroughputPoint[] = CURRENT_PERIOD_VALUES.map(
+const THROUGHPUT_SERIES: ThroughputPoint[] = CURRENT_PERIOD_VALUES.map(
   (completed, index) => {
     const date = new Date(2026, 6, 14 + index)
     const previous = Math.max(
@@ -257,53 +73,7 @@ export const THROUGHPUT_SERIES: ThroughputPoint[] = CURRENT_PERIOD_VALUES.map(
   },
 )
 
-// Top open tickets by operational impact; recordIds match the Tickets module
-// fixtures in business-modules.ts so each row opens a real ticket record.
-export const TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
-  {
-    id: "T-8826",
-    recordId: "ticket-8826",
-    subject: "Glass container overflow",
-    issue: "Overflow",
-    issueDetail: "Critical · SLA due in 1 h 26 min",
-    impact: "High",
-  },
-  {
-    id: "T-8840",
-    recordId: "ticket-8840",
-    subject: "Missed collection at Adelgade 12",
-    issue: "Missed collection",
-    issueDetail: "SLA due in 38 min",
-    impact: "High",
-  },
-  {
-    id: "T-8831",
-    recordId: "ticket-8831",
-    subject: "Blocked access at Parkvej 18",
-    issue: "Missed collection",
-    issueDetail: "SLA due in 44 min",
-    impact: "High",
-  },
-  {
-    id: "T-8853",
-    recordId: "ticket-8853",
-    subject: "Overfilled container at Vennemindevej 14",
-    issue: "Overflow",
-    issueDetail: "SLA due in 52 min",
-    impact: "High",
-  },
-  {
-    id: "T-8842",
-    recordId: "ticket-8842",
-    subject: "Access note for Borgergade 41",
-    issue: "Access issue",
-    issueDetail: "SLA due in 1 h 12 min",
-    impact: "Medium",
-  },
-]
-
-// NordRen ApS route days on service area CA-Ø-2 (Østerbro). RC-1048 is the
-// same route day the operator sees — the service provider view is a scoped subset.
+// NordRen ApS route days on service area CA-Ø-2 (Østerbro).
 export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
   {
     id: "RC-1052",
@@ -321,7 +91,6 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "At risk",
     issue: "SLA misses",
     issueDetail: "6 in last 7 days",
-    trend: [78, 75, 73, 71, 70, 68, 66, 64],
   },
   {
     id: "RC-1048",
@@ -339,7 +108,6 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "Monitor",
     issue: "Open exceptions",
     issueDetail: "4 exceptions",
-    trend: [76, 78, 77, 80, 79, 81, 78, 79],
   },
   {
     id: "RC-1061",
@@ -357,7 +125,6 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "Monitor",
     issue: "Proof incomplete",
     issueDetail: "36 stops",
-    trend: [86, 85, 84, 83, 83, 82, 81, 81],
   },
   {
     id: "RC-1057",
@@ -375,7 +142,6 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "On track",
     issue: "Stable service",
     issueDetail: "No action needed",
-    trend: [88, 89, 90, 90, 91, 92, 93, 94],
   },
   {
     id: "RC-1064",
@@ -393,7 +159,6 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "On track",
     issue: "Stable service",
     issueDetail: "No action needed",
-    trend: [87, 88, 88, 89, 90, 91, 91, 92],
   },
   {
     id: "RC-1068",
@@ -411,11 +176,10 @@ export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     status: "On track",
     issue: "Stable service",
     issueDetail: "No action needed",
-    trend: [84, 85, 86, 86, 87, 88, 89, 90],
   },
 ]
 
-// NordRen ApS open tickets; ticket-8831 is the same record the operator sees.
+// NordRen ApS open tickets; each recordId is a Tickets module fixture.
 export const SERVICE_PROVIDER_TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
   {
     id: "T-8853",

@@ -43,7 +43,7 @@
 //   areas and their assignments, provider prices, billable events, billing
 //   runs, invoices, settlements.
 import type { CustomerKind } from "@waste/domain/registry/vocabulary"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { firstDayOut } from "@waste/domain/periods"
 
 import type { Tx } from "../client"
 import { priceList, priceListRow } from "../schema/finance"
@@ -144,7 +144,7 @@ function build(): { ids: FinanceIds; rows: FinanceRows } {
           companyId: COMPANY_ID,
           projectId: DEMO_PROJECT_IDS[list.project],
           validFrom: spec.validFrom,
-          validTo: spec.validThrough === undefined ? null : addDays(spec.validThrough, 1),
+          validTo: spec.validThrough === undefined ? null : firstDayOut(spec.validThrough),
           priceListId: required(listIds, list.key, "price list"),
           productId: required(REGISTRY_IDS.products[list.project], spec.product, `${list.project} product`),
           unitPriceMinor: minorUnitsOf(spec.amount),

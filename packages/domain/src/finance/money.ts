@@ -1,35 +1,27 @@
 // Money as Finance & Contracting holds it (Issue #112, §7.6): an integer in
 // minor units — øre for DKK, cents for EUR — never a decimal, so nothing is
-// re-rounded downstream and two integers add up to what they say. One
-// rounding, spelled once: half away from zero, which is what Postgres's
-// `round(numeric)` does and what Danish invoices show per line. The
-// database's `billable_event_vat_shape` and `invoice_line_vat_shape` checks
-// spell the same expression as SQL, `vat_minor = round(net_minor::numeric *
-// vat_percent / 100.0)` — the net cast before the product, which as two
-// integers would overflow past about 85.9 million minor units at 25 % (#314)
-// — and packages/db's finance test holds the two together by writing rows
-// this module computed over odd amounts of both signs.
-//
-// `Math.round` alone would not do: it rounds half towards positive infinity,
-// so `Math.round(-0.5)` is `-0` where Postgres says `-1`, and a reversal's
-// negative VAT would differ from its original's by an øre. The sign is taken
-// off, the magnitude rounded, the sign put back, and a `-0` made `0` so an
-// assertion by `Object.is` reads it as the zero it is.
+// re-rounded downstream and two integers add up to what they say. Money is
+// rounded only here, by the domain's one rounding (../rounding): half away
+// from zero, which is what Postgres's `round(numeric)` does and what Danish
+// invoices show per line. The database's `billable_event_vat_shape` and
+// `invoice_line_vat_shape` checks spell the same expression as SQL,
+// `vat_minor = round(net_minor::numeric * vat_percent / 100.0)` — the net
+// cast before the product, which as two integers would overflow past about
+// 85.9 million minor units at 25 % (#314) — and packages/db's finance test
+// holds the two together by writing rows this module computed over odd
+// amounts of both signs.
 //
 // When an invoice is due is a project's terms, or its customer's (#291 C4,
 // finance/payment.ts).
+import { roundHalfAwayFromZero } from "../rounding"
+
+export { roundHalfAwayFromZero }
 
 /** The most an amount in minor units may be: the `integer` column it is stored in. A price past it is `amount-too-large` (#291 C2), never a failed write. */
 export const MINOR_MAX = 2_147_483_647
 
 /** Whether an amount fits the column it is stored in, either sign. */
 export const fitsMinor = (value: number): boolean => Number.isInteger(value) && value >= -MINOR_MAX - 1 && value <= MINOR_MAX
-
-/** The one rounding: half away from zero, as Postgres's `round(numeric)` rounds, never `-0`. */
-export function roundHalfAwayFromZero(value: number): number {
-  const rounded = Math.sign(value) * Math.round(Math.abs(value))
-  return rounded === 0 ? 0 : rounded
-}
 
 /** Whether an amount is one this module takes: a whole number of minor units. */
 const whole = (value: number, what: string): number => {

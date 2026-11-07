@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   CaretDown,
-  CaretLeft,
   MagnifyingGlass,
 } from "@phosphor-icons/react/dist/ssr"
 
+import { RecordPageHeader } from "@/components/page-layout"
 import { useOrganizationStore } from "@/components/settings/organization-store"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -260,16 +260,8 @@ export function RolePermissionsPanel({
 export function RoleGone({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center gap-1.5 border-b border-border px-4 py-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 h-7 gap-1 px-2 text-muted-foreground hover:text-foreground"
-          onClick={onBack}
-        >
-          <CaretLeft className="h-3.5 w-3.5" weight="bold" />
-          Roles
-        </Button>
+      <header className="border-b border-border/40">
+        <RecordPageHeader backLabel="Back to roles" onBack={onBack} name="Role" />
       </header>
       <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
         This role no longer exists.
@@ -453,18 +445,13 @@ export function RolePermissionsMatrix({
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center gap-1.5 border-b border-border px-4 py-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 h-7 gap-1 px-2 text-muted-foreground hover:text-foreground"
-          onClick={onBack}
-        >
-          <CaretLeft className="h-3.5 w-3.5" weight="bold" />
-          Roles
-        </Button>
-        <span className="text-sm text-muted-foreground">/</span>
-        <p className="text-base font-medium text-foreground">{title}</p>
+      <header className="border-b border-border/40">
+        <RecordPageHeader
+          backLabel="Back to roles"
+          onBack={onBack}
+          name={title}
+          line={`${grantedTotal} of ${rolePermissionCellCount} permissions granted`}
+        />
       </header>
       <div className="flex-1 p-4">
         <div className="mx-auto flex w-full max-w-[1500px] items-start gap-6">
@@ -503,19 +490,6 @@ export function RolePermissionsMatrix({
             </div>
           </nav>
           <div className="min-w-0 flex-1 space-y-4">
-            <section className="flex flex-wrap items-start justify-between gap-3">
-              <h1 className="text-lg font-semibold tracking-tight">
-                {title}
-              </h1>
-              <div className="text-right">
-                <p className="text-sm font-medium tabular-nums text-foreground">
-                  {grantedTotal} of {rolePermissionCellCount}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  permissions granted
-                </p>
-              </div>
-            </section>
             {notice}
   
             <div className="relative max-w-sm">

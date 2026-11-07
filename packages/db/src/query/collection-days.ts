@@ -24,7 +24,7 @@ import { lookbackOf, type ServedContainer, type ServingGroup, type ServingScheme
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
-import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { addDays } from "@waste/domain/days"
 import { and, arrayOverlaps, asc, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 

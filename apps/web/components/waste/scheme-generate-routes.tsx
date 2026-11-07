@@ -23,8 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
-import { useModuleRecords } from "@/components/waste/scheme-route-map"
+import { useBusinessRecordStore, useStoreRecords } from "@/components/waste/business-record-store"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { containerDriftWarning } from "@waste/domain/route-schemes/container-drift"
@@ -35,12 +34,8 @@ import {
 } from "@waste/domain/route-schemes/generation"
 import { schemeGenerationCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { recordGenerationRun } from "@waste/domain/route-schemes/lifecycle"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  addDays,
-  formatServiceDate,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { addDays, formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 const ACTION_LABELS: Record<PlannedRouteAction, string> = {
@@ -76,15 +71,15 @@ export function SchemeGenerateRoutesDialog({
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), 1))
   const [toDate, setToDate] = useState(() => addDays(todayIso(), 7))
 
-  const existingRoutes = useModuleRecords("route-studio", "routes")
-  const existingPickups = useModuleRecords("route-studio", "pickups")
-  const schemeRecords = useModuleRecords("route-studio", "schemes")
-  const calendarRecords = useModuleRecords(
+  const existingRoutes = useStoreRecords("route-studio", "routes")
+  const existingPickups = useStoreRecords("route-studio", "pickups")
+  const schemeRecords = useStoreRecords("route-studio", "schemes")
+  const calendarRecords = useStoreRecords(
     COLLECTION_CALENDARS_MODULE.workspaceId,
     COLLECTION_CALENDARS_MODULE.moduleId,
   )
-  const projectRecords = useModuleRecords("configure", "organization")
-  const containers = useModuleRecords("resources", "containers")
+  const projectRecords = useStoreRecords("configure", "organization")
+  const containers = useStoreRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()
 
   // The whole result is deterministic per (scheme, window, stored records),
@@ -252,7 +247,7 @@ export function SchemeGenerateRoutesDialog({
                           {ACTION_LABELS[planned.action]}
                         </Badge>
                         <span className="w-24 font-medium">
-                          {formatServiceDate(planned.actualDate)}
+                          {formatShortDay(planned.actualDate)}
                         </span>
                         <span className="w-9 text-xs text-muted-foreground">
                           {SERVICE_DAY_SHORT_LABELS[planned.day]}

@@ -6,14 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  documentAmount,
-  documentDate,
-  documentLanguageOf,
-  invoiceDocumentOf,
-  winAnsi,
-  type InvoiceDocumentInput,
-} from "../invoice-document"
+import { documentAmount, invoiceDocumentOf, type InvoiceDocumentInput } from "../invoice-document"
+import { documentDate, documentLanguageOf, winAnsi } from "../../document-text"
 import { fikSchemeOf, paymentReference } from "../payment"
 import { CREDIT_REASONS } from "../vocabulary"
 

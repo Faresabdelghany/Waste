@@ -20,10 +20,7 @@ import {
 import type { CollectionGroup } from "@waste/domain/route-schemes/groups"
 import { containerTypeShortLabel } from "@waste/domain/route-schemes/matching"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import {
-  SERVICE_DAY_LABELS,
-  SERVICE_DAY_SHORT_LABELS,
-} from "@waste/domain/route-schemes/recurrence"
+import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 
 import { GroupEditor, type GroupEditorState } from "./group-editor"

@@ -15,6 +15,7 @@
 //
 // Days are `YYYY-MM-DD` strings on the project's clock, which compare as
 // days.
+import { daysBetween } from "../days"
 
 /** The days ahead within which the next scheduled emptying is soon enough: today or tomorrow books nothing. */
 export const FILL_EMPTYING_LEAD_DAYS = 1
@@ -28,9 +29,6 @@ export type FillEmptyingChoice =
   | { kind: "soon-enough"; next: EmptyingRoute }
   | { kind: "no-schedule" }
   | { kind: "no-route"; next: EmptyingRoute }
-
-const DAY_MS = 24 * 60 * 60 * 1000
-const daysBetween = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS)
 
 /** The route the fill-driven emptying goes on, or why none, from the container's next scheduled emptying and the routes that might take it. */
 export function fillEmptyingRoute(next: EmptyingRoute | null, candidates: readonly EmptyingRoute[], today: string): FillEmptyingChoice {

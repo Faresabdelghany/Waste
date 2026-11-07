@@ -105,14 +105,8 @@ import {
   withDerivedSchemeContext,
   type SchemeRowSummary,
 } from "@waste/domain/route-schemes/scheme-list"
-import {
-  SERVICE_DAY_SHORT_LABELS,
-  formatServiceDate,
-  recurrenceFromValues,
-  recurrenceSentence,
-  serviceDaysFromValues,
-  todayIso,
-} from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
   effectiveDayRules,
   matchPlansFromValues,
@@ -165,12 +159,11 @@ import {
   subscriptionInitialValues,
   subscriptionProductOptions,
 } from "@/lib/data/agreements"
-import type { TimelineTask } from "@/lib/data/project-details"
 import { awaitedRowsSentence, recordCountLabel } from "@/lib/table-copy"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
 import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -218,10 +211,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { ChipOverflow } from "@/components/chip-overflow"
-import { StatRow } from "@/components/projects/StatRow"
-import { TimelineGantt } from "@/components/projects/TimelineGantt"
+import { StatRow } from "@/components/ui/stat-row"
+import { WeekTimeline, type TimelineItem } from "@/components/ui/week-timeline"
 import { ProgressCircle } from "@/components/progress-circle"
-import { TaskRowBase } from "@/components/tasks/TaskRowBase"
+import { CheckRow } from "@/components/ui/check-row"
 import {
   BusinessFilterPopover,
   canonicalCalendarName,
@@ -295,11 +288,12 @@ import {
 } from "@/components/settings/asset-management-store"
 import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
-import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
+import { ContainerDetailsSheet } from "@/components/waste/container-details-sheet"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
+import { settingsHref } from "@/lib/data/settings-panes"
 import { exportShownRows } from "@/lib/data/workspace-export"
 import {
   isInProjectScope,
@@ -326,7 +320,6 @@ type BusinessWorkspaceProps = {
   allowedModuleIds?: readonly string[]
   allowedRecordIds?: readonly string[]
   workspaceLabel?: string
-  workspaceDescription?: string
   fixedProjectScope?: ProjectScope
   fixedScopeLabel?: string
   showDeepLinks?: boolean
@@ -941,15 +934,6 @@ const SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
   "category",
 ]
 
-const serviceProviderTicketSectionDescriptions: Record<string, string> = {
-  classification:
-    "Validation: a configured Ticket type and priority are required. New Tickets start Created; the office drives later states.",
-  "business-context":
-    "Validation: at least one permitted customer, Property, Shared Collection Point, Container, or Route relationship is required.",
-  "content-visibility":
-    "Describe the case and upload photos or documents as evidence.",
-}
-
 function serviceProviderScopedFormSchema(
   schema: BusinessFormSchema | undefined,
   serviceProviderScopeId: string | undefined,
@@ -981,8 +965,6 @@ function serviceProviderScopedFormSchema(
       ),
       sections: schema.sections.map((section) => ({
         ...section,
-        description:
-          serviceProviderTicketSectionDescriptions[section.id] ?? section.description,
         fields: section.fields
           .filter(
             (field) => !SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS.includes(field.id),
@@ -1636,10 +1618,6 @@ export function BusinessWorkspace({
       schemes: moduleRecords("route-studio", "schemes"),
     }
   }, [apiConfigured, isMapPlanningView, moduleRecords, pickupsOnApi, routesOnApi])
-  const containersModuleDefinition = getModuleDefinition({
-    workspaceId: "resources",
-    moduleId: "containers",
-  })
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
@@ -2064,7 +2042,7 @@ export function BusinessWorkspace({
         Number(viewOptions.showUpdated)
   const isFleetPlanningView =
     workspace.id === "fleet" && activeModule.id === "vehicle-planning"
-  const fleetPlanningTasks = useMemo<TimelineTask[]>(
+  const fleetPlanningItems = useMemo<TimelineItem[]>(
     () =>
       isFleetPlanningView
         ? filteredRecords.map((record, index) => {
@@ -3024,7 +3002,6 @@ export function BusinessWorkspace({
       ...activeModuleFormSchema,
       sections,
       title: `Edit ${entity.toLowerCase()}`,
-      description: `Update the linked records and details of ${editingRecord.name}. Changes are recorded with audit history.`,
       submitLabel: "Save changes",
       execution: {
         ...activeModuleFormSchema.execution,
@@ -3811,7 +3788,7 @@ export function BusinessWorkspace({
       const nextValues = { ...record.submittedValues }
       if (nextFacts.Date) {
         nextFacts["Operating date"] = /^\d{4}-\d{2}-\d{2}$/.test(nextFacts.Date)
-          ? formatServiceDate(nextFacts.Date)
+          ? formatShortDay(nextFacts.Date)
           : nextFacts.Date
         delete nextFacts.Date
       }
@@ -4267,7 +4244,7 @@ export function BusinessWorkspace({
       "Submitted by": actorName,
       ...(project ? { Project: project.name } : {}),
       // The canonical date fact key routes share with generation (issue #23).
-      ...(data.date ? { "Operating date": formatServiceDate(data.date) } : {}),
+      ...(data.date ? { "Operating date": formatShortDay(data.date) } : {}),
       ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
       ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
       ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),
@@ -4933,7 +4910,7 @@ export function BusinessWorkspace({
       <>
         {isContainersAssetsView && (
           <Button variant="outline" size="sm" asChild>
-            <Link href="/settings?pane=asset-management&from=%2Fresources%3Fmodule%3Dcontainers">
+            <Link href={settingsHref("asset-management", { from: "/resources?module=containers" })}>
               <Gear className="h-4 w-4" />
               <span className="hidden sm:inline">Asset settings</span>
             </Link>
@@ -5254,7 +5231,7 @@ export function BusinessWorkspace({
         )}
       </header>
 
-      {isMapPlanningView && mapPlanningRecords && containersModuleDefinition ? (
+      {isMapPlanningView && mapPlanningRecords ? (
         <MapPlanningView
           containers={mapPlanningRecords.containers}
           planningAreas={mapPlanningRecords.planningAreas}
@@ -5262,7 +5239,6 @@ export function BusinessWorkspace({
           routes={mapPlanningRecords.routes}
           pickups={mapPlanningRecords.pickups}
           schemes={mapPlanningRecords.schemes}
-          containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
           onCreateServiceArea={(seed) => {
@@ -5329,12 +5305,12 @@ export function BusinessWorkspace({
           >
             {isFleetPlanningView ? (
               <div className="p-4">
-                <TimelineGantt
+                <WeekTimeline
                   title="Availability and allocation"
                   emptyLabel="No allocations match the current filters"
-                  tasks={fleetPlanningTasks}
-                  onTaskSelect={(taskId) => {
-                    const record = filteredRecords.find((item) => item.id === taskId)
+                  items={fleetPlanningItems}
+                  onItemSelect={(itemId) => {
+                    const record = filteredRecords.find((item) => item.id === itemId)
                     if (record) openRecord(record)
                   }}
                 />
@@ -5345,7 +5321,7 @@ export function BusinessWorkspace({
                   <NoRecordsShown narrowed={narrowed} waiting={rowsAwaited} />
                 ) : (
                   filteredRecords.map((record) => (
-                    <TaskRowBase
+                    <CheckRow
                       key={record.id}
                       checked={/(completed|resolved|approved|closed|certified)/i.test(record.status)}
                       title={record.name}
@@ -5824,7 +5800,6 @@ export function BusinessWorkspace({
       ) : isContainersAssetsView && RowSurface === undefined ? (
         <ContainerDetailsSheet
           key={selectedRecord?.id ?? "closed-container"}
-          module={activeModule}
           record={selectedRecord}
           onClose={closeRecord}
           onAction={requestRecordAction}

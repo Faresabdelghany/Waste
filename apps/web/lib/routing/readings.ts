@@ -12,6 +12,7 @@
 //   directions sentence, and the optimisation one for a trip an optimiser
 //   ordered; the fake's straight legs are nobody's data and owe none.
 import type { RoutingQuota, RoutingQuotaFamily } from "@waste/contracts/routing-quota"
+import { MONTH_SHORT_LABELS } from "@waste/domain/days"
 
 /** The directions attribution OpenRouteService's results carry (#124 §6). */
 export const ORS_ATTRIBUTION = "© openrouteservice by HeiGIT | Data from OpenStreetMap"
@@ -30,8 +31,6 @@ const clock = (at: Date) => `${String(at.getHours()).padStart(2, "0")}:${String(
 
 const dayOf = (at: Date) => new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime()
 
-const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
-
 /** When the quota opens again, on the browser's clock: "resumes at 14:32", "resumes tomorrow at 09:00", further out "resumes on 3 Oct at 09:00". */
 export function resumesPhrase(resumesAt: string, now: Date): string {
   const at = new Date(resumesAt)
@@ -39,7 +38,7 @@ export function resumesPhrase(resumesAt: string, now: Date): string {
   const days = Math.round((dayOf(at) - dayOf(now)) / 86_400_000)
   if (days <= 0) return `resumes at ${clock(at)}`
   if (days === 1) return `resumes tomorrow at ${clock(at)}`
-  return `resumes on ${at.getDate()} ${SHORT_MONTHS[at.getMonth()]} at ${clock(at)}`
+  return `resumes on ${at.getDate()} ${MONTH_SHORT_LABELS[at.getMonth()]} at ${clock(at)}`
 }
 
 /** What each request family is to the office. */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Position2D } from "@waste/contracts/geojson"
+import type { Position2D } from "@waste/domain/geo"
 
 import { chunkPoints } from "../chunk"
 

@@ -3,8 +3,8 @@
 import { useMemo, type ReactNode } from "react"
 
 import { PageTopBar } from "@/components/page-layout"
-import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
-import { StatRow } from "@/components/projects/StatRow"
+import { Breadcrumbs } from "@/components/ui/breadcrumbs"
+import { StatRow } from "@/components/ui/stat-row"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { RouteSurfacePage } from "@/components/waste/commands/route-surfaces"

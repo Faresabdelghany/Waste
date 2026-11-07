@@ -5,8 +5,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { generateOccurrences, NO_HOLIDAYS } from "../occurrences"
-import { cadenceOn, isoWeek, matchesRecurrence, recurrenceFromValues, serviceDayOf, type SchemeRecurrence } from "../recurrence"
+import { generateOccurrences } from "../occurrences"
+import { isoWeek, NO_HOLIDAYS, serviceDayOf } from "../../days"
+import { cadenceOn, matchesRecurrence, recurrenceFromValues, type SchemeRecurrence } from "../recurrence"
 import { SCHEME_SEASONS_KEY, seasonProblems, seasonsFromValues, seasonsValue, storedSeasonsFromValues, type StoredSchemeSeason } from "../scheme-seasons"
 import { isMonthDay, overlappingSeasons, seasonContains, seasonLastDay, seasonOn, seasonsCoverYear, seasonSpanLabel, seasonStartOf, seasonsOverlap, type SchemeSeason } from "../seasons"
 import { schemeFrequencyReconciliationWarnings } from "../validation"

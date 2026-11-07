@@ -15,13 +15,13 @@
 //               the Command Queue, so a position survives a dead zone and is
 //               idempotent through the receipt like every command;
 //   retention — personal location data (#381): a point is kept
-//               `POSITION_RETENTION_DAYS` days, a Pilot setting, and never
-//               more than `POSITION_RETENTION_CEILING_DAYS`, which is also
-//               what the worker's purge keeps when the setting is unset.
+//               `POSITION_RETENTION_DAYS` days, and the worker's nightly
+//               purge deletes it after.
 //
 // The rules here are the device's and the purge's; what the door judges of a
 // command's points — the clock bounds and the session's start, point by
 // point — is `decide`'s (commands.ts).
+import { haversineMetres } from "../geo"
 import type { FlatPoint } from "./commands"
 
 /** One fix as the device kept it: when, where, how well it knew, and the speed and heading where the phone gave them, in whole units. */
@@ -52,24 +52,10 @@ export const POSITION_RULES = {
   batchMax: 60,
 } as const
 
-/** The longest a position is kept, in days, whatever the setting says; and what is kept when it says nothing. */
-export const POSITION_RETENTION_CEILING_DAYS = 30
+export const POSITION_RETENTION_DAYS = 30
 
-/** The days a purge keeps: the setting, never past the ceiling, and the ceiling when unset. */
-export const positionRetentionDays = (setting: number | undefined): number => (setting === undefined ? POSITION_RETENTION_CEILING_DAYS : Math.min(setting, POSITION_RETENTION_CEILING_DAYS))
-
-const EARTH_RADIUS_M = 6_371_008.8
-const radians = (degrees: number): number => (degrees * Math.PI) / 180
-
-/** The great-circle distance between two points, in metres: haversine over the mean Earth radius, near enough at a kerb's scale. */
-export function metresBetween(a: FlatPoint, b: FlatPoint): number {
-  const [lonA, latA] = a.coordinates
-  const [lonB, latB] = b.coordinates
-  const dLat = radians(latB - latA)
-  const dLon = radians(lonB - lonA)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(latA)) * Math.cos(radians(latB)) * Math.sin(dLon / 2) ** 2
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
-}
+/** The great-circle distance between two points, in metres, near enough at a kerb's scale. */
+export const metresBetween = (a: FlatPoint, b: FlatPoint): number => haversineMetres(a.coordinates, b.coordinates)
 
 /** Whether the device keeps this fix after the last kept one (null: none kept yet this session). */
 export function keepsFix(last: PositionFix | null, next: PositionFix): boolean {

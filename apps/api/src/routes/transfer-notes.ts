@@ -21,16 +21,13 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { company, project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
 import { wasteFraction } from "@waste/db/schema/catalogue"
-import { documentLanguageOf } from "@waste/domain/finance/invoice-document"
+import { documentLanguageOf } from "@waste/domain/document-text"
 import type { TransferNoteInput } from "@waste/domain/execution/transfer-note"
 import { and, eq } from "drizzle-orm"
+import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 
 import { problem } from "../problem"
-import { dayInTimezone } from "./days"
 import { labelOf, type UnloadRow } from "./execution-shapes"
-
-/** The time an instant falls at on a project's clock, `14:32`. */
-const timeIn = (instant: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant)
 
 /** Why an unload has no transfer note, as the 409 says it; null where it has one. */
 export function noteRefusal(row: UnloadRow): ReturnType<typeof problem> | null {
@@ -65,7 +62,7 @@ export async function transferNoteInputOf(tx: Tx, companyId: string, row: Unload
     language: documentLanguageOf(scope.language),
     unloadId: row.id,
     occurredOn: dayInTimezone(row.occurredAt, scope.timezone),
-    occurredAt: timeIn(row.occurredAt, scope.timezone),
+    occurredAt: timeInTimezone(row.occurredAt, scope.timezone),
     timezone: scope.timezone,
     projectName: scope.name,
     holder,

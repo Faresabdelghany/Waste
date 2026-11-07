@@ -13,9 +13,6 @@ import { allows, type Grants } from "../api/grants"
 import { statusLabel } from "../api/records/adapter"
 import { scopeOfValue, typeLabel, typeScope, valueOfScope, type TypeChoice } from "./ticket-scope"
 
-/** The pane, offered on the Pilot alone: the SLA is the API's. */
-export const TICKET_SLA_SETTINGS_PANE_ID = "ticket-sla"
-
 /** The kind picker's value for every kind: the wire's null. */
 export const EVERY_KIND = "every-kind"
 

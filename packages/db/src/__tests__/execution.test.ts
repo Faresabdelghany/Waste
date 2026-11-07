@@ -1,7 +1,7 @@
 // The Execution tables against Postgres (Issue #104, slice 1), on a fresh
 // database of this file's own so that "migration 0008 applies to a clean
-// database" is proved — the first `ALTER TABLE company`, the sync role and
-// the publication included — and nothing depends on what the shared local
+// database" is proved — the first `ALTER TABLE company` included — and
+// nothing depends on what the shared local
 // database holds: the composite keys refuse another project's group, driver,
 // depot, vehicle, property and container and another company's station,
 // provider, fraction and account, and a proof, an unload or a receipt naming
@@ -10,8 +10,7 @@
 // its pair and the proof's CASE agrees with the domain's `proofShape` on
 // every kind with each column set and unset; the API role can append to the
 // three ledgers and update or delete nothing there while the owner can; the
-// sync role reads every synced table across companies and writes nothing,
-// and the publication is over exactly those tables; the counter's `update …
+// counter's `update …
 // returning` allocates disjoint blocks under two concurrent transactions;
 // and the fence shows the API role exactly its company's rows in each of the
 // seven. Every test but the counter's runs as the owner in a transaction that
@@ -28,7 +27,7 @@ import type { PgTable } from "drizzle-orm/pg-core"
 
 import { createDb, type Database, type Tx } from "../client"
 import { migrateDatabase } from "../migrate"
-import { API_ROLE, SYNC_ROLE } from "../roles"
+import { API_ROLE } from "../roles"
 import { role, userAccount } from "../schema/access"
 import { containerType, wasteFraction } from "../schema/catalogue"
 import { container } from "../schema/containers"
@@ -39,7 +38,6 @@ import { vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation } from "../schema/places"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { PUBLICATION, syncedTableNames } from "../sql/publication"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -329,62 +327,6 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
     const denied = rows.filter((row) => !row.granted).map((row) => `${row.rolename} ${row.privilege} ${row.relation}`)
     assert.deepEqual(denied.sort(), LEDGERS.flatMap((ledger) => [`${API_ROLE} DELETE ${ledger}`, `${API_ROLE} UPDATE ${ledger}`]).sort())
   })
-
-  test("and created wms_sync REPLICATION, BYPASSRLS and NOLOGIN, with SELECT on exactly the synced tables and nothing else, and the publication over exactly them", async () => {
-    const [attributes] = await owner.sql<{ replication: boolean; bypassrls: boolean; login: boolean; superuser: boolean; owner_member: boolean }[]>`
-      select r.rolreplication as replication, r.rolbypassrls as bypassrls, r.rolcanlogin as login, r.rolsuper as superuser, pg_has_role(current_user, ${SYNC_ROLE}, 'MEMBER') as owner_member
-      from pg_roles r where r.rolname = ${SYNC_ROLE}`
-    assert.deepEqual(attributes, { replication: true, bypassrls: true, login: false, superuser: false, owner_member: true })
-    const privileges = await owner.sql<{ table: string; select: boolean; write: boolean }[]>`
-      select c.relname as table,
-        has_table_privilege(${SYNC_ROLE}, c.oid, 'SELECT') as select,
-        has_table_privilege(${SYNC_ROLE}, c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE') as write
-      from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'wms' and c.relkind = 'r'
-      order by c.relname`
-    const synced = [...syncedTableNames()].sort()
-    assert.deepEqual(privileges.filter((row) => row.select).map((row) => row.table), synced)
-    assert.deepEqual(privileges.filter((row) => row.write), [], "no write right on any table")
-    assert.ok(privileges.length > synced.length, "there are tables it may not read")
-    const published = await owner.sql<{ table: string }[]>`select tablename as table from pg_publication_tables where pubname = ${PUBLICATION} order by tablename`
-    assert.deepEqual(published.map((row) => row.table), synced)
-    const [schema] = await owner.sql<{ usage: boolean; extensions: boolean }[]>`select has_schema_privilege(${SYNC_ROLE}, 'wms', 'USAGE') as usage, has_schema_privilege(${SYNC_ROLE}, 'extensions', 'USAGE') as extensions`
-    assert.deepEqual(schema, { usage: true, extensions: false })
-  })
-
-  test("as wms_sync, every synced table reads across companies — the fence bypassed by construction — and an insert is refused (42501)", () =>
-    seeded(async (tx) => {
-      await tx.execute(sql`set local role ${sql.raw(SYNC_ROLE)}`)
-      const seen: Record<string, number> = {}
-      for (const name of syncedTableNames()) {
-        const [{ count }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from ${sql.identifier("wms")}.${sql.identifier(name)}`)
-        seen[name] = count
-      }
-      // Both companies' rows: two of everything seeded once per company, four of what was seeded twice.
-      assert.deepEqual(seen, {
-        user_account: 2,
-        waste_fraction: 2,
-        container_type: 2,
-        container: 4,
-        property: 2,
-        shared_collection_point: 2,
-        depot: 2,
-        unloading_station: 2,
-        unloading_station_fraction: 0,
-        vehicle: 4,
-        driver: 4,
-        route: 4,
-        pickup: 4,
-        session: 2,
-        proof_of_service: 2,
-        unload: 2,
-        driver_command: 2,
-      })
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ id: a.spare, companyId: a.company, projectId: a.project, kind: "route-started", aggregateKind: "route", aggregateId: a.route, occurredAt: at(6), payload: {} })), refusedWith("42501", /permission denied for table outbox_event/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({}))), refusedWith("42501", /permission denied for table proof_of_service/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.select().from(outboxEvent)), refusedWith("42501", /permission denied for table outbox_event/), "a table the rules do not name is not readable either")
-      await tx.execute(sql`reset role`)
-    }))
 
   /** Row counts per table as the transaction currently sees them. */
   const counts = async (tx: Tx): Promise<Record<string, number>> => {

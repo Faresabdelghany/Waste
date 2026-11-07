@@ -42,6 +42,7 @@
 // — and among rows of the same score the higher tier wins before the later
 // start. A row with no tier is judged exactly as before, whatever the
 // quantity, so a list with no tiers resolves as it always has.
+import { periodOn } from "../periods"
 import type { AgreementStatus, CustomerKind } from "../registry/vocabulary"
 import { fitsMinor, vatOf } from "./money"
 import type { BlockReason } from "./vocabulary"
@@ -142,9 +143,9 @@ function judge<Row extends PriceRow>(row: Row, input: PriceInput, labels: PriceL
     if (input.customerId != null && input.customerId === row.customerId) matched.push(`Negotiated · ${spelled(labels, "customerId", row.customerId)}`)
     else reason = negotiatedForAnother(spelled(labels, "customerId", row.customerId))
   }
-  // The period is half-open: the row is in force from `validFrom` and out of it from `validTo`.
-  if (reason === null && row.validFrom > input.on) reason = notEffectiveUntil(row.validFrom)
-  if (reason === null && row.validTo !== null && row.validTo <= input.on) reason = expiredOn(row.validTo)
+  const standing = periodOn(row, input.on)
+  if (reason === null && standing === "upcoming") reason = notEffectiveUntil(row.validFrom)
+  if (reason === null && standing === "ended" && row.validTo !== null) reason = expiredOn(row.validTo)
   if (reason === null) {
     for (const condition of PRICE_CONDITIONS) {
       const required = row[condition]

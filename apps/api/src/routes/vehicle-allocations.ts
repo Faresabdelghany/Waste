@@ -32,7 +32,7 @@
 // `trailerId` here (#101 §6.21); the driver, where named, one of the
 // project's who holds the class the vehicle requires on the window's last day
 // — the last instant inside the half-open window, a millisecond before
-// `plannedTo`, rendered as a day in the project's timezone (routes/days.ts),
+// `plannedTo`, rendered as a day in the project's timezone (@waste/domain/clock),
 // so a window ending at midnight is judged on the day before, the day the
 // driver is still meant to be driving — refused on `driverId` with the
 // domain's sentence; the depot the project's and the fraction the company's.
@@ -82,6 +82,7 @@ import type { AllocationAction, AllocationStatus } from "@waste/domain/resources
 import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -90,7 +91,6 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { daysThrough, refuseCrewAway } from "./availability-rules"
-import { dayInTimezone, lastDayInside } from "./days"
 import { fitsOf } from "./fleet-fit"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"

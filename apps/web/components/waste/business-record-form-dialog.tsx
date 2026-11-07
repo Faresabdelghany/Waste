@@ -15,12 +15,8 @@ import type {
 import { picksLetGoBy } from "@/lib/data/address-lookup"
 import { formReseeds, type FormSeedEdge } from "@/lib/data/business-form-seed"
 import { splitList } from "@waste/domain/record-values"
-import {
-  formatServiceDate,
-  nextServiceDates,
-  recurrenceFromValues,
-  recurrenceSentence,
-} from "@waste/domain/route-schemes/recurrence"
+import { nextServiceDates, recurrenceFromValues, recurrenceSentence } from "@waste/domain/route-schemes/recurrence"
+import { formatShortDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -383,7 +379,7 @@ function RecurrenceDatesPreview({
                   key={date}
                   className="rounded-md border border-border/60 bg-background px-2 py-1 text-xs font-medium"
                 >
-                  {formatServiceDate(date)}
+                  {formatShortDay(date)}
                 </span>
               ))}
             </div>

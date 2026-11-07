@@ -46,7 +46,7 @@
 import type { Driver, Vehicle, VehicleCompartment } from "@waste/contracts/fleet"
 import { displayLicenceClass, isLicenceClassToken } from "@waste/domain/resources/licence"
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import { isIsoDate } from "@waste/domain/days"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"

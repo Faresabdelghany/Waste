@@ -33,7 +33,7 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/co
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { useModuleReady } from "@/components/waste/commands/use-command-support"
 import { isLocalRefusal } from "@/lib/api/records/adapter"
-import { dayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/clock"
 import { explainPrice, explainQuery } from "@/lib/api/records/pricing"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
@@ -42,10 +42,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { blankNone, createPriceRowRecord, editedRecord, EXPLAIN_PRICE_FORM, formValuesOf, PRICE_ROW_FORM, priceRowEditForm } from "@/lib/data/commercial-forms"
-import { COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID } from "@/lib/data/settings-panes"
-
-/** Settings › Commercial › Products, where a product is added and edited. */
-export const PRODUCTS_SETTINGS_HREF = `/settings?pane=${COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID}`
+import { settingsHref } from "@/lib/data/settings-panes"
 
 /** The products' default prices are their default rows': a row added or moved reads the products again. */
 function useProductsReread(): () => void {
@@ -264,7 +261,7 @@ export function ProductCommandsSurface({ record }: RowSurfaceProps) {
       <div className="flex flex-wrap gap-2">
         <ExplainPrice initial={{ productId: record.id, ...(defaultList === undefined ? {} : { priceListId: defaultList.id }) }} />
         <Button variant="outline" size="sm" asChild>
-          <Link href={PRODUCTS_SETTINGS_HREF}>Edit in Settings</Link>
+          <Link href={settingsHref("commercial-products")}>Edit in Settings</Link>
         </Button>
       </div>
     </section>
