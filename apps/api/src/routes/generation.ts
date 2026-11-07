@@ -143,7 +143,15 @@ export type AskedRun = { kind: "started"; run: GenerationRun } | { kind: "held";
  */
 export async function askGeneration(tx: Tx, principal: Principal, send: Send, scheme: { id: string; projectId: string }, window: { from: string; to: string }): Promise<AskedRun> {
   const started = await startGenerationRun(tx, send, { companyId: principal.companyId, projectId: scheme.projectId, routeSchemeId: scheme.id, trigger: "on-demand", window })
-  if (started !== null) return { kind: "started", run: runOf(started) }
+  if (started !== null) {
+    const [run] = await tx
+      .select(runColumns)
+      .from(generationRun)
+      .where(and(runScope(principal), eq(generationRun.id, started)))
+      .limit(1)
+    if (run === undefined) throw new Error(`generation run ${started} started and then not there`)
+    return { kind: "started", run: runOf(run) }
+  }
   // A job of the scheme is queued, active or waiting to retry: the run that job is held for — the one whose job pg-boss's table still shows live — newest should there be more than one.
   const [inFlight] = await tx
     .select(runColumns)

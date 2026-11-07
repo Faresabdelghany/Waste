@@ -36,7 +36,7 @@ import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from
 import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
-import { assigneeOf } from "@waste/db/commands/ticket-moves"
+import { assigneeOf } from "@waste/db/commands/ticket-assignment"
 import { userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"

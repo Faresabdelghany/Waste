@@ -48,17 +48,16 @@ export type GenerationAsk = { companyId: string; projectId: string; routeSchemeI
 
 /**
  * Starts a run of the scheme over the window in the caller's transaction:
- * its job sent, then the run written `queued` naming it. Null where a job of
- * the scheme is already queued or active, nothing written; throws
- * `QueueMissing` for a database no worker has started on.
+ * its job sent, then the run written `queued` naming it. Answers the run's
+ * id, or null where a job of the scheme is already queued or active, nothing
+ * written; throws `QueueMissing` for a database no worker has started on.
  */
-export async function startGenerationRun(tx: Tx, send: Send, ask: GenerationAsk): Promise<typeof generationRun.$inferSelect | null> {
+export async function startGenerationRun(tx: Tx, send: Send, ask: GenerationAsk): Promise<string | null> {
   const id = newId()
   const jobId = await sendGenerateRoutes(send, tx, { generationRunId: id, companyId: ask.companyId, routeSchemeId: ask.routeSchemeId })
   if (jobId === null) return null
-  const [row] = await tx
+  await tx
     .insert(generationRun)
     .values({ id, companyId: ask.companyId, projectId: ask.projectId, routeSchemeId: ask.routeSchemeId, trigger: ask.trigger, windowFrom: ask.window.from, windowTo: ask.window.to, status: "queued", jobId })
-    .returning()
-  return row
+  return id
 }

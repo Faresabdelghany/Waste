@@ -99,7 +99,7 @@
 // the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
-import { cancelRoutesByGeneration, lockSchemeRoutes, openStopsOf, routesWithOfficeStops, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
+import { cancelRoutesByGeneration, lockSchemeRoutes, routesWithOfficeStops, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/contracts/execution"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
@@ -279,12 +279,10 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const walk = walkWindow(window)
   const existingRoutes = await lockSchemeRoutes(tx, companyId, scheme.id, walk)
   // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it. Only a planned route is the run's to cancel, so only those are asked.
-  const officeStops = routesWithOfficeStops(
-    await openStopsOf(
-      tx,
-      companyId,
-      existingRoutes.filter((row) => row.status === "planned").map((row) => row.id),
-    ),
+  const officeStops = await routesWithOfficeStops(
+    tx,
+    companyId,
+    existingRoutes.filter((row) => row.status === "planned").map((row) => row.id),
   )
   const plan = planRoutes({
     recurrence,

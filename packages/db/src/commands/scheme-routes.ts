@@ -7,8 +7,8 @@
 // which trimmed is the domain's (@waste/domain/planning/generation's
 // `planRoutes`, planning/lifecycle's `routesEndedFrom`); what the decision
 // reads — the scheme's routes under their row locks in id order, the order a
-// run and a bulk dispatch lock them in, and the planned ones' open stops,
-// the office's among them — and the statements are here.
+// run and a bulk dispatch lock them in, and which planned ones carry an open
+// stop the office added — and the statements are here.
 //
 // A cancel is generation's own: `cancelled` with its instant, marked
 // `cancelled_by_generation` with the `regeneration` reason code (O5 of #290),
@@ -44,8 +44,15 @@ export async function openStopsOf(tx: Tx, companyId: string, plannedRouteIds: re
     .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, [...plannedRouteIds]), eq(pickup.status, "planned")))
 }
 
-/** The routes carrying an open stop the office added (#111): trimmed, never cancelled under it. */
-export const routesWithOfficeStops = (open: readonly { routeId: string; origin: string }[]): Set<string> => new Set(open.filter((row) => row.origin === "office").map((row) => row.routeId))
+/** The planned routes carrying an open stop the office added (#111): trimmed, never cancelled under it. */
+export async function routesWithOfficeStops(tx: Tx, companyId: string, plannedRouteIds: readonly string[]): Promise<Set<string>> {
+  if (plannedRouteIds.length === 0) return new Set()
+  const rows = await tx
+    .selectDistinct({ routeId: pickup.routeId })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, [...plannedRouteIds]), eq(pickup.origin, "office"), eq(pickup.status, "planned")))
+  return new Set(rows.map((row) => row.routeId))
+}
 
 /** Cancels planned routes by generation, with the sentence; `generationRunId` names the run that did, where a run did. */
 export async function cancelRoutesByGeneration(tx: Tx, companyId: string, routeIds: readonly string[], note: string, at: Date, generationRunId: string | null = null): Promise<void> {
@@ -70,12 +77,10 @@ export async function skipStopsByGeneration(tx: Tx, companyId: string, pickupIds
  */
 export async function endSchemeRoutes(tx: Tx, companyId: string, schemeId: string, from: string, note: string, at: Date): Promise<SchemeEndingCounts> {
   const routes = await lockSchemeRoutes(tx, companyId, schemeId, { from })
-  const open = await openStopsOf(
-    tx,
-    companyId,
-    routes.filter((row) => row.status === "planned").map((row) => row.id),
-  )
-  const officeStops = routesWithOfficeStops(open)
+  const plannedIds = routes.filter((row) => row.status === "planned").map((row) => row.id)
+  const officeStops = await routesWithOfficeStops(tx, companyId, plannedIds)
+  // The planned routes' open stops, the office's among them: a cancel skips them all, a trim its own.
+  const open = await openStopsOf(tx, companyId, plannedIds)
   const ending = routesEndedFrom(
     routes.map((row) => ({
       id: row.id,

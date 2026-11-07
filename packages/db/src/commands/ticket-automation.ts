@@ -34,7 +34,7 @@ import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import { stopMismatch } from "@waste/domain/execution/ticket-stops"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { OfficeStopService, RouteStatus } from "@waste/domain/execution/vocabulary"
-import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, notPlannable, plannedService, type TicketActionParameters } from "@waste/domain/resolution/automation"
+import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, notPlannable, plannedService, triggerOf, type TicketActionParameters } from "@waste/domain/resolution/automation"
 import { addDays } from "@waste/domain/days"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
@@ -57,10 +57,11 @@ import { placementInForce } from "../query/placement-in-force"
 import { vehicleLabel } from "./fleet-fit"
 import { addOfficeStop, ORDER_OPEN_STATUSES } from "./office-stops"
 import { appendTicketEvent, BY_SLA, dueWithin, openTicket, slaHoursOf, ticketRefOf } from "./open-ticket"
+import { emit } from "./outbox"
 import { projectToday } from "./project-clock"
-import { labelOf, linksOf, type TicketRow } from "./resolution-rows"
+import { labelOf, linksOf, ticketColumns, ticketOf, type TicketRow } from "./resolution-rows"
 import { Refused } from "./shared"
-import { assigneeOf, assignTicket, currentTicket, moveTicket } from "./ticket-moves"
+import { assigneeOf, assignTicket, currentTicket } from "./ticket-assignment"
 import { bookTicket, plannedStopAnswering } from "./ticket-stops"
 
 /** How many more actions one change's chain may run: one count every level of it shares. */
@@ -173,6 +174,71 @@ export async function runTicketAutomation(tx: Tx, run: AutomationRun, ticketId: 
   }
 }
 
+/** What a door sets beside the status: a completion's resolution and what it arranged, a duplicate's parent, the stop that serviced it. */
+export type TicketMoveColumns = {
+  resolution?: TicketResolution
+  recollectionRouteId?: string | null
+  recollectionPickupId?: string | null
+  chargeProductId?: string | null
+  parentTicketId?: string
+  bookedRouteId?: string
+  bookedPickupId?: string
+}
+
+/** A move the machine allowed: the status it reaches, what the door sets beside it, the history row's note and who recorded it — a person, or null for the system's own — and the instant a close carries. */
+export type TicketMove = { to: TicketStatus; set?: TicketMoveColumns; note: string | null; recordedBy: string | null; at: Date }
+
+/** A reopened ticket is open: what a close set is cleared, the close standing in the history. */
+const REOPENED = { resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null }
+
+const closingOf = (to: TicketStatus, at: Date) => (to === "completed" || to === "rejected" ? { closedAt: at } : to === "open" ? REOPENED : {})
+
+const closes = (to: TicketStatus): to is "completed" | "rejected" => to === "completed" || to === "rejected"
+
+/**
+ * Moves the ticket the caller holds under its row lock to the status the
+ * machine allowed, as every door moves one — the office's commands
+ * (apps/api's routes/tickets.ts), the `set-status` action below, a stop
+ * servicing its ticket (commands/ticket-stops.ts), the consumer completing a
+ * superseded problem (apps/worker's open-tickets.ts), each judging the move
+ * by the machine and answering a refusal in its own words: the status with
+ * the columns a close carries — `closedAt` on completed and rejected, every
+ * closing column cleared on a reopen — and what the door sets beside them,
+ * one `status-changed` row, `ticket-completed` or `ticket-rejected` on a
+ * close, then the type's actions on the status reached, with the run,
+ * `depth` deep. A move runs the actions and an action moves, so the two live
+ * here together. Answers the ticket as the actions leave it.
+ */
+export async function moveTicket(tx: Tx, run: AutomationRun, current: TicketRow, move: TicketMove): Promise<TicketRow> {
+  const [row] = await tx
+    .update(ticket)
+    .set({ status: move.to, ...closingOf(move.to, move.at), ...move.set })
+    .where(and(eq(ticket.companyId, run.companyId), eq(ticket.id, current.id)))
+    .returning(ticketColumns)
+  if (row === undefined) throw new Error(`ticket ${current.id} of company ${run.companyId} moved and then not there`)
+  await appendTicketEvent(
+    tx,
+    ticketRefOf(run.companyId, row),
+    {
+      kind: "status-changed",
+      status: move.to,
+      assigneeUserAccountId: row.assigneeUserAccountId,
+      resolution: move.to === "completed" ? (row.resolution as TicketResolution) : null,
+      body: move.note,
+      visibility: "internal",
+      objectKey: null,
+      recordedBy: move.recordedBy,
+      sourceEventId: null,
+    },
+    run.newId,
+  )
+  if (closes(move.to)) await emit(tx, run, { aggregateId: row.id, kind: move.to === "completed" ? "ticket-completed" : "ticket-rejected", payload: ticketOf(row), projectId: row.projectId, occurredAt: move.at })
+  const reached = triggerOf(move.to)
+  if (reached === undefined) return row
+  await runTicketAutomation(tx, run, row.id, reached)
+  return await currentTicket(tx, run.companyId, row.id)
+}
+
 /** Hands the ticket to an active team of the company. */
 async function assignTeam(tx: Tx, run: AutomationRun, row: TicketRow, teamId: string): Promise<Done> {
   const [found] = await tx
@@ -198,7 +264,7 @@ async function assignPerson(tx: Tx, run: AutomationRun, row: TicketRow, userAcco
   if (isClosedTicketStatus(row.status as TicketStatus)) throw new Refused(409, `not assigned to ${found.name}: the ticket is ${row.status} and keeps its assignee.`)
   if (row.assigneeUserAccountId === userAccountId) return { said: `already assigned to ${found.name}.`, recorded: false }
   const said = `assigned to ${found.name}.`
-  await assignTicket(tx, run, row, userAccountId, { note: line(said), recordedBy: null })
+  await assignTicket(tx, row, userAccountId, { companyId: run.companyId, by: null, note: line(said), at: run.now(), newId: run.newId })
   return { said, recorded: true }
 }
 

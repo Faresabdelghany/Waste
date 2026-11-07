@@ -66,8 +66,7 @@ import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import type { JobSender } from "@waste/db/jobs"
-import { addOfficeStop as addStop } from "@waste/db/commands/office-stops"
-import type { TicketRow } from "@waste/db/commands/resolution-rows"
+import { addOfficeStop as addStop, officeStopPlanned } from "@waste/db/commands/office-stops"
 import { placementInForce, type PlacementStop } from "@waste/db/query/placement-in-force"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
@@ -450,13 +449,13 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
     ...(reserved === null ? [] : [{ index: "pickup_reserved_container_id_key" as const, id: reserved, label: (reserved === stop.at.containerId ? stop.label : stop.replacementLabel) ?? reserved }]),
     ...(taken === null ? [] : [{ index: "pickup_taken_container_id_key" as const, id: taken, label: stop.label ?? taken }]),
   ]
-  // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this, before the ticket's refusals.
-  let answering: TicketRow | undefined
-  const added = await addStop(
-    tx,
-    principal.companyId,
-    parent,
-    {
+  // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this, before the ticket's refusals. Under the route's lock nobody adds one meanwhile.
+  if (stop.at.containerId !== null && (await officeStopPlanned(tx, principal.companyId, parent.id, { containerId: stop.at.containerId, service: body.service }))) {
+    throw problem(409, { detail: bookedAlready(stop.label ?? stop.at.containerId, body.service, labelOf(parent)) })
+  }
+  // And the ticket held to the stop's place, open, and answered by no other planned stop.
+  const answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
+  const added = await addStop(tx, principal.companyId, parent, {
     id: newId(),
     service: body.service,
     note: body.note ?? bulky?.note ?? null,
@@ -465,14 +464,9 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
     bulkyBookingId: bulky?.bulkyBookingId ?? null,
     movedFromRouteId: movedFrom?.routeId ?? null,
     movedFromPickupId: movedFrom?.pickupId ?? null,
-    },
-    // And the ticket held to the stop's place, open, and answered by no other planned stop.
-    async () => {
-      answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
-    },
-  ).catch((error: unknown) => refuseHeld(tx, principal, error, held))
-  if (added.kind === "booked-already") throw problem(409, { detail: bookedAlready(stop.label ?? stop.at.containerId ?? "", body.service, labelOf(parent)) })
-  // The route's planned vehicle serves the stop (O7 of #290).
+  }).catch((error: unknown) => refuseHeld(tx, principal, error, held))
+  // The same work was refused above; the route's planned vehicle serves the stop (O7 of #290).
+  if (added.kind === "booked-already") throw new Error(`route ${parent.id} took the same work of container ${stop.at.containerId} under its lock`)
   if (added.kind === "misfit") throw problem(409, { detail: added.sentence })
   const [row] = await tx.select(pickupColumns).from(pickup).where(and(pickupScope(principal), eq(pickup.id, added.id))).limit(1)
   if (row === undefined) throw new Error(`pickup ${added.id} added to route ${parent.id} and then not there`)

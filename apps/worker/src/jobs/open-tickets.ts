@@ -102,7 +102,7 @@
 import { routeLabel } from "@waste/contracts/execution"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, BY_SLA, openTicket, ticketRefOf, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
-import { moveTicket } from "@waste/db/commands/ticket-moves"
+import { moveTicket } from "@waste/db/commands/ticket-automation"
 import { bookedTicket } from "@waste/db/commands/ticket-stops"
 import { labelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"

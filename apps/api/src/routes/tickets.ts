@@ -19,7 +19,7 @@
 // reopen it first"), 200 without a write on `stay` (starting a ticket already
 // in progress, reopening an open one, assigning the account already assigned
 // — the `confirm` precedent, #101), and on `move` writes the row and appends
-// the `ticket_event` through @waste/db/commands/ticket-moves, the one place a move
+// the `ticket_event` through `moveTicket` (@waste/db/commands/ticket-automation), the one place a move
 // is followed by a history row. `PATCH` appends nothing — a field edit is the
 // audit log's (ADR-0005) — and `updatedAt` moves. A comment is appended and
 // touches the row not at all, on a closed ticket too: a note after the fact
@@ -77,7 +77,8 @@ import {
 } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
-import { assignTicket, moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-moves"
+import { assignTicket } from "@waste/db/commands/ticket-assignment"
+import { moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-automation"
 import type { JobSender } from "@waste/db/jobs"
 import { propertyParty } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -617,7 +618,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         requireOpen(current)
         if (current.assigneeUserAccountId === assigneeUserAccountId) return c.json(ticketOf(current))
         await requireAccountInProject(tx, { companyId: principal.companyId, projectId: current.projectId }, assigneeUserAccountId)
-        const row = await assignTicket(tx, { companyId: principal.companyId, newId, now }, current, assigneeUserAccountId, { note: note ?? null, recordedBy: principal.user.id })
+        const row = await assignTicket(tx, current, assigneeUserAccountId, { companyId: principal.companyId, by: principal.user.id, note: note ?? null, at: now() })
         const answered = ticketOf(row)
         return c.json(answered)
       },

@@ -86,13 +86,13 @@ export async function planAhead({ api, worker, now, log, send }: JobContext, job
   for (const scheme of schemes) {
     try {
       const window = planAheadRunWindow(scheme.today, scheme.planAheadDays)
-      const run = await withCompany(api.db, scheme.companyId, (tx) => startGenerationRun(tx, send, { companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", window }))
-      if (run === null) {
+      const runId = await withCompany(api.db, scheme.companyId, (tx) => startGenerationRun(tx, send, { companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", window }))
+      if (runId === null) {
         // A job of this scheme is queued or active: no run is written, and that run covers the week.
         outcome.alreadyQueued.push(scheme.routeSchemeId)
         continue
       }
-      outcome.queued.push(run.id)
+      outcome.queued.push(runId)
     } catch (error) {
       log(`${PLAN_AHEAD_QUEUE}: company ${scheme.companyId}, scheme ${scheme.routeSchemeId} failed: ${JSON.stringify(loggable(error))}`)
       outcome.failed.push(scheme.routeSchemeId)

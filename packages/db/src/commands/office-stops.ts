@@ -53,23 +53,19 @@ export type OfficeStopAdded = { kind: "added"; id: string; position: number } | 
 /** Thrown inside the savepoint to take a misfit back, carrying its sentence. */
 class Misfit extends Error {}
 
-/**
- * Adds the office's stop to the route its caller locked and held to an open
- * order. `beforeWrite` is the door's own judgement that comes after the
- * same work and before the write — Add stop's of the ticket the stop is to
- * answer — so its refusals keep their order. A unique index's refusal
- * propagates, the stop taken back.
- */
-export async function addOfficeStop(tx: Tx, companyId: string, onRoute: { id: string; projectId: string; plannedVehicleId: string | null }, draft: OfficeStopDraft, beforeWrite?: () => Promise<void>): Promise<OfficeStopAdded> {
-  if (draft.containerId !== null) {
-    const [booked] = await tx
-      .select({ id: pickup.id })
-      .from(pickup)
-      .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, onRoute.id), eq(pickup.containerId, draft.containerId), eq(pickup.origin, "office"), eq(pickup.service, draft.service), eq(pickup.status, "planned")))
-      .limit(1)
-    if (booked !== undefined) return { kind: "booked-already" }
-  }
-  await beforeWrite?.()
+/** Whether the office has the same work planned on the route already: an office stop of the container for the service, still planned. A door that judges more of its own before the write asks it first, to keep its refusals in order. */
+export async function officeStopPlanned(tx: Tx, companyId: string, routeId: string, work: { containerId: string; service: PickupService }): Promise<boolean> {
+  const [booked] = await tx
+    .select({ id: pickup.id })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.containerId, work.containerId), eq(pickup.origin, "office"), eq(pickup.service, work.service), eq(pickup.status, "planned")))
+    .limit(1)
+  return booked !== undefined
+}
+
+/** Adds the office's stop to the route its caller locked and held to an open order. A unique index's refusal propagates, the stop taken back. */
+export async function addOfficeStop(tx: Tx, companyId: string, onRoute: { id: string; projectId: string; plannedVehicleId: string | null }, draft: OfficeStopDraft): Promise<OfficeStopAdded> {
+  if (draft.containerId !== null && (await officeStopPlanned(tx, companyId, onRoute.id, { containerId: draft.containerId, service: draft.service }))) return { kind: "booked-already" }
   try {
     return await tx.transaction(async (savepoint) => {
       const [last] = await savepoint
