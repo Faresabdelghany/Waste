@@ -15,11 +15,11 @@
 // any other reason is a decision — the driver's own skip (`inaccessible`,
 // `not-presented`, …), the dispatcher's removal, generation's regeneration —
 // that the proof or the note records, and makes nothing. A
-// `pickup-problem-reported` is a `reported-problem`, on the stop it named or
-// on the route alone; a `command-rejected` is a `rejected-command`, the
-// driver's. Which case the ticket then belongs to — the driver's open one a
-// rejection folds into, the stop's open one a stop's event folds into or
-// supersedes — is `cases.ts` (§3, #258). The route's own events, the completions, the corrections and the
+// `pickup-problem-reported` is a `reported-problem` on the stop it named, a
+// `route-problem-reported` one on the route, naming no stop; a
+// `command-rejected` is a `rejected-command`, the driver's. Which case the
+// ticket then belongs to — the driver's open one a rejection folds into, the
+// stop's open one a stop's event folds into or supersedes — is `cases.ts` (§3, #258). The route's own events, the completions, the corrections and the
 // unloads are news nobody has to act on here — a `route-cancelled` makes
 // nothing of its own, since its closed stops each arrive as `pickup-skipped ·
 // route-cancelled` (#104 §5) — and Finance reads three of them.
@@ -36,9 +36,9 @@
 // the note, cut the same way to `PARAGRAPH_MAX`, the `Paragraph`
 // bound `Ticket.description` is held to, since a device's note has no bound
 // of its own. What a ticket links to is what the event named: a problem on the
-// route alone names no stop, so it links no container and no place either,
-// whatever the worker read (§3: "container and place then", then being when
-// a pickup was named). What the draft does not carry is the API's:
+// route names no stop, so it links no container and no place either (§3:
+// "container and place then", then being when a pickup was named). What the
+// draft does not carry is the API's:
 // `occurredAt` is the event's, `dueAt` the project's SLA (O4 of #290), `createdBy` null
 // and `sourceEventId` the event's id, which `ticket_origin_shape` ties
 // together.
@@ -47,11 +47,11 @@ import type { OutboxKind } from "../outbox/vocabulary"
 import { LABEL_MAX, PARAGRAPH_MAX } from "../text"
 import type { TicketKind, TicketPriority, TicketSource } from "./vocabulary"
 
-/** The kinds a ticket may come from, the queues Resolution's consumer works (#104 §6, #109 §3): a stop missed or skipped, a problem reported, a command refused. `route-cancelled` is not one (§7.10). */
-export const RESOLUTION_EVENT_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"] as const satisfies readonly OutboxKind[]
+/** The kinds a ticket may come from, the queues Resolution's consumer works (#104 §6, #109 §3): a stop missed or skipped, a problem reported on a stop or on the route, a command refused. `route-cancelled` is not one (§7.10). */
+export const RESOLUTION_EVENT_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"] as const satisfies readonly OutboxKind[]
 export type ResolutionEventKind = (typeof RESOLUTION_EVENT_KINDS)[number]
 
-/** The events about a pickup, whose payload is the Pickup (or, for a problem on the route alone, the Route). */
+/** The events about a pickup, whose payload is the Pickup. */
 export const PICKUP_EVENT_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-completed", "pickup-corrected"] as const satisfies readonly OutboxKind[]
 export type PickupEventKind = (typeof PICKUP_EVENT_KINDS)[number]
 
@@ -59,8 +59,7 @@ export type PickupEventKind = (typeof PICKUP_EVENT_KINDS)[number]
 export type PickupEventFacts = {
   kind: PickupEventKind
   routeId: string
-  /** The pickup; null for a problem reported on the route alone. */
-  pickupId: string | null
+  pickupId: string
   containerId: string | null
   propertyId: string | null
   sharedCollectionPointId: string | null
@@ -81,6 +80,16 @@ export type PickupEventFacts = {
   customerId: string | null
 }
 
+/** A problem reported on the route, naming no stop, as the worker reads it: the problem proof's reason and note, and the route's driver. */
+export type RouteProblemFacts = {
+  kind: "route-problem-reported"
+  routeId: string
+  reason: PickupReason | null
+  note: string | null
+  /** The route's Actual Assignment driver — null while nobody started it. */
+  actualDriverId: string | null
+}
+
 /** A rejected command as the worker reads it off the receipt. */
 export type CommandRejectedFacts = {
   kind: "command-rejected"
@@ -93,10 +102,10 @@ export type CommandRejectedFacts = {
 }
 
 /** Every other event, which this module reads the kind of and nothing else. */
-export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | "command-rejected"> }
+export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | "route-problem-reported" | "command-rejected"> }
 
 /** An outbox event as the worker hands it here: the kind, and the plain facts that kind's payload and the reads beside it give. */
-export type EventFacts = PickupEventFacts | CommandRejectedFacts | OtherEventFacts
+export type EventFacts = PickupEventFacts | RouteProblemFacts | CommandRejectedFacts | OtherEventFacts
 
 /** What a ticket links to: the ids the event named, each null where it named none. */
 export type TicketDraftLinks = {
@@ -191,20 +200,27 @@ export const rejectedCommandSubject = (detail: string): string => boundedSubject
 export const describe = (sentence: string, reason: string | null, note: string | null): string =>
   boundedDescription([`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" "))
 
-/** The stop's links, with the driver given: the stop's container and place, and the customer and agreement it served under. An event on the route alone names no stop, so it names none of them, whatever the worker read. */
-const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => {
-  const onStop = facts.pickupId !== null
-  return {
-    routeId: facts.routeId,
-    pickupId: facts.pickupId,
-    containerId: onStop ? facts.containerId : null,
-    propertyId: onStop ? facts.propertyId : null,
-    sharedCollectionPointId: onStop ? facts.sharedCollectionPointId : null,
-    driverId,
-    customerId: onStop ? facts.customerId : null,
-    agreementId: onStop ? facts.agreementId : null,
-  }
-}
+/** The stop's links, with the driver given: the stop's container and place, and the customer and agreement it served under. */
+const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => ({
+  routeId: facts.routeId,
+  pickupId: facts.pickupId,
+  containerId: facts.containerId,
+  propertyId: facts.propertyId,
+  sharedCollectionPointId: facts.sharedCollectionPointId,
+  driverId,
+  customerId: facts.customerId,
+  agreementId: facts.agreementId,
+})
+
+/** A problem the driver reported, on a stop or on the route: medium, the device's, with the problem's reason and note. */
+const reportedProblem = (problem: { reason: PickupReason | null; note: string | null }, subject: string, links: TicketDraftLinks): TicketDraft => ({
+  kind: "reported-problem",
+  priority: "medium",
+  source: "driver-app",
+  subject,
+  description: describe("The driver reported a problem", problem.reason, problem.note),
+  links,
+})
 
 /** The ticket an event is worth, or undefined for an event that is news and not a case. */
 export function ticketFor(event: EventFacts): TicketDraft | undefined {
@@ -230,14 +246,9 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
       }
     }
     case "pickup-problem-reported":
-      return {
-        kind: "reported-problem",
-        priority: "medium",
-        source: "driver-app",
-        subject: reportedProblemSubject(event.reason, event.containerLabel, event.address),
-        description: describe("The driver reported a problem", event.reason, event.note),
-        links: pickupLinks(event, event.actualDriverId),
-      }
+      return reportedProblem(event, reportedProblemSubject(event.reason, event.containerLabel, event.address), pickupLinks(event, event.actualDriverId))
+    case "route-problem-reported":
+      return reportedProblem(event, reportedProblemSubject(event.reason, null, null), { routeId: event.routeId, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: event.actualDriverId, customerId: null, agreementId: null })
     case "command-rejected":
       return {
         kind: "rejected-command",
