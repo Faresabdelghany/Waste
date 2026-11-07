@@ -47,6 +47,15 @@ export function dayIn(now: Date, timezone: string | undefined): string {
   return localDay(now)
 }
 
+/**
+ * The project's day as a mapping reads it: through the load's clock where the
+ * mapping is a load's, which notes the read so the store reads the module
+ * again once that day turns (server-records.ts), else off the context's `now`.
+ */
+export function todayIn(context: MappingContext, timezone: string | undefined): string {
+  return context.today?.(timezone) ?? dayIn(context.now ?? new Date(), timezone)
+}
+
 /** The wall clock an instant reads on the project's clock, or on the browser's where the zone is not one. */
 function wallOn(instant: string, timezone: string | undefined): WallClock {
   const date = new Date(instant)

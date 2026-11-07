@@ -18,7 +18,7 @@ import { createPaymentRecord, PAYMENT_FORM } from "../../data/commercial-forms"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { invoiceAdapter } from "../records/billing"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { customerStatement, importBankLines, PAYMENT_NEVER_CHANGES, paymentAdapter, paymentsModule, wireLinesOf } from "../records/payments"
 import { customerAdapter } from "../records/registry"
@@ -80,9 +80,8 @@ describe("an invoice's standing", () => {
 })
 
 describe("the payments module", () => {
-  test("is switched after the invoices it pays and the customers who pay", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("commercial", "payments"))
-    for (const before of ["commercial.invoices", "customers.contacts"]) assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.payments") > SERVER_MODULE_KEYS.indexOf(before), before)
     assert.deepEqual(paymentsModule.resources, [paymentAdapter])
   })
 

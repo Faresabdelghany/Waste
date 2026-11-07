@@ -21,12 +21,14 @@ import { activityLabel, activityReading } from "@waste/domain/service-providers/
 import { splitList } from "@/lib/prototype/record-values"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import { ACTIVITY_KIND_KEY, ACTIVITY_PREFIX, ACTIVITY_RECORD_KIND, ACTIVITY_STATUS_KEY, closeBodyOf, daysText, kindLabel, PROVIDER_ACTIVITIES_MODULE, rejectBodyOf } from "@/lib/data/provider-activities"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
+import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 
 import { command, create, get, listAll, patch } from "../client"
-import { isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./clock"
+import { isLocalRefusal, moduleKeyOf, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { dayIn, todayIn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
@@ -50,7 +52,7 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
   const timezone = project === undefined ? undefined : typed(project, "timezone")
   const provider = nameVia(context, PROVIDER_PREFIX, activity.serviceProviderId)
   const label = activityLabel(activity.number)
-  const reading = activityReading(activity, dayIn(context.now ?? new Date(), timezone))
+  const reading = activityReading(activity, todayIn(context, timezone))
   const facts: Record<string, string> = {
     Number: label,
     Kind: kindLabel(activity.kind),
@@ -147,7 +149,7 @@ function serverIdAt(record: BusinessRecord, key: string, prefix: string, context
 function subjectOf(record: BusinessRecord, kind: ServiceProviderActivityCreate["kind"], context: MappingContext) {
   if (kind === "route-day-change" || kind === "vehicle-change" || kind === "stop-set-change" || kind === "waste-fraction-change") {
     const routeId = typed(record, "routeId")
-    const route = routeId === undefined ? undefined : context.resolve.find((candidate) => candidate.id === routeId)
+    const route = routeId === undefined ? undefined : context.resolve.find(moduleKeyOf(ROUTES_MODULE_LOCATION.workspaceId, ROUTES_MODULE_LOCATION.moduleId), (candidate) => candidate.id === routeId)
     if (route === undefined) return refusal("routeId", ROUTE_REFUSED)
     const projectId = serverIdAt(route, "projectId", PROJECT_PREFIX, context, ROUTE_REFUSED)
     const routeSchemeId = serverIdAt(route, "schemeId", SCHEME_PREFIX, context, ROUTE_REFUSED)
@@ -158,7 +160,7 @@ function subjectOf(record: BusinessRecord, kind: ServiceProviderActivityCreate["
   const serviceAreaId = serverIdAt(record, "serviceAreaId", AREA_PREFIX, context, AREA_REFUSED)
   if (isLocalRefusal(serviceAreaId)) return serviceAreaId
   const areaWebId = typed(record, "serviceAreaId")
-  const area = areaWebId === undefined ? undefined : context.resolve.find((candidate) => candidate.id === areaWebId)
+  const area = areaWebId === undefined ? undefined : context.resolve.find(moduleKeyOf(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId), (candidate) => candidate.id === areaWebId)
   const projectKey = area === undefined ? record : area
   const projectId = serverIdAt(projectKey, "projectId", PROJECT_PREFIX, context, PROJECT_REFUSED) ?? refusal("projectId", PROJECT_REFUSED)
   if (isLocalRefusal(projectId)) return projectId
@@ -301,10 +303,9 @@ export const activityAdapter: ResourceAdapter<ServiceProviderActivity> = {
   commands: ACTIVITY_COMMANDS,
 }
 
-/** Service Providers › Activities: read after the providers, the awards, the schemes and the routes they name; an open follow-up is overdue by its project's day. */
+/** Service Providers › Activities: an open follow-up is overdue by its project's day. */
 export const providerActivitiesModule: ServerModule = {
   workspaceId: PROVIDER_ACTIVITIES_MODULE.workspaceId,
   moduleId: PROVIDER_ACTIVITIES_MODULE.moduleId,
   resources: [activityAdapter],
-  readsTheDay: true,
 }

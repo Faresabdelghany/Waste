@@ -27,7 +27,7 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { containerAdapter } from "../records/containers"
 import { containerTypeAdapter, contaminantCodeAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REMOVE_PICKUP } from "../records/pickups"
 import { routeAdapter, routesWindowFrom } from "../records/routes"
@@ -124,12 +124,8 @@ const options = { state, now: NOW }
 const pageOf = (items: unknown[], nextCursor: string | null = null) => json({ items, nextCursor })
 
 describe("the pickups module", () => {
-  test("is switched, after the routes, the containers and the master data its rows name", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId))
-    const at = SERVER_MODULE_KEYS.indexOf("route-studio.pickups")
-    for (const named of ["configure.organization", "configure.master", "resources.containers", "route-studio.routes"]) {
-      assert.ok(at > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
   })
 
   test("reads every pickup of the routes' window, page after page, each pickup-<uuid>", async () => {

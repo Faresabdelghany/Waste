@@ -32,7 +32,7 @@ import { createMasterDataRecord, KEY_REFUSAL, masterDataKindOf, NO_TREATMENT, WA
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { containerTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter, masterDataModule, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -77,9 +77,8 @@ async function loadedMaster() {
 }
 
 describe("the master data module", () => {
-  test("is switched, after the organisation its frequencies name their project in", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("configure", "master"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("configure.master") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
   })
 
   test("loads the six lists in one order — container types before the vehicle types that name them, the fractions before the contaminant codes, the decommission reasons last — and files every row under its own prefix", async () => {

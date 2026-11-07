@@ -1,11 +1,6 @@
-// The modules the record store reads from the server (Issue #81), in the
-// order they load: a module listed after another may resolve that one's
-// rows. Organisation & Access first — the company and its projects, which
-// every scope compares against; the service providers, which a user may
-// belong to; then the users and roles, whose mapping names all three — and
-// then the Registry's first, the customers. A `workspace.module` not listed
-// here stays on the browser's own path: its fixtures merged with what the
-// browser holds, exactly as before this issue.
+// The modules the record store reads from the server (Issue #81). A
+// `workspace.module` not listed here stays on the browser's own path: its
+// fixtures merged with what the browser holds, exactly as before this issue.
 //
 // Switching a module is adding it here and, where the wire does not carry
 // what the prototype's form says, a mapping under records/. The store reads
@@ -52,47 +47,17 @@ import { weighbridgeModule } from "./weighbridge"
 import { weightsModule } from "./weights"
 
 /**
- * The switched modules, in load order: a module another module resolves
- * against comes first. The planning configuration and the master data after
- * the organisation, since an area, a calendar and a service frequency name
- * their project; the places after the master data, since a station names
- * its fractions, and the warehouses after the depots one may share a yard
- * with; the Drop-off Points after the places, since a point names its
- * project and its fractions (#293 M3); the fleet after the master data (a vehicle's type and fractions),
- * the access module (a driver's login) and the depots (a home base) (#180);
- * the properties after the customers their parties name, and the groups and
- * the shared points after the properties they gather (#184); the Price
- * Engine's catalogue, which names no route: the products after the master
- * data, and the price lists and their rows after the products, the customers
- * and the planning areas their conditions name (#185); the agreements after
- * the customers they name, the price lists they are priced under and the
- * products and places their subscriptions deliver (#291), and before the
- * placements that name their subscriptions (#183); the containers after the
- * master data and the warehouses they name, the ledger after the containers
- * its movements name, and the allocations after the fleet and the places they
- * reserve (#181);
- * the route schemes after everything a scheme and its groups name — the
- * areas, the master data, the providers, the fleet and the places — so none
- * of it is left an id chip on a scheme (#177); then the Live board, today's
- * routes, the short read ahead of the two windowed ones: the routes, which
- * name their scheme and the fleet and the places of their Planned Assignment,
- * and the pickups after the routes and the containers they name (#179); then
- * the tickets, after every module a ticket's links and its assignee name —
- * its parent among the tickets themselves — and the alerts after the
- * tickets they are linked to (#182); then the money the routes' work
- * makes: the billable events after the agreements, the products, the
- * routes and the tickets they name, the billing runs after the events they
- * invoice, and the invoices after the runs that issue them (#185); and the
- * payments after the invoices they pay and the customers who pay them
- * (#291 C6).
+ * The switched modules, in the order the store reads them. A mapping that
+ * names a row of a module read after it finds none yet, and the store reads
+ * it again once that module holds the row (server-records.ts, `readsChanged`):
+ * a module listed after the ones it names is read once, one listed before
+ * them twice, and its rows are the same either way.
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
   serviceProvidersModule,
   accessModule,
-  // A provider's team (#291 C24), after the providers its accounts name.
   teamModule,
-  // The ticket teams (O30 of #290), after the accounts their members are, and before the tickets that name them.
   ticketTeamsModule,
   customersModule,
   planningAreasModule,
@@ -109,16 +74,11 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   productsModule,
   priceRowsModule,
   agreementsModule,
-  // Right-sizing's proposals (M23b of #293), after the agreements and the products they name.
   rightSizingModule,
-  // The Applications (M7 of #293), after the customers, the places and the agreements their subjects name.
   applicationsModule,
-  // The register of plates and cards (#393), after the customers, the properties and the agreements its holders name.
   siteAccessModule,
   containersModule,
-  // The fill-level Sensors (O26 of #290), after the containers their pairings name.
   sensorsModule,
-  // The field inspections (M23 of #293), after the containers and the properties they are of; they name no route.
   inspectionsModule,
   inventoryModule,
   vehiclePlanningModule,
@@ -127,12 +87,9 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   routeSchemesModule,
   liveModule,
   routesModule,
-  // The providers' Activities (#474), after the providers, the awards, the schemes and the routes a proposal is opened on.
   providerActivitiesModule,
   pickupsModule,
-  // The Bulky Bookings (O11 of #290), after the routes their stops are on and the places, agreements and fractions they name.
   bulkyBookingsModule,
-  // The recycling-centre visits (#393), after the places, the fractions, the holders and the products their rows name.
   siteVisitsModule,
   ticketsModule,
   alertsModule,
@@ -142,9 +99,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   paymentsModule,
   settlementsModule,
   weightsModule,
-  // A weighbridge's tickets (O27 of #290), after the stations, the routes, the vehicles and the fractions they name.
   weighbridgeModule,
-  // The scale house (M16a of #293), after the projects, the stations, the customers, the agreements, the vehicles, the routes and the fractions its rows name.
   scaleHouseModule,
 ]
 

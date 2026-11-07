@@ -35,8 +35,10 @@ export type Resource = { id: string; createdAt: string; updatedAt: string }
  * How a mapping reaches the records of other resources: a user names its
  * role, its projects and its provider by server id, and a write names them
  * back by web id. The store composes one over every module it has loaded
- * and the rows of the module being loaded, in list order, so an adapter
- * listed after another sees that one's rows.
+ * and the rows of the module being loaded, so an adapter listed after
+ * another in its module sees that one's rows. A load's resolver notes what
+ * the mapping asked of it (server-records.ts, `MappingReads`), and the store
+ * reads the module again once that moves.
  */
 export type Resolver = {
   /** The web record a server id names, or undefined when nothing loaded carries it. */
@@ -44,14 +46,15 @@ export type Resolver = {
   /** The server id a web id stands for, or undefined for a record the server does not hold. */
   serverIdOf: (webId: string) => string | undefined
   /**
-   * The first loaded record the predicate holds for, or undefined: for a
-   * mapping whose form names a row by the wire's own stable key rather than
-   * by id — a route scheme's rule names its waste fractions by name, the
-   * word the domain matches containers by. A miss is the caller's refusal.
+   * The first record of one module, by key, the predicate holds for, or
+   * undefined: for a mapping whose form names a row by the wire's own stable
+   * key rather than by id — a route scheme's rule names its waste fractions by
+   * name, the word the domain matches containers by. A scan reads the module
+   * whole. A miss is the caller's refusal.
    */
-  find: (predicate: (record: BusinessRecord) => boolean) => BusinessRecord | undefined
-  /** Every loaded record the predicate holds for, in load order: for a reading that counts each — a container's planning areas, where areas overlap (#207). */
-  filter: (predicate: (record: BusinessRecord) => boolean) => BusinessRecord[]
+  find: (moduleKey: string, predicate: (record: BusinessRecord) => boolean) => BusinessRecord | undefined
+  /** Every record of one module, by key, the predicate holds for, in its order: for a reading that counts each — a container's planning areas, where areas overlap (#207). */
+  filter: (moduleKey: string, predicate: (record: BusinessRecord) => boolean) => BusinessRecord[]
 }
 
 /** A resolver over nothing: every lookup misses. What a mapping gets when the store has nothing else to offer. */
@@ -63,6 +66,12 @@ export type MappingContext = {
   resolve: Resolver
   /** The clock, for "Today" and "3 days ago"; a test pins it. */
   now?: Date
+  /**
+   * The project's day on a clock, `YYYY-MM-DD`, as `todayIn` (clock.ts) reads
+   * it: a load's mapping notes each day it is asked for, so the store reads
+   * the module again once that day turns. Absent, the day is read off `now`.
+   */
+  today?: (timezone: string | undefined) => string
 }
 
 /** A write the adapter refused before the API saw it, in the API's own words: a 400 with the field it names. */
@@ -166,17 +175,6 @@ export type ServerModule = {
   moduleId: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a module composes adapters of different resources; each is typed on its own
   resources: ResourceAdapter<any>[]
-  /**
-   * The modules, by key, whose rows its records are read through (#232): a
-   * container's place, areas and serving period through the agreements, the
-   * places and the areas. The store stamps each read of it with their rows
-   * as the read began (`mappedAgainst`) and reads it again once one of them
-   * has new rows since, or its projects' day has turned since it was read.
-   * None names itself or another such module (modules.ts' test).
-   */
-  derivedFrom?: readonly ModuleKey[]
-  /** Whether its records are read on the project's day (a boundary in force, a container's serving): the store reads it again once that day turns (#232). */
-  readsTheDay?: true
   /**
    * Whether it is read for a Service Provider's account alone (#291 C24): a
    * module whose routes the API opens to an office account under another

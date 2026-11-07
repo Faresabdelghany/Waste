@@ -8,8 +8,12 @@
 // resolver reads beside the loaded modules and never a module: each under the
 // web id the organisation module gives it (`projectWebIdOf`), so a row names
 // its project as it would for an administrator. The pinned scope derives from
-// the same projects (`projectScopeOfMe`). A role that views the organisation
+// the same projects (`projectScopeOfMe`). Each carries its timezone and its
+// currency as the organisation's record does, so a row is read on its
+// project's clock whatever the role views. A role that views the organisation
 // reads its rows, whole, and nothing is filed here.
+import type { Me } from "@waste/contracts/me"
+
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 
@@ -20,14 +24,14 @@ import type { ModuleState, ServerRecordsState } from "./server-records"
 export const ME_PROJECTS = "me.projects"
 
 /** A project as `/me` names it. */
-export type MeProject = { id: string; name: string }
+export type MeProject = Me["projects"][number]
 
 /** The web id the organisation module gives a project. */
 export function projectWebIdOf(project: Pick<MeProject, "id">): string {
   return webIdOf("project", project.id)
 }
 
-/** A project as the resolver reads it: its web id and name, nothing the organisation's read would add. */
+/** A project as the resolver reads it: its web id and name, and its clock and currency under the organisation record's keys; nothing else its read would add. */
 function projectRecordOf(project: MeProject): BusinessRecord {
   const id = projectWebIdOf(project)
   return {
@@ -39,12 +43,13 @@ function projectRecordOf(project: MeProject): BusinessRecord {
     value: "",
     updated: "",
     description: "",
-    facts: {},
+    facts: { Currency: project.currency, Timezone: project.timezone },
     related: [],
     source: "Waste API",
     freshness: "",
     projectIds: [id],
     recordKind: "Project",
+    submittedValues: { timezone: project.timezone, currency: project.currency },
   }
 }
 

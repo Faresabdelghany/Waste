@@ -20,7 +20,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { AGREEMENT_STATUSES, agreementAdapter, agreementsModule, INITIAL_SUBSCRIPTION_REFUSAL, subscriptionAdapter } from "../records/agreements"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { customerAdapter } from "../records/registry"
 import { loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -125,13 +125,8 @@ const SUBSCRIPTION_FORM = {
 }
 
 describe("the agreements module", () => {
-  test("is switched, after the organisation its agreements are scoped by, the customers they name and the products and price lists they are priced in", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("customers", "agreements"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("customers.contacts"))
-    // A subscription names its product and an agreement its price list (#291): read first, they are named by name, never by an id chip.
-    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("commercial.products"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("commercial.price-rows"))
     assert.deepEqual(agreementsModule.resources, [agreementAdapter, subscriptionAdapter], "the agreements before the subscriptions that name them")
   })
 

@@ -71,9 +71,9 @@ import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/do
 import { SLUG_PATTERN } from "@waste/domain/text"
 
 import { create, get, listAll, patch, withQuery } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { planningAreaAdapter } from "./planning"
-import { dayIn } from "./clock"
+import { dayIn, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -101,7 +101,7 @@ const oneOf = <Token extends string>(tokens: readonly Token[], value: string | u
 /** The project's own day, on its clock: what a period is read against. */
 export function projectDay(projectServerId: string, context: MappingContext): string {
   const project = context.resolve.byServerId(projectServerId)
-  return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
+  return todayIn(context, project === undefined ? undefined : typed(project, "timezone"))
 }
 
 /** A period's standing on the day, as a price list or a row names it. */
@@ -233,6 +233,7 @@ function defaultPriceOf(product: ProductResource, productWebId: string, projectW
   }
   const conditionKeys = ["planningAreaId", "customerKind", "containerType", "wasteFraction", "customerId"]
   const row = context.resolve.find(
+    moduleKeyOf(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId),
     (record) => isPriceRowRecord(record) && record.status === "Active" && typed(record, "productId") === productWebId && conditionKeys.every((key) => typed(record, key) === undefined) && isDefaultList(typed(record, "priceListId")),
   )
   return row?.value ?? "Unpriced"

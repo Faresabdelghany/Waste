@@ -35,7 +35,7 @@ import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecor
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { subscriptionAdapter } from "../records/agreements"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { propertiesModule, propertyAdapter, propertyGroupAdapter, propertyGroupsModule, sharedPointAdapter, sharedPointsModule } from "../records/properties"
 import { customerAdapter } from "../records/registry"
@@ -168,18 +168,8 @@ const PROPERTY_VALUES: Record<string, string> = {
 }
 
 describe("the three modules", () => {
-  test("are switched after the organisation and the customers they name, and before the agreements and the containers that name them", () => {
-    const at = (key: string) => SERVER_MODULE_KEYS.indexOf(key)
-    for (const { workspaceId, moduleId } of [PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE]) {
-      const key = `${workspaceId}.${moduleId}`
-      assert.ok(isServerBacked(workspaceId, moduleId), key)
-      assert.ok(at(key) > at("configure.organization"), `${key} after the organisation`)
-      assert.ok(at(key) > at("customers.contacts"), `${key} after the customers`)
-      assert.ok(at(key) < at("customers.agreements"), `${key} before the subscriptions that name its rows`)
-      assert.ok(at(key) < at("resources.containers"), `${key} before the containers placed there`)
-    }
-    assert.ok(at("customers.groups") > at("customers.properties"), "a group after the properties it gathers")
-    assert.ok(at("customers.shared") > at("customers.properties"), "a point after the properties it serves")
+  test("are switched", () => {
+    for (const { workspaceId, moduleId } of [PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE]) assert.ok(isServerBacked(workspaceId, moduleId), `${workspaceId}.${moduleId}`)
     assert.deepEqual(propertiesModule.resources, [propertyAdapter])
     assert.deepEqual(propertyGroupsModule.resources, [propertyGroupAdapter])
     assert.deepEqual(sharedPointsModule.resources, [sharedPointAdapter])

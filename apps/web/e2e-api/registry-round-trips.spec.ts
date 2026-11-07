@@ -493,9 +493,22 @@ async function receivedContainerThroughApi(api: APIRequestContext, projectId: st
   return container
 }
 
-test("a write to a module the containers are read through has them read again, once, after it (#232)", async ({ page, api }) => {
+test("a write to a row the containers read has them read again, once, after it; a row none of them reads, never (#232)", async ({ page, api }) => {
+  // A container served at a property under a subscription of an agreement, all made for the run: its record reads the agreement's period.
+  const project = await projectNamed(api, TESTER_PROJECT)
   const customer = await customerThroughApi(api, uniqueName("E2E Readings"))
-  // The containers' first page, each time they are read: a container's place, areas and serving are read with it.
+  const [product, agreement] = await Promise.all([productThroughApi(api, project.id, "active"), agreementThroughApi(api, project.id, customer.id)])
+  const placed = await api.post("/properties", { data: { projectId: project.id, name: uniqueName("E2E Read-through property"), address: "Parkvej 18, 2100 København Ø", kind: "residential" } })
+  expect(placed.status(), "POST /properties").toBe(201)
+  const property = (await placed.json()) as Property
+  const subscribed = await api.post(`/agreements/${agreement.id}/subscriptions`, { data: { productId: product.id, propertyId: property.id, validFrom: "2026-10-01", validTo: "2027-01-01" } })
+  expect(subscribed.status(), "POST /agreements/:id/subscriptions").toBe(201)
+  const subscription = (await subscribed.json()) as Subscription
+  const [container, fractions] = await Promise.all([receivedContainerThroughApi(api, project.id), listAll<{ id: string }>(api, "/waste-fractions")])
+  const issued = await api.post(`/containers/${container.id}/placements`, { data: { subscriptionId: subscription.id, wasteFractionId: fractions[0].id, validFrom: "2026-10-01" } })
+  expect(issued.status(), "POST /containers/:id/placements").toBe(201)
+
+  // The containers' first page, each time they are read.
   const containersRead = (request: { method: () => string; url: () => string }) => {
     const url = new URL(request.url())
     return request.method() === "GET" && url.pathname === "/waste-api/containers" && !url.searchParams.has("cursor")
@@ -504,13 +517,27 @@ test("a write to a module the containers are read through has them read again, o
   page.on("request", (request) => {
     if (containersRead(request)) reads.push(Date.now())
   })
-  // The store's own first read of them, after the agreements': only what follows the write is counted.
+  // The store's own first read of them, and the load settled after it: only what follows a write is counted.
   const loaded = page.waitForResponse((response) => containersRead(response.request()), { timeout: 30_000 })
   await openAgreementsLoaded(page)
   await loaded
+  await page.waitForTimeout(3_000)
   const first = reads.length
-  const created = await createAgreement(page, { number: uniqueName("E2E-RDG").replace(/\s+/g, "-").toUpperCase(), customer: customer.name, payer: customer.name })
-  expect(created.status()).toBe(201)
+
+  // A new agreement no container is served under: no container read it, so none is read again.
+  const unrelated = await createAgreement(page, { number: uniqueName("E2E-RDG").replace(/\s+/g, "-").toUpperCase(), customer: customer.name, payer: customer.name })
+  expect(unrelated.status()).toBe(201)
+  await page.waitForTimeout(3_000)
+  expect(reads.length - first, "a row no container read").toBe(0)
+  await page.keyboard.press("Escape")
+
+  // The agreement the container is served under, its end moved: the containers read its period, so they are read again, once.
+  await (await rowNamed(page, `${agreement.number} · ${customer.name}`)).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Edit agreement" }).click()
+  const editing = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: /^Edit/ }) })
+  await editing.getByLabel(/^Effective to/).fill("2027-12-31")
+  const [moved] = await Promise.all([answerOf(page, "PATCH", `/agreements/${agreement.id}`), editing.getByRole("button", { name: /^Save/ }).click()])
+  expect(moved.status()).toBe(200)
   await expect.poll(() => reads.length - first, { timeout: 15_000, message: "the containers are read again" }).toBe(1)
   // A burst collapses into one read: nothing more follows it.
   await page.waitForTimeout(3_000)

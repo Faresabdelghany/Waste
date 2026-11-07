@@ -85,7 +85,7 @@ import { create, get, listAll, patch, put } from "../client"
 import { NO_PRESENTATION, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
-import { dayIn } from "./clock"
+import { todayIn } from "./clock"
 import { referencedServerId } from "./references"
 import { customerAdapter } from "./registry"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
@@ -233,7 +233,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     const project = referenced(context, "project", property.projectId)
     // The record's parties are today's on the project's clock (#374): a move booked ahead is not yet the set a form edits, nor what `PUT …/parties` sends back.
     const projectRow = context.resolve.byServerId(property.projectId)
-    const today = dayIn(context.now ?? new Date(), projectRow === undefined ? undefined : typed(projectRow, "timezone"))
+    const today = todayIn(context, projectRow === undefined ? undefined : typed(projectRow, "timezone"))
     const parties = entriesOf(property.parties.filter((party) => party.validFrom <= today).map((party) => ({ id: party.customerId, role: party.role })), CUSTOMER_CHIP, context)
     const holders = (role: PropertyParty["role"]) => parties.filter((party) => party.role === role).map((party) => party.name ?? party.webId)
     const owners = holders("owner").join(", ")

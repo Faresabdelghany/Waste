@@ -18,7 +18,7 @@ import { FILL_LABELS } from "../../data/fill-levels"
 import { INSPECTION_RECORD_KIND, INSPECTIONS_MODULE } from "../../data/inspections"
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { addInspectionPhoto, CLOSE_INSPECTION, inspectionAdapter, toInspectionCreateBody, toInspectionPatchBody, toInspectionRecord } from "../records/inspections"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2027-03-04T12:00:00Z")
@@ -52,7 +52,6 @@ const atTheBin: FieldInspection = {
 describe("a field inspection as a record", () => {
   test("is the module's on the API, `field-inspection-<uuid>`, by its subject and day, its verdict and findings in words", () => {
     assert.ok(isServerBacked(INSPECTIONS_MODULE.workspaceId, INSPECTIONS_MODULE.moduleId))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("operate.inspections") > SERVER_MODULE_KEYS.indexOf("resources.containers"), "after the containers it names")
     const record = toInspectionRecord(atTheBin, context)
     assert.equal(record.id, `field-inspection-${atTheBin.id}`)
     assert.deepEqual([record.name, record.context, record.status, record.value], [`asset-${id(3)} · 2027-03-04`, "Major finding", "Open", "Contamination · Overfilled"])

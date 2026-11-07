@@ -115,7 +115,8 @@ export type Account = {
 export type Tenant = {
   companyId: string
   name: string
-  projects: { copenhagen: { id: string; name: string }; harbor: { id: string; name: string }; cairo: { id: string; name: string } }
+  /** As `/me` names each: its clock and its currency beside its name. */
+  projects: Record<"copenhagen" | "harbor" | "cairo", { id: string; name: string; timezone: string; currency: string }>
   serviceProviders: { nordren: { id: string; legalName: string }; cityhaul: { id: string; legalName: string } }
   roles: {
     administrator: { id: string; key: SystemRoleKey; grants: Grant[] }
@@ -160,9 +161,9 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
     companyId,
     name: `Test Company ${slug}`,
     projects: {
-      copenhagen: { id: testId(), name: "Copenhagen Central" },
-      harbor: { id: testId(), name: "Harbor Commercial" },
-      cairo: { id: testId(), name: "Cairo Operations" },
+      copenhagen: { id: testId(), name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" },
+      harbor: { id: testId(), name: "Harbor Commercial", timezone: "Europe/Copenhagen", currency: "DKK" },
+      cairo: { id: testId(), name: "Cairo Operations", timezone: "Africa/Cairo", currency: "EGP" },
     },
     serviceProviders: {
       nordren: { id: testId(), legalName: "NordRen ApS" },
@@ -199,9 +200,9 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
       { companyId, country: "EG", name: "Egyptian public holidays" },
     ])
     await tx.insert(project).values([
-      { id: tenant.projects.copenhagen.id, companyId, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" },
-      { id: tenant.projects.harbor.id, companyId, name: "Harbor Commercial", kind: "Business unit", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "onboarding" },
-      { id: tenant.projects.cairo.id, companyId, name: "Cairo Operations", kind: "Municipality", language: "ar", currency: "EGP", timezone: "Africa/Cairo", status: "active" },
+      { ...tenant.projects.copenhagen, companyId, kind: "Municipality", language: "da", status: "active" },
+      { ...tenant.projects.harbor, companyId, kind: "Business unit", language: "da", status: "onboarding" },
+      { ...tenant.projects.cairo, companyId, kind: "Municipality", language: "ar", status: "active" },
     ])
     await tx.insert(serviceProvider).values([
       { id: tenant.serviceProviders.nordren.id, companyId, legalName: "NordRen ApS", registrationNumber: String(randomInt(10_000_000, 100_000_000)), country: "DK", contactName: "Lars Mikkelsen", contactEmail: `lars.mikkelsen@${domain}` },

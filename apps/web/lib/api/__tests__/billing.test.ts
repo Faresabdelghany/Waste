@@ -37,7 +37,7 @@ import {
   invoicesModule,
   previewBillingRun,
 } from "../records/billing"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { productAdapter } from "../records/pricing"
 import { customerAdapter } from "../records/registry"
@@ -126,9 +126,8 @@ function made(id: string, recordKind: string, values: Record<string, string | bo
 }
 
 describe("the billable events module", () => {
-  test("is switched after the agreements, the products and the routes an event names", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("commercial", "events"))
-    for (const before of ["customers.agreements", "commercial.products", "route-studio.routes"]) assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.events") > SERVER_MODULE_KEYS.indexOf(before), before)
     assert.deepEqual(eventsModule.resources, [billableEventAdapter])
   })
 
@@ -317,8 +316,12 @@ describe("Explain price on a billable event's own question (#259)", () => {
   const pickup = made(`pickup-${PICKUP}`, "Pickup", { containerId: "asset-01a0d2a4-a280-7020-8000-000000000001", wasteFractionId: "waste-fraction-01a0d2a4-a280-7007-8000-000000000001" })
   const container = made("asset-01a0d2a4-a280-7020-8000-000000000001", "Container", { containerType: "container-type-01a0d2a4-a280-7008-8000-000000000001" })
   const everything = [agreement, osterbroRecord, winningRow, ownList, defaultList, route, scheme, pickup, container]
-  /** The store holding `rows`, each under the server id its web id carries, as the surface's resolver reads it. */
-  const holding = (rows: readonly BusinessRecord[]) => resolverOver(new Map([["held", moduleOf([...rows], rows.map((row) => row.id.slice(-36)))]]))
+  /** The store holding `rows`, each under the server id its web id carries, the price lists in their module, as the surface's resolver reads it. */
+  const holding = (rows: readonly BusinessRecord[]) => {
+    const held = (kept: readonly BusinessRecord[]) => moduleOf([...kept], kept.map((row) => row.id.slice(-36)))
+    const isList = (row: BusinessRecord) => row.id.startsWith("price-list-")
+    return resolverOver(new Map([["held", held(rows.filter((row) => !isList(row)))], ["commercial.price-rows", held(rows.filter(isList))]]))
+  }
   const pricedEvent = billableEventAdapter.toRecord(ready, context())
   const manualEvent = billableEventAdapter.toRecord({ ...manual, overrideReason: null }, context())
 
@@ -378,9 +381,8 @@ describe("the billing runs module", () => {
   const run: BillingRun = { id: "01a0d2a4-a280-7070-8000-000000000001", ...STAMPS, projectId: copenhagen.id, periodFrom: "2026-09-01", periodTo: "2026-09-30", status: "completed", requestedBy: ADMIN, completedAt: "2026-09-30T10:00:00.000Z", eventCount: 3, invoiceCount: 1, excludedCustomerCount: 1, netMinor: 66650, vatMinor: 16663, note: "September" }
   const detail: BillingRunDetail = { ...run, exclusions: [{ ...RECORDED, id: "01a0d2a4-a280-7071-8000-000000000001", billingRunId: run.id, customerId: osterbro.id, reason: "all-events-blocked", eventCount: 1 }], invoiceIds: ["01a0d2a4-a280-7080-8000-000000000001"] }
 
-  test("is switched after the events a run invoices", () => {
+  test("is switched, a run of its own", () => {
     assert.ok(isServerBacked("commercial", "billing"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.billing") > SERVER_MODULE_KEYS.indexOf("commercial.events"))
     assert.deepEqual(billingModule.resources, [billingRunAdapter])
   })
 
@@ -452,9 +454,8 @@ describe("the invoices module", () => {
   const creditNote: Invoice = { ...invoice, id: "01a0d2a4-a280-7080-8000-000000000002", number: 26007189, label: "CN-26007189", kind: "credit-note", dueOn: "2026-09-30", periodFrom: null, periodTo: null, billingRunId: null, creditsInvoiceId: invoice.id, creditReason: "quantity-correction", creditNote: "One sofa", netMinor: -30000, vatMinor: -7500, grossMinor: -37500 }
   const line: InvoiceLine = { ...RECORDED, id: "01a0d2a4-a280-7081-8000-000000000001", invoiceId: invoice.id, position: 1, billableEventId: manual.id, creditsLineId: null, description: "Bulky waste pickup 2026-09-29", productId: bulky.id, serviceDate: "2026-09-29", quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatPercent: 25, vatMinor: 15000 }
 
-  test("is switched after the billing runs that issue invoices", () => {
+  test("is switched, an invoice of its own", () => {
     assert.ok(isServerBacked("commercial", "invoices"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.invoices") > SERVER_MODULE_KEYS.indexOf("commercial.billing"))
     assert.deepEqual(invoicesModule.resources, [invoiceAdapter])
   })
 

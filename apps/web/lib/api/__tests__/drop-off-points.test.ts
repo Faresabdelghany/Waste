@@ -15,7 +15,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { DROP_OFF_EXCEPTIONS_KEY, DROP_OFF_FRACTIONS_KEY, DROP_OFF_HOURS_KEY, dropOffPointAdapter, dropOffPointsModule } from "../records/drop-off-points"
 import { wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
@@ -66,11 +66,8 @@ const recordOf = (point: DropOffPoint) => dropOffPointAdapter.toRecord(point, co
 const withValues = (record: BusinessRecord, values: Record<string, string | boolean>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 
 describe("the Drop-off Points module", () => {
-  test("is switched, after the organisation and the master data a point names", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("resources", "drop-off-points"))
-    const at = (key: string) => SERVER_MODULE_KEYS.indexOf(key)
-    assert.ok(at("configure.organization") < at("resources.drop-off-points"))
-    assert.ok(at("configure.master") < at("resources.drop-off-points"))
     assert.deepEqual([dropOffPointsModule.workspaceId, dropOffPointsModule.moduleId], ["resources", "drop-off-points"])
   })
 })

@@ -34,7 +34,7 @@ import { schemeValuesOfDraft } from "../../data/route-schemes"
 import { problemSentence } from "../problem"
 import { webIdOf, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import { planningAreaAdapter } from "../records/planning"
 import { PLAN_AHEAD_DAYS_KEY } from "../../data/route-schemes"
@@ -178,14 +178,8 @@ const withGroups = (groups: (current: SchemeGroup[]) => SchemeGroup[], serviceDa
 const request = (call: Call) => `${call.init.method ?? "GET"} ${call.url.replace("http://api.test", "")}`
 
 describe("the route schemes module", () => {
-  test("is switched, after every module a scheme and its groups name a row of, and before the routes, which name their scheme", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("route-studio", "schemes"))
-    const at = SERVER_MODULE_KEYS.indexOf("route-studio.schemes")
-    for (const before of ["configure.organization", "service-providers.service-providers", "configure.areas", "configure.master", "resources.depots", "fleet.vehicles", "fleet.drivers"]) {
-      assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
-    }
-    // The routes' modules follow it at once (#179), the Live board's short read ahead of the two windowed ones, and after them only the modules that name a route — Resolution's (#182) and the money a route's work makes (#185), the payments with the invoices they pay (#291 C6); a module switched later that names no route goes in ahead of the schemes (the order on #191).
-    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "service-providers.activities", "route-studio.pickups", "operate.bulky-bookings", "operate.site-visits", "operate.tickets", "operate.exceptions", "commercial.events", "commercial.billing", "commercial.invoices", "commercial.payments", "commercial.settlements", "route-studio.weights", "route-studio.weighbridge", "operate.scale-house"])
   })
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {

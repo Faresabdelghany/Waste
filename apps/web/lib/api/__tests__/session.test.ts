@@ -49,7 +49,7 @@ const me = (driver: { id: string } | null) =>
     user: { id: "01a0d2a4-a280-7005-8000-000000000003", email: EMAIL, fullName: "Mads Jensen", status: "active", allProjects: false, primaryAdministrator: false },
     company: { id: "01a0d2a4-a280-7001-8000-000000000001", name: "Kystbyen Renovation" },
     role: { id: "01a0d2a4-a280-7004-8000-000000000009", key: "driver", name: "Driver", scope: "Assigned projects", system: true, grants: [] },
-    projects: [{ id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central" }],
+    projects: [{ id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" }],
     serviceProvider: null,
     driver,
   })

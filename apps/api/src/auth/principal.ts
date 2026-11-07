@@ -70,7 +70,7 @@ export type Principal = {
   /** Normalised (`view` wherever anything else is granted, one entry per module, sorted): what requireGrant reads. */
   grants: Grant[]
   /** Sorted by name; every project of the company when `user.allProjects`. */
-  projects: { id: string; name: string }[]
+  projects: { id: string; name: string; timezone: string; currency: string }[]
   serviceProvider: { id: string; legalName: string } | null
   /** The driver profile bound to the account (`driver.user_account_id`) while it is `active`; null otherwise. The driver door resolves the whole profile itself (driver.ts). */
   driver: { id: string } | null
@@ -94,6 +94,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** The one driver status a profile drives under; `inactive` and `suspended` land the account as anyone else. */
 const ACTIVE_DRIVER: DriverStatus = "active"
+
+/** A project as `/me` names it. */
+const PROJECT_SUMMARY = { id: project.id, name: project.name, timezone: project.timezone, currency: project.currency }
 
 /** The hook's claim, `app_metadata.company_id`, when it is there and a UUID; undefined otherwise. */
 export function companyIdOf(claims: VerifiedClaims): string | undefined {
@@ -158,9 +161,9 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
     .where(and(eq(roleGrant.companyId, companyId), eq(roleGrant.roleId, found.roleId)))
 
   const projects = found.allProjects
-    ? await tx.select({ id: project.id, name: project.name }).from(project).where(eq(project.companyId, companyId)).orderBy(asc(project.name))
+    ? await tx.select(PROJECT_SUMMARY).from(project).where(eq(project.companyId, companyId)).orderBy(asc(project.name))
     : await tx
-        .select({ id: project.id, name: project.name })
+        .select(PROJECT_SUMMARY)
         .from(projectAccess)
         .innerJoin(project, and(eq(project.companyId, projectAccess.companyId), eq(project.id, projectAccess.projectId)))
         .where(and(eq(projectAccess.companyId, companyId), eq(projectAccess.userAccountId, found.id)))
