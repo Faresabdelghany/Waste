@@ -1,10 +1,11 @@
-// The resolution rule the pricing modules state (issue #22).
+// The resolution rule the pricing modules state (issue #22): the domain's sentence, which the API's resolver runs as code.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
+
 import { getBusinessFormSchema } from "../../data/business-form-schemas"
 import { getModuleDefinition } from "../../data/business-modules"
-import { RESOLUTION_RULE } from "../price-model"
 
 // Module-scope reads throw at load, which fails the file loudly (a throw in
 // a describe body would not).

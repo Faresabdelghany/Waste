@@ -38,12 +38,14 @@ import {
   resolveActiveRouteSummaries,
   useActiveRoutes,
 } from "@/components/waste/active-routes-store"
+import { projectScopeOfMe, projectWebIdOf } from "@/lib/api/records/me-projects"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { settingsHref } from "@/lib/data/settings-panes"
 import { footerItems, navBadgeOf, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
+import { projectScopeLabel, selectedProjectIds } from "@/lib/data/project-scope"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
@@ -67,9 +69,10 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar()
   const { starredRouteIds } = useActiveRoutes("operator")
   const { getRecords } = useBusinessRecordStore()
-  // The project the office works in, by the workspace's rule (`projectScopeOfMe`): on the Pilot the one `/me` names, else every project the person may read.
+  // The project scope the office's workspace runs in on the Pilot (`projectScopeOfMe`), read as a record's scope reads.
   const { apiConfigured, me } = useApiSession()
-  const projectLabel = !apiConfigured ? OPERATOR_PROJECT_NAME : me?.projects.length === 1 ? me.projects[0].name : "All permitted projects"
+  const meProjects = (me?.projects ?? []).map((project) => ({ id: projectWebIdOf(project), name: project.name }))
+  const projectLabel = apiConfigured ? projectScopeLabel(selectedProjectIds(projectScopeOfMe(me?.projects), {}, meProjects), meProjects) : OPERATOR_PROJECT_NAME
   // The Tickets badge is the open tickets the store has loaded, and none until it has (#147); no other item carries a number (#248).
   const ticketsOnApi = useServerModuleState(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
   const badgeOf = (item: NavItem): number | undefined =>

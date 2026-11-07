@@ -1512,9 +1512,8 @@ export function BusinessWorkspace({
   const canDeleteRecords =
     offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
   const canRunRecordActions = hasGrant("edit")
-  // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
-  // ticket #8) on a scheme: row menu + detail view, only for schemes whose
-  // recurrence is structured enough to generate.
+  // The Plan Ahead toggle (FR-11, ticket #8) on a scheme's row menu, only for
+  // schemes whose recurrence is structured enough to generate.
   const isSchemesView = activeModule.id === "schemes"
   // Per-scheme derived row presentation, one pass over one related-records
   // load: the live Attention warnings (issue #25, D5/D20 — recomputed from

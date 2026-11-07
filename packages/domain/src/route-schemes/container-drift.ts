@@ -215,8 +215,7 @@ export function containerDriftMovement(drift: CollectionGroupContainerDrift): st
  * The one Attention sentence for a drift, or null when nothing drifted:
  * "Matched containers shifted 13 % between generation runs: 4 joined, 0 left
  * of 30" for the implicit shared group, one clause per named group
- * otherwise. The same sentence serves the plan preview (this run against the
- * last stamp) and the badge (the two most recent distinct sets).
+ * otherwise, over the two most recent distinct sets.
  */
 export function containerDriftWarning(
   drift: readonly CollectionGroupContainerDrift[],

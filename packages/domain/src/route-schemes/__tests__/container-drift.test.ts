@@ -7,12 +7,14 @@ import {
   LAST_GENERATION_MATCHES_KEY,
   PREVIOUS_GENERATION_MATCHES_KEY,
   containerDriftBetween,
+  containerDriftWarning,
   generationMatchHistoryOf,
   parseGenerationMatches,
   serializeGenerationMatches,
   type GenerationMatches,
 } from "../container-drift"
-import { collectionGroupsOf } from "../groups"
+import { COLLECTION_GROUPS_KEY, collectionGroupsOf } from "../groups"
+import { schemeAttention } from "../lifecycle"
 
 /* --------------------------------- fixtures -------------------------------- */
 
@@ -130,6 +132,74 @@ describe("the 10 % threshold", () => {
       containerDriftBetween(stamp(rule, thirty), stamp(`${AREA}|Organic||`, thirty.slice(0, 10)), groups),
       [],
     )
+  })
+})
+
+/* ------------------------------- the badge -------------------------------- */
+
+describe("the Attention badge reads the two stamps the scheme carries", () => {
+  const rule = `${AREA}|Residual||`
+  const thirty = containersOf(30)
+  const DRIFT_PREFIX = "Matched containers shifted"
+  /** The scheme as the API's adapter hands it over: the run before and the last run, stored as `serializeGenerationMatches` writes them. */
+  const stamped = (scheme: BusinessRecord, previous: GenerationMatches, last: GenerationMatches): BusinessRecord => ({
+    ...scheme,
+    submittedValues: {
+      ...scheme.submittedValues,
+      [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(previous),
+      [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
+    },
+  })
+  const attentionOf = (scheme: BusinessRecord, containers: readonly BusinessRecord[]) => schemeAttention(scheme, { schemes: [scheme], containers })
+  const driftWarnings = (warnings: readonly string[]) => warnings.filter((warning) => warning.startsWith(DRIFT_PREFIX))
+
+  test("a shift past the threshold is the badge's last sentence, joined and left counted against the run before; within the threshold, or with no run before, there is none", () => {
+    const grown = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id))]
+    const joined = stamped(ruleScheme(), stamp(rule, ids(thirty)), stamp(rule, ids(grown)))
+    const sentence = "Matched containers shifted 13 % between generation runs: 4 joined, 0 left of 30"
+    const attention = attentionOf(joined, grown)
+    assert.deepEqual(driftWarnings(attention), [sentence])
+    assert.equal(attention[attention.length - 1], sentence, "the drift sentence follows validation's warnings")
+
+    // 3 of 34 leave (9 %): the most recent change is no drift.
+    const settled = grown.slice(0, 31)
+    assert.deepEqual(driftWarnings(attentionOf(stamped(ruleScheme(), stamp(rule, ids(grown)), stamp(rule, ids(settled))), settled)), [])
+    // The first run has nothing to compare with.
+    assert.deepEqual(driftWarnings(attentionOf(stamped(ruleScheme(), {}, stamp(rule, ids(thirty))), thirty)), [])
+  })
+
+  test("containers leaving count too: 4 of 30 out of the set is a drift", () => {
+    const shrunk = thirty.slice(4)
+    const left = stamped(ruleScheme(), stamp(rule, ids(thirty)), stamp(rule, ids(shrunk)))
+    assert.deepEqual(driftWarnings(attentionOf(left, shrunk)), [
+      "Matched containers shifted 13 % between generation runs: 0 joined, 4 left of 30",
+    ])
+  })
+
+  test("named collection groups are reported one clause each", () => {
+    const explicit = ruleScheme({
+      stopSelection: "",
+      matchFractions: "",
+      [COLLECTION_GROUPS_KEY]: JSON.stringify([
+        { id: "g-residual", name: "Residual run", days: ["monday", "tuesday", "wednesday", "thursday", "friday"], fractions: ["Residual"], vehicleId: "vehicle-wh24", driverId: "driver-mads", stopSource: "rule", containerIds: [] },
+        { id: "g-organic", name: "Organic run", days: ["monday", "tuesday", "wednesday", "thursday", "friday"], fractions: ["Organic"], vehicleId: "vehicle-wh25", driverId: "driver-lars", stopSource: "rule", containerIds: [] },
+      ]),
+    })
+    const organic = containersOf(5, "Organic").map((record) => ({ ...record, id: `o-${record.id}` }))
+    const moved = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id)), ...organic, container("o-d01", "Organic"), container("o-d02", "Organic")]
+    const organicRule = `${AREA}|Organic||`
+    const previous: GenerationMatches = {
+      "g-residual": { rule, containerIds: ids(thirty) },
+      "g-organic": { rule: organicRule, containerIds: ids(organic) },
+    }
+    const last: GenerationMatches = {
+      "g-residual": { rule, containerIds: [...ids(thirty), "d01", "d02", "d03", "d04"] },
+      "g-organic": { rule: organicRule, containerIds: [...ids(organic), "o-d01", "o-d02"] },
+    }
+    const sentence = "Matched containers shifted between generation runs: Residual run 13 % (4 joined, 0 left of 30); Organic run 40 % (2 joined, 0 left of 5)"
+    const scheme = stamped(explicit, previous, last)
+    assert.deepEqual(driftWarnings(attentionOf(scheme, moved)), [sentence])
+    assert.equal(containerDriftWarning(containerDriftBetween(previous, last, collectionGroupsOf(explicit.submittedValues, { facts: {} }))), sentence)
   })
 })
 

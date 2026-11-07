@@ -1,4 +1,4 @@
-import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
+import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 

@@ -9,8 +9,7 @@
 // the creditor number while a project's invoices name it.
 import { uniqueName } from "./env"
 import { expect, test } from "./fixtures"
-import { answerOf, toasts } from "./routes-support"
-import { pick } from "./routes-support"
+import { answerOf, pick, toasts } from "./routes-support"
 import { projectNamed, TESTER_PROJECT, type Project } from "./tester"
 
 type Company = { vatNumber: string | null; bankIban: string | null; bankBic: string | null; fikCreditorNumber: string | null }

@@ -1,4 +1,4 @@
-import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
+import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
 import type { BusinessRecord } from "@waste/domain/prototype-record"
 
 // The registry of workspaces and modules, and the fixture records of the
