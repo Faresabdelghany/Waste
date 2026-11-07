@@ -1,29 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { CHANGE_NAMES_SOMETHING } from "@waste/domain/registry/agreements"
 import { AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
 
-import {
-  Agreement,
-  AgreementCreate,
-  AgreementListQuery,
-  AgreementPatch,
-  AgreementStatus,
-  AgreementTerminated,
-  AgreementTermination,
-  BillingCadence,
-  CHANGE_NAMES_SOMETHING,
-  Subscription,
-  SubscriptionChange,
-  SubscriptionCreate,
-  SubscriptionListQuery,
-  SubscriptionPatch,
-  SubscriptionPause,
-  SubscriptionPauseCancel,
-  SubscriptionPauseCreate,
-  SubscriptionPauseListQuery,
-  SubscriptionPausePatch,
-} from "../agreements"
+import { Agreement, AgreementCreate, AgreementListQuery, AgreementPatch, AgreementStatus, AgreementTerminated, AgreementTermination, BillingCadence, Subscription, SubscriptionChange, SubscriptionCreate, SubscriptionListQuery, SubscriptionPatch, SubscriptionPause, SubscriptionPauseCancel, SubscriptionPauseCreate, SubscriptionPauseListQuery, SubscriptionPausePatch } from "../agreements"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

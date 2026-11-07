@@ -6,9 +6,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CustomerContactCreate, CustomerContactPatch, REACHABLE_ON_A_CHANNEL as CONTRACTS_SENTENCE } from "@waste/contracts/customers"
+import { CustomerContactCreate, CustomerContactPatch } from "@waste/contracts/customers"
+import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
-import { ADD_CONTACT, contactBody, contactLine, draftOf, EDIT_CONTACT, NEW_CONTACT, REACHABLE_ON_A_CHANNEL, takesContacts } from "../records/customer-contacts"
+import { ADD_CONTACT, contactBody, contactLine, draftOf, EDIT_CONTACT, NEW_CONTACT, takesContacts } from "../records/customer-contacts"
 import { NOTHING_RESOLVED } from "../records/adapter"
 import { customerAdapter, customerKindOf, customersModule } from "../records/registry"
 import { actOnRecord, loaded, type ServerRecordsState } from "../records/server-records"
@@ -37,7 +38,6 @@ describe("an organisation's contact persons (#291 C14)", () => {
     assert.ok(!("message" in sent))
     assert.deepEqual(sent.body, { name: "Hanne Holm", role: "billing", email: "hanne@example.dk", phone: null, status: "active" })
     assert.ok(CustomerContactCreate.safeParse(sent.body).success)
-    assert.equal(REACHABLE_ON_A_CHANNEL, CONTRACTS_SENTENCE)
     assert.deepEqual(contactBody({ contact: { ...NEW_CONTACT, name: "Nobody" } }), { path: "email", message: REACHABLE_ON_A_CHANNEL })
     assert.deepEqual(contactBody({ contact: { ...NEW_CONTACT, email: "x@example.dk" } }), { path: "name", message: "A contact needs a name" })
     const edit = contactBody({ contact: { ...draftOf(hanne), status: "inactive" } })

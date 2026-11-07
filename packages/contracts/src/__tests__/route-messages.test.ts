@@ -3,7 +3,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DriverRouteMessageCreate, ROUTE_MESSAGE_BODY_MAX, RouteMessageCreate } from "../route-messages"
+import { ROUTE_MESSAGE_BODY_MAX } from "@waste/domain/execution/route-messages"
+
+import { DriverRouteMessageCreate, RouteMessageCreate } from "../route-messages"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

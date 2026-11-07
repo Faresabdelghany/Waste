@@ -29,6 +29,9 @@
 // nothing here knows a resource: the modules under lib/api/records map the
 // contracts' resources onto the prototype's records, and this only carries
 // them.
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
+import { PAGE_LIMIT_MAX } from "@waste/domain/requests"
+
 import { ApiProblem, genericProblem, problemOf, type Problem } from "./problem"
 
 export type ApiClient = {
@@ -45,20 +48,10 @@ export type ApiClient = {
   reason?: string
 }
 
-/**
- * The header a write's reason travels in, as `@waste/contracts/audit` names
- * it: re-spelled here, since the contracts reach the bundle as types alone,
- * and held equal by a test.
- */
-export const CHANGE_REASON_HEADER = "waste-change-reason"
-
 export type Page<Item> = { items: Item[]; nextCursor: string | null }
 
 /** What `POST` answers: the body, and where the row is now read (`Location`, root-relative; null when the API did not say). */
 export type Created<Body> = { body: Body; location: string | null }
-
-/** The API's page-size ceiling (`@waste/contracts/pagination`, PAGE_LIMIT_MAX). */
-export const PAGE_LIMIT_MAX = 200
 
 /** The status a request that never reached the API is reported under; not an HTTP status on purpose. */
 export const UNREACHABLE_STATUS = 0

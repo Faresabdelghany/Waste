@@ -14,6 +14,7 @@
 import { useState } from "react"
 import { DownloadSimple, WarningCircle } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
+import { separatorForLocale } from "@waste/domain/imports/csv"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,7 +25,7 @@ import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { wasteDataFile, wasteDataKey, wasteDataReport, type FileSeparator, type WasteDataQuery } from "@/lib/api/reports"
 import { downloadBlob } from "@/lib/data/csv"
-import { COMPLIANCE_PERIODS, DEFAULT_PERIOD, periodLabel, periodOf, periodRefusal, SEPARATORS, separatorFor, wasteDataFileName, type CompliancePeriodId } from "@/lib/insight/compliance"
+import { COMPLIANCE_PERIODS, DEFAULT_PERIOD, periodLabel, periodOf, periodRefusal, SEPARATORS, wasteDataFileName, type CompliancePeriodId } from "@/lib/insight/compliance"
 import { countedOf, countOf, WEIGHTS_MODULE, weightOf, type DayWindow } from "@/lib/insight/dashboard"
 
 import { ReportCard, ReportNotice } from "./report-card"
@@ -37,7 +38,7 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
   const [periodId, setPeriodId] = useState<CompliancePeriodId>(DEFAULT_PERIOD)
   const [custom, setCustom] = useState<DayWindow>(() => periodOf(DEFAULT_PERIOD, today) ?? { from: today, to: today })
   // The tab mounts only once `/me` is read, in the browser, so the locale is the person's.
-  const [separator, setSeparator] = useState<FileSeparator>(() => separatorFor(typeof navigator === "undefined" ? undefined : navigator.language))
+  const [separator, setSeparator] = useState<FileSeparator>(() => separatorForLocale(typeof navigator === "undefined" ? undefined : navigator.language))
   const [downloading, setDownloading] = useState(false)
 
   const period = periodOf(periodId, today) ?? custom

@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { UNLOAD_SECONDS } from "../../routing/reloads"
+import { UNLOAD_SECONDS } from "../../execution/workload"
 import { legsOfTrip, routeEta, type EtaInput, type EtaStop } from "../eta"
 
 const DAY = Date.parse("2026-12-01T00:00:00.000Z")

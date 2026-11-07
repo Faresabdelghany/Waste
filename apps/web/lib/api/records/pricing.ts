@@ -68,6 +68,7 @@ import {
 } from "@/lib/data/commercial"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
+import { SLUG_PATTERN } from "@waste/domain/text"
 
 import { create, get, listAll, patch, withQuery } from "../client"
 import { NO_PRESENTATION, isLocalRefusal, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -92,7 +93,7 @@ export const ROW_KEY_REFUSAL = "A row keeps its list, its product, its condition
 /** The transitions a product offers, by its wire status: a draft is put on sale, an active one withdrawn, an inactive one offered again. */
 export const PRODUCT_TRANSITIONS: Readonly<Record<ProductStatus, readonly string[]>> = { draft: ["Active"], active: ["Inactive"], inactive: ["Active"] }
 
-const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
+const SLUG = new RegExp(SLUG_PATTERN)
 
 const oneOf = <Token extends string>(tokens: readonly Token[], value: string | undefined): Token | undefined => tokens.find((token) => token === value)
 

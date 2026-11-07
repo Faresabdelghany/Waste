@@ -41,7 +41,7 @@
 // already holds the lock holds it twice, which is once. The ticket itself is
 // not held here — the ticket create has just written it, and the link
 // command holds it to the project before it calls.
-import { ticketLabel } from "@waste/contracts/resolution"
+import { ticketLabel } from "@waste/domain/numbering"
 import { Refused } from "@waste/domain/refusal"
 import { ALERT_DOES_NOT_CHANGE } from "@waste/domain/resolution/transitions"
 import { and, eq } from "drizzle-orm"

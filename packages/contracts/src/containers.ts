@@ -38,17 +38,20 @@
 // what makes that the honest way to say it. Whether a corrected end still lies
 // inside the subscription's period is the route's question, since this schema
 // cannot see the stored row.
+import { validityOrdered } from "@waste/domain/periods"
+import { A_DAY_FOR_A_PLACE, SERVED_BY_ONE } from "@waste/domain/registry/containers"
 import { CONTAINER_IDENTIFIERS, CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { AssetStatus } from "./resources"
 import { AssetState } from "./stock"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity } from "./validity"
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const ContainerOwnership = z.enum(CONTAINER_OWNERSHIPS)
@@ -118,10 +121,7 @@ export const ContainerServicePlacement = z
   .refine(validityOrdered, endsAfterItStarts)
 export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement>
 
-const servedByOne = {
-  message: "Give exactly one of subscriptionId and sharedCollectionPointId: a container serves a subscription, or stands for the project at a Shared Collection Point",
-  path: ["subscriptionId"],
-}
+const servedByOne = { message: SERVED_BY_ONE, path: ["subscriptionId"] }
 /** A null counts as not given, as a form with both fields sends it. */
 const servedOnce = (body: { subscriptionId?: string | null; sharedCollectionPointId?: string | null }) =>
   [body.subscriptionId, body.sharedCollectionPointId].filter((served) => served != null).length === 1
@@ -175,10 +175,7 @@ export const ContainerListQuery = ProjectScopedListQuery.extend({
 })
 export type ContainerListQuery = z.infer<typeof ContainerListQuery>
 
-const dayForAPlace = {
-  message: "Give validOn with propertyId or sharedCollectionPointId: what stands at a place is what stands there on a day",
-  path: ["validOn"],
-}
+const dayForAPlace = { message: A_DAY_FOR_A_PLACE, path: ["validOn"] }
 const placeAsksForADay = (query: { propertyId?: string; sharedCollectionPointId?: string; validOn?: string }) =>
   (query.propertyId === undefined && query.sharedCollectionPointId === undefined) || query.validOn !== undefined
 

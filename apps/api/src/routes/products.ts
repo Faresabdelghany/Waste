@@ -26,13 +26,14 @@
 // The grant is the Price Engine's own, `commercial.products`: the master data
 // a product points at is `configure.master`'s, written through the catalogue
 // routes, and nothing here widens that.
-import { FREE_DAYS_ARE_A_HIRES, Product, ProductCreate, ProductPatch, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/contracts/catalogue"
+import { Product, ProductCreate, ProductPatch, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/contracts/catalogue"
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { project } from "@waste/db/schema/organisation"
+import { FREE_DAYS_ARE_A_HIRES } from "@waste/domain/finance/hire"
 import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"

@@ -13,7 +13,8 @@
 // own provider, which the dialog stamps.
 import type { ActivityClose, ActivityReject } from "@waste/contracts/service-provider-activities"
 import { SERVICE_DAYS, type ServiceDay } from "@waste/domain/planning/vocabulary"
-import { closesWith, KIND_WORDS, type ActivityCommand, type ActivitySide } from "@waste/domain/service-providers/activities"
+import { without } from "@waste/domain/lists"
+import { closesWith, KIND_WORDS, PROPOSAL_KINDS, type ActivityCommand, type ActivitySide } from "@waste/domain/service-providers/activities"
 import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES, type ServiceProviderActivityKind, type ServiceProviderActivityStatus } from "@waste/domain/service-providers/vocabulary"
 
 import type { LocalRefusal } from "../api/records/adapter"
@@ -66,13 +67,13 @@ export type ActivityFormOptions = {
   projects: readonly BusinessFormOption[]
 }
 
-const PROPOSAL = { fieldId: "kind", oneOf: ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"] }
+const PROPOSAL = { fieldId: "kind", oneOf: [...PROPOSAL_KINDS] }
 const STOPS = { fieldId: "kind", oneOf: ["stop-set-change"] }
 const FRACTIONS = { fieldId: "kind", oneOf: ["waste-fraction-change"] }
 const ROUTE_DAYS = { fieldId: "kind", oneOf: ["route-day-change"] }
 const VEHICLE = { fieldId: "kind", oneOf: ["vehicle-change"] }
 const FOLLOW_UP = { fieldId: "kind", oneOf: ["compliance-follow-up"] }
-const NOT_PROPOSAL = { fieldId: "kind", oneOf: ["compliance-follow-up", "coordination-note"] }
+const NOT_PROPOSAL = { fieldId: "kind", oneOf: [...without(SERVICE_PROVIDER_ACTIVITY_KINDS, ...PROPOSAL_KINDS)] }
 
 /**
  * Log activity: the kind, then what it is about. A proposal names a route of

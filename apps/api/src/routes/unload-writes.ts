@@ -7,7 +7,7 @@
 // so the driver door records it and opens the office an internal task in the
 // same sentence (`tellOfficeNotTaken`), in the command's savepoint, once while
 // it is open for a route, a station and a fraction.
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { Tx } from "@waste/db/client"
 import { BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 import type { StationTakes } from "@waste/db/commands/unloads"

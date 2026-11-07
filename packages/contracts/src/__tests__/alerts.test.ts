@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertListQuery, AlertResolve, NAMES_A_SUBJECT, namesASubject } from "../alerts"
+import { NAMES_A_SUBJECT, namesASubject } from "@waste/domain/resolution/alerts"
+
+import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertListQuery, AlertResolve } from "../alerts"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

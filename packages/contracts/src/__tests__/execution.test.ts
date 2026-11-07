@@ -12,22 +12,18 @@ import {
   PROOF_KINDS,
   ROUTE_STATUSES,
 } from "@waste/domain/execution/vocabulary"
+import { IMAGE_EXTENSIONS, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 
 import {
   CommandOutcome,
   DriverCommandKind,
   DriverPickupReason,
   ExecutionSource,
-  OBJECT_EXTENSIONS,
-  OBJECT_KEY,
-  OBJECT_KEY_SHAPE,
   ObjectKey,
   PickupOutcome,
   PickupReason,
   PickupStatus,
   ProofKind,
-  ROUTE_NUMBER_PREFIX,
-  routeLabel,
   RouteStatus,
 } from "../execution"
 import { refusal } from "./expect"
@@ -63,21 +59,11 @@ describe("the Execution enums", () => {
   })
 })
 
-describe("the route label", () => {
-  test("is the number under the one prefix", () => {
-    assert.equal(ROUTE_NUMBER_PREFIX, "RC-")
-    assert.equal(routeLabel(1042), "RC-1042")
-    assert.equal(routeLabel(7), "RC-7")
-  })
-})
-
 describe("ObjectKey", () => {
   test("is <companyId>/<routeId>/<commandId>.<ext> over the four formats, lowercase UUIDs, and nothing else", () => {
-    for (const extension of OBJECT_EXTENSIONS) assert.equal(ObjectKey.safeParse(`${COMPANY}/${ROUTE}/${COMMAND}.${extension}`).success, true, extension)
-    assert.deepEqual([...OBJECT_EXTENSIONS], ["jpg", "jpeg", "png", "webp"])
+    for (const extension of IMAGE_EXTENSIONS) assert.equal(ObjectKey.safeParse(`${COMPANY}/${ROUTE}/${COMMAND}.${extension}`).success, true, extension)
     for (const wrong of [`${COMPANY}/${ROUTE}/${COMMAND}.gif`, `${COMPANY}/${ROUTE}/${COMMAND}`, `${COMPANY}/${COMMAND}.jpg`, `${COMPANY.toUpperCase()}/${ROUTE}/${COMMAND}.jpg`, `../${ROUTE}/${COMMAND}.jpg`, `${COMPANY}/${ROUTE}/${COMMAND}.jpg/extra`]) {
-      assert.deepEqual(refusal(ObjectKey.safeParse(wrong)), [{ path: "", message: OBJECT_KEY_SHAPE }], wrong)
+      assert.deepEqual(refusal(ObjectKey.safeParse(wrong)), [{ path: "", message: PROOF_KEY_SHAPE }], wrong)
     }
-    assert.equal(OBJECT_KEY.test(`${COMPANY}/${ROUTE}/${COMMAND}.png`), true)
   })
 })

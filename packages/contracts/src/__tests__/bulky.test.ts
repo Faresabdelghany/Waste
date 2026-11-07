@@ -5,9 +5,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX, BulkyAvailabilityQuery, BulkyBookingCreate, BulkyBookingPatch, BulkyScheduleCreate, BulkySchedulePatch, ONE_PLACE, WINDOW_TOO_WIDE } from "../bulky"
-import { A_BULKY_BOOKING, ONLY_A_BULKY_COLLECTION, PickupAdd, THE_BOOKING_ALONE } from "../pickups"
-import { WEEK_ROTATION_WITH_FORTNIGHTLY } from "../route-schemes"
+import { BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX, ONE_PLACE, WINDOW_TOO_WIDE } from "@waste/domain/execution/bulky"
+import { A_BULKY_BOOKING, ONLY_A_BULKY_COLLECTION, THE_BOOKING_ALONE } from "@waste/domain/execution/office-stops"
+import { WEEK_ROTATION_WITH_FORTNIGHTLY } from "@waste/domain/planning/schemes"
+
+import { BulkyAvailabilityQuery, BulkyBookingCreate, BulkyBookingPatch, BulkyScheduleCreate, BulkySchedulePatch } from "../bulky"
+import { PickupAdd } from "../pickups"
 
 const ID = "01a0d2a4-a280-7001-8000-000000000001"
 const OTHER = "01a0d2a4-a280-7001-8000-000000000002"

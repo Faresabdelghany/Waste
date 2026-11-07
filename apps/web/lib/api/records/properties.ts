@@ -35,6 +35,7 @@
 // no key on the wire, so every row is `<prefix>-<uuid>` from the start.
 import type { Property, PropertyGroup, PropertyGroupMember, PropertyParty, PropertyPartyHeld, SharedCollectionPoint, SharedCollectionPointMember } from "@waste/contracts/customers"
 import { splitList } from "@waste/domain/record-values"
+import { SET_MAX } from "@waste/domain/requests"
 import {
   PROPERTY_GROUP_MEMBER_ROLES,
   PROPERTY_GROUP_PURPOSES,
@@ -114,8 +115,6 @@ const POINT_LOCATED = "A shared collection point has a location: give the latitu
 const POINT_KEEPS_LOCATION = "A shared collection point keeps a location: give the latitude and longitude"
 const DISTANCE_IS_A_COUNT = "An eligibility distance is a whole number of metres, 1 or more"
 
-/** The most a set body names (`SET_MAX` in @waste/contracts/customers, not exported), spelled again since the web imports no zod at runtime; the test holds the two equal. */
-export const SET_MAX = 200
 const SET_TOO_LONG = `A form names at most ${SET_MAX} of a set; a longer one arrives through an import`
 
 /**

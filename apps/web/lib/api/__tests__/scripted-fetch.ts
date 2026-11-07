@@ -1,8 +1,9 @@
 // A `fetch` that answers from a script and records what it was asked, for
 // tests that drive the adapter through the real client (client.ts) and read
 // the request the API would have seen.
+import { PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
+
 import type { ApiClient } from "../client"
-import { PROBLEM_MEDIA_TYPE } from "../problem"
 
 export type Call = { url: string; init: RequestInit }
 

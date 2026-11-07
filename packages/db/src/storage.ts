@@ -10,7 +10,7 @@
 // its body — is the deployment's state and `StorageRefused`; Storage not
 // answering, within `STORAGE_TIMEOUT_MS` or at all, or answering 5xx, is
 // `StorageSilent`, which a retry may get past.
-import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
+import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
 
 import { PROOF_MIME_TYPES } from "./sql/proof-storage"
 

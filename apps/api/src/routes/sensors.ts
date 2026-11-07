@@ -60,6 +60,7 @@ import {
   type SensorStatus,
 } from "@waste/contracts/sensors"
 import type { Tx } from "@waste/db/client"
+import type { Action } from "@waste/domain/access/modules"
 import { dayInTimezone } from "@waste/domain/clock"
 import { aheadOfClock } from "@waste/domain/execution/commands"
 import { project } from "@waste/db/schema/organisation"
@@ -346,7 +347,7 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
   return outcomes
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

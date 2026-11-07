@@ -61,6 +61,8 @@ import {
   SHARED_COLLECTION_POINT_OPERATING_MODELS,
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
+import { AN_ADDRESS, EACH_GROUP_MEMBER_ONCE, EACH_PARTY_ONCE, EACH_POINT_MEMBER_ONCE, ONE_ADDRESS, REACHABLE_ON_A_CHANNEL, reachable } from "@waste/domain/registry/customers"
+import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { AddressId, AddressParts } from "./addresses"
@@ -69,7 +71,7 @@ import { PaymentTermsDays } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
 
@@ -129,18 +131,9 @@ export type SharedCollectionPointStatus = z.infer<typeof SharedCollectionPointSt
 export const SharedCollectionPointMemberRole = z.enum(SHARED_COLLECTION_POINT_MEMBER_ROLES)
 export type SharedCollectionPointMemberRole = z.infer<typeof SharedCollectionPointMemberRole>
 
-/**
- * The most a set body may carry: a form's list, not an import. A resource
- * carries the same entries unbounded, since a membership already stored is a
- * membership that has to parse however long it grew.
- */
-const SET_MAX = 200
-
 /** A distance in whole metres; zero is not a distance. */
 const Metres = PositiveInt
 
-/** Each entry names its row once, as the database's key insists. */
-const eachNamedOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => string) => new Set(entries.map(key)).size === entries.length
 
 export const Customer = z.object({
   ...stamped,
@@ -202,9 +195,6 @@ export type ContactRole = z.infer<typeof ContactRole>
 export const ContactStatus = z.enum(CONTACT_STATUSES)
 export type ContactStatus = z.infer<typeof ContactStatus>
 
-/** A contact is reached on an e-mail or a phone, or both; one with neither could never be written to. */
-export const REACHABLE_ON_A_CHANNEL = "Give an e-mail or a phone: a contact is reached on one at least"
-const reachable = (contact: { email?: string | null; phone?: string | null }) => contact.email != null || contact.phone != null
 
 /**
  * A Contact Person (#291 C14): a named person who speaks for an organisation
@@ -268,11 +258,8 @@ export type PropertyPartyHeld = z.infer<typeof PropertyPartyHeld>
 
 const Parties = z.array(PropertyParty)
 const PartiesBody = Parties.max(SET_MAX)
-const partiesNamedOnce = {
-  message: "Name each customer once per role: a party is a customer and a role, and the list holds each pair once",
-  path: ["parties"],
-}
-const noRepeatedParty = (parties: readonly PropertyParty[]) => eachNamedOnce(parties, (party) => `${party.customerId} ${party.role}`)
+const partiesNamedOnce = { message: EACH_PARTY_ONCE, path: ["parties"] }
+const noRepeatedParty = (parties: readonly PropertyParty[]) => eachOnce(parties, (party) => `${party.customerId}/${party.role}`)
 
 export const Property = z.object({
   ...stamped,
@@ -303,10 +290,7 @@ export const Property = z.object({
 export type Property = z.infer<typeof Property>
 
 /** A body names the address one way: typed, or the register's. */
-const oneAddress = {
-  message: "Give the address typed, or the address register's addressId, not both",
-  path: ["addressId"],
-}
+const oneAddress = { message: ONE_ADDRESS, path: ["addressId"] }
 const typedOrFound = (body: { address?: string; addressId?: string | null }) => !(body.address !== undefined && body.addressId != null)
 
 export const PropertyCreate = z
@@ -327,7 +311,7 @@ export const PropertyCreate = z
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   })
   .refine(typedOrFound, oneAddress)
-  .refine((body) => body.address !== undefined || body.addressId !== undefined, { message: "Give the address, typed or as the address register's addressId", path: ["address"] })
+  .refine((body) => body.address !== undefined || body.addressId !== undefined, { message: AN_ADDRESS, path: ["address"] })
   .refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyCreate = z.infer<typeof PropertyCreate>
 
@@ -372,11 +356,8 @@ export type PropertyGroupMember = z.infer<typeof PropertyGroupMember>
 
 const GroupMembers = z.array(PropertyGroupMember)
 const GroupMembersBody = GroupMembers.max(SET_MAX)
-const groupMembersNamedOnce = {
-  message: "Name each property once: a property is a member of the group or it is not, and the role says what kind",
-  path: ["members"],
-}
-const noRepeatedGroupMember = (members: readonly PropertyGroupMember[]) => eachNamedOnce(members, (member) => member.propertyId)
+const groupMembersNamedOnce = { message: EACH_GROUP_MEMBER_ONCE, path: ["members"] }
+const noRepeatedGroupMember = (members: readonly PropertyGroupMember[]) => eachOnce(members, (member) => member.propertyId)
 
 export const PropertyGroup = z.object({
   ...stamped,
@@ -427,11 +408,8 @@ export type SharedCollectionPointMember = z.infer<typeof SharedCollectionPointMe
 
 const PointMembers = z.array(SharedCollectionPointMember)
 const PointMembersBody = PointMembers.max(SET_MAX)
-const pointMembersNamedOnce = {
-  message: "Name each property once: a property is a member of the point or it is not, and the role says what kind",
-  path: ["members"],
-}
-const noRepeatedPointMember = (members: readonly SharedCollectionPointMember[]) => eachNamedOnce(members, (member) => member.propertyId)
+const pointMembersNamedOnce = { message: EACH_POINT_MEMBER_ONCE, path: ["members"] }
+const noRepeatedPointMember = (members: readonly SharedCollectionPointMember[]) => eachOnce(members, (member) => member.propertyId)
 
 export const SharedCollectionPoint = z.object({
   ...stamped,

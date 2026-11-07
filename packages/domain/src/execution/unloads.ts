@@ -16,6 +16,21 @@ export const DEFAULT_WEIGHT_TOLERANCE_PERCENT = 5
 /** The tolerance a project may set, in whole percent. */
 export const WEIGHT_TOLERANCE_PERCENT = { min: 1, max: 100 } as const
 
+/** A weighing as any body or row carries it: net always, gross and tare together or not at all — an unload's, a weighbridge ticket's, an outbound load's (`weights_shape` on each table). */
+export type Weights = { netKg: number; grossKg?: number | null; tareKg?: number | null }
+
+/** Gross and tare come together or not at all. */
+export const weightsPaired = (weights: Weights): boolean => (weights.grossKg == null) === (weights.tareKg == null)
+
+/** What a weighing giving one of gross and tare without the other is told, at the tare. */
+export const BOTH_GROSS_AND_TARE = "Give grossKg and tareKg together or neither"
+
+/** Where both are given, net is gross less tare; a half-given pair is judged by `weightsPaired` and not here. */
+export const weightsAddUp = (weights: Weights): boolean => weights.grossKg == null || weights.tareKg == null || weights.netKg === weights.grossKg - weights.tareKg
+
+/** What a weighing whose net is not gross less tare is told, at the net. */
+export const NET_IS_GROSS_LESS_TARE = "netKg is grossKg less tareKg where both are given"
+
 /** What a refusal for another reason is told without the station's words. */
 export const SAY_WHY_REFUSED = "Say why the station refused the load"
 

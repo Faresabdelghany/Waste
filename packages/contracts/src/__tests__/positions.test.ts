@@ -4,7 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { LiveEta, Position, RouteEta, RouteTrack, RouteTrackQuery, TRACK_POINTS_MAX } from "../positions"
+import { TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
+
+import { LiveEta, Position, RouteEta, RouteTrack, RouteTrackQuery } from "../positions"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"

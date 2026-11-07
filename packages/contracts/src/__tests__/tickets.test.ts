@@ -1,48 +1,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
 import { KIND_OR_TYPE } from "@waste/domain/resolution/ticket-types"
 import { TICKET_EVENT_SHAPES, ticketEventShape, ticketEventShapeIssue, type TicketEventRow } from "@waste/domain/resolution/event-shapes"
+import { CHARGE_WITH_A_BILLABLE_RESOLUTION, KIND_CHARGED_ONCE, REPLY_NOTE_MAX, LABEL_IS_THE_NUMBER, PICKUP_WITH_ITS_ROUTE, pickupWithItsRoute, pickupWithItsRouteOnPatch, RECOLLECTION_ROUTE_WITH_RECOLLECTED, RECOLLECTION_STOP_WITH_ITS_ROUTE, recollectionRouteWithRecollected, recollectionStopWithItsRoute } from "@waste/domain/resolution/tickets"
 import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind } from "@waste/domain/resolution/vocabulary"
 
-import { DAY_WINDOW_ORDERED } from "../queries"
-import {
-  CHARGE_WITH_A_BILLABLE_RESOLUTION,
-  EvidenceProof,
-  KIND_CHARGED_ONCE,
-  REPLY_NOTE_MAX,
-  StopEvidence,
-  TicketEvidence,
-  TicketReplyWithEvidence,
-  LABEL_IS_THE_NUMBER,
-  labelMatches,
-  PICKUP_WITH_ITS_ROUTE,
-  pickupWithItsRoute,
-  pickupWithItsRouteOnPatch,
-  RECOLLECTION_ROUTE_WITH_RECOLLECTED,
-  RECOLLECTION_STOP_WITH_ITS_ROUTE,
-  recollectionRouteWithRecollected,
-  recollectionStopWithItsRoute,
-  Ticket,
-  TicketAssign,
-  TicketCharges,
-  TicketChargesQuery,
-  TicketChargesSet,
-  TicketComment,
-  TicketComplete,
-  TicketCreate,
-  TicketDetail,
-  TicketEvent,
-  TicketEventListQuery,
-  TicketHold,
-  TicketLinks,
-  TicketListQuery,
-  TicketPatch,
-  TicketReject,
-  TicketReopen,
-  TicketStart,
-  TicketWait,
-} from "../tickets"
+import { EvidenceProof, StopEvidence, TicketEvidence, TicketReplyWithEvidence, labelMatches, Ticket, TicketAssign, TicketCharges, TicketChargesQuery, TicketChargesSet, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEventListQuery, TicketHold, TicketLinks, TicketListQuery, TicketPatch, TicketReject, TicketReopen, TicketStart, TicketWait } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

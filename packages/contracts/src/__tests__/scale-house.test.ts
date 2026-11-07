@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PARTY_SHAPE, ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, ScaleTicketListQuery, ScaleTicketPatch, ScaleTicketVoid, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "../scale-house"
+import { PARTY_SHAPE } from "@waste/domain/scale-house/rules"
+import { TARE_SOURCES } from "@waste/domain/scale-house/vocabulary"
+
+import { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketTare, ScaleTicketCreate, ScaleTicketListQuery, ScaleTicketPatch, ScaleTicketVoid, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "../scale-house"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -27,6 +30,12 @@ describe("a registered tare (M16a of #293)", () => {
   test("reads with its keys as stored", () => {
     const tare = { ...STAMPS, projectId: ID, plate: "CN42018", trailerPlate: null, containerRef: null, tareKg: 8_120, weighedOn: "2026-10-01", customerId: null, label: null, status: "active" }
     assert.deepEqual(VehicleTare.parse(tare), tare)
+  })
+})
+
+describe("a ticket's tare (M16a of #293)", () => {
+  test("is shaped by its source, one body for each of the vocabulary's sources", () => {
+    assert.deepEqual(ScaleTicketTare.options.map((body) => body.shape.source.value), [...TARE_SOURCES])
   })
 })
 

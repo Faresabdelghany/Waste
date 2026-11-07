@@ -26,14 +26,15 @@
 // `operate.tickets` too, since the people working tickets pick a type and
 // fill in its fields.
 import { Page } from "@waste/contracts/pagination"
-import { DEFAULT_TYPE_OFFERED, TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction, type TicketTypeActionBody, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
+import { TicketType, TicketTypeActionsSet, TicketTypeCreate, TicketTypeFieldsSet, TicketTypeListQuery, TicketTypePatch, TicketTypePermissionsSet, type TicketTypeAction, type TicketTypeActionBody, type TicketTypeField, type TicketTypePermission } from "@waste/contracts/ticket-types"
 import type { Tx } from "@waste/db/client"
 import { role, userAccount } from "@waste/db/schema/access"
 import { vehicle } from "@waste/db/schema/fleet"
 import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermission } from "@waste/db/schema/resolution"
+import type { Action } from "@waste/domain/access/modules"
 import { notPlannable, plannedService } from "@waste/domain/resolution/automation"
-import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
-import { TICKET_ACTION_TRIGGERS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { DEFAULT_TYPE_OFFERED } from "@waste/domain/resolution/ticket-types"
+import { TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { advisoryLock, lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -188,7 +189,7 @@ async function referenceIssues(tx: Tx, companyId: string, kind: TicketKind, acti
   ])
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(
     action === "view" ? `No active account here, or the caller's role allows \`view\` on neither \`${TICKETS}\` nor \`${MODULE}\`.` : `No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`,

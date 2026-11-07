@@ -34,6 +34,10 @@ describe("the vocabularies", () => {
     assert.deepEqual(ActivityKind.options, [...SERVICE_PROVIDER_ACTIVITY_KINDS])
     assert.deepEqual(ActivityStatus.options, [...SERVICE_PROVIDER_ACTIVITY_STATUSES])
   })
+
+  test("give each kind its create body, and no body a kind of its own", () => {
+    assert.deepEqual(ServiceProviderActivityCreate.options.map((body) => body.shape.kind.value).sort(), [...SERVICE_PROVIDER_ACTIVITY_KINDS].sort())
+  })
 })
 
 describe("a create", () => {

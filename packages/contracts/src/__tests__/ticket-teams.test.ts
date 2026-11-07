@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { EACH_KIND_ONCE, EACH_MEMBER_ONCE } from "@waste/domain/resolution/teams"
 import { KIND_OR_TYPE } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
-import { EACH_KIND_ONCE, EACH_MEMBER_ONCE, Team, TeamCreate, TeamMembersSet, TeamPatch, TicketTeamDefaultsSet } from "../ticket-teams"
+import { Team, TeamCreate, TeamMembersSet, TeamPatch, TicketTeamDefaultsSet } from "../ticket-teams"
 import { TicketCreate, TicketListQuery, TicketPatch } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 

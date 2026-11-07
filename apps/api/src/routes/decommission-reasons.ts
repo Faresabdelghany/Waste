@@ -9,6 +9,7 @@ import { Page } from "@waste/contracts/pagination"
 import { DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch, type DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
 import { decommissionReason } from "@waste/db/schema/stock"
+import type { Action } from "@waste/domain/access/modules"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -56,7 +57,7 @@ async function findReason(tx: Tx, companyId: string, id: string): Promise<Row | 
   return row
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

@@ -18,6 +18,7 @@
 // or follows `on`, invoiced or not as their status says, for the office to
 // look at — a charge minted in advance is not repriced by an end that comes
 // after it. A termination is to share the rule (#328).
+import { ANOTHER_CUSTOMER_MOVES_IN } from "@waste/domain/registry/moves"
 import * as z from "zod"
 
 import { Agreement, Subscription } from "./agreements"
@@ -39,7 +40,7 @@ export const MoveCreate = z
     agreementNumber: Label.optional(),
     dryRun: z.boolean().default(false).describe("True answers what the move would do and writes nothing."),
   })
-  .refine((body) => body.incomingCustomerId !== body.outgoingCustomerId, { message: "A customer does not move into the property they move out of", path: ["incomingCustomerId"] })
+  .refine((body) => body.incomingCustomerId !== body.outgoingCustomerId, { message: ANOTHER_CUSTOMER_MOVES_IN, path: ["incomingCustomerId"] })
 export type MoveCreate = z.infer<typeof MoveCreate>
 
 /** One side of a move: the agreement it is under, or none where the property was subscribed at by nobody, and the subscriptions at the property. */

@@ -53,6 +53,8 @@ import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
 import type { JobSender } from "@waste/db/jobs"
+import type { Action } from "@waste/domain/access/modules"
+import { NOT_A_FRACTION, NOT_A_POWERED_VEHICLE } from "@waste/domain/execution/commands"
 import { firstEndingDay } from "@waste/domain/planning/lifecycle"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
 import { Refused, type Refusal } from "@waste/domain/refusal"
@@ -87,7 +89,7 @@ import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, serve
 import { requireAllowed, requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
-import { NOT_A_DRIVER, NOT_A_POWERED_VEHICLE, requireServiceProvider } from "./references"
+import { NOT_A_DRIVER, requireServiceProvider } from "./references"
 import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
@@ -251,7 +253,6 @@ async function proposalOf(tx: Tx, companyId: string, row: Row): Promise<Proposal
 }
 
 export const NOT_A_CONTAINER = "Not a container of this project"
-export const NOT_A_WASTE_FRACTION = "Not a waste fraction of this company"
 
 /**
  * A waste-fraction change's fractions held to its group: the group finds its
@@ -267,7 +268,7 @@ async function fractionsRefusal(tx: Tx, companyId: string, group: { id: string; 
     .where(and(eq(wasteFraction.companyId, companyId), inArray(wasteFraction.id, [...wasteFractionIds])))
   const known = new Set(found.map((row) => row.id))
   const missing = wasteFractionIds.findIndex((id) => !known.has(id))
-  if (missing !== -1) return { reason: "invalid", input: `wasteFractionIds.${missing}`, sentence: NOT_A_WASTE_FRACTION }
+  if (missing !== -1) return { reason: "invalid", input: `wasteFractionIds.${missing}`, sentence: NOT_A_FRACTION }
   const current = await tx
     .select({ wasteFractionId: collectionGroupFraction.wasteFractionId })
     .from(collectionGroupFraction)
@@ -493,7 +494,7 @@ function amendmentOf(proposal: Proposal) {
   }
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

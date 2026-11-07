@@ -13,7 +13,7 @@ import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import { PROPERTY_PARTY_ROLES } from "../../registry/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 22, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 23, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS", "OFFICE_TICKET_SOURCES"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -36,6 +36,7 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider", "counting-rule"])
     for (const source of ["driver-app", "dispatch"] as const) assert.ok((EXECUTION_SOURCES as readonly string[]).includes(source), `${source} is Execution's spelling`)
     assert.equal((vocabulary.TICKET_SOURCES as readonly string[]).includes("driver"), false)
+    assert.deepEqual([...vocabulary.OFFICE_TICKET_SOURCES], ["office", "phone", "email", "portal", "import", "integration"], "the office claims no door's own source")
     assert.deepEqual([...vocabulary.TICKET_EVENT_KINDS], ["created", "assigned", "status-changed", "comment"])
     assert.equal((vocabulary.TICKET_EVENT_KINDS as readonly string[]).includes("edited"), false, "the history of a field edit is the audit log's (ADR-0005)")
     assert.deepEqual([...vocabulary.TICKET_VISIBILITIES], ["internal", "customer", "service-provider"])

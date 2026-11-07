@@ -24,6 +24,9 @@
 // lists), which the contracts' command bodies read from there too.
 import { ADJUSTMENT_TARGETS, STOCK_PLACE_KINDS, STOCK_PLACES, type AssetStatus, type StockMovementKind, type StockPlaceKind } from "./vocabulary"
 
+/** What an adjustment naming a warehouse for scrap, or none for a place in stock, is told. */
+export const WAREHOUSE_WITH_A_STOCK_PLACE = "Name the warehouse with warehouse or maintenance and not with scrap"
+
 /** What each place a movement can arrive at says about the container's state; a supplier is never arrived at. */
 export const ASSET_STATUS_OF_PLACE: Readonly<Record<Exclude<StockPlaceKind, "supplier">, AssetStatus>> = {
   warehouse: "in-warehouse",

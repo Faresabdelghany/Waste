@@ -46,14 +46,16 @@
 // taken, each judged by the door on the envelope's own clock rules, and
 // `record-fill` (M23 of #293) names a stop and how full its container was. What each command
 // does when applied is #104 §3's table and the domain's `decide`.
-import { POSITION_RULES } from "@waste/domain/execution/positions"
-import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
+import { BATCH_MAX, EACH_COMMAND_ONCE, PROBLEM_WITH_A_REJECTION, WIRE_OUTCOMES } from "@waste/domain/execution/command-batches"
+import { FIX_BOUNDS, FIXES_IN_ORDER, POSITION_RULES } from "@waste/domain/execution/positions"
+import { weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
+import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { WasteFraction } from "./catalogue"
 import { ContainerIdentifier } from "./containers"
 import { IsoDateTime } from "./dates"
-import { CommandOutcome, DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
+import { CommandOutcome, DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, ObjectKey } from "./execution"
 import { Driver, Vehicle } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
@@ -61,15 +63,13 @@ import { Pickup } from "./pickups"
 import { UnloadingStation } from "./places"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
-import { eachOnce, eachOnceSentence, PositiveInt, recorded } from "./resource"
+import { PositiveInt, recorded } from "./resource"
 import { ActivePlan } from "./plans"
 import { labelIsTheNumber, labelMatches, Route, routeFields } from "./routes"
 import { Session } from "./sessions"
 import { TankKind, TankOutlet } from "./tanks"
 import { Label, Paragraph } from "./text"
-import { bothGrossAndTare, netIsGrossLessTare, Unload, UnloadRefusal, weightsAddUp, weightsPaired } from "./unloads"
-
-export { OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey }
+import { bothGrossAndTare, netIsGrossLessTare, Unload, UnloadRefusal } from "./unloads"
 
 /** What every command says about itself: the device's id for it, the route, when, and which installation. */
 const envelope = {
@@ -91,9 +91,6 @@ const located = {
 /** One command kind: the envelope with its literal kind and its body. */
 const commandOf = <Kind extends DriverCommandKind, Body extends z.ZodType>(kind: Kind, body: Body) => z.strictObject({ ...envelope, kind: z.literal(kind), body })
 
-/** The most a batch carries: the Driver App drains its queue in batches of at most this many, one `POST /driver/commands` each, and two hundred is a long day. */
-export const BATCH_MAX = 200
-
 /**
  * Whole kilograms, positive: `PositiveInt`, whose bound is the `integer`
  * every weight column is (`proof_of_service.weight_kg`, `unload.net_kg` and
@@ -106,9 +103,6 @@ const Kilograms = PositiveInt
 /** The most fixes one `record-positions` carries: the batch the Driver App closes (@waste/domain/execution/positions), sixty fixes or two minutes, whichever comes first. */
 export const POSITIONS_MAX = POSITION_RULES.batchMax
 
-/** What a position's fixes are told when two are out of order or share an instant. */
-export const FIXES_IN_ORDER = "The fixes are in the order they were taken, one per instant"
-
 /**
  * One fix as the device kept it (O8 of #290): its own instant, the point, how
  * well the phone knew it in whole metres, and — where the phone gave them —
@@ -120,8 +114,8 @@ export const PositionFix = z.strictObject({
   at: IsoDateTime,
   location: FlatPoint,
   accuracyM: PositiveInt,
-  speedKmh: z.int().min(0).max(300).optional(),
-  headingDeg: z.int().min(0).max(359).optional(),
+  speedKmh: z.int().min(FIX_BOUNDS.speedKmh.min).max(FIX_BOUNDS.speedKmh.max).optional(),
+  headingDeg: z.int().min(FIX_BOUNDS.headingDeg.min).max(FIX_BOUNDS.headingDeg.max).optional(),
 })
 export type PositionFix = z.infer<typeof PositionFix>
 
@@ -207,8 +201,6 @@ export const DriverCommandEnvelope = z.strictObject({
 })
 export type DriverCommandEnvelope = z.infer<typeof DriverCommandEnvelope>
 
-export const EACH_COMMAND_ONCE = eachOnceSentence("command", "one id is one command, and a second with the same id is its replay")
-
 /** `POST /driver/commands`: one to two hundred envelopes, each id once, applied in this order. */
 export const DriverCommandBatch = z.strictObject({
   commands: z
@@ -220,7 +212,7 @@ export const DriverCommandBatch = z.strictObject({
 export type DriverCommandBatch = z.infer<typeof DriverCommandBatch>
 
 /** What the door answers per command: the stored outcomes, and `replayed` for an id already received. */
-export const WireOutcome = z.enum([...COMMAND_OUTCOMES, "replayed"])
+export const WireOutcome = z.enum(WIRE_OUTCOMES)
 export type WireOutcome = z.infer<typeof WireOutcome>
 
 /** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route`, the stop for `record-fill` — so a device never takes a stripped object of one resource for another. */
@@ -250,8 +242,6 @@ export const DriverCommandBatchOutcome = z.strictObject({
 })
 export type DriverCommandBatchOutcome = z.infer<typeof DriverCommandBatchOutcome>
 
-/** What a receipt with a problem and an applied outcome, or none and a rejected one, is told. */
-export const PROBLEM_WITH_A_REJECTION = "A rejected command carries its problem, and an applied one none"
 const problemWithARejection = { message: PROBLEM_WITH_A_REJECTION, path: ["problem"] }
 
 /** The receipt: one row per command a device ever sent, applied or rejected, keyed by the device's id for it. */

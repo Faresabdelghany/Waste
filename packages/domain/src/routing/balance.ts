@@ -32,6 +32,9 @@ import { firstMisfit, type FitVehicle } from "../resources/fleet-fit"
 /** The most moves one balance proposes and applies: the office reads each, and every route they touch is asked a new Plan. */
 export const BALANCE_MOVES_MAX = 50
 
+/** The longest token a balance's apply carries back: its preview's reading of the day. */
+export const BALANCE_TOKEN_MAX = 128
+
 /** A straight line's metres as a road's: a typical city detour. */
 export const DETOUR_FACTOR = 1.3
 

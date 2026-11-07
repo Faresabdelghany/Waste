@@ -24,6 +24,7 @@ import type { Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { validOn } from "@waste/db/query/valid-on"
 import { accessCredential } from "@waste/db/schema/site-visits"
+import type { Action } from "@waste/domain/access/modules"
 import { normaliseCredentialValue } from "@waste/domain/visits/charges"
 import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -124,7 +125,7 @@ async function customersAgreement(tx: Tx, scope: { companyId: string; projectId:
   return { status: found.status, period: { validFrom: found.validFrom, validTo: found.validTo } }
 }
 
-const problems = (action: "view" | "edit" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

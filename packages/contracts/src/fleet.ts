@@ -25,22 +25,20 @@
 // over a vehicle's `ownership` with the places' sentence, and over a driver's
 // `employment` with a sentence of its own, since a driver body has no
 // ownership to be told about.
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, COMPARTMENT_FRACTIONS_MAX, COMPARTMENTS_MAX, poweredVehicleHasACompartment, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
+import { providerShape, providerShapeGiven } from "@waste/domain/resources/places"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { providerShape, providerShapeGiven, providerWithProviderOwnership } from "./places"
+import { providerWithProviderOwnership } from "./places"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { DriverStatus, EmploymentType, FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "./resources"
 import { DriverShift } from "./shifts"
 import { Label, Paragraph } from "./text"
-
-/** The most compartments a body may give a vehicle: a body, a left and a right is three, and twenty is room for anything with wheels. */
-export const COMPARTMENTS_MAX = 20
-
-/** The most fractions a compartment body may name. */
-const FRACTIONS_MAX = 200
 
 /** An order among siblings: whole and positive, since the first is number one. */
 const Ordinal = PositiveInt
@@ -48,11 +46,8 @@ const Ordinal = PositiveInt
 /** A payload or a volume: whole units, above zero. */
 const Amount = PositiveInt
 
-/** What a driver body whose employment and provider disagree is told, at the provider: the same rule as a place's ownership, in the driver's words. */
-export const PROVIDER_WITH_PROVIDER_EMPLOYMENT = "Name the employing service provider with service-provider employment, and none otherwise"
+/** What a driver body whose employment and provider disagree is told, at the provider. */
 const providerWithProviderEmployment = { message: PROVIDER_WITH_PROVIDER_EMPLOYMENT, path: ["serviceProviderId"] }
-
-export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 
 /** The fractions a compartment carries: one or more, each once. */
 const CompartmentFractionIds = z.array(Id).min(1).refine((ids) => eachOnce(ids), { message: EACH_FRACTION_ONCE })
@@ -73,18 +68,14 @@ export const VehicleCompartmentCreate = z.strictObject({
   name: Label.nullable().optional(),
   capacityKg: Amount.nullable().optional(),
   volumeLitres: Amount.nullable().optional(),
-  wasteFractionIds: CompartmentFractionIds.max(FRACTIONS_MAX),
+  wasteFractionIds: CompartmentFractionIds.max(COMPARTMENT_FRACTIONS_MAX),
 })
 export type VehicleCompartmentCreate = z.infer<typeof VehicleCompartmentCreate>
 
 const CompartmentsBody = z.array(VehicleCompartmentCreate).max(COMPARTMENTS_MAX)
 
 /** What a powered vehicle without a compartment is told, at the list. */
-export const A_POWERED_VEHICLE_HAS_A_COMPARTMENT = "A powered vehicle has at least one compartment"
 const aPoweredVehicleHasACompartment = { message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT, path: ["compartments"] }
-
-/** A trailer may carry no compartment; a powered vehicle carries one or more. */
-export const poweredVehicleHasACompartment = (kind: string, compartments: readonly unknown[]): boolean => kind !== "powered-vehicle" || compartments.length > 0
 
 export const Vehicle = z.object({
   ...stamped,

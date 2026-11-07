@@ -41,15 +41,15 @@
 // the context carries an error or the response is an error status, and
 // committed otherwise: a request that failed leaves nothing behind, whether
 // the handler threw a problem or returned one.
-import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database, Tx } from "@waste/db/client"
 import type { Actor } from "@waste/db/commands/shared"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { driver } from "@waste/db/schema/fleet"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import type { Grant } from "@waste/domain/access/grants"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import type { DriverStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import type { MiddlewareHandler } from "hono"

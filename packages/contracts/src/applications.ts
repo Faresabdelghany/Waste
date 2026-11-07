@@ -15,16 +15,18 @@
 // a grant is in force, upcoming or expired is a reading of its period
 // against a day, never a status: a list asks for the grants in force with
 // `inForceOn`.
-import { appealTextNeeded, APPEAL_TEXT_NEEDED, decisionPeriodRefusal } from "@waste/domain/registry/applications"
+import { validityOrdered } from "@waste/domain/periods"
+import { appealTextNeeded, APPEAL_TEXT_NEEDED, decisionPeriodRefusal, ONE_PLACE } from "@waste/domain/registry/applications"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES } from "@waste/domain/registry/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, validityOrdered } from "./validity"
+import { endsAfterItStarts } from "./validity"
 
 export const ApplicationKind = z.enum(APPLICATION_KINDS)
 export type ApplicationKind = z.infer<typeof ApplicationKind>
@@ -35,8 +37,6 @@ export type ApplicationChannel = z.infer<typeof ApplicationChannel>
 export const DecisionOutcome = z.enum(DECISION_OUTCOMES)
 export type DecisionOutcome = z.infer<typeof DecisionOutcome>
 
-/** What an Application naming both a property and a shared collection point is told, at the shared point. */
-export const ONE_PLACE = "An application names a property or a shared collection point, not both"
 const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) => body.propertyId == null || body.sharedCollectionPointId == null
 const onePlaceAt = { message: ONE_PLACE, path: ["sharedCollectionPointId"] }
 

@@ -3,9 +3,7 @@
 // reads them into its `CHECK ... in (...)` constraints (`oneOf` in
 // packages/db/src/schema/checks.ts) and the contracts read them into their
 // `z.enum`, so the check at the API boundary and the check in the table cannot
-// drift and there is no lockstep test to write. The Organisation & Access
-// statuses keep their two spellings and their lockstep test; they came first
-// and are not touched.
+// drift and there is no lockstep test to write.
 //
 // A value is a kebab-case token, lowercase words joined by single hyphens: it
 // goes into a migration as a SQL literal and onto the wire as an enum member,

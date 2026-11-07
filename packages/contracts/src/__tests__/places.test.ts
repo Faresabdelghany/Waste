@@ -1,26 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  BOTH_HOURS_OR_NEITHER,
-  Depot,
-  DepotCreate,
-  DepotListQuery,
-  DepotPatch,
-  EACH_FRACTION_ONCE,
-  hoursShape,
-  PROVIDER_WITH_PROVIDER_OWNERSHIP,
-  providerShape,
-  UnloadingStation,
-  UnloadingStationCreate,
-  UnloadingStationFractionsSet,
-  UnloadingStationListQuery,
-  UnloadingStationPatch,
-  Warehouse,
-  WarehouseCreate,
-  WarehouseListQuery,
-  WarehousePatch,
-} from "../places"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "@waste/domain/resources/places"
+
+import { Depot, DepotCreate, DepotListQuery, DepotPatch, UnloadingStation, UnloadingStationCreate, UnloadingStationFractionsSet, UnloadingStationListQuery, UnloadingStationPatch, Warehouse, WarehouseCreate, WarehouseListQuery, WarehousePatch } from "../places"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

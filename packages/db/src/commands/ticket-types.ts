@@ -12,8 +12,7 @@
 // deviation. Two transactions making the same default meet the partial unique
 // index (`ticket_type_default_kind_key`) and the second reads the first's.
 import { DEFAULT_TICKET_TYPE_NAMES, type CommandPermission, type TicketFieldDefinition } from "@waste/domain/resolution/ticket-types"
-import type { TicketCommand } from "@waste/domain/resolution/transitions"
-import { TICKET_KINDS, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { TICKET_KINDS, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"

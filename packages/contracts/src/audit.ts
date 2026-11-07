@@ -11,21 +11,19 @@
 // spells it — a header carries bytes, and a reason may be in any script — and
 // bounded like any paragraph once decoded. The actor never travels: the API's
 // principal is the only source of who.
-import { AUDIT_ACTIONS, AUDITED_TABLES, type AuditedTableName } from "@waste/domain/audit/vocabulary"
+import { AUDIT_ACTIONS, AUDITED_TABLES, NOT_AN_AUDITED_TABLE, TABLE_NAME_PATTERN, TABLE_NAME_SHAPE, type AuditedTableName } from "@waste/domain/audit/vocabulary"
+import { WHOLE_NUMBER_PATTERN } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { recorded } from "./resource"
 
-/** The request header a write's reason travels in, as the API reads it (header names are case-insensitive). */
-export const CHANGE_REASON_HEADER = "waste-change-reason"
-
 export const AuditAction = z.enum(AUDIT_ACTIONS)
 export type AuditAction = z.infer<typeof AuditAction>
 
 /** A table's name as the database spells it: `role_grant`, `property_party`. */
-const TableName = z.string().regex(/^[a-z][a-z_]*$/, "a table's name, in the database's spelling: role_grant")
+const TableName = z.string().regex(new RegExp(TABLE_NAME_PATTERN), TABLE_NAME_SHAPE)
 
 /**
  * A table whose rows have a history (`AUDITED_TABLES`, @waste/domain/audit/vocabulary):
@@ -33,7 +31,7 @@ const TableName = z.string().regex(/^[a-z][a-z_]*$/, "a table's name, in the dat
  * sets' rows, so an event's own `table` is held to the name's shape alone.
  */
 export const AuditedTable = z.enum(Object.keys(AUDITED_TABLES) as [AuditedTableName, ...AuditedTableName[]], {
-  error: (issue) => (issue.input === undefined ? undefined : "Not an audited table"),
+  error: (issue) => (issue.input === undefined ? undefined : NOT_AN_AUDITED_TABLE),
 })
 export type AuditedTable = z.infer<typeof AuditedTable>
 
@@ -53,7 +51,7 @@ export const AuditEvent = z.object({
   actor: z.object({ id: Id, fullName: z.string() }).nullable(),
   reason: z.string().nullable(),
   /** One request's changes share it: a matrix replaced whole is one change. A decimal string, since it may outgrow a double. */
-  transactionId: z.string().regex(/^\d+$/),
+  transactionId: z.string().regex(new RegExp(WHOLE_NUMBER_PATTERN)),
 })
 export type AuditEvent = z.infer<typeof AuditEvent>
 

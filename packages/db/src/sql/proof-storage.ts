@@ -12,9 +12,9 @@
 // gets the private bucket without them. The owner runs it, as every file:
 // locally the superuser, on the Pilot `postgres`, which Supabase grants the
 // `storage` tables to.
-import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
+import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
 
-/** The formats the bucket takes: the four extensions of an object key (`OBJECT_EXTENSIONS`), jpg and jpeg being one. */
+/** The formats the bucket takes: the image extensions an object key takes (`IMAGE_EXTENSIONS`), jpg and jpeg being one. */
 export const PROOF_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
 
 /** The one statement: the private bucket, made or kept private, its limits where Storage has the columns. */

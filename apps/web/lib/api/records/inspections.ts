@@ -8,7 +8,7 @@
 // the client (`addInspectionPhoto`), then read the row back.
 import type { FieldInspection, FieldInspectionCreate, FieldInspectionPatch, InspectionPhotoLinks, InspectionPhotoUpload } from "@waste/contracts/field-inspections"
 import { FIELD_INSPECTION_OUTCOMES, INSPECTION_FINDINGS, type FieldInspectionOutcome, type InspectionFinding } from "@waste/domain/inspections/vocabulary"
-import type { InspectionPhotoExtension } from "@waste/domain/inspections/rules"
+import type { ImageExtension } from "@waste/domain/storage-objects"
 
 import { PROPERTY_PREFIX } from "@/lib/data/agreements"
 import { splitMultiValue } from "@/lib/data/business-form-records"
@@ -141,7 +141,7 @@ export const inspectionAdapter: ResourceAdapter<FieldInspection> = {
 }
 
 /** The extension a photo's file is stored under: one of the bucket's images, read off its type. */
-export function photoExtensionOf(file: { type: string; name: string }): InspectionPhotoExtension | undefined {
+export function photoExtensionOf(file: { type: string; name: string }): ImageExtension | undefined {
   if (file.type === "image/jpeg") return "jpg"
   if (file.type === "image/png") return "png"
   if (file.type === "image/webp") return "webp"
@@ -150,7 +150,7 @@ export function photoExtensionOf(file: { type: string; name: string }): Inspecti
 }
 
 /** A photo added to an open inspection: the upload signed, the bytes put straight to Storage as the Driver App puts its own (`putObject`), the key appended. Answers the inspection as it now stands. */
-export async function addInspectionPhoto(client: ApiClient, serverId: string, photo: { extension: InspectionPhotoExtension; contentType: string; bytes: ArrayBuffer }): Promise<FieldInspection> {
+export async function addInspectionPhoto(client: ApiClient, serverId: string, photo: { extension: ImageExtension; contentType: string; bytes: ArrayBuffer }): Promise<FieldInspection> {
   const signed = await post<InspectionPhotoUpload>(client, `/field-inspections/${serverId}/uploads`, { extension: photo.extension })
   await putObject(client, signed.body.uploadUrl, photo)
   return (await post<FieldInspection>(client, `/field-inspections/${serverId}/photos`, { objectKey: signed.body.objectKey })).body

@@ -12,7 +12,6 @@ import { describe, test } from "node:test"
 import {
   ContainerTypeCreate,
   ContainerTypePatch,
-  ONE_CADENCE,
   ServiceFrequencyCreate,
   ServiceFrequencyPatch,
   WasteCode,
@@ -26,12 +25,13 @@ import type { Project } from "@waste/contracts/organisation"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { DecommissionReason } from "@waste/contracts/stock"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
+import { ONE_CADENCE } from "@waste/domain/registry/catalogue"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createMasterDataRecord, KEY_REFUSAL, masterDataKindOf, NO_TREATMENT, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
-import { containerTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter, masterDataModule, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -389,7 +389,6 @@ describe("a service frequency", () => {
   })
 
   test("is refused here without a project the store loaded, without a name, with a number that is no count, or with a cadence the one rule refuses — in the contract's own sentence", () => {
-    assert.equal(LOCAL_ONE_CADENCE, ONE_CADENCE, "one rule, one sentence: the adapter quotes the contract's")
     assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: "project-nowhere" }), context(resolve)), { path: "projectId", message: "Pick a project" })
     assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "", projectId: COPENHAGEN }), context(resolve)), { path: "name", message: "A service frequency needs a name" })
     assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: COPENHAGEN, weeksBetween: "1.5" }), context(resolve)), { path: "weeksBetween", message: "Weeks between is a whole number, 1 or more" })

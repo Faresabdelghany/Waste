@@ -11,14 +11,14 @@
 // about, each from its switched module — and a closed list by the wire's
 // token, shown as a person reads it.
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
-import { BILLABLE_RESOLUTIONS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
+import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
 import { statusLabel, statusToken } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { accessModule } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { ROUTES_MODULE } from "../api/records/routes"
-import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "../api/records/tickets"
+import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "../api/records/tickets"
 import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"

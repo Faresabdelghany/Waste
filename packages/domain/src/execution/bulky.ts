@@ -34,6 +34,12 @@ export const BULKY_ITEMS_MAX = 20
 export const BULKY_ITEM_QUANTITY_MAX = 100
 /** The most days one availability read spans, both ends included. */
 export const BULKY_WINDOW_DAYS_MAX = 92
+/** What an availability read over a wider window is told. */
+export const WINDOW_TOO_WIDE = `Ask for ${BULKY_WINDOW_DAYS_MAX} days at most`
+/** The most bookings a schedule takes on one day. */
+export const BULKY_SLOTS_PER_DAY_MAX = 1000
+/** What a booking, or an availability read, naming no place or two is told. */
+export const ONE_PLACE = "Name a property or a shared collection point, one of the two"
 
 /** The units a bulky collection is charged by (#449): the booking as one job, or each of its items. */
 export const BULKY_PRODUCT_UNITS = ["job", "item"] as const satisfies readonly ProductUnit[]

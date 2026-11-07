@@ -32,7 +32,9 @@
 // under the project's default list, priced as Finance would; it stores
 // nothing. No payment is taken here: that waits for the owner's decision
 // (M15).
-import { routeLabel } from "@waste/contracts/execution"
+import type { Action } from "@waste/domain/access/modules"
+import { NOT_A_STATION } from "@waste/domain/execution/commands"
+import { routeLabel, scaleTicketLabel } from "@waste/domain/numbering"
 import { Page } from "@waste/contracts/pagination"
 import {
   ScaleTicket,
@@ -81,7 +83,7 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { NOT_AN_UNLOADING_STATION, requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
+import { requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
 import { refuseUnofferedProduct } from "./statuses"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
@@ -91,9 +93,6 @@ const MODULE = "operate.scale-house"
 
 const TarePage = Page(VehicleTare)
 const TicketPage = Page(ScaleTicket)
-
-/** A ticket's number as the customer is handed it. */
-export const scaleTicketLabel = (number: number): string => `ST-${number}`
 
 // --- The tare register -------------------------------------------------------
 
@@ -226,7 +225,7 @@ async function requireSite(tx: Tx, companyId: string, id: string): Promise<void>
     .from(unloadingStation)
     .where(and(eq(unloadingStation.companyId, companyId), eq(unloadingStation.id, id)))
     .limit(1)
-  if (row === undefined) throw invalidRequest("body", [{ path: "unloadingStationId", message: NOT_AN_UNLOADING_STATION }])
+  if (row === undefined) throw invalidRequest("body", [{ path: "unloadingStationId", message: NOT_A_STATION }])
   if (row.ownership !== "company" || !row.weighbridge || !["active", "seasonal"].includes(row.status)) throw invalidRequest("body", [{ path: "unloadingStationId", message: NOT_A_SITE }])
 }
 
@@ -242,7 +241,7 @@ async function vehicleOfPlate(tx: Tx, companyId: string, projectId: string, plat
   return matches.length === 1 ? { id: matches[0].id, projectId, timezone: matches[0].timezone } : null
 }
 
-const commonProblems = (action: "view" | "create" | "edit") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

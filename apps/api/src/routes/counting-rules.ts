@@ -34,6 +34,7 @@ import { countedStops, stopOnItsRoute } from "@waste/db/commands/counting-rules"
 import { property } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { countingRule, team, ticket } from "@waste/db/schema/resolution"
+import type { Action } from "@waste/domain/access/modules"
 import { periodsOver, SIMULATION_TICKETS_SHOWN, wholePeriods } from "@waste/domain/resolution/counting-rules"
 import type { CountingPeriod, CountingRuleStatus, TeamStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
@@ -159,7 +160,7 @@ async function simulate(tx: Tx, principal: Principal, body: CountingSimulationBo
   }
 }
 
-const commonProblems = (action: "view" | "edit" | "create" | "delete") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

@@ -45,7 +45,7 @@
 // answer. A body the answer does not read is let go, so the pooled
 // connection is free for the next call.
 import { type Position2D, samePosition } from "@waste/domain/geo"
-import { UNLOAD_SECONDS } from "@waste/domain/routing/reloads"
+import { UNLOAD_SECONDS } from "@waste/domain/execution/workload"
 
 import { decodePolyline } from "./polyline"
 import type { MeasureRequest, MeasureResult, OptimiseRequest, OptimiseResult, Provenance, ProviderAnswer, QuotaReading, RoutingProvider } from "./provider"

@@ -68,9 +68,6 @@ export function referencedId(value: string | undefined, prefix: string): string 
   return UUID.test(bare) ? bare.toLowerCase() : undefined
 }
 
-/** The contract's one-place sentence (`SubscriptionCreate`), quoted since the contracts reach the bundle as types alone; the tests hold the two equal. */
-export const ONE_PLACE = "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place"
-
 // ---------------------------------------------------------------------------
 // The agreement form on the API
 // ---------------------------------------------------------------------------

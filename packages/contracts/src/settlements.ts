@@ -22,19 +22,19 @@
 // already done answers 200 without a write. A Service Provider's manager
 // reads its own settlements and their lines through the list, bounded by the
 // route.
+import { A_PERIOD_ENDS, PRICED_TOGETHER, pricedWhole } from "@waste/domain/finance/settlements"
+import { validityOrdered } from "@waste/domain/periods"
+import * as z from "zod"
+
+import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { SettlementEventKind, SettlementStatus } from "./finance"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeInt, NonNegativeMinor, PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, validityOrdered } from "./validity"
-import * as z from "zod"
-
-/** What a settlement without an end is told: it is a period. */
-export const A_PERIOD_ENDS = "A settlement settles a period, so validTo is the first day after it and is given"
+import { endsAfterItStarts } from "./validity"
 
 /** The end of a settlement's period, required: the sentence for a missing one, zod's own for a malformed day. */
 const SettlementEnd = z.iso.date({ error: (issue) => (issue.input === undefined || issue.input === null ? A_PERIOD_ENDS : undefined) })
@@ -63,13 +63,7 @@ const settlementFields = {
 export const Settlement = z.object(settlementFields).refine(validityOrdered, endsAfterItStarts)
 export type Settlement = z.infer<typeof Settlement>
 
-/** What a line priced by half is told. */
-export const PRICED_TOGETHER = "A line carries its price, its unit price and its net together or none of them"
 const pricedTogether = { message: PRICED_TOGETHER, path: ["serviceProviderPriceId"] }
-
-/** The three nullable columns are null together or none of them. */
-export const pricedWhole = (line: { serviceProviderPriceId: string | null; unitPriceMinor: number | null; netMinor: number | null }): boolean =>
-  (line.serviceProviderPriceId === null) === (line.netMinor === null) && (line.netMinor === null) === (line.unitPriceMinor === null)
 
 export const SettlementLine = z
   .object({

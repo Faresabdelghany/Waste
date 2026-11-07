@@ -8,7 +8,8 @@
 // other refusal the suites read is held to `about:blank`.
 import assert from "node:assert/strict"
 
-import { BLANK_PROBLEM_TYPE, Problem, type ProblemKind } from "@waste/contracts/problem"
+import { Problem, type ProblemKind } from "@waste/contracts/problem"
+import { BLANK_PROBLEM_TYPE } from "@waste/domain/requests"
 
 export async function readProblem(response: Response, kind?: ProblemKind): Promise<Problem> {
   assert.match(response.headers.get("content-type") ?? "", /^application\/problem\+json/)

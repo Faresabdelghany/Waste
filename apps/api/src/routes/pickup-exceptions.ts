@@ -22,17 +22,7 @@
 // longest window reaches. Nothing is charged here: the charge is M5b's, judged
 // once at the stop's event and never re-stepped by a later correction.
 import { Page } from "@waste/contracts/pagination"
-import {
-  PICKUP_EXCEPTION_HISTORY_MAX,
-  PickupException,
-  PickupExceptionHistory,
-  PickupExceptionHistoryQuery,
-  PickupExceptionRule,
-  PickupExceptionRuleCreate,
-  PickupExceptionRuleListQuery,
-  PickupExceptionRulePatch,
-  type PickupExceptionReason,
-} from "@waste/contracts/pickup-exceptions"
+import { PickupException, PickupExceptionHistory, PickupExceptionHistoryQuery, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRuleListQuery, PickupExceptionRulePatch, type PickupExceptionReason } from "@waste/contracts/pickup-exceptions"
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
@@ -43,7 +33,8 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
-import { judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
+import type { Action } from "@waste/domain/access/modules"
+import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
 import { addDays } from "@waste/domain/days"
 import { dayInTimezone } from "@waste/domain/clock"
 import { type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -174,7 +165,7 @@ async function writeLadder(tx: Tx, rule: { companyId: string; projectId: string;
   )
 }
 
-const commonProblems = (action: "view" | "edit" | "create", module = MODULE) => ({
+const commonProblems = (action: Action, module = MODULE) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${module}\`.`),
 })

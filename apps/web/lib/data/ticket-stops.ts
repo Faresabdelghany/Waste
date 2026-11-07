@@ -5,7 +5,7 @@
 // the services the ticket's kind answers (`servicesAnswering`), opened on what
 // the ticket is about; the input goes to the route picked as its Add stop,
 // naming the ticket, and the API holds the ticket to the stop.
-import { isStopTicketKind, servicesAnswering, type StopTicketKind } from "@waste/domain/execution/ticket-stops"
+import { isStopTicketKind, servicesAnswering, type StopTicketKind } from "@waste/domain/resolution/ticket-stops"
 import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"

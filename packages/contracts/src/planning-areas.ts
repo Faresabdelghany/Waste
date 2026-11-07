@@ -32,6 +32,8 @@
 // project-wide one (`PlanningAreaBoundaryListQuery`, the Layers control's,
 // by project, area and day) and one area's own (`PlanningAreaBoundaryVersionsQuery`,
 // by day alone, since the path says the area and the area the project).
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
@@ -40,9 +42,10 @@ import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { PlanningAreaPurpose } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { QueryDecimal } from "./query-numbers"
+import { somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 export const PlanningArea = z.object({
   ...stamped,
@@ -131,9 +134,6 @@ export const PlanningAreaBoundaryVersionsQuery = PageRequest.extend({
   validOn: IsoDate.optional(),
 })
 export type PlanningAreaBoundaryVersionsQuery = z.infer<typeof PlanningAreaBoundaryVersionsQuery>
-
-/** A query string's decimal number, `12.5683` or `-0.5`, and nothing looser: no exponent, no hex, no blank. */
-const QueryDecimal = z.string().regex(/^-?\d+(\.\d+)?$/, { error: "a decimal number" }).transform(Number)
 
 /**
  * The day and the purpose an address → zone read asks for (O29 of #290, row

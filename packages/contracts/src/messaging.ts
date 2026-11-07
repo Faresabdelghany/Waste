@@ -13,15 +13,16 @@
 // sentences these are). A patch is judged whole by the API against the
 // stored template, since a channel moved alone changes what the subject must
 // be.
-import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders } from "@waste/domain/messaging/template"
+import { channelShapeIssue, SAY_SOMETHING, TEMPLATE_BODY_MAX, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_PURPOSES, MESSAGE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, NonNegativeInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
 export const MessageChannel = z.enum(MESSAGE_CHANNELS)
@@ -37,17 +38,11 @@ export const MessageTemplateStatus = z.enum(MESSAGE_TEMPLATE_STATUSES)
 export type MessageTemplateStatus = z.infer<typeof MessageTemplateStatus>
 
 /** A template's body: room for an e-mail of a few paragraphs; a text message's own bound is the channel's rule. */
-const TEMPLATE_BODY_MAX = 10_000
-const TemplateBody = z.string().min(1).max(TEMPLATE_BODY_MAX).refine((text) => text.trim().length > 0, { message: "Say something other than whitespace" })
-
-/** The sentence a placeholder nobody fills earns, naming the ones that are filled. */
-export const unknownPlaceholderSentence = (names: readonly string[]) =>
-  `${names.map((name) => `{{${name}}}`).join(", ")} ${names.length === 1 ? "is" : "are"} filled by no message; use ${MESSAGE_VARIABLES.map((name) => `{{${name}}}`).join(", ")}`
+const TemplateBody = z.string().min(1).max(TEMPLATE_BODY_MAX).refine((text) => text.trim().length > 0, { message: SAY_SOMETHING })
 
 /** The placeholders of the subject and the body, held to the ones a message fills, each refused at its own field. */
 function placeholdersIssues(template: { subject?: string | null; body?: string }, context: z.RefinementCtx): void {
-  for (const path of ["subject", "body"] as const) {
-    const text = template[path]
+  for (const [path, text] of Object.entries({ subject: template.subject, body: template.body })) {
     if (typeof text !== "string") continue
     const unknown = unknownPlaceholders(text)
     if (unknown.length > 0) context.addIssue({ code: "custom", path: [path], message: unknownPlaceholderSentence(unknown) })

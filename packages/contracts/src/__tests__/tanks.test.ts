@@ -3,8 +3,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { NEXT_INSPECTION_AFTER, TankInspectionCreate, TankInstallationCreate, TankInstallationPatch } from "../tanks"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
+import { NEXT_INSPECTION_AFTER } from "@waste/domain/registry/tanks"
+
+import { TankInspectionCreate, TankInstallationCreate, TankInstallationPatch } from "../tanks"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

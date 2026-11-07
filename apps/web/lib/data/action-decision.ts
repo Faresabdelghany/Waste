@@ -26,9 +26,6 @@ const COMPANION =
   "The source record remains unchanged. A linked correction, immutable plan, promotion, child record, or ledger entry will be created."
 const ON_API = "The status changes now, as the API holds it, and its audit log keeps who changed it and the reason given."
 
-/** How long a reason may be: the contracts' paragraph, the bound the API holds the change-reason header to, re-spelled since no zod reaches the bundle and held equal by a test. */
-export const REASON_MAX = 2000
-
 /** The dialog's shape: `onApi` when the record's module is one the API holds. */
 export function actionDecisionShape({ onApi, createsCompanion }: { onApi: boolean; createsCompanion: boolean }): ActionDecisionShape {
   if (onApi) return { asksReason: true, requiresReason: false, asksEffectiveDate: false, promise: ON_API, keepsBrowserAudit: false }

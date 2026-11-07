@@ -2,10 +2,10 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { routeShift } from "../../execution/shift"
-import { stopLoadKg } from "../../execution/workload"
+import { stopLoadKg, UNLOAD_SECONDS } from "../../execution/workload"
 import { planFingerprint } from "../fingerprint"
 import { OPTIMISER_MAX_LOCATIONS } from "../plans"
-import { RELOAD_MAX_STOPS, reloadOf, shipsReload, UNLOAD_SECONDS, unloadsAlong, withUnloads } from "../reloads"
+import { RELOAD_MAX_STOPS, reloadOf, shipsReload, unloadsAlong, withUnloads } from "../reloads"
 import { PLAN_STOP_KINDS } from "../vocabulary"
 
 describe("a Plan's stops (O15 of #290)", () => {

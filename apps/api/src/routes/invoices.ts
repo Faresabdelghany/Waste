@@ -53,6 +53,7 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { invoiceDocumentInputOf } from "@waste/db/commands/invoice-document"
 import { billingRun, invoice, invoiceLine } from "@waste/db/schema/finance"
+import type { Action } from "@waste/domain/access/modules"
 import { invoiceDocumentOf } from "@waste/domain/finance/invoice-document"
 import { vatOf } from "@waste/domain/finance/money"
 import { and, asc, eq, gt, gte, inArray, lte, sum } from "drizzle-orm"
@@ -170,7 +171,7 @@ function creditedLines(creditable: readonly Creditable[], body: CreditNoteCreate
   return drafts.sort((a, b) => a.position - b.position).map(({ draft }) => draft)
 }
 
-const problems = (action: "view" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem("No invoice with that id in the projects this account works in."),

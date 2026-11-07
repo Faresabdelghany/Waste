@@ -7,12 +7,14 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
+
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
+import { PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
 
 import { PasswordChangeRefused, SignInRefused, type ApiSession } from "../auth"
 import { get } from "../client"
 import { landingOf } from "../landing"
-import { ApiProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "../problem"
+import { ApiProblem } from "../problem"
 import { accessUnknownSentence, createApiSession } from "../session"
 import { memoryStorage } from "./memory-storage"
 
@@ -370,8 +372,3 @@ describe("across the browser's tabs", () => {
   })
 })
 
-describe("the account's problem type", () => {
-  test("is the contracts' own, re-spelled so no zod reaches the bundle and held equal so the two cannot drift", () => {
-    assert.equal(NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, NO_ACTIVE_ACCOUNT.type)
-  })
-})

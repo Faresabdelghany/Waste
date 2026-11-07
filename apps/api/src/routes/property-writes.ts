@@ -26,6 +26,7 @@
 // deleted, so the parties' own read is the record of who held a property when.
 import type { Address } from "@waste/contracts/addresses"
 import type { AddressParts } from "@waste/domain/registry/address"
+import { AN_ADDRESS } from "@waste/domain/registry/customers"
 import type { Property, PropertyCreate, PropertyKind, PropertyParty, PropertyPartyHeld, PropertyPartyRole, PropertyPatch, PropertyStatus } from "@waste/contracts/customers"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
@@ -213,7 +214,7 @@ export async function createProperty(tx: Tx, principal: Principal, body: Propert
   const fromRegister = registerValues(body, found)
   const address = fromRegister.address ?? given.address
   // The contract holds a create to one address, typed or the register's; this is its type's word for it.
-  if (address === undefined) throw invalidRequest("body", [{ path: "address", message: "Give the address, typed or as the address register's addressId" }])
+  if (address === undefined) throw invalidRequest("body", [{ path: "address", message: AN_ADDRESS }])
   const values = { ...given, ...fromRegister, address }
   const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
   await requirePartyCustomers(tx, parent, asked.map(entryOf))

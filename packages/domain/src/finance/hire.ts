@@ -36,6 +36,9 @@ export const HIRE_UNIT: ProductUnit = "day"
 /** The most free days a hire product may give: a year, which no hire runs past free. */
 export const FREE_DAYS_MAX = 366
 
+/** What a product sold by anything but the day is told of free days. */
+export const FREE_DAYS_ARE_A_HIRES = "Free days are a hire product's: sell it by the day, or give it none"
+
 /** The calendar month a day falls in, half-open: a monthly cadence's charge period. */
 export const monthOf = (day: string): ChargePeriod => chargePeriodContaining("monthly", day)
 

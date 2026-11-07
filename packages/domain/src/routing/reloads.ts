@@ -26,9 +26,6 @@ import type { PlanTrip } from "./vocabulary"
 /** The stops one optimisation with reloads takes: each stop is a shipment, two locations. */
 export const RELOAD_MAX_STOPS = OPTIMISER_MAX_LOCATIONS / 2
 
-/** An unload visit's time at the station, weighing in and emptying: a typical figure, like a work order's (../execution/workload). */
-export const UNLOAD_SECONDS = 900
-
 /** What a request with reloads carries: the payload, and each stop's load by its index into the request's stops. */
 export type Reload = { capacityKg: number; amounts: readonly number[] }
 

@@ -17,20 +17,18 @@
 // with, a patch never does. The set body is bounded and distinct, the
 // resource unbounded, since a set already stored has to read back however
 // long it grew.
+import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { EACH_CONTAINER_TYPE_ONCE } from "@waste/domain/resources/fleet"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
-
-/** The most container types a set body may name: a form's list, not an import. */
-const SET_MAX = 200
 
 /** The stable key, `rear-loader`: the one key shape of text.ts, as a waste fraction's. */
 const VehicleTypeKey = Slug()
 
-export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type")
 const eachContainerTypeOnce = { message: EACH_CONTAINER_TYPE_ONCE, path: ["containerTypeIds"] }
 
 const ContainerTypeIds = z.array(Id)

@@ -7,10 +7,10 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { MaintenanceOrder, MaintenancePlan, NAME_THE_ORDER } from "@waste/contracts/maintenance"
+import { MaintenanceOrder, MaintenancePlan } from "@waste/contracts/maintenance"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
-import { AN_INTERVAL, KM_NEEDS_A_READING } from "@waste/domain/resources/maintenance"
+import { AN_INTERVAL, KM_NEEDS_A_READING, NAME_THE_ORDER } from "@waste/domain/resources/maintenance"
 import { Hono } from "hono"
 
 import type { createApp } from "../app"

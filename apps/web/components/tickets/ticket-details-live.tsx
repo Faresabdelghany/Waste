@@ -85,7 +85,7 @@ import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopVa
 import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
-import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
+import type { StopTicketKind } from "@waste/domain/resolution/ticket-stops"
 import { isAutomationLine } from "@waste/domain/resolution/automation"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 

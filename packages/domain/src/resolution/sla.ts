@@ -18,6 +18,7 @@
 // the tickets report's `withinDue` counts it: deciding a case is a duplicate
 // is handling it. The API's `overdue` filter is the first reading in SQL; the
 // web's list reads all five.
+import { eachOnceSentence } from "../requests"
 import { isClosedTicketStatus, type TicketKind, type TicketPriority, type TicketStatus } from "./vocabulary"
 
 /** The longest target: a year, in hours. */
@@ -41,6 +42,9 @@ export const slaTargetKey = (target: { kind: string | null; ticketTypeId?: strin
 
 /** What a target naming both a kind and a type is told: a type is of one kind already. */
 export const SLA_KIND_OR_TYPE = "Name a kind or a ticket type, or neither for every kind; not both"
+
+/** What a set naming a kind or a type and a priority twice is told. */
+export const SLA_TARGET_ONCE = eachOnceSentence("kind or ticket type and priority", "a ticket is due by one target")
 
 const HOUR_MS = 60 * 60 * 1000
 

@@ -13,18 +13,12 @@
 // (onboarding to active is an operator's act, not a tenant's), and neither is
 // anything the database derives.
 //
-// The coded fields are checked by shape and not against a list: country is
-// ISO 3166-1 alpha-2, currency ISO 4217, language a BCP 47 tag, timezone an
-// IANA name. Shipping those registries is a dependency and a release cadence;
-// the shape is what keeps a typo out of a column, and the real check is the
-// one the consumer of the value runs (Intl for a timezone, a price for a
-// currency). `kind` is free text on purpose: the prototype's Municipality,
-// Business unit, Contract and Region are labels, not a vocabulary.
+// The coded fields are checked by shape and not against a list (codes.ts).
+// `kind` is free text on purpose: the prototype's Municipality, Business
+// unit, Contract and Region are labels, not a vocabulary.
 //
 // The statuses are text with a CHECK in the database and this enum at the
-// boundary; packages/db/src/__tests__/statuses.test.ts holds the two lists in
-// lockstep, so adding a status is one code change and one migration, never
-// half of each.
+// boundary, both over the domain's lists (@waste/domain/access/vocabulary).
 //
 // A Project carries its working week (Issue #97): `weekend`, the days it
 // rests on, as a set of `ServiceDay`s from `planning.ts` (each named once,
@@ -34,49 +28,39 @@
 // it has. A create body may leave both out and gets the database's defaults,
 // Saturday–Sunday and no list, which the schema says so the document does too;
 // the default is the domain's `DEFAULT_WEEKEND`, the same constant the column
-// default is built from. A weekend never holds all seven days: the holiday
-// policy shifts a collection to the next working day, and a project with none
-// would send it two months out (`shiftToWorkingDay` walks sixty steps and then
-// gives up); the contract bounds it at six, the database at fewer than seven.
-import { BRAND_COLOR_PATTERN, brandColorReadable, brandColorRefusal, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN } from "@waste/domain/access/branding"
-import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
+// default is built from. A weekend never holds all seven days
+// (@waste/domain/access/projects): the holiday policy shifts a collection to
+// the next working day, and a project with none would send it two months out.
+import { BRAND_COLOR_PATTERN, BRAND_COLOR_SHAPE, brandColorReadable, brandColorRefusal, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN, HTTPS_ADDRESS_SHAPE } from "@waste/domain/access/branding"
+import { A_WORKING_DAY, WEEKEND_MAX } from "@waste/domain/access/projects"
+import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_SHAPE } from "@waste/domain/access/public-slug"
+import { COMPANY_STATUSES, PROJECT_STATUSES } from "@waste/domain/access/vocabulary"
 import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
+import { SLUG_PATTERN } from "@waste/domain/text"
 import * as z from "zod"
 
+import { Country, Currency, Language, Timezone } from "./codes"
 import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
 import { ServiceDays } from "./planning"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
-export const CompanyStatus = z.enum(["active", "onboarding"])
+export const CompanyStatus = z.enum(COMPANY_STATUSES)
 export type CompanyStatus = z.infer<typeof CompanyStatus>
 
 /** A project's status: onboarding until it runs. */
-export const ProjectStatus = z.enum(["active", "onboarding"])
+export const ProjectStatus = z.enum(PROJECT_STATUSES)
 export type ProjectStatus = z.infer<typeof ProjectStatus>
-
-/** ISO 3166-1 alpha-2, uppercase (`DK`). */
-const Country = z.string().regex(/^[A-Z]{2}$/, "a two-letter uppercase ISO 3166-1 alpha-2 country code, such as DK")
-
-/** ISO 4217, uppercase (`DKK`). An Agreement is billed in one of these too. */
-export const Currency = z.string().regex(/^[A-Z]{3}$/, "a three-letter uppercase ISO 4217 currency code, such as DKK")
-
-/** A BCP 47 language tag by shape (`da`, `en-GB`, `zh-Hans-CN`). */
-const Language = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "a BCP 47 language tag, such as da or en-GB")
 
 /** The name a project publishes itself under on the public door (ADR-0010): `@waste/domain/access/public-slug`'s shape, unique across every company. */
 export const PublicSlug = z
   .string()
   .min(PUBLIC_SLUG_LENGTH.min)
   .max(PUBLIC_SLUG_LENGTH.max)
-  .regex(new RegExp(PUBLIC_SLUG_PATTERN), "a lowercase slug of letters, digits and single hyphens, such as kystbyen or kystbyen-nord")
-
-/** An IANA timezone name by shape (`Europe/Copenhagen`, `Etc/GMT+2`), or `UTC`. */
-const Timezone = z
-  .string()
-  .regex(/^(UTC|[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z][A-Za-z0-9_+-]*)+)$/, "an IANA timezone name, such as Europe/Copenhagen")
+  .regex(new RegExp(SLUG_PATTERN), PUBLIC_SLUG_SHAPE)
 
 export const Company = z.object({
   ...stamped,
@@ -116,12 +100,6 @@ export const CompanyPatch = z
   .refine(changesSomething, somethingToChange)
 export type CompanyPatch = z.infer<typeof CompanyPatch>
 
-/** The most days a project may rest on: one short of the week, so it has a working day for a shifted collection to land on. */
-export const WEEKEND_MAX = 6
-
-/** What a weekend of all seven days is told. The database holds the same rule as `project_weekend_not_every_day`. */
-export const A_WORKING_DAY = "A project rests on at most six days: it has to have a working day"
-
 /** A project's weighbridge tolerance, in whole percent, within the domain's bounds (O9 of #290). */
 const ProjectTolerance = PositiveInt.max(WEIGHT_TOLERANCE_PERCENT.max)
 
@@ -131,11 +109,11 @@ const Weekend = ServiceDays.max(WEEKEND_MAX, { error: A_WORKING_DAY })
 /** A colour as `#RRGGBB`, lowercased as kept. */
 const BrandColor = z
   .string()
-  .regex(new RegExp(BRAND_COLOR_PATTERN), "A colour is a hash and six hex digits, as #1f6f3f")
+  .regex(new RegExp(BRAND_COLOR_PATTERN), BRAND_COLOR_SHAPE)
   .transform((color) => color.toLowerCase())
 
 /** An address the project serves itself: https, a host, no whitespace. */
-const HttpsAddress = z.string().max(HTTPS_ADDRESS_MAX).regex(new RegExp(HTTPS_ADDRESS_PATTERN), "An address is https, as https://kk.dk/logo.svg")
+const HttpsAddress = z.string().max(HTTPS_ADDRESS_MAX).regex(new RegExp(HTTPS_ADDRESS_PATTERN), HTTPS_ADDRESS_SHAPE)
 
 /**
  * A project's branding on its public pages (M22 of #293): one colour drawn

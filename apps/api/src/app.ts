@@ -25,14 +25,14 @@
 // is a 404, not a 401. The verifier is injected: server.ts builds it over the
 // project's remote key set, a test over a local one, and the app never reads
 // SUPABASE_URL itself.
-import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
-import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
-import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
 import { checkDatabase } from "@waste/db/probe"
 import type { ProofStorage } from "@waste/db/storage"
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { Hono, type Context } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"

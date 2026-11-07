@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { TICKET_KINDS } from "../../resolution/vocabulary"
+import { TICKET_KINDS } from "../vocabulary"
 import { answeredAlready, bookedFor, correctedAway, isStopTicketKind, notAnsweredBy, onlyAnOpenTicket, servedAfterClose, servicedBy, servicesAnswering, stopCorrected, stopMismatch, stopMissed } from "../ticket-stops"
 
 const stop = { position: 4, route: "RC-1042" }

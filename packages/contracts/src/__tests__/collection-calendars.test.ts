@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { HOLIDAYS_MAX, ONE_LISTED_HOLIDAY_PER_DAY } from "@waste/domain/planning/holiday-lists"
+
 import { CollectionCalendar, CollectionCalendarCreate, CollectionCalendarListQuery, CollectionCalendarPatch } from "../collection-calendars"
-import { HOLIDAYS_MAX, HolidayListHoliday, HolidayListHolidaysSet, ONE_LISTED_HOLIDAY_PER_DAY } from "../holiday-lists"
+import { HolidayListHoliday, HolidayListHolidaysSet } from "../holiday-lists"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

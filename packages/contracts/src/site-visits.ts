@@ -15,17 +15,20 @@
 // A visit is an append the attendant's check-in or the gate's read makes,
 // admitted or refused with the reason, and voided with a reason, never
 // deleted: the ledger is the bookkeeping evidence for its charges.
-import { normaliseCredentialValue } from "@waste/domain/visits/charges"
+import { dayWindowOrdered } from "@waste/domain/days"
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { CREDENTIAL_TYPED_MAX, CREDENTIAL_VALUE_SHAPE, EACH_VISIT_FRACTION_ONCE, isCredentialValue, ONE_HOLDER, oneHolder, VISIT_ADDRESS_MAX, VISIT_ADDRESS_QUERY, VISIT_FRACTIONS_MAX } from "@waste/domain/visits/charges"
 import { ACCESS_CREDENTIAL_KINDS, SITE_VISIT_IDENTIFICATIONS, SITE_VISIT_OUTCOMES, SITE_VISIT_REFUSAL_REASONS, SITE_VISIT_SOURCES, VISIT_CHARGE_BASES } from "@waste/domain/visits/vocabulary"
 import { BLOCK_REASONS } from "@waste/domain/finance/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
-import { ProjectScopedListQuery, dayWindowIsOrdered, dayWindowOrdered } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, Minor, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { ProjectScopedListQuery, dayWindowIsOrdered } from "./queries"
+import { Minor, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 export const AccessCredentialKind = z.enum(ACCESS_CREDENTIAL_KINDS)
 export type AccessCredentialKind = z.infer<typeof AccessCredentialKind>
@@ -40,23 +43,12 @@ export type SiteVisitRefusalReason = z.infer<typeof SiteVisitRefusalReason>
 export const VisitChargeBasis = z.enum(VISIT_CHARGE_BASES)
 export type VisitChargeBasis = z.infer<typeof VisitChargeBasis>
 
-/** The longest plate or card number a credential holds, normalised. */
-export const CREDENTIAL_VALUE_MAX = 32
-
-/** What a value that normalises to nothing usable is told. */
-export const CREDENTIAL_VALUE_SHAPE = "A plate or card number of letters and digits; spaces and hyphens are dropped and letters read upper case"
-
 /** A plate or a card as a person types it: it normalises to letters and digits, at most `CREDENTIAL_VALUE_MAX`, so `AB-12 345` and `ab12345` are one plate. */
 export const CredentialValue = z
   .string()
-  .max(CREDENTIAL_VALUE_MAX * 2)
-  .refine((value) => /^[A-Z0-9]+$/.test(normaliseCredentialValue(value)) && normaliseCredentialValue(value).length <= CREDENTIAL_VALUE_MAX, { message: CREDENTIAL_VALUE_SHAPE })
+  .max(CREDENTIAL_TYPED_MAX)
+  .refine(isCredentialValue, { message: CREDENTIAL_VALUE_SHAPE })
 
-/** A credential's holder is a business's Customer with its Agreement, or a household's Property: exactly one. */
-const oneHolder = (value: { customerId?: string | null; agreementId?: string | null; propertyId?: string | null }): boolean =>
-  value.propertyId != null ? value.customerId == null && value.agreementId == null : value.customerId != null && value.agreementId != null
-/** What a credential with no holder, half a business's, or both is told, at the Property. */
-export const ONE_HOLDER = "A credential is a business's — its customer and the agreement its visits are charged to — or a household's Property, exactly one"
 const oneHolderAt = { message: ONE_HOLDER, path: ["propertyId"] }
 
 export const AccessCredential = z
@@ -165,13 +157,10 @@ export const SiteVisit = z.object({
 })
 export type SiteVisit = z.infer<typeof SiteVisit>
 
-/** What a check-in's fractions naming one twice is told. */
-export const EACH_VISIT_FRACTION_ONCE = eachOnceSentence("waste fraction", "a visit brings a fraction or it does not")
-
 /** The fractions a visit brought: each once. */
 const VisitFractionIds = z
   .array(Id)
-  .max(50)
+  .max(VISIT_FRACTIONS_MAX)
   .refine((ids) => eachOnce(ids), { message: EACH_VISIT_FRACTION_ONCE })
 
 /** What a visit was identified by: a plate or a card as read, or the Property the attendant found by its address. */
@@ -272,13 +261,10 @@ export type VisitSite = z.infer<typeof VisitSite>
 export const VisitSites = z.object({ items: z.array(VisitSite) })
 export type VisitSites = z.infer<typeof VisitSites>
 
-/** The most Properties an address search answers. */
-export const VISIT_ADDRESS_MAX = 20
-
 /** `GET /site-visits/addresses`: one project's Properties whose name or address holds `q`, for a check-in by address. */
 export const VisitAddressQuery = z.strictObject({
   projectId: Id,
-  q: z.string().trim().min(2).max(100),
+  q: z.string().trim().min(VISIT_ADDRESS_QUERY.min).max(VISIT_ADDRESS_QUERY.max),
 })
 export type VisitAddressQuery = z.infer<typeof VisitAddressQuery>
 

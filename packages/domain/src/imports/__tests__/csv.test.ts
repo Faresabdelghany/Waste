@@ -6,8 +6,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { columnOf, headerIssues, headerKey, IMPORT_COLUMNS } from "../columns"
-import { csvField, csvRecords, importRows, importTemplate, separatorOf } from "../csv"
-import { IMPORT_KINDS } from "../vocabulary"
+import { csvField, csvRecords, importRows, importTemplate, SEPARATOR_CHARACTERS, separatorForLocale, separatorOf } from "../csv"
+import { CSV_SEPARATORS, IMPORT_KINDS } from "../vocabulary"
 
 describe("csvRecords", () => {
   test("reads quoted fields with separators, line breaks and doubled quotes, numbering records by spreadsheet row", () => {
@@ -121,5 +121,19 @@ describe("importTemplate", () => {
     assert.equal(csvField("@cmd,x", ","), '"\'@cmd,x"')
     const file = importRows("customers", `kind,name\nperson,${csvField("=Anna", ",")}\n`)
     assert.equal(file.rows[0]?.values.name, "=Anna")
+  })
+})
+
+describe("a file's separator for a locale", () => {
+  test("is semicolons where the locale writes a decimal comma, commas otherwise or for a locale nobody knows", () => {
+    assert.equal(separatorForLocale("da-DK"), "semicolon")
+    assert.equal(separatorForLocale("de-DE"), "semicolon")
+    assert.equal(separatorForLocale("en-GB"), "comma")
+    assert.equal(separatorForLocale("en-US"), "comma")
+    assert.equal(separatorForLocale("not a locale!"), "comma")
+  })
+
+  test("names a character each separator is written with", () => {
+    assert.deepEqual(CSV_SEPARATORS.map((separator) => SEPARATOR_CHARACTERS[separator]), [",", ";"])
   })
 })

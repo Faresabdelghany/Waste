@@ -14,6 +14,7 @@
 // so the tab says why in a plain sentence rather than asking; from which day
 // the report reads is the API's to judge, in its own sentence.
 import { windowDays } from "@waste/domain/insight/intervals"
+import { REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import { addDays } from "@waste/domain/days"
 
 import type { FileSeparator, WasteDataQuery } from "@/lib/api/reports"
@@ -61,8 +62,6 @@ export function periodOf(id: CompliancePeriodId, today: string): DayWindow | nul
   }
 }
 
-/** The longest window a report reads (`@waste/contracts/reports`, REPORT_WINDOW_MAX_DAYS), spelled again since the contracts reach the bundle as types alone; a test holds the two equal. */
-export const REPORT_WINDOW_MAX_DAYS = 366
 
 /** What the tab says of a period the report would refuse, in place of asking the API. */
 export const PERIOD_INCOMPLETE = "Pick the period's first and last day"
@@ -88,20 +87,6 @@ export const SEPARATORS = [
   { id: "comma", label: "Commas" },
   { id: "semicolon", label: "Semicolons" },
 ] as const satisfies readonly { id: FileSeparator; label: string }[]
-
-/**
- * The separator a spreadsheet under the locale opens a CSV with: semicolons
- * where the locale writes a decimal comma (Danish, German), since its
- * spreadsheet reads a comma as the decimal, and commas otherwise.
- */
-export function separatorFor(locale: string | undefined): FileSeparator {
-  try {
-    const decimal = new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")?.value
-    return decimal === "," ? "semicolon" : "comma"
-  } catch {
-    return "comma"
-  }
-}
 
 /** The name a downloaded file is saved under: the API's, else the one it would give. */
 export function wasteDataFileName(fileName: string | null, query: WasteDataQuery): string {

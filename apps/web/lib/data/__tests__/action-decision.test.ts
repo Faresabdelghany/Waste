@@ -8,9 +8,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PARAGRAPH_MAX } from "@waste/contracts/text"
 
-import { actionDecisionShape, actionRecordedSentence, REASON_MAX } from "../action-decision"
+
+import { actionDecisionShape, actionRecordedSentence } from "../action-decision"
 
 describe("the status dialog in fixture mode", () => {
   test("asks a reason before it confirms, offers an effective date, and keeps the browser's audit row", () => {
@@ -44,10 +44,6 @@ describe("the status dialog on a module the API holds (#251, #291)", () => {
   test("promises the change now and the API's audit log of who and why; the browser keeps no row of its own", () => {
     assert.equal(shape.keepsBrowserAudit, false)
     assert.equal(shape.promise, "The status changes now, as the API holds it, and its audit log keeps who changed it and the reason given.")
-  })
-
-  test("a reason is held to the bound the API holds the header to", () => {
-    assert.equal(REASON_MAX, PARAGRAPH_MAX)
   })
 
   test("the recorded toast names the move and nothing it did not do", () => {

@@ -23,18 +23,17 @@
 // `Rescheduled` is a Ticket's outcome, not a status here. A stop the office
 // added carries `origin = office`, which generation's refresh leaves where
 // the office put it; `containerId` is null on an address-only one.
-import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
+import { dayWindowOrdered } from "@waste/domain/days"
+import { addedStopIssues, CODE_WITH_CONTAMINATION, codeWithOutcome, REASON_WITH_A_MISS, reasonWithOutcome } from "@waste/domain/execution/office-stops"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { FillLevel, OfficeStopService, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
 import { PositiveInt, stamped } from "./resource"
 import { Paragraph } from "./text"
-
-export { PickupOutcome }
 
 export const Pickup = z.object({
   ...stamped,
@@ -122,85 +121,9 @@ export const PickupDetail = Pickup.extend({
 })
 export type PickupDetail = z.infer<typeof PickupDetail>
 
-/** What a stop the office adds that names neither a container nor an address is told. */
-export const A_CONTAINER_OR_AN_ADDRESS = "Name a container, or a property or a shared collection point with the waste fraction collected there"
-/** What a container's stop naming a place or a fraction beside it is told: the placement gives both. */
-export const THE_CONTAINER_ALONE = "A container's stop takes its place and fraction from the container's placement on the route's service date; name the container alone"
-/** What an address-only stop naming two places is told. */
-export const ONE_ADDRESS = "Name a property or a shared collection point, not both"
-/** What an address-only stop without its fraction is told. */
-export const AN_ADDRESS_WITH_ITS_FRACTION = "An address-only stop names the waste fraction collected there"
-/** What a work order at an address alone is told. */
-export const A_WORK_ORDER_OF_A_CONTAINER = "A work order is of a container: name the container"
-/** What a delivery naming its place is told: the subscription says where. */
-export const A_DELIVERY_AT_ITS_SUBSCRIPTION = "A delivery goes where its subscription serves: name the subscription, not the place"
-/** What a bulky collection naming anything but its booking is told: the booking says where and what. */
-export const THE_BOOKING_ALONE = "A bulky collection takes its place and fraction from its booking; name the booking alone"
-/** What a bulky collection without its booking is told. */
-export const A_BULKY_BOOKING = "A bulky collection names the bulky booking it collects"
-/** What any other stop naming a booking is told. */
-export const ONLY_A_BULKY_COLLECTION = "Only a bulky collection names a bulky booking"
-/** What a swap of a container for itself is told. */
-export const A_SWAP_FOR_ANOTHER = "A swap's replacement is another container"
-
-/** What each ledger booking a service needs is told when it is missing (O3b of #290, `BOOKED_WITH`). */
-export const BOOKS: Readonly<Record<BookedField, string>> = {
-  subscriptionId: "A delivery names the subscription the container will serve under",
-  warehouseId: "A removal or a swap names the warehouse the container goes back to",
-  replacementContainerId: "A swap names the container that replaces it",
-}
-/** What a booking the service does not take is told. */
-export const BOOKED_BY_NO_OTHER: Readonly<Record<BookedField, string>> = {
-  subscriptionId: "Only a delivery names a subscription",
-  warehouseId: "Only a removal or a swap names a warehouse",
-  replacementContainerId: "Only a swap names a replacement",
-}
-
-const given = (value: string | null | undefined): value is string => value != null
-
-type PickupServiceToken = keyof typeof BOOKED_WITH
-
-/** The shape of a stop the office adds: a container alone, or one place with its fraction. A null counts as not given, as a form sends one for the field it leaves empty. */
-function addedStopIssues(
-  body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null; bulkyBookingId?: string | null } & Partial<Record<BookedField, string | null>>,
-  context: z.RefinementCtx,
-): void {
-  const place = [given(body.propertyId), given(body.sharedCollectionPointId)].filter(Boolean).length
-  const service = (body.service ?? "empty") as PickupServiceToken
-  // A bulky collection is its booking's alone: the table's `pickup_bulky_shape`, at the boundary (O11 of #290).
-  if (service === "bulky") {
-    if (!given(body.bulkyBookingId)) context.addIssue({ code: "custom", message: A_BULKY_BOOKING, path: ["bulkyBookingId"] })
-    for (const path of ["containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "subscriptionId", "warehouseId", "replacementContainerId"] as const) {
-      if (given(body[path])) context.addIssue({ code: "custom", message: THE_BOOKING_ALONE, path: [path] })
-    }
-    return
-  }
-  if (given(body.bulkyBookingId)) context.addIssue({ code: "custom", message: ONLY_A_BULKY_COLLECTION, path: ["bulkyBookingId"] })
-  // A work order is of a container where it stands: the table's `pickup_service_container_shape`, at the boundary.
-  if (service !== "empty" && !given(body.containerId)) {
-    context.addIssue({ code: "custom", message: A_WORK_ORDER_OF_A_CONTAINER, path: ["containerId"] })
-    return
-  }
-  // What the service books beside its container, and nothing else books it: the table's three shapes, at the boundary.
-  const booked = BOOKED_WITH[service] ?? []
-  for (const field of ["subscriptionId", "replacementContainerId", "warehouseId"] as const) {
-    if (booked.includes(field) && !given(body[field])) context.addIssue({ code: "custom", message: BOOKS[field], path: [field] })
-    if (!booked.includes(field) && given(body[field])) context.addIssue({ code: "custom", message: BOOKED_BY_NO_OTHER[field], path: [field] })
-  }
-  if (service === "swap" && given(body.replacementContainerId) && body.replacementContainerId === body.containerId) {
-    context.addIssue({ code: "custom", message: A_SWAP_FOR_ANOTHER, path: ["replacementContainerId"] })
-  }
-  if (given(body.containerId)) {
-    // A delivery takes its place from its subscription and may name its fraction; every other container's stop takes both from the placement.
-    for (const path of ["propertyId", "sharedCollectionPointId", "wasteFractionId"] as const) {
-      if (!given(body[path]) || (service === "deliver" && path === "wasteFractionId")) continue
-      context.addIssue({ code: "custom", message: service === "deliver" ? A_DELIVERY_AT_ITS_SUBSCRIPTION : THE_CONTAINER_ALONE, path: [path] })
-    }
-    return
-  }
-  if (place === 0) context.addIssue({ code: "custom", message: A_CONTAINER_OR_AN_ADDRESS, path: ["containerId"] })
-  else if (place > 1) context.addIssue({ code: "custom", message: ONE_ADDRESS, path: ["sharedCollectionPointId"] })
-  else if (!given(body.wasteFractionId)) context.addIssue({ code: "custom", message: AN_ADDRESS_WITH_ITS_FRACTION, path: ["wasteFractionId"] })
+/** The shape of a stop the office adds, each issue at its field (@waste/domain/execution/office-stops). */
+const addedStopShaped = (body: Parameters<typeof addedStopIssues>[0], context: z.RefinementCtx): void => {
+  for (const issue of addedStopIssues(body)) context.addIssue({ code: "custom", message: issue.message, path: [issue.path] })
 }
 
 /**
@@ -231,27 +154,15 @@ export const PickupAdd = z
     /** The Bulky Booking a `bulky` stop collects (O11 of #290): a booked one of the route's project, for the route's day, whose place and fraction the stop takes. */
     bulkyBookingId: Id.nullable().optional(),
   })
-  .superRefine(addedStopIssues)
+  .superRefine(addedStopShaped)
 export type PickupAdd = z.infer<typeof PickupAdd>
 
 /** `POST /pickups/:id/remove`: the dispatcher takes a stop off a route that has not started, saying why. */
 export const PickupRemove = z.strictObject({ reason: Paragraph })
 export type PickupRemove = z.infer<typeof PickupRemove>
 
-/** What a correction giving a reason with a completion, or none with a skip or a failure, is told. */
-export const REASON_WITH_A_MISS = "Give a reason with skipped or failed, and none with completed"
 const reasonWithAMiss = { message: REASON_WITH_A_MISS, path: ["reason"] }
-
-/** A reason goes with a skip or a failure and not with a completion: the table's `pickup_reason_shape`, at the boundary. */
-export const reasonWithOutcome = (value: { outcome: string; reason?: string | null }): boolean => (value.outcome === "skipped" || value.outcome === "failed") === (value.reason != null)
-
-/** What a code given with an outcome it does not tag is told (M5 of #293). */
-export const CODE_WITH_CONTAMINATION = "A contaminant code goes with contamination, or with a collection made all the same"
 const codeWithContamination = { message: CODE_WITH_CONTAMINATION, path: ["contaminantCodeId"] }
-
-/** A code tags the wrong waste: a stop missed for contamination, or one collected all the same — the table's `pickup_contaminant_code_shape`, at the boundary. */
-export const codeWithOutcome = (value: { outcome: string; reason?: string | null; contaminantCodeId?: string | null }): boolean =>
-  value.contaminantCodeId == null || value.reason === "contamination" || value.outcome === "completed"
 
 /** `POST /pickups/:id/correct-outcome`: the audited correction, appending a correction proof and moving the status — and, since M5a, the code the stop is tagged with, or none. */
 export const PickupCorrection = z

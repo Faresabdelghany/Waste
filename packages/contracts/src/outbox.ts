@@ -12,7 +12,7 @@
 // event waits on its queue until a consumer works it — so a field a resource
 // gains later is read with a default where the payload may lack it (the
 // Pickup's own, and the route's hold and cancel reason here).
-import { OUTBOX_AGGREGATES, OUTBOX_KINDS, type AggregateOf, type OutboxKind as Kind } from "@waste/domain/outbox/vocabulary"
+import { aggregateOf, OUTBOX_AGGREGATES, OUTBOX_KINDS, type AggregateOf, type OutboxKind as Kind } from "@waste/domain/outbox/vocabulary"
 import * as z from "zod"
 
 import { Alert } from "./alerts"
@@ -113,8 +113,6 @@ export type OutboxPayloadInput<K extends Kind, A extends AggregateOf<K> = Aggreg
 
 /** An event's payload read through its kind's schema for the aggregate it is about; throws where it is not that resource. */
 export function outboxPayloadOf<K extends Kind, A extends AggregateOf<K>>(kind: K, aggregate: A, payload: unknown): OutboxPayload<K, A> {
-  const schemas: Partial<Record<string, z.ZodType>> = OUTBOX_PAYLOADS[kind]
-  const schema = schemas[aggregate]
-  if (schema === undefined) throw new Error(`a ${kind} event is never about a ${aggregate}`)
-  return schema.parse(payload) as OutboxPayload<K, A>
+  const schemas: Readonly<Record<string, z.ZodType>> = OUTBOX_PAYLOADS[kind]
+  return schemas[aggregateOf(kind, aggregate)].parse(payload) as OutboxPayload<K, A>
 }

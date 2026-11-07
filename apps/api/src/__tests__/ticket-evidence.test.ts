@@ -4,12 +4,12 @@
 import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
-import { TICKET_OBJECT_KEY_SHAPE } from "@waste/contracts/resolution"
 import { TicketType } from "@waste/contracts/ticket-types"
 import { Ticket, TicketDetail, TicketEvent, TicketEvidence } from "@waste/contracts/tickets"
 import { type Database, type Tx } from "@waste/db/client"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
+import { ATTACHMENT_KEY_SHAPE } from "@waste/domain/storage-objects"
 import { and, eq, sql } from "drizzle-orm"
 
 import { type Call } from "./calls"
@@ -227,7 +227,7 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
     test("holds the attachment key to its shape and to the row's own company and ticket, stores a matching one, and answers 404 and 403 like every route here", async () => {
       const fresh = await opened()
       const shape = await refused(await comment(fresh.id, { body: "See attached", objectKey: "photos/bin.jpg" }), 400)
-      assert.deepEqual(shape.errors, [{ path: "objectKey", message: TICKET_OBJECT_KEY_SHAPE }])
+      assert.deepEqual(shape.errors, [{ path: "objectKey", message: ATTACHMENT_KEY_SHAPE }])
       const anotherTicket = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${a.companyId}/${harbors.id}/${testId()}.pdf` }), 400)
       assert.deepEqual(anotherTicket.errors, [{ path: "objectKey", message: "The attachment key names another company or another ticket" }])
       const anotherCompany = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${testId()}/${fresh.id}/${testId()}.jpg` }), 400)

@@ -48,16 +48,18 @@
 // `project.timezone`. The days a report reads begin at `REPORT_FIRST_DAY`.
 // A rate is 0..1, or null where there was nothing to divide by — a rate of
 // nothing is not zero (`rate`).
+import { dayWindowOrdered } from "@waste/domain/days"
+import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_TOO_LONG, reportWindowFits } from "@waste/domain/insight/reports"
 import { REPORT_INTERVALS, WASTE_DATA_WARNINGS } from "@waste/domain/insight/vocabulary"
-import { daysInclusive } from "@waste/domain/days"
+import { CSV_SEPARATORS } from "@waste/domain/imports/vocabulary"
 import * as z from "zod"
 
+import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { PickupReason } from "./execution"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
 import { WasteCode } from "./catalogue"
-import { dayWindowIsOrdered, dayWindowOrdered } from "./queries"
+import { dayWindowIsOrdered } from "./queries"
 import { TicketKind } from "./resolution"
 import { Minor, NonNegativeTotal } from "./resource"
 
@@ -65,29 +67,7 @@ import { Minor, NonNegativeTotal } from "./resource"
 export const ReportInterval = z.enum(REPORT_INTERVALS)
 export type ReportInterval = z.infer<typeof ReportInterval>
 
-/** The longest window a report reads: a year, a leap year's included. */
-export const REPORT_WINDOW_MAX_DAYS = 366
-
-/** What a window longer than that is told, at `to`. */
-export const REPORT_WINDOW_TOO_LONG = `A report's window is at most ${REPORT_WINDOW_MAX_DAYS} days; ask for a year at a time`
-
-/**
- * Whether a window spans at most `REPORT_WINDOW_MAX_DAYS`, both ends
- * inclusive. A backwards window is `dayWindowOrdered`'s to refuse and a day
- * that is not one `IsoDate`'s, so a window this cannot measure passes here
- * rather than being told a second, wrong sentence.
- */
-export const reportWindowFits = (window: { from: string; to: string }): boolean => {
-  const span = daysInclusive(window.from, window.to)
-  return Number.isNaN(span) || span <= REPORT_WINDOW_MAX_DAYS
-}
 const reportWindowFitsAt = { message: REPORT_WINDOW_TOO_LONG, path: ["to"] }
-
-/** The first day a report reads: Postgres has no year 0, and nothing this system records is older. */
-export const REPORT_FIRST_DAY = "2000-01-01"
-
-/** What a day before it is told, at its field. */
-export const REPORT_DAY_TOO_EARLY = `A report reads days from ${REPORT_FIRST_DAY} on`
 
 /** A day of a report's window: a calendar day, from `REPORT_FIRST_DAY` on; comparing two `YYYY-MM-DD` strings compares the days. */
 export const ReportDay = IsoDate.refine((day) => day >= REPORT_FIRST_DAY, REPORT_DAY_TOO_EARLY)
@@ -363,16 +343,13 @@ export const WasteDataReportQuery = z
   .refine(reportWindowFits, reportWindowFitsAt)
 export type WasteDataReportQuery = z.infer<typeof WasteDataReportQuery>
 
-/** How the file separates its fields: commas, or semicolons for a spreadsheet under a Danish locale. */
-export const REPORT_FILE_SEPARATORS = ["comma", "semicolon"] as const
-
 /** `GET /reports/waste-data.csv`: the report's query, and the file's separator. */
 export const WasteDataFileQuery = z
   .strictObject({
     projectId: windowFields.projectId,
     from: windowFields.from,
     to: windowFields.to,
-    separator: z.enum(REPORT_FILE_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
+    separator: z.enum(CSV_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
   })
   .refine(dayWindowOrdered, dayWindowIsOrdered)
   .refine(reportWindowFits, reportWindowFitsAt)

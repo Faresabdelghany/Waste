@@ -7,12 +7,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import { softDeletedRecord } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { command, get, patch, put, UNREACHABLE_STATUS, type ApiClient } from "../client"
-import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, type Problem } from "../problem"
+import { ApiProblem, genericProblem, type Problem } from "../problem"
 import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import {
   adapterFor,
@@ -354,7 +355,7 @@ describe("reading a module into the store", () => {
   })
 
   test("the account's own refusal comes back and is written nowhere: the session has ended, and /login says why", async () => {
-    const refusal = { type: NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, title: "Forbidden", status: 403, detail: "No active account in this company is bound to this login" }
+    const refusal = { type: NO_ACTIVE_ACCOUNT.type, title: "Forbidden", status: 403, detail: "No active account in this company is bound to this login" }
     const refused = heldModule(async () => {
       throw new ApiProblem(refusal)
     })

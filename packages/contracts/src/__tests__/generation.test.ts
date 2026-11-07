@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { WINDOW_AT_MOST_A_YEAR } from "@waste/domain/planning/schemes"
+
 import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "../generation"
-import { WINDOW_AT_MOST_A_YEAR, WINDOW_ORDERED } from "../route-schemes"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -38,7 +40,7 @@ describe("GenerationRequest", () => {
     assert.deepEqual(GenerationRequest.parse({ from: "2026-10-05", to: "2026-10-05" }), { from: "2026-10-05", to: "2026-10-05" }, "a window of one day")
     assert.deepEqual(GenerationRequest.parse({ from: "2026-01-01", to: "2027-01-01" }), { from: "2026-01-01", to: "2027-01-01" }, "366 days, the job's walk cap")
     assert.deepEqual(refusal(GenerationRequest.safeParse({ from: "2026-01-01", to: "2027-01-02" })), [{ path: "to", message: WINDOW_AT_MOST_A_YEAR }], "367 days")
-    assert.deepEqual(refusal(GenerationRequest.safeParse({ from: "2026-10-11", to: "2026-10-05" })), [{ path: "to", message: WINDOW_ORDERED }])
+    assert.deepEqual(refusal(GenerationRequest.safeParse({ from: "2026-10-11", to: "2026-10-05" })), [{ path: "to", message: DAY_WINDOW_ORDERED }])
     assert.deepEqual(refusal(GenerationRequest.safeParse({ from: "2026-10-05" })).map((issue) => issue.path), ["to"])
     assert.ok(refusal(GenerationRequest.safeParse({ from: "5 October", to: "2026-10-11" })).some((issue) => issue.path === "from"), "a day that is not YYYY-MM-DD is refused at its field")
   })

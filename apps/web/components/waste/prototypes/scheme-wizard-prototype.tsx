@@ -18,7 +18,7 @@ import { Stepper } from "@/components/ui/stepper"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { formatShortDay, isoWeek } from "@waste/domain/days"
+import { formatShortDay, isoWeek, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 
 /* ----------------------------- fixture data ----------------------------- */
 
@@ -30,12 +30,9 @@ function moduleRecords(workspaceId: keyof typeof businessWorkspaces, moduleId: s
 
 /* ------------------------------ draft model ----------------------------- */
 
-const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
-type DayKey = (typeof DAY_KEYS)[number]
-const DAY_LABELS: Record<DayKey, string> = {
-  monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
-  friday: "Fri", saturday: "Sat", sunday: "Sun",
-}
+const DAY_KEYS = SERVICE_DAYS
+type DayKey = ServiceDay
+const DAY_LABELS = SERVICE_DAY_SHORT_LABELS
 
 type SchemeDraft = {
   name: string

@@ -5,21 +5,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
+import { BOUNDARY_COLUMN } from "@waste/domain/imports/columns"
+import { cellTooLong, PROJECT_IMPORT_KINDS, PROJECT_REFUSED, PROJECT_REQUIRED } from "@waste/domain/imports/rules"
+import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_CELL_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
-import {
-  ImportBatch,
-  ImportBatchResult,
-  ImportPreview,
-  ImportPreviewRequest,
-  ImportRunCreate,
-  BOUNDARY_COLUMN,
-  cellTooLong,
-  IMPORT_CELL_MAX,
-  PROJECT_IMPORT_KINDS,
-  PROJECT_REFUSED,
-  PROJECT_REQUIRED,
-} from "../imports"
+import { ImportBatch, ImportBatchResult, ImportPreview, ImportPreviewRequest, ImportRunCreate } from "../imports"
 import { refusal } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

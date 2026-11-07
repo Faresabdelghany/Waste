@@ -18,6 +18,7 @@ import {
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { contaminantCode, contaminantCodeFraction } from "@waste/db/schema/pickup-exceptions"
+import type { Action } from "@waste/domain/access/modules"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -78,7 +79,7 @@ async function findCode(tx: Tx, companyId: string, id: string): Promise<Row | un
   return row
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

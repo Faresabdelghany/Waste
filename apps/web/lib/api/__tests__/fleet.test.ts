@@ -9,10 +9,12 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { WasteFraction } from "@waste/contracts/catalogue"
-import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, DriverCreate, DriverPatch, PROVIDER_WITH_PROVIDER_EMPLOYMENT, VehicleCompartmentsSet, VehicleCreate, VehiclePatch, type Driver, type Vehicle } from "@waste/contracts/fleet"
+import { DriverCreate, DriverPatch, VehicleCompartmentsSet, VehicleCreate, VehiclePatch, type Driver, type Vehicle } from "@waste/contracts/fleet"
 import type { Project, ServiceProvider } from "@waste/contracts/organisation"
-import { PROVIDER_WITH_PROVIDER_OWNERSHIP, type Depot } from "@waste/contracts/places"
+import { type Depot } from "@waste/contracts/places"
 import type { VehicleType } from "@waste/contracts/vehicle-types"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
+import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DRIVER_STATUSES, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { driverProfile, vehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
 
@@ -20,13 +22,11 @@ import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../../data/business-mo
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
 import {
-  A_POWERED_VEHICLE_HAS_A_COMPARTMENT as LOCAL_A_POWERED_VEHICLE_HAS_A_COMPARTMENT,
   compartmentDraftsOf,
   compartmentsOfRecord,
   driverAdapter,
   fleetDriversModule,
   fleetVehiclesModule,
-  PROVIDER_WITH_PROVIDER_EMPLOYMENT as LOCAL_PROVIDER_WITH_PROVIDER_EMPLOYMENT,
   SET_COMPARTMENTS,
   vehicleAdapter,
 } from "../records/fleet"
@@ -142,11 +142,6 @@ describe("the fleet modules", () => {
     const loadedDrivers = await loadModule(clientOver(drivers.fetch), fleetDriversModule, { state, now: NOW })
     assert.deepEqual(drivers.calls.map((call) => call.url), ["http://api.test/drivers?limit=200"])
     assert.deepEqual(loadedDrivers.records.map((record) => record.id), [`driver-${mads.id}`, `driver-${lars.id}`, `driver-${jonas.id}`])
-  })
-
-  test("the sentences quoted here are the contracts' own", () => {
-    assert.equal(LOCAL_A_POWERED_VEHICLE_HAS_A_COMPARTMENT, A_POWERED_VEHICLE_HAS_A_COMPARTMENT)
-    assert.equal(LOCAL_PROVIDER_WITH_PROVIDER_EMPLOYMENT, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
   })
 })
 

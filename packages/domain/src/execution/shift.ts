@@ -14,7 +14,7 @@
 // waiting its windows made, the stop time, the unload visits it makes on the
 // way (O15) and the break against the shift.
 
-import { UNLOAD_SECONDS } from "../routing/reloads"
+import { UNLOAD_SECONDS } from "./workload"
 
 /** A break's minutes: the bounds the database and the wire hold it to. */
 export const BREAK_MINUTES = { min: 1, max: 240 } as const

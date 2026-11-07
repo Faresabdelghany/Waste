@@ -13,7 +13,7 @@
 import type { AccessCredential, SiteVisit, SiteVisitCheckIn, SiteVisitCheckInAnswer, VisitChargeReading } from "@waste/contracts/site-visits"
 import type { VisitRule, VisitRuleCreate, VisitRulePatch } from "@waste/contracts/visit-rules"
 import type { BlockReason } from "@waste/domain/finance/vocabulary"
-import { normaliseCredentialValue } from "@waste/domain/visits/charges"
+import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DAYS } from "@waste/domain/visits/charges"
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
 import { allows, type Grants } from "@/lib/api/grants"
@@ -148,9 +148,6 @@ export function checkInBodyOf(draft: CheckInDraft): SiteVisitCheckIn | string {
   return { siteId: draft.siteId, identifier: { kind: draft.mode, value }, ...rest }
 }
 
-/** The shortest address search the API takes. */
-export const ADDRESS_QUERY_MIN = 2
-
 /** The fractions picked, with one toggled: chips, each once. */
 export const toggled = (picked: readonly string[], id: string): string[] => (picked.includes(id) ? picked.filter((candidate) => candidate !== id) : [...picked, id])
 
@@ -230,16 +227,16 @@ function wholeOf(form: VisitRuleForm, field: "freeVisits" | "tradeThreshold" | "
 
 /** The values both bodies share, or the first refusal. */
 function valuesOf(form: VisitRuleForm): Omit<VisitRuleCreate, "projectId" | "validFrom" | "validTo"> & { validTo: string | null } | VisitRuleRefusal {
-  const freeVisits = wholeOf(form, "freeVisits", 0, 366, "the free visits a year")
+  const freeVisits = wholeOf(form, "freeVisits", FREE_VISITS.min, FREE_VISITS.max, "the free visits a year")
   if (isVisitRuleRefusal(freeVisits)) return freeVisits
   if (form.ladder.some((step) => step === "" || step === NO_PRODUCT)) return { field: "ladder", message: "Pick a product for each step, or remove it" }
   const trading = form.tradeThreshold.trim() !== "" || form.tradeWindowDays.trim() !== ""
   let tradeThreshold: number | null = null
   let tradeWindowDays: number | null = null
   if (trading) {
-    const threshold = wholeOf(form, "tradeThreshold", 1, 1000, "the visits that flag a likely trade")
+    const threshold = wholeOf(form, "tradeThreshold", TRADE_THRESHOLD.min, TRADE_THRESHOLD.max, "the visits that flag a likely trade")
     if (isVisitRuleRefusal(threshold)) return threshold
-    const window = wholeOf(form, "tradeWindowDays", 1, 366, "the window in days")
+    const window = wholeOf(form, "tradeWindowDays", TRADE_WINDOW_DAYS.min, TRADE_WINDOW_DAYS.max, "the window in days")
     if (isVisitRuleRefusal(window)) return window
     tradeThreshold = threshold
     tradeWindowDays = window

@@ -33,7 +33,7 @@
 // notice once (`message_source_event_id_customer_id_idx`), so a redelivery
 // answers the messages queued the first time and writes nothing. Every read
 // and write is `wms_api`'s under `withCompany` on the event's company.
-import { ticketLabel } from "@waste/contracts/resolution"
+import { ticketLabel } from "@waste/domain/numbering"
 import type { Tx } from "@waste/db/client"
 import { queueMessage } from "@waste/db/commands/messaging"
 import { newId } from "@waste/db/ids"

@@ -134,6 +134,7 @@
 // joins nothing; its index is the second without the tenant after the hook's
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
+import { CONTAINERLESS_SERVICES } from "@waste/domain/execution/office-stops"
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
 import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
@@ -387,7 +388,7 @@ export const pickup = wms.table(
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties, or collects a bulky booking.
-    check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} in ('empty', 'bulky') or ${t.containerId} is not null`),
+    check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} in (${sql.raw(CONTAINERLESS_SERVICES.map(literal).join(", "))}) or ${t.containerId} is not null`),
     // A bulky collection is a booking's, at its address with no container, and nothing else names a booking (O11 of #290).
     check(tableObjectName(t.id.table, "bulky_shape", "pickup"), sql`(${t.service} = 'bulky') = (${t.bulkyBookingId} is not null) and (${t.service} <> 'bulky' or ${t.containerId} is null)`),
     projectReference(t, [t.bulkyBookingId], bulkyBooking),

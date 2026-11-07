@@ -18,6 +18,7 @@
 // left blank. `AlertAcknowledge` says nothing (`VehicleAllocationConfirm`'s
 // shape: a body with a member is refused), `AlertResolve` may carry the
 // resolution's note, `AlertLinkTicket` names the one ticket.
+import { NAMES_A_SUBJECT, namesASubject } from "@waste/domain/resolution/alerts"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -61,13 +62,7 @@ export const Alert = z.object({
 })
 export type Alert = z.infer<typeof Alert>
 
-/** What an alert about nothing is told. */
-export const NAMES_A_SUBJECT = "An alert names what it is about: a route, a vehicle, a driver or a container"
 const namesASubjectAt = { message: NAMES_A_SUBJECT, path: ["routeId"] }
-
-/** At least one of the four links is given: the table's `alert_subject_shape`, at the boundary. */
-export const namesASubject = (body: { routeId?: string | null; vehicleId?: string | null; driverId?: string | null; containerId?: string | null }): boolean =>
-  body.routeId != null || body.vehicleId != null || body.driverId != null || body.containerId != null
 
 /** `POST /alerts`: the office raises an alert by hand about something of the project. */
 export const AlertCreate = z

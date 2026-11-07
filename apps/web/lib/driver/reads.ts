@@ -17,9 +17,6 @@ import { command, get, UNREACHABLE_STATUS, type ApiClient } from "../api/client"
 import { ApiProblem, genericProblem } from "../api/problem"
 import type { PilotCommand, ProofBytes } from "./commands"
 
-/** The `type` of the API's 503 for a deployment that holds no Storage key: the contracts' `NO_PROOF_STORAGE.type`, spelled again so no zod reaches the browser, and held equal to it by a test. */
-export const NO_PROOF_STORAGE_TYPE = "urn:waste:problem:no-proof-storage"
-
 /** The code Storage's body carries for a key it holds already, which it answers 400 rather than 409. */
 const KEY_ALREADY_EXISTS = "KeyAlreadyExists"
 

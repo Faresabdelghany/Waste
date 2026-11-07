@@ -7,14 +7,14 @@
 // target it keeps moves only its hours and keeps its id, so the audit log
 // reads one row's history per kind and priority. A project without targets
 // opens tickets due never, as before.
-import { duplicateSlaTarget, SLA_KIND_OR_TYPE, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { duplicateSlaTarget, SLA_KIND_OR_TYPE, SLA_TARGET_ONCE, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { TicketKind, TicketPriority } from "./resolution"
-import { eachOnceSentence, PositiveInt } from "./resource"
+import { PositiveInt } from "./resource"
 
 /** From when a ticket's issue happened to its due date, in whole hours: one to a year. */
 export const SlaHours = PositiveInt.max(TICKET_SLA_HOURS_MAX)
@@ -37,9 +37,6 @@ export type TicketSla = z.infer<typeof TicketSla>
 
 /** The most targets a project holds: every kind, each kind and the types it names, at each priority. */
 export const TICKET_SLA_TARGETS_MAX = (TICKET_KINDS.length + 1 + TICKET_TYPE_SETTINGS_MAX) * TICKET_PRIORITIES.length
-
-/** What a set naming a kind or a type and a priority twice is told. */
-export const SLA_TARGET_ONCE = eachOnceSentence("kind or ticket type and priority", "a ticket is due by one target")
 
 /** `PUT /projects/:id/ticket-sla`: the whole set; each kind or type and priority once, every kind counting as one, and never a kind's and a type's at once. */
 export const TicketSlaSet = z

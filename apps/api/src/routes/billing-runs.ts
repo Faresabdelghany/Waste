@@ -20,13 +20,14 @@
 // and the command's refusal — another run of the project under way, an event
 // another run invoiced under this one — a `Refused` the API's error handler
 // answers as a 409 (problem.ts, `refusalProblem`).
-import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunListQuery, BillingRunPreview } from "@waste/contracts/billing"
 import { Page } from "@waste/contracts/pagination"
 import { BILLING_RUN_MAX_EVENTS, grouped, previewBilling, runBilling, type Transact } from "@waste/db/commands/billing-runs"
 import type { Database } from "@waste/db/client"
 import { billingRun } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
+import type { Action } from "@waste/domain/access/modules"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -54,7 +55,7 @@ const MODULE = "commercial.billing"
 
 const RunPage = Page(BillingRun)
 
-const problems = (action: "view" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

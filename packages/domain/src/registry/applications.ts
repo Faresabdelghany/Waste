@@ -44,6 +44,9 @@ export function moveRefusal(label: string, status: ApplicationStatus, command: A
 /** A Decision as it is judged: its outcome and its period, both ends null for a refusal. */
 export type DecisionPeriod = { outcome: DecisionOutcome; validFrom: string | null; validTo: string | null }
 
+/** What an Application naming both a property and a shared collection point is told, at the shared point. */
+export const ONE_PLACE = "An application names a property or a shared collection point, not both"
+
 export const GRANT_STARTS = "A grant names the first day it is in force"
 export const REFUSAL_HAS_NO_PERIOD = "A refusal is in force for no period: give it no first or last day"
 

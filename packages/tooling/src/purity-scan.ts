@@ -6,6 +6,12 @@
 // `declare module "x"`) are findings too: each is a way to reach a package or
 // re-enable a global without an import statement.
 //
+// An allowed import is a direction, not a list of modules: `@waste/domain/*`
+// lets contracts read any module of the domain, which is gated pure itself.
+// What the direction must not reach is the deny-list, judged through
+// everything the imported module imports in turn, so a module that drags a
+// denied one in is refused for it.
+//
 // Browser and Node globals are otherwise not this scanner's job: the checked
 // package's tsconfig.json gives shipping code no DOM lib and no ambient types,
 // so the compiler rejects them; purity.ts proves that with a specimen compile.
@@ -16,6 +22,7 @@ import ts from "typescript"
 
 export type PurityRule =
   | "bare-import"
+  | "denied-import"
   | "escapes-package"
   | "computed-import"
   | "reference-directive"
@@ -30,25 +37,20 @@ export type PurityViolation = {
   detail: string
 }
 
-export type PurityAllowance = {
-  /** Path relative to src/, posix separators. */
-  file: string
-  /** Omit to allow every rule in that file. */
-  rule?: PurityRule
-  reason: string
-}
-
 export type PurityScanOptions = {
   /**
-   * Exact specifiers shipping code may import, e.g. `["zod"]`. A subpath is a
-   * different specifier: `zod/v3` is refused unless listed. Empty: the package
-   * imports nothing but itself.
+   * Specifiers shipping code may import: exact, e.g. `["zod"]`, or every
+   * subpath of a package, `@waste/domain/*`. An exact specifier's subpath is
+   * a different specifier: `zod/v3` is refused unless listed. Empty: the
+   * package imports nothing but itself.
    */
   allowedImports?: readonly string[]
   /** Exact specifiers tests may import besides Node built-ins and allowedImports. */
   allowedTestImports?: readonly string[]
-  /** The whole exception list. Every entry carries a reason a reviewer can check. */
-  allowances?: readonly PurityAllowance[]
+  /** Specifiers, exact or `/*`, that no import may be or pull in, though an allowed pattern covers them. */
+  deniedImports?: readonly string[]
+  /** Every module a specifier pulls in, itself included, each with the chain of specifiers that reaches it. */
+  reachOf?: (specifier: string) => ReadonlyMap<string, readonly string[]>
 }
 
 export type SourceFile = { file: string; source: string }
@@ -56,7 +58,6 @@ export type SourceFile = { file: string; source: string }
 export function findPurityViolations(files: readonly SourceFile[], options: PurityScanOptions = {}): PurityViolation[] {
   const allowedImports = options.allowedImports ?? []
   const allowedTestImports = options.allowedTestImports ?? []
-  const allowances = options.allowances ?? []
   const violations: PurityViolation[] = []
   for (const { file, source } of files) {
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
@@ -67,7 +68,7 @@ export function findPurityViolations(files: readonly SourceFile[], options: Puri
         violations.push({ file, line, rule: "computed-import", detail: `${found.kind} with a computed specifier` })
         continue
       }
-      const verdict = judge(file, found.specifier, allowedImports, allowedTestImports)
+      const verdict = judge(file, found.specifier, allowedImports, allowedTestImports) ?? deniedReach(found.specifier, options)
       if (verdict) violations.push({ file, line, ...verdict })
     }
     for (const directive of referenceDirectivesIn(sourceFile)) {
@@ -87,33 +88,55 @@ export function findPurityViolations(files: readonly SourceFile[], options: Puri
       })
     }
   }
-  return violations.filter((v) => !isAllowed(v, allowances))
+  return violations
 }
 
-type FoundSpecifier = { node: ts.Node; specifier: string | null; kind: string }
+/**
+ * The literal specifiers a module's source imports values from: what it pulls
+ * in at run time, for walking what an import drags along. A type-only import
+ * is erased by the compiler and pulls nothing.
+ */
+export function valueImportsOf(source: string): string[] {
+  const sourceFile = ts.createSourceFile("module.ts", source, ts.ScriptTarget.Latest, true)
+  return specifiersIn(sourceFile).flatMap((found) => (found.specifier === null || found.typeOnly ? [] : [found.specifier]))
+}
+
+type FoundSpecifier = { node: ts.Node; specifier: string | null; kind: string; typeOnly: boolean }
 
 /** Every static import/export-from, `import x = require()`, `import()`, `require()` and `import("x").T`. */
 function specifiersIn(sourceFile: ts.SourceFile): FoundSpecifier[] {
   const found: FoundSpecifier[] = []
   const visit = (node: ts.Node) => {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
-      found.push({ node: node.moduleSpecifier, specifier: literalText(node.moduleSpecifier), kind: "import" })
+      found.push({ node: node.moduleSpecifier, specifier: literalText(node.moduleSpecifier), kind: "import", typeOnly: isTypeOnly(node) })
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
       const expression = node.moduleReference.expression
-      found.push({ node: expression, specifier: literalText(expression), kind: "import = require()" })
+      found.push({ node: expression, specifier: literalText(expression), kind: "import = require()", typeOnly: node.isTypeOnly })
     } else if (ts.isCallExpression(node) && isImportLikeCall(node)) {
       const argument = node.arguments[0]
       const kind = node.expression.kind === ts.SyntaxKind.ImportKeyword ? "import()" : "require()"
-      found.push({ node: argument ?? node, specifier: argument ? literalText(argument) : null, kind })
+      found.push({ node: argument ?? node, specifier: argument ? literalText(argument) : null, kind, typeOnly: false })
     } else if (ts.isImportTypeNode(node)) {
       const argument = node.argument
       const specifier = ts.isLiteralTypeNode(argument) ? literalText(argument.literal) : null
-      found.push({ node: argument, specifier, kind: "import() type" })
+      found.push({ node: argument, specifier, kind: "import() type", typeOnly: true })
     }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
   return found
+}
+
+/** Whether an import or export declaration names types alone, so the compiler erases it: `import type`, or every binding marked `type`. */
+function isTypeOnly(node: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
+  if (ts.isExportDeclaration(node)) {
+    return node.isTypeOnly || (node.exportClause !== undefined && ts.isNamedExports(node.exportClause) && node.exportClause.elements.length > 0 && node.exportClause.elements.every((element) => element.isTypeOnly))
+  }
+  const clause = node.importClause
+  if (clause === undefined) return false
+  if (clause.isTypeOnly) return true
+  const bindings = clause.namedBindings
+  return clause.name === undefined && bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly)
 }
 
 function isImportLikeCall(node: ts.CallExpression): boolean {
@@ -167,7 +190,7 @@ function judge(
     }
     return null
   }
-  if (allowedImports.includes(specifier)) return null
+  if (allowedImports.some((pattern) => matches(pattern, specifier))) return null
   if (isTestFile(file)) {
     if (isBuiltin(specifier) || allowedTestImports.includes(specifier)) return null
     const extra = allowedTestImports.length > 0 ? ` and ${allowedTestImports.join(", ")}` : ""
@@ -175,6 +198,25 @@ function judge(
   }
   const allowed = allowedImports.length > 0 ? `only ${allowedImports.join(", ")}` : "nothing"
   return { rule: "bare-import", detail: `imports "${specifier}"; shipping code may import ${allowed}` }
+}
+
+/** The first denied module an import is or pulls in, named with the chain that reaches it. */
+function deniedReach(specifier: string, options: PurityScanOptions): { rule: PurityRule; detail: string } | null {
+  const denied = options.deniedImports ?? []
+  if (denied.length === 0 || specifier.startsWith(".") || isBuiltin(specifier)) return null
+  const reached = options.reachOf?.(specifier) ?? new Map([[specifier, [specifier]]])
+  for (const [module, chain] of reached) {
+    const pattern = denied.find((p) => matches(p, module))
+    if (pattern === undefined) continue
+    const through = chain.length > 1 ? `, through ${chain.join(" → ")}` : ""
+    return { rule: "denied-import", detail: `imports "${specifier}", which is or reaches "${module}"${through}; ${pattern} is denied` }
+  }
+  return null
+}
+
+/** Whether a specifier is a pattern's: the pattern itself, or a subpath under its `/*`. */
+export function matches(pattern: string, specifier: string): boolean {
+  return pattern.endsWith("/*") ? specifier.startsWith(pattern.slice(0, -1)) : pattern === specifier
 }
 
 /** The package a specifier addresses: `zod/v4` is zod, `@waste/tooling/purity` is @waste/tooling. */
@@ -196,10 +238,6 @@ export function testDirectoriesOf(files: readonly string[]): string[] {
     if (index >= 0) dirs.add(parts.slice(0, index + 1).join("/"))
   }
   return [...dirs].sort()
-}
-
-function isAllowed(violation: PurityViolation, allowances: readonly PurityAllowance[]): boolean {
-  return allowances.some((a) => a.file === violation.file && (a.rule === undefined || a.rule === violation.rule))
 }
 
 /**

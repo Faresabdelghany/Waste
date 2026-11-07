@@ -5,11 +5,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { SLA_TARGET_ONCE, TicketSlaSet, type TicketSla } from "@waste/contracts/ticket-sla"
-import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { TicketSlaSet, type TicketSla } from "@waste/contracts/ticket-sla"
+import { SLA_TARGET_ONCE, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { EVERY_KIND, HOURS_SENTENCE, newSlaRow, ONCE_SENTENCE, SLA_KIND_OPTIONS, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRow } from "../ticket-sla"
+import { EVERY_KIND, HOURS_SENTENCE, newSlaRow, SLA_KIND_OPTIONS, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRow } from "../ticket-sla"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -70,7 +70,7 @@ describe("a type's own target (#548 of #544)", () => {
 
   test("a type and its kind at one priority are two targets; the type twice is refused", () => {
     assert.ok(!("index" in slaBodyOf([row("container-request", "high", "24"), row(`type:${BULKY}`, "high", "72")])))
-    assert.deepEqual(slaBodyOf([row(`type:${BULKY}`, "high", "72"), row(`type:${BULKY}`, "high", "48", "again")]), { index: 1, field: "kind", message: ONCE_SENTENCE })
+    assert.deepEqual(slaBodyOf([row(`type:${BULKY}`, "high", "72"), row(`type:${BULKY}`, "high", "48", "again")]), { index: 1, field: "kind", message: SLA_TARGET_ONCE })
   })
 })
 
@@ -90,8 +90,7 @@ describe("the body", () => {
   })
 
   test("a kind and a priority twice are refused at the second, in the contracts' own sentence", () => {
-    assert.deepEqual(slaBodyOf([row("overflow", "high", "4"), row(EVERY_KIND, "high", "24"), row("overflow", "high", "8")]), { index: 2, field: "kind", message: ONCE_SENTENCE })
-    assert.equal(ONCE_SENTENCE, SLA_TARGET_ONCE)
+    assert.deepEqual(slaBodyOf([row("overflow", "high", "4"), row(EVERY_KIND, "high", "24"), row("overflow", "high", "8")]), { index: 2, field: "kind", message: SLA_TARGET_ONCE })
   })
 })
 

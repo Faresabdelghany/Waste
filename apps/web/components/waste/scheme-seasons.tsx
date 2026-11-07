@@ -20,6 +20,7 @@ import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-r
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { seasonLine, withSeasons } from "@/lib/data/scheme-seasons"
 import { MONTH_LABELS } from "@waste/domain/days"
+import { DAILY_HAS_NO_SEASONS } from "@waste/domain/planning/schemes"
 import { SEASON_FREQUENCIES, type SeasonFrequency, type WeekRotation } from "@waste/domain/planning/vocabulary"
 import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/route-schemes/recurrence"
 import { seasonProblems, storedSeasonsFromValues, type StoredSchemeSeason } from "@waste/domain/route-schemes/scheme-seasons"
@@ -199,7 +200,7 @@ export function SchemeSeasonsCard({ record, frequency, canEdit }: { record: Busi
         )}
       </div>
       {daily ? (
-        <p className="text-xs text-muted-foreground">A daily scheme serves every day all year and has no seasons.</p>
+        <p className="text-xs text-muted-foreground">{DAILY_HAS_NO_SEASONS}.</p>
       ) : seasons.length === 0 ? (
         <p className="text-xs text-muted-foreground">None: the scheme runs at its own cadence all year.</p>
       ) : (

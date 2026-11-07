@@ -1,22 +1,18 @@
 // The text the outbox's consumer spells for a ticket
 // (@waste/domain/resolution/from-event, Issue #109 §3) goes onto the wire as
 // `Ticket.subject`, a `Label` of the contracts (@waste/contracts/text), and as
-// `Ticket.description`, a `Paragraph`; the domain — which depends on nothing —
-// cannot import the contracts' bounds, nor the contracts' tests the domain's
-// module, whose purity allowlist names vocabularies and shape tables only. Two
-// pairs of bounds, one rule: like statuses.test.ts, this package sees both
-// sides, so it holds them together — the domain's `TICKET_SUBJECT_MAX` is
-// `LABEL_MAX` and its `TICKET_DESCRIPTION_MAX` is `PARAGRAPH_MAX`, and a
-// subject or a description the domain builds from text far past the bound
-// parses on the wire — so a bound moved on either side fails here and not on
-// the worker's first long rejection.
+// `Ticket.description`, a `Paragraph`, both cut to the bounds of
+// @waste/domain/text that those schemas read: a subject or a description the
+// domain builds from text far past the bound parses on the wire, so the
+// worker's first long rejection opens its ticket.
 //
 // No database: every bound is source.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Label, LABEL_MAX, Paragraph, PARAGRAPH_MAX } from "@waste/contracts/text"
-import { TICKET_DESCRIPTION_MAX, TICKET_SUBJECT_MAX, ticketFor } from "@waste/domain/resolution/from-event"
+import { Label, Paragraph } from "@waste/contracts/text"
+import { ticketFor } from "@waste/domain/resolution/from-event"
+import { LABEL_MAX, PARAGRAPH_MAX } from "@waste/domain/text"
 
 const DRIVER = "018f7c33-a000-7000-8000-000000000010"
 const ROUTE = "018f7c33-a000-7000-8000-000000000011"
@@ -33,11 +29,6 @@ const failed = (note: string) =>
 const rejected = (detail: string) => ticketFor({ kind: "command-rejected", routeId: null, pickupId: null, driverId: DRIVER, detail })
 
 describe("the consumer's ticket text and the wire's bounds", () => {
-  test("the subject and the Label are bounded alike; the description and the Paragraph alike", () => {
-    assert.equal(TICKET_SUBJECT_MAX, LABEL_MAX)
-    assert.equal(TICKET_DESCRIPTION_MAX, PARAGRAPH_MAX)
-  })
-
   test("a subject built from a 500-character detail parses as a Label, cut at a space or, with none to cut at, at the bound", () => {
     for (const detail of long(100, 500)) {
       assert.ok(detail.length >= 500)

@@ -11,22 +11,22 @@
 // the fraction and the items; the area, the schedule and the product are the
 // server's, read from the place and the day. Its status is a reading, and its
 // stop the office's Add stop (`PickupAdd.bulkyBookingId`).
-import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
+import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_SLOTS_PER_DAY_MAX, BULKY_WINDOW_DAYS_MAX, ONE_PLACE, WINDOW_TOO_WIDE } from "@waste/domain/execution/bulky"
 import { BULKY_BOOKING_STATUSES } from "@waste/domain/execution/vocabulary"
-import { daysInclusive } from "@waste/domain/days"
+import { daysInclusive, dayWindowOrdered } from "@waste/domain/days"
+import { validityOrdered } from "@waste/domain/periods"
+import { weekRotationShape, WEEK_ROTATION_WITH_FORTNIGHTLY } from "@waste/domain/planning/schemes"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { HolidayPolicy, RecurrenceFrequency, ServiceDays, WeekRotation } from "./planning"
-import { ProjectScopedListQuery, dayWindowIsOrdered, dayWindowOrdered } from "./queries"
-import { changesSomething, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
-import { weekRotationShape, WEEK_ROTATION_WITH_FORTNIGHTLY } from "./route-schemes"
+import { ProjectScopedListQuery, dayWindowIsOrdered } from "./queries"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
-
-export { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX }
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** Where a booking stands: booked, routed by a planned stop, collected by a completed one, or cancelled. */
 export const BulkyBookingStatus = z.enum(BULKY_BOOKING_STATUSES)
@@ -35,7 +35,7 @@ export type BulkyBookingStatus = z.infer<typeof BulkyBookingStatus>
 const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, path: ["weekRotation"] }
 
 /** How many bookings one day takes, at most. */
-const SlotsPerDay = PositiveInt.max(1000)
+const SlotsPerDay = PositiveInt.max(BULKY_SLOTS_PER_DAY_MAX)
 
 export const BulkySchedule = z
   .object({
@@ -124,8 +124,6 @@ export const BulkyBooking = z.object({
 })
 export type BulkyBooking = z.infer<typeof BulkyBooking>
 
-/** What a booking naming no place, or two, is told. */
-export const ONE_PLACE = "Name a property or a shared collection point, one of the two"
 const onePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }): boolean => (body.propertyId != null) !== (body.sharedCollectionPointId != null)
 
 /** `POST /bulky-bookings`: the customer, the place, the agreement charged, the day, the fraction and the items. */
@@ -170,9 +168,6 @@ export const BulkyBookingListQuery = ProjectScopedListQuery.extend({
   to: IsoDate.optional(),
 }).refine(dayWindowOrdered, dayWindowIsOrdered)
 export type BulkyBookingListQuery = z.infer<typeof BulkyBookingListQuery>
-
-/** What a window wider than an availability read takes is told. */
-export const WINDOW_TOO_WIDE = `Ask for ${BULKY_WINDOW_DAYS_MAX} days at most`
 
 /** `GET /bulky-bookings/availability`: the place, optionally under the project it is of, and the window of days, both ends included. */
 export const BulkyAvailabilityQuery = z

@@ -47,10 +47,11 @@
 // here.
 import { STATUS_CODES } from "node:http"
 
-import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
+import { Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
 import { QueueMissing } from "@waste/db/jobs"
 import { EXCLUSION_VIOLATION, loggable, sqlstate, UNIQUE_VIOLATION } from "@waste/db/sqlstate"
 import { Refused, type Refusal } from "@waste/domain/refusal"
+import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
 import type { ErrorHandler, NotFoundHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import type { ClientErrorStatusCode, ServerErrorStatusCode } from "hono/utils/http-status"

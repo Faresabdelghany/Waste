@@ -17,6 +17,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { CheckCircle, MagnifyingGlass, Recycle, SignOut, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import type { SiteVisitCheckInAnswer, VisitAddress, VisitSite } from "@waste/contracts/site-visits"
+import { VISIT_ADDRESS_QUERY } from "@waste/domain/visits/charges"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,7 +29,7 @@ import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { checkInVisit, readVisitSites, searchVisitAddresses } from "@/lib/api/site-visits"
 import { BLOCK_REASON_LABELS } from "@/lib/data/commercial"
-import { ADDRESS_QUERY_MIN, answerHeadline, chargeSentence, CHECK_IN_MODES, CHECK_IN_PATH, checkInBodyOf, rememberedSite, toggled, type CheckInMode } from "@/lib/data/site-visits"
+import { answerHeadline, chargeSentence, CHECK_IN_MODES, CHECK_IN_PATH, checkInBodyOf, rememberedSite, toggled, type CheckInMode } from "@/lib/data/site-visits"
 import { CHECK_IN_SITE_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 import { cn } from "@/lib/utils"
 
@@ -150,7 +151,7 @@ function CheckInForm({ projects }: { projects: readonly { id: string; name: stri
   // The address search, once the person has stopped typing; a later query wins over a read still on its way.
   useEffect(() => {
     const q = query.trim()
-    if (client === null || mode !== "address" || q.length < ADDRESS_QUERY_MIN) return
+    if (client === null || mode !== "address" || q.length < VISIT_ADDRESS_QUERY.min) return
     let live = true
     const timer = window.setTimeout(() => {
       searchVisitAddresses(client, pick.projectId, q).then(
@@ -279,7 +280,7 @@ function CheckInForm({ projects }: { projects: readonly { id: string; name: stri
                 <span className="font-medium">{property.name}</span> · {property.address}
               </p>
             ) : shownFound === null ? (
-              query.trim().length > 0 && query.trim().length < ADDRESS_QUERY_MIN && <p className="text-sm text-muted-foreground">Type {ADDRESS_QUERY_MIN} letters at least.</p>
+              query.trim().length > 0 && query.trim().length < VISIT_ADDRESS_QUERY.min && <p className="text-sm text-muted-foreground">Type {VISIT_ADDRESS_QUERY.min} letters at least.</p>
             ) : "sentence" in shownFound ? (
               <p className="text-sm text-destructive">{shownFound.sentence}</p>
             ) : shownFound.items.length === 0 ? (

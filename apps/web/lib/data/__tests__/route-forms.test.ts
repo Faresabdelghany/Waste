@@ -6,8 +6,9 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Driver } from "@waste/contracts/fleet"
-import { A_WORK_ORDER_OF_A_CONTAINER, PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
+import { PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
 import { RouteAssign, RouteCancel, RouteReschedule, type Route } from "@waste/contracts/routes"
+import { A_WORK_ORDER_OF_A_CONTAINER } from "@waste/domain/execution/office-stops"
 import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
 import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
@@ -24,7 +25,6 @@ import { WAREHOUSES_MODULE } from "../containers"
 import { MASTER_DATA_MODULE } from "../master-data"
 import { ORGANISATION_MODULE } from "../containers"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
-import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "../pickup-services"
 import { SERVICE_PROVIDERS_MODULE } from "../provider-money"
 import { createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin } from "../routes"
 
@@ -160,9 +160,8 @@ describe("the route's dialogs", () => {
     const toBody = (input: Record<string, unknown>) => routeAdapter.commands?.[ADD_STOP]?.toBody?.(input, record, context)
     const atAProperty = { stopAt: "property", propertyId: "property-01a0d2a4-a280-7011-8000-000000000001", wasteFractionId: "fraction-01a0d2a4-a280-7005-8000-000000000001" }
     assert.equal((toBody({ ...atAProperty, service: "empty" }) as Record<string, unknown>).service, undefined, "an emptying is the API's default")
-    assert.deepEqual(toBody({ ...atAProperty, service: "wash" }), { path: "stopAt", message: A_WORK_ORDER_IS_OF_A_CONTAINER })
-    assert.equal(A_WORK_ORDER_IS_OF_A_CONTAINER, A_WORK_ORDER_OF_A_CONTAINER, "one sentence, whichever side refuses")
-    assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "stopAt", message: A_WORK_ORDER_IS_OF_A_CONTAINER })
+    assert.deepEqual(toBody({ ...atAProperty, service: "wash" }), { path: "stopAt", message: A_WORK_ORDER_OF_A_CONTAINER })
+    assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "stopAt", message: A_WORK_ORDER_OF_A_CONTAINER })
     assert.deepEqual(toBody({ ...atAProperty, service: "sweep" }), { path: "service", message: "Book an emptying or one of the work orders offered" })
   })
 

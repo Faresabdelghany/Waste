@@ -6,8 +6,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OBJECT_EXTENSIONS } from "@waste/contracts/execution"
-import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
+import { IMAGE_EXTENSIONS, PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
 
 import { PROOF_MIME_TYPES, proofBucketStatement } from "../sql/proof-storage"
 
@@ -23,7 +22,7 @@ describe("the proofs' bucket", () => {
   test("its limits: two megabytes, and the image formats an object key may name", () => {
     assert.equal(PROOF_OBJECT_MAX_BYTES, 2_097_152)
     const mime = (extension: string) => (extension === "jpg" ? "image/jpeg" : `image/${extension}`)
-    assert.deepEqual([...new Set(OBJECT_EXTENSIONS.map(mime))].sort(), [...PROOF_MIME_TYPES].sort())
+    assert.deepEqual([...new Set(IMAGE_EXTENSIONS.map(mime))].sort(), [...PROOF_MIME_TYPES].sort())
     assert.match(proofBucketStatement(), /file_size_limit = 2097152, allowed_mime_types = ARRAY\['image\/jpeg', 'image\/png', 'image\/webp'\]/)
   })
 })

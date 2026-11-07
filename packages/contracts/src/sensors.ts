@@ -29,16 +29,18 @@
 // with the reason. A batch never fails whole for one reading it cannot take.
 // The fill is a whole percent the vendor computed; the battery and the signal
 // strength are where the vendor reports them.
-import { DEFAULT_FULL_THRESHOLD_PERCENT, SENSOR_READING_BATCH_MAX } from "@waste/domain/resources/sensors"
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
+import { DEFAULT_FULL_THRESHOLD_PERCENT, FILL_READING_REFUSALS, PERCENT, RSSI_DBM, SENSOR_READING_BATCH_MAX, THRESHOLD_PERCENT } from "@waste/domain/resources/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, recorded, somethingToChange, stamped } from "./resource"
+import { recorded, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 export const SensorNetwork = z.enum(SENSOR_NETWORKS)
 export type SensorNetwork = z.infer<typeof SensorNetwork>
@@ -47,11 +49,11 @@ export const SensorStatus = z.enum(SENSOR_STATUSES)
 export type SensorStatus = z.infer<typeof SensorStatus>
 
 /** A whole percent of a container's volume. */
-export const Percent = z.int().min(0).max(100)
+export const Percent = z.int().min(PERCENT.min).max(PERCENT.max)
 /** A full threshold: a whole percent above nothing. */
-export const ThresholdPercent = z.int().min(1).max(100)
+export const ThresholdPercent = z.int().min(THRESHOLD_PERCENT.min).max(THRESHOLD_PERCENT.max)
 /** A signal strength in whole dBm, as the vendor reports it. */
-export const RssiDbm = z.int().min(-200).max(0)
+export const RssiDbm = z.int().min(RSSI_DBM.min).max(RSSI_DBM.max)
 
 export const SensorPairing = z
   .object({
@@ -161,8 +163,7 @@ export const FillReadingBatch = z.strictObject({
 })
 export type FillReadingBatch = z.infer<typeof FillReadingBatch>
 
-/** Why the ingest refused a reading: no active sensor of the caller's projects has the identifier, the sensor is retired, or the reading is from the future. */
-export const FILL_READING_REFUSALS = ["unknown-sensor", "retired-sensor", "ahead-of-clock"] as const
+/** Why the ingest refused a reading. */
 export const FillReadingRefusal = z.enum(FILL_READING_REFUSALS)
 export type FillReadingRefusal = z.infer<typeof FillReadingRefusal>
 

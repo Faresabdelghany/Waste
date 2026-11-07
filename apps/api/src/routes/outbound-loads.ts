@@ -45,6 +45,7 @@
 // reaches; only a transfer station's means stock, and only a transfer
 // station takes an adjustment (409). An adjustment is a ledger row, answered
 // 201 with no address of its own: a station's adjustments are listed under it.
+import type { Action } from "@waste/domain/access/modules"
 import { OUTBOUND_LOAD_COMMANDS, notATransferStation, outboundLoadTransition, receiptReading, SAY_WHY, type OutboundLoadCommand } from "@waste/domain/execution/haul-out"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { unloadStanding } from "@waste/domain/insight/readings"
@@ -230,7 +231,7 @@ async function stockOf(tx: Tx, principal: Principal, stationId: string, projectI
     .sort((a, b) => a.projectId.localeCompare(b.projectId) || a.wasteFractionId.localeCompare(b.wasteFractionId))
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

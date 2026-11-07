@@ -7,8 +7,9 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { Customer, CustomerContact, CustomerContacts, REACHABLE_ON_A_CHANNEL } from "@waste/contracts/customers"
+import { Customer, CustomerContact, CustomerContacts } from "@waste/contracts/customers"
 import { createDb, type Database } from "@waste/db/client"
+import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
 import { createApp } from "../app"
 import { CONTACTS_ARE_AN_ORGANISATIONS } from "../routes/customer-contacts"

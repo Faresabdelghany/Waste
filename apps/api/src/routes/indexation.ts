@@ -17,11 +17,11 @@
 // product is no longer active — are judged per row and answered on their
 // lines, since nothing in the body would change them.
 import type { IndexLine, IndexResult } from "@waste/contracts/finance"
-import { INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { nothingToIndex, type IndexPlan } from "@waste/domain/finance/indexation"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
+import { INT4_MAX } from "@waste/domain/requests"
 import { and, eq, inArray } from "drizzle-orm"
 import { lockRows, type TenantTable } from "@waste/db/commands/shared"
 

@@ -57,6 +57,7 @@ import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/voca
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
 import { subjectOf, type OutboxKind, type OutboxSubject } from "../outbox/vocabulary"
+import { objectKeyNames } from "../storage-objects"
 import type { DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
 /** A point as the device recorded it: `[longitude, latitude]`. */
@@ -282,24 +283,6 @@ export const notTheStopsContainer = (code: string, position: number): string => 
 
 /** What the licence sentence's last clause says the judged day was. */
 export const THE_OPERATING_DATE = "the operating date"
-
-// The object key rule: a photo or a signature is a Storage object under
-// `<companyId>/<routeId>/<commandId>.<ext>`, agreed before the upload, and
-// the API holds the key to the row's own ids so a device cannot name another
-// tenant's object (#104 §3).
-
-/** The image formats a proof's object may be. */
-export const OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const
-export type ObjectExtension = (typeof OBJECT_EXTENSIONS)[number]
-
-/** The key a command's object is agreed to live under. */
-export const objectKeyOf = (ids: { companyId: string; routeId: string; commandId: string }, extension: ObjectExtension): string => `${ids.companyId}/${ids.routeId}/${ids.commandId}.${extension}`
-
-/** Whether the key is one of this command's: its company, its route, its id, one of the formats. */
-export function objectKeyNames(key: string, ids: { companyId: string; routeId: string; commandId: string }): boolean {
-  const prefix = `${ids.companyId}/${ids.routeId}/${ids.commandId}.`
-  return key.startsWith(prefix) && (OBJECT_EXTENSIONS as readonly string[]).includes(key.slice(prefix.length))
-}
 
 /** Whether the route is the driver's — planned for them, or started by them: the assignment, the driver door's one fence (the API spells the same in SQL for its reads, and asks this before it reads anything else of a route for a command). */
 export const assignedTo = (route: Pick<RouteState, "plannedDriverId" | "actualDriverId">, driverId: string): boolean => route.plannedDriverId === driverId || route.actualDriverId === driverId

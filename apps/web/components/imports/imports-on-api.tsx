@@ -26,7 +26,8 @@ import { toast } from "sonner"
 
 import type { ImportKind, ImportRowResult, ImportRun } from "@waste/contracts/imports"
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
-import type { ImportRow } from "@waste/domain/imports/csv"
+import { separatorForLocale, type ImportRow } from "@waste/domain/imports/csv"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -43,11 +44,10 @@ import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { importTemplate, previewImport, sendImportBatch, startImportRun } from "@/lib/api/imports"
 import { ApiProblem, genericProblem, problemSentence, type Problem } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
-import { REASON_MAX } from "@/lib/data/action-decision"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import { settingsHref } from "@/lib/data/settings-panes"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
-import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, templateSeparatorFor, textOf, type FileReading } from "@/lib/imports/import-file"
+import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, textOf, type FileReading } from "@/lib/imports/import-file"
 
 import { ImportResultsTable } from "./import-results-table"
 import { ImportRuns } from "./import-runs"
@@ -127,7 +127,7 @@ export function ImportsOnApi() {
   const downloadTemplate = async () => {
     if (client === null || kind === undefined) return
     try {
-      const separator = templateSeparatorFor(typeof navigator === "undefined" ? undefined : navigator.language)
+      const separator = separatorForLocale(typeof navigator === "undefined" ? undefined : navigator.language)
       const template = await importTemplate(client, kind, separator)
       // The API writes the byte-order mark a spreadsheet reads UTF-8 by, and reading the body as text drops it: it is put back.
       downloadCsv(`${kind}-import-template.csv`, template.startsWith(CSV_BOM) ? template : `${CSV_BOM}${template}`)
@@ -286,7 +286,7 @@ export function ImportsOnApi() {
                     id="import-reason"
                     value={reasonTyped}
                     onChange={(event) => setReasonTyped(event.target.value)}
-                    maxLength={REASON_MAX}
+                    maxLength={PARAGRAPH_MAX}
                     disabled={busy}
                     placeholder={chosen === null ? "CSV import <file>" : `CSV import ${chosen.name}`}
                     className="h-8 text-xs"

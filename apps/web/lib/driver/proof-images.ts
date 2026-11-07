@@ -2,7 +2,7 @@
 // before the Command Queue holds them until Storage has them. A phone's
 // camera takes several megabytes; the photo is drawn again to fit 1600 px
 // and sent as JPEG, a few hundred kilobytes, never more than the bucket
-// takes (the contracts' `PROOF_OBJECT_MAX_BYTES`). A signature is the pad's
+// takes (the domain's `PROOF_OBJECT_MAX_BYTES`). A signature is the pad's
 // canvas as PNG. The browser decodes and draws; nothing here reads the
 // picture.
 //
@@ -11,13 +11,12 @@
 // deployment's setting, `NEXT_PUBLIC_DRIVER_STOP_PHOTOS`, off unless it is
 // `true`, inlined by Next at build time and read by its literal name as
 // app-version.ts reads its own.
+import { PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
+
 import type { ProofBytes } from "./commands"
 
 /** The longer edge a photo is drawn to fit. */
 export const PHOTO_MAX_EDGE = 1600
-
-/** The largest photo sent: the bucket's limit, spelled again so no zod reaches the browser, and held equal to it by a test. */
-export const PHOTO_BYTES_MAX = 2 * 1024 * 1024
 
 /** The JPEG qualities tried in turn until the photo fits. */
 const PHOTO_QUALITIES = [0.8, 0.6, 0.4] as const
@@ -61,7 +60,7 @@ export async function photoOf(file: Blob): Promise<ProofBytes> {
     context.drawImage(bitmap, 0, 0, width, height)
     for (const quality of PHOTO_QUALITIES) {
       const blob = await encoded(canvas, "image/jpeg", quality)
-      if (blob.size <= PHOTO_BYTES_MAX) return { extension: "jpg", contentType: "image/jpeg", bytes: await blob.arrayBuffer() }
+      if (blob.size <= PROOF_OBJECT_MAX_BYTES) return { extension: "jpg", contentType: "image/jpeg", bytes: await blob.arrayBuffer() }
     }
     throw new Error("This photo is too large to send; take another")
   } finally {

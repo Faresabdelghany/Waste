@@ -1,25 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  A_POWERED_VEHICLE_HAS_A_COMPARTMENT,
-  COMPARTMENTS_MAX,
-  Driver,
-  DriverCreate,
-  DriverListQuery,
-  DriverPatch,
-  EACH_FRACTION_ONCE,
-  poweredVehicleHasACompartment,
-  PROVIDER_WITH_PROVIDER_EMPLOYMENT,
-  Vehicle,
-  VehicleCompartment,
-  VehicleCompartmentCreate,
-  VehicleCompartmentsSet,
-  VehicleCreate,
-  VehicleListQuery,
-  VehiclePatch,
-} from "../fleet"
-import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "../places"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, COMPARTMENTS_MAX, poweredVehicleHasACompartment, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
+import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
+
+import { Driver, DriverCreate, DriverListQuery, DriverPatch, Vehicle, VehicleCompartment, VehicleCompartmentCreate, VehicleCompartmentsSet, VehicleCreate, VehicleListQuery, VehiclePatch } from "../fleet"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

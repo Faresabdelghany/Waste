@@ -1,21 +1,18 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OBJECT_EXTENSIONS, ObjectKey } from "../execution"
 import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ATTACHMENT_EXTENSIONS, ATTACHMENT_KEY_SHAPE } from "@waste/domain/storage-objects"
+
+import { ObjectKey } from "../execution"
 
 import {
   AlertKind,
   AlertSeverity,
   AlertSource,
   AlertStatus,
-  TICKET_NUMBER_PREFIX,
-  TICKET_OBJECT_EXTENSIONS,
-  TICKET_OBJECT_KEY,
-  TICKET_OBJECT_KEY_SHAPE,
   TicketEventKind,
   TicketKind,
-  ticketLabel,
   TicketObjectKey,
   TicketPriority,
   TicketResolution,
@@ -57,18 +54,9 @@ describe("the Resolution enums", () => {
   })
 })
 
-describe("the ticket label", () => {
-  test("is the number under the one prefix", () => {
-    assert.equal(TICKET_NUMBER_PREFIX, "T-")
-    assert.equal(ticketLabel(8831), "T-8831")
-    assert.equal(ticketLabel(7), "T-7")
-  })
-})
-
 describe("TicketObjectKey", () => {
   test("is <companyId>/<ticketId>/<objectId>.<ext> over the four image formats and pdf, lowercase UUIDs, and nothing else", () => {
-    for (const extension of TICKET_OBJECT_EXTENSIONS) assert.equal(TicketObjectKey.safeParse(`${COMPANY}/${TICKET}/${OBJECT}.${extension}`).success, true, extension)
-    assert.deepEqual([...TICKET_OBJECT_EXTENSIONS], [...OBJECT_EXTENSIONS, "pdf"], "a proof's formats and one more")
+    for (const extension of ATTACHMENT_EXTENSIONS) assert.equal(TicketObjectKey.safeParse(`${COMPANY}/${TICKET}/${OBJECT}.${extension}`).success, true, extension)
     for (const wrong of [
       `${COMPANY}/${TICKET}/${OBJECT}.gif`,
       `${COMPANY}/${TICKET}/${OBJECT}.PDF`,
@@ -79,9 +67,8 @@ describe("TicketObjectKey", () => {
       `${COMPANY}/${TICKET}/${OBJECT}.pdf/extra`,
       `${COMPANY}/${TICKET}/${OBJECT}/${OBJECT}.pdf`,
     ]) {
-      assert.deepEqual(refusal(TicketObjectKey.safeParse(wrong)), [{ path: "", message: TICKET_OBJECT_KEY_SHAPE }], wrong)
+      assert.deepEqual(refusal(TicketObjectKey.safeParse(wrong)), [{ path: "", message: ATTACHMENT_KEY_SHAPE }], wrong)
     }
-    assert.equal(TICKET_OBJECT_KEY.test(`${COMPANY}/${TICKET}/${OBJECT}.png`), true)
   })
 
   test("is spelled apart from a proof's key: a pdf is a ticket's attachment and never a proof's object", () => {

@@ -39,14 +39,16 @@
 // indexation multiplied: the locked bid, or the fee it replaced, which
 // compounds earlier changes.
 //
-// One value beside the lists, the way Resolution's `OPEN_TICKET_STATUSES` is
+// Two values beside the lists, the way Resolution's `OPEN_TICKET_STATUSES` is
 // a value of its list: `OPEN_SETTLEMENT_STATUSES`, the statuses a settlement
-// is recalculated in (finance/transitions.ts).
+// is recalculated in (finance/transitions.ts), and `OFFICE_CANCEL_REASONS`,
+// the reasons the office cancels an event with, every one but a consumer's.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
+import { without } from "../lists"
 
 /** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a job (a completed bulky collection, O11 of #290, and the work orders charged before their charges were removed) and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
 export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit", "weight", "scale-ticket"] as const
@@ -101,6 +103,12 @@ export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 /** The statuses a Settlement is recalculated in: open, or calculated and not yet closed. A value of `SETTLEMENT_STATUSES`, not a vocabulary. */
 export const OPEN_SETTLEMENT_STATUSES = ["open", "calculated"] as const satisfies readonly SettlementStatus[]
 export type OpenSettlementStatus = (typeof OPEN_SETTLEMENT_STATUSES)[number]
+
+/** The reasons only a consumer cancels a ready event with: a corrected pickup, a voided visit, a revised weight, a voided scale ticket. */
+const CONSUMER_CANCEL_REASONS = ["pickup-corrected", "visit-voided", "weight-revised", "scale-ticket-voided"] as const satisfies readonly CancelReason[]
+
+/** The reasons the office cancels a ready event with: every one but a consumer's. A value of `CANCEL_REASONS`, not a vocabulary. */
+export const OFFICE_CANCEL_REASONS = without(CANCEL_REASONS, ...CONSUMER_CANCEL_REASONS)
 
 /** Whether a Settlement in this status may be recalculated: it is not closed. */
 export const isOpenSettlementStatus = (status: SettlementStatus): status is OpenSettlementStatus => (OPEN_SETTLEMENT_STATUSES as readonly SettlementStatus[]).includes(status)

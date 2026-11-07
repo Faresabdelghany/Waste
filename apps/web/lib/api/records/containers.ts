@@ -40,6 +40,7 @@
 import type { Container, ContainerOwnership, ContainerServicePlacement } from "@waste/contracts/containers"
 import type { StockMovement } from "@waste/contracts/stock"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
+import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek, PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
@@ -194,9 +195,6 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
 // reads it again once the command is done (#198). The `issue` door answers
 // the placement, not the issue movement it writes with it, so the ledger
 // is read, not filed from the answer.
-
-/** The sentence the contract refuses a warehouse named with scrap, or none named with a place in stock, in (`WAREHOUSE_WITH_A_STOCK_PLACE`, @waste/contracts/stock), quoted since the web imports no zod at runtime; the test holds the two equal. */
-export const WAREHOUSE_WITH_A_STOCK_PLACE = "Name the warehouse with warehouse or maintenance and not with scrap"
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 

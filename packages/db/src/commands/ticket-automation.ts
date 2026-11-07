@@ -29,9 +29,9 @@
 // ahead at the earliest, written as every office stop is
 // (commands/office-stops.ts), and booked to the ticket through `bookTicket`
 // (commands/ticket-stops.ts).
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
-import { stopMismatch } from "@waste/domain/execution/ticket-stops"
+import { stopMismatch } from "@waste/domain/resolution/ticket-stops"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { OfficeStopService, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { automationNote, AUTOMATION_ACTIONS_MAX, AUTOMATION_DEPTH_MAX, AUTOMATION_SPENT, AUTOMATION_STOPPED, notPlannable, plannedService, triggerOf, type TicketActionParameters } from "@waste/domain/resolution/automation"

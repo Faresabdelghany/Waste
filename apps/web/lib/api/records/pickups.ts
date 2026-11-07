@@ -28,6 +28,7 @@
 import type { Pickup, PickupDetail } from "@waste/contracts/pickups"
 import type { ProofObjectLink, ProofObjectLinks } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
+import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { FILL_LABELS } from "@/lib/data/fill-levels"
@@ -52,12 +53,6 @@ export const PICKUPS_MODULE: ModuleLocation = { workspaceId: "route-studio", mod
 /** The stop's commands, by the names the surfaces send. */
 export const REMOVE_PICKUP = "remove"
 export const CORRECT_PICKUP = "correct"
-
-/** The sentence the contract refuses a reason with a completion, or none with a miss, in (`REASON_WITH_A_MISS`, @waste/contracts/pickups), quoted since the web imports no zod at runtime; the test holds the two equal. */
-export const REASON_WITH_A_MISS = "Give a reason with skipped or failed, and none with completed"
-
-/** The contracts' `CODE_WITH_CONTAMINATION`, spelled again since the web imports the contracts as types alone; a test holds the two equal. */
-export const CODE_WITH_CONTAMINATION = "A contaminant code goes with contamination, or with a collection made all the same"
 
 /** The web id prefix of a contaminant code, a kind of the master data (M5 of #293). */
 const CONTAMINANT_CODE_PREFIX = MASTER_DATA_KIND_DETAILS["contaminant-code"].prefix

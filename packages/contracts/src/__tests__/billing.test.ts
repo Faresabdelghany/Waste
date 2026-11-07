@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunExclusion, BillingRunListQuery, BillingRunPreview, PERIOD_ORDERED, periodOrdered } from "../billing"
-import { DAY_WINDOW_ORDERED } from "../queries"
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { PERIOD_ORDERED, periodOrdered } from "@waste/domain/finance/billing-runs"
+
+import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunExclusion, BillingRunListQuery, BillingRunPreview } from "../billing"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

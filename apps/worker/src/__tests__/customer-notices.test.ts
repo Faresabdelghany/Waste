@@ -10,7 +10,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import type { Route } from "@waste/contracts/routes"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"

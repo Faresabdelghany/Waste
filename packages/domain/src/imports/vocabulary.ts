@@ -24,12 +24,20 @@
 // session's snapshot has to look them up on disk; a request of 50 rows also
 // gives its connection back to the pool's next request within a second or
 // two.
+import { INT4_MAX } from "../requests"
+import { PARAGRAPH_MAX } from "../text"
 
 /** What a file imports. */
 export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers", "collection-calendars", "planning-areas"] as const
 
 /** What became of one row. */
 export const IMPORT_ROW_OUTCOMES = ["created", "updated", "unchanged", "refused"] as const
+
+/** Where a run stands: still recording its rows, or every row recorded. A reading of its counts, never a column. */
+export const IMPORT_RUN_STATUSES = ["running", "completed"] as const
+
+/** The separators a file is written with, by name: a comma, or a semicolon for a spreadsheet under a Danish locale, which opens a file of commas into one column. */
+export const CSV_SEPARATORS = ["comma", "semicolon"] as const
 
 /** The most rows one request previews or commits: below the 64 subtransactions Postgres caches per transaction, one savepoint per row. */
 export const IMPORT_BATCH_MAX = 50
@@ -40,8 +48,14 @@ export const IMPORT_ROWS_MAX = 10_000
 /** The longest boundary a planning-area row may carry, as the GeoJSON of its polygon: some thousands of vertices, where every other cell is a paragraph's length. */
 export const IMPORT_BOUNDARY_MAX = 100_000
 
+/** The first row a file's records start on: the header is row 1. */
+export const IMPORT_FIRST_ROW = 2
+
 /** The largest spreadsheet row number a row may carry: the database's integer. */
-export const IMPORT_ROW_NUMBER_MAX = 2_147_483_647
+export const IMPORT_ROW_NUMBER_MAX = INT4_MAX
+
+/** The longest cell a row may hold: a paragraph's length. */
+export const IMPORT_CELL_MAX = PARAGRAPH_MAX
 
 export type ImportKind = (typeof IMPORT_KINDS)[number]
 
@@ -51,9 +65,13 @@ export const COMPANY_IMPORT_KINDS = ["customers", "waste-fractions", "container-
 /** Whether a kind's records are the company's and its import names no project. */
 export const isCompanyImportKind = (kind: ImportKind): boolean => (COMPANY_IMPORT_KINDS as readonly ImportKind[]).includes(kind)
 export type ImportRowOutcome = (typeof IMPORT_ROW_OUTCOMES)[number]
+export type ImportRunStatus = (typeof IMPORT_RUN_STATUSES)[number]
+export type CsvSeparator = (typeof CSV_SEPARATORS)[number]
 
 /** Every list of this module by its name, for a test that walks them. */
 export const IMPORT_VOCABULARIES = {
   IMPORT_KINDS,
   IMPORT_ROW_OUTCOMES,
+  IMPORT_RUN_STATUSES,
+  CSV_SEPARATORS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

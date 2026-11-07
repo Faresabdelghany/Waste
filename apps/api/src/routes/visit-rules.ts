@@ -13,14 +13,17 @@
 // An amended rule never moves a charge already made: each visit is judged
 // once, at its event.
 import { Page } from "@waste/contracts/pagination"
-import { TRADE_TOGETHER, VisitRule, VisitRuleCreate, VisitRuleListQuery, VisitRulePatch } from "@waste/contracts/visit-rules"
+import { VisitRule, VisitRuleCreate, VisitRuleListQuery, VisitRulePatch } from "@waste/contracts/visit-rules"
 import type { Tx } from "@waste/db/client"
 import { ruleSetsOf } from "@waste/db/commands/site-visits"
 import { validOn } from "@waste/db/query/valid-on"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { project } from "@waste/db/schema/organisation"
 import { visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
+import type { Action } from "@waste/domain/access/modules"
+import { NOT_A_FRACTION } from "@waste/domain/execution/commands"
 import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
+import { TRADE_TOGETHER } from "@waste/domain/visits/charges"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -47,7 +50,6 @@ export const SOLD_PER_VISIT = "A visit is charged at a product sold per visit"
 /** What an annual-access product not sold by the month is told. */
 export const ACCESS_SOLD_BY_THE_MONTH = "Annual access is a product sold by the month, subscribed under the business's agreement"
 /** What a free fraction that is not the company's is told. */
-export const NOT_A_FRACTION = "Not a waste fraction of this company"
 
 const RUNNING = "visit_rule_no_overlap"
 const RUNNING_SENTENCE = "A visit rule is already in force over part of that period; end it first or schedule this one after it"
@@ -168,7 +170,7 @@ async function writeSets(tx: Tx, rule: { companyId: string; projectId: string; i
   }
 }
 
-const problems = (action: "view" | "edit" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

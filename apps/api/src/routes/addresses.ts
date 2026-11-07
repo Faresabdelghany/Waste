@@ -23,9 +23,10 @@
 // address lookup not set up here, to the reads and to a write naming an
 // `addressId` alike, as the proofs' routes answer a deployment without
 // Storage.
-import { Address, AddressId, AddressSearch, AddressSearchQuery, ADDRESS_ATTRIBUTION } from "@waste/contracts/addresses"
+import { Address, AddressId, AddressSearch, AddressSearchQuery } from "@waste/contracts/addresses"
 import { loggable } from "@waste/db/sqlstate"
 import type { ModuleKey } from "@waste/domain/access/modules"
+import { ADDRESS_ATTRIBUTION } from "@waste/domain/registry/address"
 import { Hono, type Context, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"

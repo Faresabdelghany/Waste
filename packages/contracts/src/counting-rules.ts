@@ -10,6 +10,7 @@
 // whole periods, and each property that would have received a ticket is
 // listed with its period and the day its count reached the limit, the
 // earliest first, `SIMULATION_TICKETS_SHOWN` at most, beside the total.
+import { changesSomething } from "@waste/domain/requests"
 import { COUNTING_LIMIT_MAX, simulationWindowIssue } from "@waste/domain/resolution/counting-rules"
 import { COUNTING_PERIODS, COUNTING_RULE_STATUSES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
@@ -17,7 +18,7 @@ import * as z from "zod"
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { changesSomething, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
 export const CountingPeriod = z.enum(COUNTING_PERIODS)

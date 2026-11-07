@@ -12,8 +12,8 @@ import { ContainerServicePlacement, type Container } from "@waste/contracts/cont
 import { Customer, Property } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import { TankInspection, TankInstallation } from "@waste/contracts/tanks"
-import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database } from "@waste/db/client"
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
 
 import { createApp } from "../app"
 import { INSPECTED_BY_TODAY, notPlacedAt, standsForAnotherTank } from "../routes/tanks"

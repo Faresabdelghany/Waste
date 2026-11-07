@@ -37,7 +37,7 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import { actionDecisionShape, actionRecordedSentence, REASON_MAX } from "@/lib/data/action-decision"
+import { actionDecisionShape, actionRecordedSentence } from "@/lib/data/action-decision"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { readableKey } from "@/lib/data/record-key"
@@ -63,6 +63,7 @@ import {
   type CalendarRowSummary,
 } from "@waste/domain/route-schemes/calendar-list"
 import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
+import type { Action } from "@waste/domain/access/modules"
 import { draftGroups } from "@waste/domain/route-schemes/draft"
 import { driverFormOptions } from "@/lib/data/driver-form-options"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
@@ -98,6 +99,7 @@ import {
   type SchemeRowSummary,
 } from "@waste/domain/route-schemes/scheme-list"
 import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
   effectiveDayRules,
@@ -261,7 +263,6 @@ import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-liv
 import {
   effectiveRoleAccess,
   type RoleAccessMap,
-  type RolePermissionAction,
 } from "@/lib/data/role-permissions"
 
 type BusinessWorkspaceProps = {
@@ -1069,11 +1070,11 @@ export function BusinessWorkspace({
   const activeModuleGrants = roleAccess
     ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
     : null
-  const hasGrant = (action: RolePermissionAction) =>
+  const hasGrant = (action: Action) =>
     activeModuleGrants === null || activeModuleGrants.includes(action)
   // A grant on another module — Map Planning creates Service Areas, so it
   // follows the Service Areas module's create grant, not Plan's.
-  const hasGrantOn = (workspaceId: WorkspaceId, moduleId: string, action: RolePermissionAction) => {
+  const hasGrantOn = (workspaceId: WorkspaceId, moduleId: string, action: Action) => {
     if (!roleAccess) return true
     return (roleAccess[`${workspaceId}.${moduleId}`] ?? []).includes(action)
   }
@@ -4741,7 +4742,7 @@ function ActionDecisionDialog({
                     onChange={(event) => setReason(event.target.value)}
                     placeholder={shape.requiresReason ? "Explain why this action is appropriate and note the evidence reviewed." : "Why, in a sentence the history will show beside the change."}
                     className="min-h-24 resize-none"
-                    maxLength={REASON_MAX}
+                    maxLength={PARAGRAPH_MAX}
                   />
                 </div>
               )}

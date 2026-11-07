@@ -24,14 +24,18 @@
 // the office picked; `cancel` stamps a ready or blocked event with the
 // caller, the clock and a reason — the office's three, never the consumer's
 // `pickup-corrected`. The consumer's two doors are the worker's.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { OVERRIDE_WITH_A_REASON, overrideWithAReason } from "@waste/domain/finance/billable-events"
+import { OFFICE_CANCEL_REASONS } from "@waste/domain/finance/vocabulary"
+import * as z from "zod"
+
+import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { BillableEventKind, BillableEventStatus, BlockReason, CancelReason } from "./finance"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeMinor, PositiveInt, stamped } from "./resource"
 import { Paragraph } from "./text"
-import * as z from "zod"
 
 /** What an event links to: the ids the occurrence named, each null where it named none. */
 export const BillableEventLinks = z.object({
@@ -114,11 +118,9 @@ export const BillableEvent = z.object({
 export type BillableEvent = z.infer<typeof BillableEvent>
 
 /** What a body giving a price of its own without a reason, or a reason without a price, is told. */
-export const OVERRIDE_WITH_A_REASON = "Give the reason with a price of your own, and neither without the other"
 const overrideWithAReasonAt = { message: OVERRIDE_WITH_A_REASON, path: ["overrideReason"] }
 
 /** A person's price and its reason come together or not at all. */
-export const overrideWithAReason = (body: { unitPriceMinor?: number; overrideReason?: string }): boolean => (body.unitPriceMinor === undefined) === (body.overrideReason === undefined)
 
 /** `POST /billable-events`: the office's manual event, priced by the resolver or by the person with a reason. The status, the links, the origin and the stamps are the server's. */
 export const BillableEventCreate = z
@@ -152,7 +154,7 @@ export type BillableEventRelease = z.infer<typeof BillableEventRelease>
 
 /** `POST /billable-events/:id/cancel`: the office's reason, never the consumer's, and a note. */
 export const BillableEventCancel = z.strictObject({
-  reason: CancelReason.exclude(["pickup-corrected", "visit-voided", "weight-revised", "scale-ticket-voided"]),
+  reason: z.enum(OFFICE_CANCEL_REASONS),
   note: Paragraph.optional(),
 })
 export type BillableEventCancel = z.infer<typeof BillableEventCancel>

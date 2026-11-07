@@ -18,6 +18,8 @@
 // rest — and an approved proposal names the scheme version its approval
 // wrote (`successorSchemeId`). Overdue is a reading of an open follow-up's
 // due day, never a status.
+import { changesSomething } from "@waste/domain/requests"
+import { AT_LEAST_ONE_DAY } from "@waste/domain/service-providers/activities"
 import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES } from "@waste/domain/service-providers/vocabulary"
 import * as z from "zod"
 
@@ -26,16 +28,13 @@ import { Id } from "./ids"
 import { ServiceDays } from "./planning"
 import { CollectionGroupContainersSet, StopMatchingRule } from "./route-schemes"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const ActivityKind = z.enum(SERVICE_PROVIDER_ACTIVITY_KINDS)
 export type ActivityKind = z.infer<typeof ActivityKind>
 export const ActivityStatus = z.enum(SERVICE_PROVIDER_ACTIVITY_STATUSES)
 export type ActivityStatus = z.infer<typeof ActivityStatus>
-
-/** What a proposal of days giving none is told. */
-export const AT_LEAST_ONE_DAY = "A group runs on one day at least"
 
 /** The days a route-day change asks the group to run on: one at least, each once. */
 const ProposedDays = ServiceDays.refine((days) => days.length > 0, { message: AT_LEAST_ONE_DAY })
@@ -90,7 +89,7 @@ const createBase = {
 
 export const RouteDayChangeCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("route-day-change"),
+  kind: z.literal(ActivityKind.enum["route-day-change"]),
   routeSchemeId: Id,
   collectionGroupId: Id,
   serviceDays: ProposedDays,
@@ -100,21 +99,21 @@ export type RouteDayChangeCreate = z.infer<typeof RouteDayChangeCreate>
 
 export const ComplianceFollowUpCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("compliance-follow-up"),
+  kind: z.literal(ActivityKind.enum["compliance-follow-up"]),
   dueOn: IsoDate,
 })
 export type ComplianceFollowUpCreate = z.infer<typeof ComplianceFollowUpCreate>
 
 export const CoordinationNoteCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("coordination-note"),
+  kind: z.literal(ActivityKind.enum["coordination-note"]),
 })
 export type CoordinationNoteCreate = z.infer<typeof CoordinationNoteCreate>
 
 /** A vehicle change: the group runs with this vehicle from `effectiveFrom`, and with this driver where one is named, else its own. */
 export const VehicleChangeCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("vehicle-change"),
+  kind: z.literal(ActivityKind.enum["vehicle-change"]),
   routeSchemeId: Id,
   collectionGroupId: Id,
   vehicleId: Id,
@@ -129,7 +128,7 @@ const PickedContainers = CollectionGroupContainersSet.shape.containerIds
 /** A stop-set change: the group, which picks its stops, runs on these containers in this order from `effectiveFrom`. */
 export const StopSetChangeCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("stop-set-change"),
+  kind: z.literal(ActivityKind.enum["stop-set-change"]),
   routeSchemeId: Id,
   collectionGroupId: Id,
   containerIds: PickedContainers,
@@ -143,7 +142,7 @@ const RuleFractions = StopMatchingRule.shape.wasteFractionIds
 /** A waste-fraction change: the group's rule collects these fractions from `effectiveFrom`, its container types and vehicle type kept. */
 export const WasteFractionChangeCreate = z.strictObject({
   ...createBase,
-  kind: z.literal("waste-fraction-change"),
+  kind: z.literal(ActivityKind.enum["waste-fraction-change"]),
   routeSchemeId: Id,
   collectionGroupId: Id,
   wasteFractionIds: RuleFractions,

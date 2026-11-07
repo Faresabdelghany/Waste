@@ -5,9 +5,9 @@
 // have seen.
 import type { CommandOutcomeRow, DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
+import { PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
 
 import type { ApiClient } from "../../api/client"
-import { PROBLEM_MEDIA_TYPE } from "../../api/problem"
 
 export const NOW = Date.parse("2027-01-15T08:00:00.000Z")
 export const ROUTE_ID = "01950000-0000-7000-8000-000000000001"

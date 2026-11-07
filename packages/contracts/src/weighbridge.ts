@@ -13,6 +13,7 @@
 // matches an unmatched one by hand to a route and a fraction
 // (`WeighbridgeTicketMatch`), or dismisses it with a note
 // (`WeighbridgeTicketDismiss`).
+import { weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
 import { WEIGHBRIDGE_REFUSALS, WEIGHBRIDGE_TICKET_STATUSES, WEIGHBRIDGE_UNMATCHED_REASONS } from "@waste/domain/execution/vocabulary"
 import { WEIGHBRIDGE_BATCH_MAX } from "@waste/domain/execution/weighbridge"
 import * as z from "zod"
@@ -23,7 +24,7 @@ import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { PositiveInt, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
-import { bothGrossAndTare, netIsGrossLessTare, weightsAddUp, weightsPaired } from "./unloads"
+import { bothGrossAndTare, netIsGrossLessTare } from "./unloads"
 
 export const WeighbridgeTicketStatus = z.enum(WEIGHBRIDGE_TICKET_STATUSES)
 export type WeighbridgeTicketStatus = z.infer<typeof WeighbridgeTicketStatus>

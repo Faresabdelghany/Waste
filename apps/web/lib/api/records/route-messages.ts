@@ -5,14 +5,12 @@
 // the thread is read again after it. The driver's side is the Driver App's
 // (lib/driver/route-messages.ts).
 import type { RouteMessage } from "@waste/contracts/route-messages"
+import { routeMessageIssue } from "@waste/domain/execution/route-messages"
 
 import { get, post } from "../client"
 import { shownOn } from "./clock"
 
 type Client = Parameters<typeof get>[0]
-
-/** The longest message, as the contracts bound it: spelled again, since the contracts reach the bundle as types alone, and held equal by a test. */
-export const ROUTE_MESSAGE_MAX = 1000
 
 /** The route's thread, oldest first. */
 export const routeMessages = (client: Client, serverId: string): Promise<RouteMessage[]> => get<RouteMessage[]>(client, `/routes/${serverId}/messages`)
@@ -30,9 +28,4 @@ export const messageLine = (message: RouteMessage, timezone: string | undefined)
 })
 
 /** Why a draft is not sent yet, or null where it may be. */
-export const draftRefusal = (draft: string): string | null => {
-  const text = draft.trim()
-  if (text.length === 0) return "Say something"
-  if (text.length > ROUTE_MESSAGE_MAX) return `A message is at most ${ROUTE_MESSAGE_MAX} characters`
-  return null
-}
+export const draftRefusal = routeMessageIssue

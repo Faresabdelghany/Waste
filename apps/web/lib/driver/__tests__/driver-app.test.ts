@@ -13,10 +13,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
+import { PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
+import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
 import { IDBFactory } from "fake-indexeddb"
 
-import { PROBLEM_MEDIA_TYPE } from "../../api/problem"
 import { openCommandQueue, type QueueEntry } from "../command-queue"
 import { openReadSnapshot, SNAPSHOT_MAX_AGE_MS } from "../read-snapshot"
 import { createDriverApp, DRAIN_RETRY_MS, REQUEST_TIMEOUT_MS, type DriverAppOptions } from "../driver-app"
