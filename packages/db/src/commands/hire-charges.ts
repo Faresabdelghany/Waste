@@ -41,7 +41,7 @@ import { product } from "../schema/catalogue"
 import { container, containerServicePlacement } from "../schema/containers"
 import { billableEvent } from "../schema/finance"
 import { autoHold, billableEventShapeIssue, priceDraft, type ComposedEvent } from "./billable-writes"
-import type { Scope } from "./project-clock"
+import type { Scope } from "../query/project-clock"
 import type { ChargeOutcome } from "./recurring-charges"
 
 /** What a hire is priced from: its agreement and product, the first day charged, the days charged, and the conditions its container sets. */

@@ -315,8 +315,8 @@ const liveAllocationsNameThis = liveAllocationsName("vehicle")
 const groupsNameThis = groupsName("vehicle")
 
 /** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (@waste/domain/status-gates spells the rest). */
-const liveAllocations = (companyId: string, vehicleId: string) =>
-  liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)))
+const liveAllocations = (companyId: string, vehicleId: string, now: Date) =>
+  liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)), now)
 
 /** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every vehicle statement is bounded by. */
 const scope = (principal: Principal) => and(eq(vehicle.companyId, principal.companyId), reachesFleet(principal, vehicle))
@@ -370,7 +370,7 @@ export async function createVehicle(tx: Tx, principal: Principal, body: VehicleC
 }
 
 /** Changes one vehicle the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and a retirement refused under what it would strand. */
-export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch): Promise<Vehicle> {
+export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch, now: () => Date): Promise<Vehicle> {
   // The row every rule below is held against, locked before it is read
   // (routes/shared.ts): a retirement and an allocation being made are two
   // halves of one rule, and they serialise here.
@@ -387,8 +387,8 @@ export async function patchVehicle(tx: Tx, principal: Principal, id: string, pat
   await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
   await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
   if (patch.status === "retired" && current.status !== "retired") {
-    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
-    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.vehicleId, principal.companyId, id), groupsNameThis)
+    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id, now()), liveAllocationsNameThis)
+    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.vehicleId, principal.companyId, id, now()), groupsNameThis)
   }
 
   const [row] = await refuseDuplicate(collisions(patch), () =>
@@ -541,7 +541,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", VehiclePatch),
-      async (c) => c.json(await patchVehicle(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
+      async (c) => c.json(await patchVehicle(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now)),
     )
     .put(
       "/vehicles/:id/compartments",

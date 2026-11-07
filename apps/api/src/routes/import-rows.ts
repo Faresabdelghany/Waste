@@ -57,7 +57,7 @@ import { PlanningAreaBoundaryCreate, PlanningAreaCreate, PlanningAreaPatch } fro
 import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
-import { projectCurrency, projectToday } from "@waste/db/commands/project-clock"
+import { projectCurrency, projectToday } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, product } from "@waste/db/schema/catalogue"
 import { sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -810,7 +810,7 @@ async function importVehicle(context: ImportContext, cells: Cells): Promise<Writ
   const compartmentsMoved = compartments !== undefined && !sameCompartments(current.compartments, compartments)
   if (isEmpty(patch) && !compartmentsMoved) return { outcome: "unchanged", resourceId: current.id }
   requireAllowed(principal.grants, IMPORT_MODULES.vehicles, "edit")
-  if (!isEmpty(patch)) await step(VEHICLE_COLUMNS, () => patchVehicle(tx, principal, current.id, parsed(VehiclePatch, patch, VEHICLE_COLUMNS)))
+  if (!isEmpty(patch)) await step(VEHICLE_COLUMNS, () => patchVehicle(tx, principal, current.id, parsed(VehiclePatch, patch, VEHICLE_COLUMNS), context.now))
   if (compartmentsMoved) await step(VEHICLE_COLUMNS, () => replaceVehicleCompartments(tx, principal, current.id, compartments))
   return { outcome: "updated", resourceId: current.id }
 }
@@ -853,7 +853,7 @@ async function importDriver(context: ImportContext, cells: Cells): Promise<Writt
   const patch = changes(current, fields, given)
   if (isEmpty(patch)) return { outcome: "unchanged", resourceId: current.id }
   requireAllowed(principal.grants, IMPORT_MODULES.drivers, "edit")
-  await step(DRIVER_COLUMNS, () => patchDriver(tx, principal, current.id, parsed(DriverPatch, patch, DRIVER_COLUMNS)))
+  await step(DRIVER_COLUMNS, () => patchDriver(tx, principal, current.id, parsed(DriverPatch, patch, DRIVER_COLUMNS), context.now))
   return { outcome: "updated", resourceId: current.id }
 }
 

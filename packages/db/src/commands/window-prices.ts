@@ -17,7 +17,7 @@ import { product } from "../schema/catalogue"
 import { billableEvent } from "../schema/finance"
 import { scaleTicketLine } from "../schema/scale-house"
 import { listInForce, priceDraft, rowsOn } from "./billable-writes"
-import type { Scope } from "./project-clock"
+import type { Scope } from "../query/project-clock"
 import { lockRow } from "./shared"
 import { eventsFrom, type EventReading } from "../shapes/billable-events"
 

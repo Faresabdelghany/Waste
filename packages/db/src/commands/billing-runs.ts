@@ -132,7 +132,7 @@ import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } 
 import { project } from "../schema/organisation"
 import { siteVisit } from "../schema/site-visits"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
-import { projectToday, type Scope } from "./project-clock"
+import { projectToday, type Scope } from "../query/project-clock"
 import { heldWhenCharged, holdsForReview } from "./billable-writes"
 import { mintHireCharges, planHireCharges } from "./hire-charges"
 import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"

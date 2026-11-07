@@ -27,7 +27,7 @@ import type { Tx } from "@waste/db/client"
 import { instantOnDay } from "@waste/domain/clock"
 import { routeTiming } from "@waste/db/commands/stop-timing"
 import { pickup, session, sessionPosition } from "@waste/db/schema/execution"
-import { project } from "@waste/db/schema/organisation"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import { plan, planLeg } from "@waste/db/schema/routing"
 import { routeEta, type EtaStop } from "@waste/domain/routing/eta"
 import { POSITION_RETENTION_DAYS, TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
@@ -105,7 +105,7 @@ export async function routeEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, 
     .where(and(eq(plan.companyId, companyId), eq(plan.id, routeRow.activePlanId)))
     .limit(1)
   if (planRow === undefined) return { planId: null, stops: [], finishAt: null }
-  const [planStops, legRows, stopRows, [zone]] = await Promise.all([
+  const [planStops, legRows, stopRows, timeZone] = await Promise.all([
     planStopsByPlan(tx, companyId, [planRow.id]).then((byPlan) => byPlan.get(planRow.id) ?? []),
     tx
       .select({ seconds: planLeg.seconds })
@@ -116,15 +116,10 @@ export async function routeEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, 
       .select({ id: pickup.id, status: pickup.status, reason: pickup.reason, outcomeAt: pickup.outcomeAt, arrivedAt: pickup.arrivedAt })
       .from(pickup)
       .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeRow.id))),
-    tx
-      .select({ timezone: project.timezone })
-      .from(project)
-      .where(and(eq(project.companyId, companyId), eq(project.id, routeRow.projectId)))
-      .limit(1),
+    projectTimezone(tx, companyId, routeRow.projectId),
   ])
   const named = planStops.flatMap((row) => (row.kind === "pickup" && row.pickupId !== null ? [row.pickupId] : []))
   const timing = await routeTiming(tx, companyId, routeRow, named)
-  const timeZone = zone?.timezone ?? "UTC"
   const onDay = (seconds: number) => instantOnDay(routeRow.operatingDate, seconds, timeZone).getTime()
   const stops = new Map(stopRows.map((row) => [row.id, row] as const))
   // A Plan stop names a pickup of its own route by its key; one somehow gone is left out of the trip, not invented.

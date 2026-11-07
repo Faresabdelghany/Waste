@@ -24,7 +24,7 @@
 // the nightly plan-ahead's or the next Generate — as for an office pause no
 // run was asked for.
 import type { Tx } from "@waste/db/client"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { exclusionConstraintOf } from "@waste/db/sqlstate"

@@ -40,7 +40,7 @@ import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow } from "@waste/db/commands/shared"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 import { applicationColumns, applicationOf, decisionColumns, decisionOf, labelOf, latestDecisions, type ApplicationRow } from "@waste/db/shapes/applications"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"

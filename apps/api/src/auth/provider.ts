@@ -52,6 +52,7 @@
 // run or an invoice: those families carry `inProjects` alone, and a provider
 // works in no project.
 import type { Tx } from "@waste/db/client"
+import { todayOnClock } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { route } from "@waste/db/schema/execution"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea } from "@waste/db/schema/finance"
@@ -256,7 +257,7 @@ export const notAHeldProject = (provider: string): string => `Not a project ${pr
 export async function requireReachedProject(tx: Tx, principal: Principal, projectId: string, now: () => Date, path = "projectId", target: "body" | "query" = "body"): Promise<void> {
   const providerId = providerIdOf(principal)
   if (providerId === null) return requireProject(principal, projectId, path, target)
-  const today = sql`(${now().toISOString()}::timestamptz at time zone ${project.timezone})::date`
+  const today = todayOnClock(now(), project.timezone)
   const [held] = await tx
     .select({ one: sql`1` })
     .from(serviceAreaAssignment)

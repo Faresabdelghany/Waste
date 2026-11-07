@@ -9,7 +9,7 @@
 // rolled up by fraction, station or period with the CSV of what is shown.
 //
 // "Today" is the project's day where the store holds the project's timezone,
-// else the browser's (`projectToday`, lib/data/route-schemes.ts), and the
+// else the browser's (`dayIn`, lib/api/records/clock.ts), and the
 // window ends on it: the last 7 days are today and the six before. The period
 // a change is told against is as long and just before it; a series cut by the
 // week is told against the period whole weeks before, so its weeks are cut on

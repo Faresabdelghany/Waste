@@ -146,7 +146,7 @@ const liveAllocationsNameThis = liveAllocationsName("driver")
 const groupsNameThis = groupsName("driver")
 
 /** The allocations the change would strand: the live ones naming the driver (@waste/domain/status-gates spells the rest). */
-const liveAllocations = (companyId: string, driverId: string) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId))
+const liveAllocations = (companyId: string, driverId: string, now: Date) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId), now)
 
 /** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every driver statement is bounded by. */
 const scope = (principal: Principal) => and(eq(driver.companyId, principal.companyId), reachesFleet(principal, driver))
@@ -207,7 +207,7 @@ export async function createDriver(tx: Tx, principal: Principal, body: DriverCre
 }
 
 /** Changes one driver the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and taking it out of service refused under what that would strand. */
-export async function patchDriver(tx: Tx, principal: Principal, id: string, body: DriverPatch): Promise<Driver> {
+export async function patchDriver(tx: Tx, principal: Principal, id: string, body: DriverPatch, now: () => Date): Promise<Driver> {
   const { shift, ...patch } = body
   // The row the provider rule is held against, locked before it is read
   // (routes/shared.ts), so two patches that each hold alone cannot
@@ -225,8 +225,8 @@ export async function patchDriver(tx: Tx, principal: Principal, id: string, body
   await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
   await requireLogin(tx, principal, patch.userAccountId)
   if (patch.status !== undefined && OUT_OF_SERVICE.includes(patch.status) && !OUT_OF_SERVICE.includes(current.status)) {
-    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
-    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id), groupsNameThis)
+    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id, now()), liveAllocationsNameThis)
+    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id, now()), groupsNameThis)
   }
 
   const [row] = await refuseDuplicate(collisions(patch), () =>
@@ -370,7 +370,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", DriverPatch),
-      async (c) => c.json(await patchDriver(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
+      async (c) => c.json(await patchDriver(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now)),
     )
 }
 

@@ -29,14 +29,13 @@ import {
   MaintenancePlanPatch,
 } from "@waste/contracts/maintenance"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/domain/clock"
 import { vehicle } from "@waste/db/schema/fleet"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
-import { project } from "@waste/db/schema/organisation"
+import { projectTodays } from "@waste/db/query/project-clock"
 import { maintenanceDue, planIssue, type VehicleReadings } from "@waste/domain/resources/maintenance"
 import { ACTIVE_MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
 import { takesReference } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
@@ -98,19 +97,9 @@ const planScope = (principal: Principal) => and(eq(vehicleMaintenancePlan.compan
 /** The readings a plan is judged on between services: none, since nothing reads a vehicle's odometer or engine hours, so the last service's own stand. */
 const NO_READINGS: VehicleReadings = { odometerKm: null, engineHours: null }
 
-/** Today on each of the projects' clocks, by project id. */
-async function todaysOf(tx: Tx, companyId: string, projectIds: readonly string[], now: Date): Promise<Map<string, string>> {
-  if (projectIds.length === 0) return new Map()
-  const rows = await tx
-    .select({ id: project.id, timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, companyId), inArray(project.id, [...new Set(projectIds)])))
-  return new Map(rows.map((row) => [row.id, dayInTimezone(now, row.timezone)]))
-}
-
 /** The plans on the wire, each with where it stands on its project's day against its last service's readings. */
 async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now: Date): Promise<MaintenancePlan[]> {
-  const todays = await todaysOf(
+  const todays = await projectTodays(
     tx,
     companyId,
     rows.map((row) => row.projectId),
@@ -467,7 +456,7 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const tx = c.get("tx")
         const principal = c.get("principal")
         const order = await openOrder(tx, principal, id)
-        const today = (await todaysOf(tx, principal.companyId, [order.projectId], now())).get(order.projectId)!
+        const today = (await projectTodays(tx, principal.companyId, [order.projectId], now())).get(order.projectId)!
         if (body.completedOn > today) throw invalidRequest("json", [{ path: "completedOn", message: NOT_AHEAD }])
         if (order.planId !== null) {
           await lockRow(tx, vehicleMaintenancePlan, { companyId: principal.companyId, id: order.planId })

@@ -74,16 +74,23 @@ function offsetAt(instant: number, timeZone: string): number {
   return asUtc - Math.floor(instant / 1000) * 1000
 }
 
+const DAY_MS = 86_400_000
+
 /**
  * The instant a time of a project's day falls at: `seconds` after midnight of
  * `day` on `timeZone`'s clock, where a Plan's departure and a stop's window
  * are spelled. The offset is the one in force at that time of that day, so a
  * summer morning is summer time on the day the clocks change; a time the
- * change skips is read in the offset before it.
+ * change skips is read in the offset before it, and a time it repeats in the
+ * offset after it — Postgres's reading of `timestamp at time zone`, which
+ * `instantOnClock` (@waste/db/query/project-clock) spells.
  */
 export function instantOnDay(day: string, seconds: number, timeZone: string): Date {
   const local = Date.parse(`${day}T00:00:00Z`) + seconds * 1000
-  // Twice: the offset at the first guess may be the other side of a clock change.
-  const first = local - offsetAt(local, timeZone)
-  return new Date(local - offsetAt(first, timeZone))
+  // A clock changes at most once a day, so the offsets a day either side are the two this time can be read in.
+  const before = offsetAt(local - DAY_MS, timeZone)
+  const after = offsetAt(local + DAY_MS, timeZone)
+  const readsAs = (offset: number) => offsetAt(local - offset, timeZone) === offset
+  // Read in the offset after where it holds (every time but a skipped one), else the offset before (the hour the clocks skip).
+  return new Date(local - (readsAs(after) ? after : before))
 }

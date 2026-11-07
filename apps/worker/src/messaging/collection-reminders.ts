@@ -23,6 +23,7 @@ import { queueMessage } from "@waste/db/commands/messaging"
 import { newId } from "@waste/db/ids"
 import { remindersDue } from "@waste/db/query/stop-customers"
 import { withCompany } from "@waste/db/tenant"
+import { dayInTimezone, wallClockIn } from "@waste/domain/clock"
 import type { MessageChannel } from "@waste/domain/messaging/vocabulary"
 import { REMINDER_BATCH, REMINDER_DAILY_CAP, reminderDayAt } from "@waste/domain/notifications/notices"
 import { sql } from "drizzle-orm"
@@ -44,18 +45,15 @@ export type RemindingProject = { companyId: string; projectId: string; templateI
 
 /** The projects whose rule names an active reminder template, across companies, as the worker role, with the day and the hour on each one's clock. */
 export async function remindingProjects(worker: JobContext["worker"], at: Date): Promise<RemindingProject[]> {
-  const now = sql`${at.toISOString()}::timestamptz`
-  const rows = await worker.db.execute<{ company_id: string; project_id: string; template_id: string; channel: MessageChannel; today: string; hour: number }>(sql`
-    select r.company_id, r.project_id, r.template_id, t.channel,
-           to_char(${now} at time zone p.timezone, 'YYYY-MM-DD') as today,
-           extract(hour from ${now} at time zone p.timezone)::int as hour
+  const rows = await worker.db.execute<{ company_id: string; project_id: string; template_id: string; channel: MessageChannel; timezone: string }>(sql`
+    select r.company_id, r.project_id, r.template_id, t.channel, p.timezone
       from wms.notification_rule r
       join wms.project p on p.company_id = r.company_id and p.id = r.project_id
       join wms.message_template t on t.company_id = r.company_id and t.id = r.template_id
      where r.event = 'collection-reminder' and t.status = 'active'
      order by r.company_id, r.project_id
   `)
-  return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, templateId: row.template_id, channel: row.channel, today: row.today, hour: Number(row.hour) }))
+  return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, templateId: row.template_id, channel: row.channel, today: dayInTimezone(at, row.timezone), hour: wallClockIn(at, row.timezone).hour }))
 }
 
 /** What one project's run came to. */

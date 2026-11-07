@@ -22,8 +22,7 @@
 // place one it serves that day, then the day itself — each a conflict but
 // the first, in the domain's sentence, thrown as `Refused`.
 import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
-import { holidayListOf } from "@waste/domain/planning/generation"
-import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/planning/occurrences"
+import { SHIFT_SEARCH_DAYS } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
 import { inForceOn } from "@waste/domain/periods"
 import { Refused } from "@waste/domain/refusal"
@@ -33,11 +32,9 @@ import type { Tx } from "../client"
 import { validOn } from "../query/valid-on"
 import { agreement, subscription } from "../schema/agreements"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
-import { listHolidayRows } from "../query/holidays"
 import { property, sharedCollectionPoint } from "../schema/customers"
-import { project } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import type { Scope } from "./project-clock"
+import { readProjectCalendar, type Scope } from "../query/project-clock"
 import { lockRow } from "./shared"
 
 /** A booking's place: a property or a shared collection point, one of the two. */
@@ -73,21 +70,6 @@ async function locationOf(tx: Tx, scope: Scope, place: BulkyPlace): Promise<SQL 
   return place.propertyId !== null
     ? sql`(select ${property.location} from ${property} where ${property.companyId} = ${scope.companyId} and ${property.id} = ${place.propertyId})`
     : sql`(select ${sharedCollectionPoint.location} from ${sharedCollectionPoint} where ${sharedCollectionPoint.companyId} = ${scope.companyId} and ${sharedCollectionPoint.id} = ${place.sharedCollectionPointId})`
-}
-
-/** The project's calendar near the window: its weekend, and its holidays, named as generation names them, as far either side as the walk of `bulkyDays` and a shift from its edge may reach. */
-async function calendarNear(tx: Tx, scope: Scope, window: { from: string; to: string }): Promise<SchemeCalendar> {
-  const [row] = await tx
-    .select({ weekend: project.weekend, holidayList: project.holidayList })
-    .from(project)
-    .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
-    .limit(1)
-  if (row === undefined) throw new Error(`calendarNear: no project ${scope.projectId}`)
-  const holidays = await listHolidayRows(tx, scope.companyId, row.holidayList, {
-    from: addDays(window.from, -2 * SHIFT_SEARCH_DAYS),
-    to: addDays(window.to, 2 * SHIFT_SEARCH_DAYS),
-  })
-  return { weekend: row.weekend, holidays: holidayListOf(holidays, row.holidayList) }
 }
 
 /** A day of the place with what a booking of it freezes: its schedule's product too. */
@@ -161,7 +143,8 @@ async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from
     .from(bulkyBooking)
     .where(and(eq(bulkyBooking.companyId, scope.companyId), inArray(bulkyBooking.scheduleId, scheduleIds), gte(bulkyBooking.day, window.from), lte(bulkyBooking.day, window.to), isNull(bulkyBooking.cancelledAt)))
     .groupBy(bulkyBooking.scheduleId, bulkyBooking.day)
-  const calendar = await calendarNear(tx, scope, window)
+  // As far either side as the walk of `bulkyDays` and a shift from its edge may reach.
+  const calendar = await readProjectCalendar(tx, scope, { from: addDays(window.from, -2 * SHIFT_SEARCH_DAYS), to: addDays(window.to, 2 * SHIFT_SEARCH_DAYS) })
 
   const days: PlaceDay[] = []
   for (const id of scheduleIds) {

@@ -68,6 +68,7 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery, type MissedReason, type PickupStandings, type PickupWeightRow, type ReportWindow, type RevenueInterval, type RevenueProduct, type RevenueTotals, type RouteCounts, type ServiceRates, type ServiceScheme, type TicketKindCounts, type TonnageRow, type WasteDataRow, type WasteDataWarning } from "@waste/contracts/reports"
 import type { Tx } from "@waste/db/client"
+import { dayOnClock, instantOnClock } from "@waste/db/query/project-clock"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
@@ -119,7 +120,7 @@ function fenced(table: ProjectTable, principal: Principal, projectId: string | u
 const projectOf = (table: ProjectTable) => and(eq(project.companyId, table.companyId), eq(project.id, table.projectId))
 
 /** An instant as the day it falls on, on its project's clock; no parameter, so a statement can group by it. */
-const dayOn = (instant: PgColumn | SQL): SQL<string> => sql<string>`(${instant} at time zone ${project.timezone})::date`
+const dayOn = (instant: PgColumn | SQL): SQL<string> => dayOnClock(instant, project.timezone)
 
 /** A day inside the window, both ends inclusive. */
 export const inWindow = (day: PgColumn | SQL, window: DayInterval): SQL => sql`${day} between ${window.from}::date and ${window.to}::date`
@@ -200,7 +201,7 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
   const window = { from: query.from, to: query.to }
   const routeWindow = and(routesOfWindow(window), routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId))
   // On time: started no later than the planned start on the project's clock on the operating date, plus the grace.
-  const deadline = sql`((${route.operatingDate} + ${route.plannedStartTime}) at time zone ${project.timezone}) + ${sql.raw(`interval '${ON_TIME_GRACE_MINUTES} minutes'`)}`
+  const deadline = sql`${instantOnClock(route.operatingDate, project.timezone, route.plannedStartTime)} +${sql.raw(`interval '${ON_TIME_GRACE_MINUTES} minutes'`)}`
   const judged = and(isNotNull(route.startedAt), isNotNull(route.plannedStartTime))
   const routeGroups = await tx
     .select({

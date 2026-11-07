@@ -30,7 +30,7 @@ import { WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
 import { OPEN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } from "drizzle-orm"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 
 import type { Principal } from "../auth/principal"
 import { allows } from "../auth/require"

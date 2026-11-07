@@ -171,6 +171,7 @@ import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { tankInstallation } from "@waste/db/schema/tanks"
+import { dayOnClock, todayOnClock } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
@@ -257,14 +258,12 @@ const heldAtWrite = (applier: Applier, envelope: DriverCommandEnvelope, constrai
 
 /**
  * The routes a driver's day is made of: `ready` or `active`, or `completed`
- * today on the project's clock (`now() at time zone project.timezone`, the
- * precedent of the groups-in-force read). The request's clock goes in as an
- * ISO string cast to `timestamptz`, since the raw face takes no Date.
+ * today on the project's clock at the request's instant.
  */
 const todays = (now: Date): SQL =>
   or(
     inArray(route.status, [...DISPATCHED_ROUTE_STATUSES]),
-    and(eq(route.status, "completed"), sql`(${route.completedAt} at time zone ${project.timezone})::date = (${now.toISOString()}::timestamptz at time zone ${project.timezone})::date`),
+    and(eq(route.status, "completed"), sql`${dayOnClock(route.completedAt, project.timezone)} = ${todayOnClock(now, project.timezone)}`),
   ) as SQL
 
 /** One driver's day, as `GET /driver/me` answers it whole and `GET /driver/routes` pages it. */

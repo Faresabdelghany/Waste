@@ -6,9 +6,8 @@
 //
 // "Live" is two things. Every `active` route of the caller's projects, and
 // every `ready` one whose operating date is today — today on the route's
-// project's clock, `now at time zone project.timezone`, the reading
-// routes/scheme-groups.ts's `groupsInForceNaming` makes, with the app's
-// injected `now` as the instant so a test can pin it: 22:30Z on the 1st of
+// project's clock (`todayOnClock`, @waste/db/query/project-clock), with the
+// app's injected `now` as the instant so a test can pin it: 22:30Z on the 1st of
 // December is still the 1st in Copenhagen and already the 2nd in Cairo, and
 // a route due on the 2nd in each project is live in one and not the other.
 // Each row carries what the dashboard shows beside the route: its progress,
@@ -28,8 +27,9 @@ import { LiveRoute, LiveRouteQuery } from "@waste/contracts/routes"
 import { Session, SessionListQuery } from "@waste/contracts/sessions"
 import type { Tx } from "@waste/db/client"
 import { proofOfService, route, session } from "@waste/db/schema/execution"
+import { todayOnClock } from "@waste/db/query/project-clock"
 import { project } from "@waste/db/schema/organisation"
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { progressByRoute, progressFor, routeColumns, routeOf } from "@waste/db/shapes/routes"
@@ -88,8 +88,8 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        // Today on each route's project's clock: the request's instant at the project's timezone, as a day.
-        const today = sql`(${now().toISOString()}::timestamptz at time zone ${project.timezone})::date`
+        // Today on each route's project's clock at the request's instant.
+        const today = todayOnClock(now(), project.timezone)
         const rows = await tx
           .select(routeColumns)
           .from(route)

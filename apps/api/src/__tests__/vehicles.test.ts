@@ -460,6 +460,35 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       assert.equal(retired.status, "retired", "released and reassigned, the vehicle retires")
     })
 
+    test("counts the live allocations and the groups in force on the app's clock, not the database's", async () => {
+      // March 2025 on the app's clock: the allocation and the scheme below are over on the database's own, and live on the app's.
+      const pinned = new Date("2025-03-03T09:00:00Z")
+      const atPinned = callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => pinned }), keys, a.users.olivia, a.companyId)
+      const truck = await vehicle()
+      const retire = () => atPinned(`/vehicles/${truck.id}`, { method: "PATCH", body: { status: "retired" } })
+      const allocation = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(vehicleAllocation).values({ id: allocation, companyId: a.companyId, projectId: a.projects.copenhagen.id, vehicleId: truck.id, plannedFrom: new Date(pinned.getTime() + HOUR), plannedTo: new Date(pinned.getTime() + 2 * HOUR), status: "planned" })
+      })
+      assert.equal((await refused(await retire(), 409)).detail, "1 live allocation names this vehicle; release it first", "an allocation not yet over at the app's now is live")
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.update(vehicleAllocation).set({ status: "released" }).where(and(eq(vehicleAllocation.companyId, a.companyId), eq(vehicleAllocation.id, allocation)))
+      })
+      await create(olivia, "/route-schemes", {
+        projectId: a.projects.copenhagen.id,
+        name: "Spring 2025",
+        serviceType: "container-collection",
+        frequency: "weekly",
+        serviceDays: ["monday"],
+        validFrom: "2025-01-01",
+        validTo: "2025-07-01",
+        collectionGroups: [{ name: "North", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null }, vehicleId: truck.id }],
+      }, RouteScheme)
+      assert.equal((await refused(await retire(), 409)).detail, "1 collection group names this vehicle; reassign it first", "a scheme in force on the app's today counts")
+      const retired = await patch(olivia, truck.id, { status: "retired" })
+      assert.equal(retired.status, "retired", "on today's clock the scheme has ended and the allocation was released")
+    })
+
     test("refuses a registration or a callsign another vehicle holds", async () => {
       const held = await vehicle({ callsign: "WH-7" })
       const created = await vehicle()

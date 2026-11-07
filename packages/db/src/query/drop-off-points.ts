@@ -9,11 +9,10 @@
 // Each point comes with what `@waste/domain/resources/drop-off-points` reads
 // its days from — its hours, its exceptions in the window, its flags — and
 // the fractions it takes by name. The project's holidays in the window are
-// read as generation reads them (`holidayListOf`), so a point closed on
+// read as generation reads them (`readProjectCalendar`), so a point closed on
 // holidays closes on the days the collection calendar shifts around.
 import type { DropOffOpening, OpeningException, WeeklyWindow } from "@waste/domain/resources/drop-off-points"
 import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
-import { holidayListOf } from "@waste/domain/planning/generation"
 import type { DropOffPointKind } from "@waste/domain/resources/vocabulary"
 import { type HolidayList, NO_HOLIDAYS } from "@waste/domain/days"
 import { and, asc, eq, exists, gte, inArray, lte, sql } from "drizzle-orm"
@@ -21,9 +20,8 @@ import { and, asc, eq, exists, gte, inArray, lte, sql } from "drizzle-orm"
 import type { Tx } from "../client"
 import type { ScopedProject } from "./collection-days"
 import { wasteFraction } from "../schema/catalogue"
-import { listHolidayRows } from "./holidays"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
-import { project } from "../schema/organisation"
+import { readProjectCalendar } from "./project-clock"
 
 /** A point as the map draws it, with what its days are read from. */
 export type DropOffMapPoint = {
@@ -129,17 +127,7 @@ export async function readDropOffMap(tx: Tx, scope: ScopedProject, { fractionKey
 
   // The project's holidays in the window, read as generation reads them, and only where a point shown closes on them.
   let holidays: HolidayList = NO_HOLIDAYS
-  if (shown.some((row) => row.closedOnHolidays)) {
-    const [calendarRow] = await tx
-      .select({ holidayList: project.holidayList })
-      .from(project)
-      .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
-      .limit(1)
-    if (calendarRow?.holidayList != null) {
-      const holidayRows = await listHolidayRows(tx, scope.companyId, calendarRow.holidayList, { from, to })
-      holidays = holidayListOf(holidayRows, calendarRow.holidayList)
-    }
-  }
+  if (shown.some((row) => row.closedOnHolidays)) holidays = (await readProjectCalendar(tx, scope, { from, to })).holidays
 
   return {
     fraction,
