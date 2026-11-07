@@ -20,7 +20,7 @@
 // more per page — the runs grouped by scheme, the stamps ranked by group —
 // and nothing kept on the scheme's row, so the runs are the one place the
 // reading is stored. The latest stamp is the one with the highest id, the
-// order the worker reads its own latest by (apps/worker/src/jobs/generate-routes.ts).
+// order the worker reads its own latest by (apps/worker/src/planning/generate-routes.ts).
 //
 // A body's references are held in one statement per set, the way
 // routes/members.ts holds a membership list — routes/sets.ts is the two

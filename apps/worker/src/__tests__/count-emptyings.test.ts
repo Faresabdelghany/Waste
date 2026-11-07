@@ -21,9 +21,9 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { countEmptying } from "../jobs/count-emptyings"
-import type { JobContext } from "../jobs/definition"
+import { countEmptying } from "../resolution/count-emptyings"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type StopSeed } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
 const api = databaseUnderTest()
@@ -35,7 +35,7 @@ describe("the counting rules' consumer", { skip: api.skip || owner.skip }, () =>
   let tenant: ConsumerTenant
   const lines: string[] = []
   const send: Send = async () => testId()
-  const context = () => ({ api: pool, send, now: () => at("13:30"), log: (line: string) => void lines.push(line) }) as unknown as JobContext
+  const context = () => jobContext({ api: pool, send, now: () => at("13:30"), log: (line) => void lines.push(line) })
   const teamId = testId()
   const typeId = testId()
   const rules = { often: testId(), anyBin: testId(), glass: testId(), off: testId() }

@@ -1,7 +1,7 @@
 // Counting Rules (#547 of #544): a company's rules counting the completed
 // emptyings at each property over a month, a quarter or a year, and the
 // ticket a rule opens on a property whose count reaches its limit (the
-// worker's `counting` consumer, apps/worker/src/jobs/count-emptyings.ts).
+// worker's `counting` consumer, apps/worker/src/resolution/count-emptyings.ts).
 // `GET /counting-rules` lists them, `POST /counting-rules` adds one,
 // `GET`/`PATCH`/`DELETE /counting-rules/:id` read, change and remove one, and
 // `POST /counting-rules/simulation` counts what a rule's terms would have

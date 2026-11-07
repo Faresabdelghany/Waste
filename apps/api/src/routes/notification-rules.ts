@@ -9,7 +9,7 @@
 // rule is the opt-in: a notice no rule names is never sent, and nothing has a
 // default text (the coordinator's default on #351, pending the owner's
 // review). The worker's customer notices consumer reads the rule when the
-// event comes (apps/worker/src/jobs/customer-notices.ts) and queues the
+// event comes (apps/worker/src/notifications/customer-notices.ts) and queues the
 // template to the booking's customer through `queueMessage`, whose send
 // honours the customer's consent.
 //

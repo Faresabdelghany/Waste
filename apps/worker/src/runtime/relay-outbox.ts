@@ -26,7 +26,7 @@
 // unpublished with `for update skip locked`, in id order, stamps
 // `published_at = now()` on exactly those rows in one statement whose
 // `returning` is the instant the payload then carries, and sends each to
-// `outbox.<kind>` (outbox/subscribe.ts spells the queue and the payload) with
+// `outbox.<kind>` (outbox.ts spells the queue and the payload) with
 // pg-boss's `send` on that same transaction — `{ db: inTransaction(tx) }`,
 // pg-boss's own adapter over a Drizzle transaction as `@waste/db/jobs`
 // spells it for every sender.
@@ -49,7 +49,7 @@
 //
 // One door for a consumer, written in the row's transaction: a job `send`
 // to each consumer's queue of the kind, `outbox.<kind>.<consumer>`
-// (`OUTBOX_ROUTES`, outbox/routes.ts), so every consumer of a kind hears the
+// (`routesOf`, outbox.ts), so every consumer of a kind hears the
 // event and their failures stay apart (#339); an event no consumer takes yet
 // goes to the kind's own `outbox.<kind>`, where it waits for one. The stamp
 // still means "handed to every consumer": the sends and the stamp commit
@@ -67,7 +67,7 @@
 // a consumer that took both every event twice. Which kinds exist is the
 // domain's `OUTBOX_KINDS`; a kind added there is a queue here with nothing
 // else to change. `outbox.dead` is where a consumer's job goes when it has
-// failed past its retries (outbox/subscribe.ts says how and how it comes
+// failed past its retries (outbox.ts says how and how it comes
 // back); the relay itself never sends there.
 //
 // The tick. pg-boss's schedule is minute-granular (its cron pass runs once a
@@ -102,7 +102,7 @@
 // asks (the probe, #97 B's docs slice), and the count is information and not
 // a failure, since an event nobody could publish is still an event.
 //
-// The payload on the wire is `RelayedJob` (outbox/subscribe.ts): the
+// The payload on the wire is `RelayedJob` (outbox.ts): the
 // contracts' `OutboxEvent` as the API would answer the row — instants as ISO
 // strings, `publishedAt` the instant this transaction stamps — plus
 // `companyId`, since a consumer opens its own writes with `withCompany` and no
@@ -116,9 +116,8 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, inArray, isNull, lt, lte, sql } from "drizzle-orm"
 import type { SendOptions } from "pg-boss"
 
-import { OUTBOX_ROUTES } from "../outbox/routes"
-import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedJob } from "../outbox/subscribe"
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type AnyJob, type JobContext, type JobDefinition, type PollingKnob } from "./definition"
+import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, routesOf, type OutboxRoutes, type RelayedJob } from "./outbox"
 
 /** The relay's own queue. */
 export const RELAY_QUEUE = "execution.relay-outbox"
@@ -181,7 +180,7 @@ const onTransaction = (tx: Tx): SendOptions => ({ db: inTransaction(tx) })
  * order, on this same transaction. Stamp and sends commit together or not at
  * all. Answers how many.
  */
-export async function relayCompany(context: Pick<JobContext, "api" | "send">, companyId: string, ids: readonly string[]): Promise<number> {
+export async function relayCompany(context: Pick<JobContext, "api" | "send">, routes: OutboxRoutes, companyId: string, ids: readonly string[]): Promise<number> {
   return withCompany(context.api.db, companyId, async (tx) => {
     const rows = await tx
       .select()
@@ -210,7 +209,7 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send">, co
       if (!stamp) throw new Error(`execution.relay-outbox: row ${row.id} was locked and not stamped`)
       const event = toRelayed(row, stamp)
       // One door, one transaction: a job on each consumer's queue of the kind, or on the kind's own where none takes it yet.
-      for (const queue of OUTBOX_ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]) await context.send(queue, event, options)
+      for (const queue of routes.get(event.kind) ?? [outboxQueue(event.kind)]) await context.send(queue, event, options)
     }
     return rows.length
   })
@@ -226,7 +225,7 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send">, co
  * the next tick; the others are not held up by it. Throws after every
  * company has been tried when any failed, so the tick is a failed job.
  */
-export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "send" | "log">): Promise<RelayOutcome> {
+export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "send" | "log">, routes: OutboxRoutes): Promise<RelayOutcome> {
   const ranked = context.worker.db
     .select({
       id: outboxEvent.id,
@@ -251,7 +250,7 @@ export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "se
   const failures: { companyId: string; error: unknown }[] = []
   for (const [companyId, ids] of byCompany) {
     try {
-      published += await relayCompany(context, companyId, ids)
+      published += await relayCompany(context, routes, companyId, ids)
     } catch (error) {
       failures.push({ companyId, error })
       context.log(`execution.relay-outbox: company ${companyId}: ${ids.length} ${ids.length === 1 ? "row" : "rows"} left unpublished: ${error instanceof Error ? error.message : String(error)}`)
@@ -277,31 +276,40 @@ export async function staleOutboxCount(worker: Database, now: Date, staleMs = OU
   return row?.count ?? 0
 }
 
-export const relayOutbox = defineJob<RelayOutboxData>({
-  queue: RELAY_QUEUE,
-  description: "Publishes every unpublished outbox event to each consumer's queue of its kind, or the kind's own where none takes it, and stamps it in the same transaction, every five seconds, one tick at a time.",
-  schedule: "* * * * *",
-  scheduleData: { source: "schedule" },
-  scheduleOptions: { tz: "UTC", missed: "skip" },
-  // `short`: one tick queued at a time, so the schedule's occurrence and the tick's own successor are one row and not two chains. No retry: the next tick is the retry. Kept an hour: a tick every five seconds is seven hundred rows an hour, and a failed one shows on /readyz for that hour.
-  queueOptions: { policy: "short", retryLimit: 0, deleteAfterSeconds: 60 * 60 },
-  // Polled every second, so a successor due in five seconds runs in five and not in up to seven.
-  workOptions: { pollingIntervalSeconds: 1 },
-  // The dead-letter queue first: a consumer's queue names it, and pg-boss refuses a dead letter that does not exist yet.
-  publishes: [OUTBOX_DEAD, ...OUTBOX_QUEUES],
-  handler: async (jobs, context) => {
-    const tick = await relayOnce(context).then(
-      (outcome) => ({ outcome }),
-      (error: unknown) => ({ error }),
-    )
-    // The successor, whatever the tick did: a tick that failed is tried again after the interval, a batch's worth (some company at its cap, or as many rows across companies) is followed at once. `short` drops the send when one is already queued.
-    const startAfter = successorDelaySeconds("outcome" in tick ? tick.outcome : undefined, context.pollingIntervalSeconds)
-    await context.send(RELAY_QUEUE, { source: "successor" } satisfies RelayOutboxData, { startAfter })
-    if ("error" in tick) throw tick.error
-    const { published } = tick.outcome
-    if (published > 0) {
-      context.log(`execution.relay-outbox: ${published} ${published === 1 ? "event" : "events"} published (${jobs.map((job) => job.data.source).join(", ")})`)
-    }
-    return tick.outcome
-  },
-})
+/**
+ * The relay over the registry's consumers: each kind sent to the queues of
+ * the consumers that take it (`routesOf`), in their order, or to its own
+ * queue where none does. Built where the registry is composed (../jobs.ts),
+ * so the relay knows the consumers' queues and never their code.
+ */
+export function relayOutbox(consumers: readonly AnyJob[]): JobDefinition<RelayOutboxData, JobContext & PollingKnob> {
+  const routes = routesOf(consumers)
+  return defineJob<RelayOutboxData, JobContext & PollingKnob>({
+    queue: RELAY_QUEUE,
+    description: "Publishes every unpublished outbox event to each consumer's queue of its kind, or the kind's own where none takes it, and stamps it in the same transaction, every five seconds, one tick at a time.",
+    schedule: "* * * * *",
+    scheduleData: { source: "schedule" },
+    scheduleOptions: { tz: "UTC", missed: "skip" },
+    // `short`: one tick queued at a time, so the schedule's occurrence and the tick's own successor are one row and not two chains. No retry: the next tick is the retry. Kept an hour: a tick every five seconds is seven hundred rows an hour, and a failed one shows on /readyz for that hour.
+    queueOptions: { policy: "short", retryLimit: 0, deleteAfterSeconds: 60 * 60 },
+    // Polled every second, so a successor due in five seconds runs in five and not in up to seven.
+    workOptions: { pollingIntervalSeconds: 1 },
+    // The dead-letter queue first: a consumer's queue names it, and pg-boss refuses a dead letter that does not exist yet.
+    publishes: [OUTBOX_DEAD, ...OUTBOX_QUEUES],
+    handler: async (jobs, context) => {
+      const tick = await relayOnce(context, routes).then(
+        (outcome) => ({ outcome }),
+        (error: unknown) => ({ error }),
+      )
+      // The successor, whatever the tick did: a tick that failed is tried again after the interval, a batch's worth (some company at its cap, or as many rows across companies) is followed at once. `short` drops the send when one is already queued.
+      const startAfter = successorDelaySeconds("outcome" in tick ? tick.outcome : undefined, context.pollingIntervalSeconds)
+      await context.send(RELAY_QUEUE, { source: "successor" } satisfies RelayOutboxData, { startAfter })
+      if ("error" in tick) throw tick.error
+      const { published } = tick.outcome
+      if (published > 0) {
+        context.log(`execution.relay-outbox: ${published} ${published === 1 ? "event" : "events"} published (${jobs.map((job) => job.data.source).join(", ")})`)
+      }
+      return tick.outcome
+    },
+  })
+}

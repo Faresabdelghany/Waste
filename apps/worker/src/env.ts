@@ -54,9 +54,9 @@ export const Env = z.object({
   MESSAGING_PROVIDER: z.string().optional(),
   /** The API role's pool, on which every job writes; postgres.js's 10 unless set. Named for its process, since in the Pilot's container both children read one environment. */
   WORKER_API_POOL_MAX: PoolMax,
-  /** The worker role's pool, on which the sweeps read; postgres.js's 10 unless set. pg-boss's own pool stays at 3 (boss.ts). */
+  /** The worker role's pool, on which the sweeps read; postgres.js's 10 unless set. pg-boss's own pool stays at 3 (runtime/boss.ts). */
   WORKER_POOL_MAX: PoolMax,
-  /** How often every queue is polled, in seconds: each queue's poll, the relay's successor delay and pg-boss's cron and flow intervals raised to it, never lowered (boss.ts); pg-boss's and the jobs' own unless set. Never a `schedule` cron: the 03:00 plan-ahead, the monthly billing run and the heartbeat's minute stay. */
+  /** How often every queue is polled, in seconds: each queue's poll, the relay's successor delay and pg-boss's cron and flow intervals raised to it, never lowered (runtime/boss.ts); pg-boss's and the jobs' own unless set. Never a `schedule` cron: the 03:00 plan-ahead, the monthly billing run and the heartbeat's minute stay. */
   WORKER_POLLING_INTERVAL_SECONDS: Seconds,
   /** pg-boss's supervise pass (maintenance, and the monitor pass that refreshes the counts /readyz reads), in seconds; pg-boss's 60 unless set. */
   WORKER_SUPERVISE_INTERVAL_SECONDS: Seconds,

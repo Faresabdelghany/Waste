@@ -1,7 +1,7 @@
 // The outbox's first consumer (Issue #109 part B, §3, ADR-0004): the four
 // `outbox.<kind>` queues of the kinds Resolution reads — `pickup-failed`,
 // `pickup-skipped`, `pickup-problem-reported` and `command-rejected` — taken
-// through `defineOutboxConsumer` (../outbox/subscribe.ts), one registry entry
+// through `defineOutboxConsumer` (../runtime/outbox.ts), one registry entry
 // per kind, whose handler turns an execution event into a Ticket, or into
 // nothing. `route-cancelled` is not among them on purpose (§7.10): a
 // cancellation makes no ticket of its own, since each stop it closed arrives
@@ -123,9 +123,9 @@ import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { labelOf, ticketColumns, type TicketRow } from "@waste/db/shapes/tickets"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import { placementOn } from "./finance-facts"
-import type { JobContext } from "./definition"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import { placementOn } from "../finance/facts"
+import type { JobContext } from "../runtime/definition"
 
 /** The two partial unique indexes that are the consumer's idempotency keys; a 23505 on either is an event handled before. */
 const TICKET_SOURCE_INDEX = tableObjectName(ticket, "source_event_id_idx", "openTickets")

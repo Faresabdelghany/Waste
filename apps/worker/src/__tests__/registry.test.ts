@@ -9,6 +9,7 @@
 // here too, since a consumer takes a kind by that spelling
 // (`outbox.<kind>.<consumer>`, `defineOutboxConsumer`).
 import assert from "node:assert/strict"
+import { readdirSync, readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
 import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
@@ -18,27 +19,30 @@ import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
 import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { RESOLUTION_EVENT_KINDS } from "@waste/domain/resolution/from-event"
 
-import { isCronExpression } from "../boss"
-import { defineJob, JOBS } from "../jobs"
-import { alertRulesJob } from "../jobs/alert-rules"
-import { applyPauseGrants } from "../jobs/apply-pause-grants"
-import { countEmptyings } from "../jobs/count-emptyings"
-import { updatableOptions } from "../jobs/definition"
-import { generateRoutes } from "../jobs/generate-routes"
-import { heartbeat } from "../jobs/heartbeat"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
-import { planAheadJob } from "../jobs/plan-ahead"
-import { proposeRightSizingJob } from "../jobs/propose-right-sizing"
-import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
-import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
-import { OUTBOX_CONSUMERS, OUTBOX_ROUTES, routesOf } from "../outbox/routes"
-import { purgePositionsJob } from "../jobs/purge-positions"
-import { noticeCustomers } from "../jobs/customer-notices"
-import { notifyStaff } from "../jobs/staff-notifications"
-import { purgeProofObjectsJob } from "../jobs/purge-proof-objects"
-import { sweepHorizonJob } from "../jobs/routing-horizon"
-import { runScheduledBilling } from "../jobs/run-billing"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, UNCONSUMED_RETENTION_SECONDS } from "../outbox/subscribe"
+import { isCronExpression } from "../runtime/boss"
+import { CONSUMERS, JOBS, relay } from "../jobs"
+import { alertRulesJob } from "../resolution/alert-rules"
+import { applyPauseGrants } from "../registry/apply-pause-grants"
+import { countEmptyings } from "../resolution/count-emptyings"
+import { defineJob, updatableOptions } from "../runtime/definition"
+import { generateRoutes } from "../planning/generate-routes"
+import { heartbeat } from "../runtime/heartbeat"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../resolution/open-tickets"
+import { planAheadJob } from "../planning/plan-ahead"
+import { proposeRightSizingJob } from "../registry/propose-right-sizing"
+import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../finance/record-billable-events"
+import { BATCH_SIZE, RELAY_INTERVAL_SECONDS } from "../runtime/relay-outbox"
+import { purgePositionsJob } from "../execution/purge-positions"
+import { noticeCustomers } from "../notifications/customer-notices"
+import { notifyStaff } from "../notifications/staff-notifications"
+import { purgeProofObjectsJob } from "../execution/purge-proof-objects"
+import { sweepHorizonJob } from "../routing/sweep-horizon"
+import { runScheduledBilling } from "../finance/run-billing"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, routesOf, UNCONSUMED_RETENTION_SECONDS } from "../runtime/outbox"
+import { jobContext } from "./context"
+
+/** Where the registry's relay sends each kind. */
+const ROUTES = routesOf(CONSUMERS)
 
 /** Resolution's and Finance's queues of their kinds, as the fan-out spells them (#339). */
 const resolutionQueues = RESOLUTION_EVENT_KINDS.map((kind) => consumerQueue(kind, "resolution"))
@@ -55,6 +59,15 @@ describe("the job registry", () => {
     const queues = JOBS.map((job) => job.queue)
     assert.deepEqual([...new Set(queues)], queues)
     assert.ok(queues.length >= 3, "at least the heartbeat and Planning's two")
+  })
+
+  test("is composed outside the runtime, which imports nothing of a context: the relay knows the consumers' queues, never their code", () => {
+    const runtime = new URL("../runtime/", import.meta.url)
+    for (const file of readdirSync(runtime).filter((name) => name.endsWith(".ts"))) {
+      for (const [, specifier] of readFileSync(new URL(file, runtime), "utf8").matchAll(/from "(\.[^"]*)"/g)) {
+        assert.ok(specifier.startsWith("./"), `runtime/${file} imports ${specifier}`)
+      }
+    }
   })
 
   test("spells every queue <context>.<verb>, or an outbox consumer's outbox.<kind>.<consumer>, in pg-boss's alphabet: letters, digits, underscore, hyphen, period", () => {
@@ -83,7 +96,7 @@ describe("the job registry", () => {
     const consumers = JOBS.filter((job) => job.queue.startsWith("outbox."))
     const consumed = consumers.map((job) => job.queue)
     assert.deepEqual([...new Set(consumed)], consumed, "a consumer takes a kind once")
-    assert.deepEqual(consumers, [...OUTBOX_CONSUMERS], "every consumer in the registry is one the relay sends to")
+    assert.deepEqual(consumers, [...CONSUMERS], "every consumer in the registry is one the relay sends to")
     for (const job of consumers) {
       assert.ok(job.inherits !== undefined && published.has(job.inherits), `${job.queue}: inherits no queue the relay publishes`)
       assert.ok(job.queue.startsWith(`${job.inherits}.`), `${job.queue}: a consumer's queue of a kind is the kind's own and its name`)
@@ -97,7 +110,7 @@ describe("the job registry", () => {
     // The relay's routes are the consumers' queues by kind, in the consumers' order.
     for (const kind of OUTBOX_KINDS) {
       const expected = consumers.filter((job) => job.inherits === outboxQueue(kind)).map((job) => job.queue)
-      assert.deepEqual(OUTBOX_ROUTES.get(kind) ?? [], expected, kind)
+      assert.deepEqual(ROUTES.get(kind) ?? [], expected, kind)
     }
   })
 
@@ -213,16 +226,16 @@ describe("the job registry", () => {
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing the dead-letter queue and then one queue per outbox kind, each kept ninety days for a consumer to come", () => {
-    assert.ok(JOBS.includes(relayOutbox))
-    assert.equal(relayOutbox.queue, "execution.relay-outbox")
-    assert.equal(relayOutbox.schedule, "* * * * *")
-    assert.deepEqual(relayOutbox.scheduleData, { source: "schedule" })
-    assert.deepEqual(relayOutbox.scheduleOptions, { tz: "UTC", missed: "skip" })
-    assert.deepEqual(relayOutbox.queueOptions, { policy: "short", retryLimit: 0, deleteAfterSeconds: 3_600 })
-    assert.deepEqual(relayOutbox.workOptions, { pollingIntervalSeconds: 1 })
+    assert.ok(JOBS.includes(relay))
+    assert.equal(relay.queue, "execution.relay-outbox")
+    assert.equal(relay.schedule, "* * * * *")
+    assert.deepEqual(relay.scheduleData, { source: "schedule" })
+    assert.deepEqual(relay.scheduleOptions, { tz: "UTC", missed: "skip" })
+    assert.deepEqual(relay.queueOptions, { policy: "short", retryLimit: 0, deleteAfterSeconds: 3_600 })
+    assert.deepEqual(relay.workOptions, { pollingIntervalSeconds: 1 })
     assert.equal(RELAY_INTERVAL_SECONDS, 5)
     assert.equal(BATCH_SIZE, 100)
-    assert.deepEqual(relayOutbox.publishes, [OUTBOX_DEAD, ...OUTBOX_QUEUES], "the dead-letter queue first, since a consumer's queue names it and pg-boss refuses a dead letter that does not exist")
+    assert.deepEqual(relay.publishes, [OUTBOX_DEAD, ...OUTBOX_QUEUES], "the dead-letter queue first, since a consumer's queue names it and pg-boss refuses a dead letter that does not exist")
     assert.deepEqual(OUTBOX_DEAD, { queue: "outbox.dead", queueOptions: DEAD_LETTER_QUEUE_OPTIONS })
     assert.deepEqual(DEAD_LETTER_QUEUE_OPTIONS, { retryLimit: 0, retentionSeconds: 90 * 86_400 })
     assert.equal(OUTBOX_DEAD_QUEUE, "outbox.dead")
@@ -248,7 +261,7 @@ describe("the job registry", () => {
       ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.pickup-failed.finance", "outbox.pickup-skipped.finance", "outbox.ticket-completed.finance", "outbox.site-visit-recorded.finance", "outbox.site-visit-voided.finance", "outbox.weight-reviewed.finance", "outbox.scale-ticket-completed.finance", "outbox.scale-ticket-voided.finance"],
     )
     // A missed stop's two kinds fan out to Resolution and Finance both (#293 M5b on #339's fan-out).
-    for (const kind of ["pickup-failed", "pickup-skipped"] as const) assert.deepEqual(OUTBOX_ROUTES.get(kind)?.slice(0, 2), [consumerQueue(kind, "resolution"), consumerQueue(kind, "finance")], kind)
+    for (const kind of ["pickup-failed", "pickup-skipped"] as const) assert.deepEqual(ROUTES.get(kind)?.slice(0, 2), [consumerQueue(kind, "resolution"), consumerQueue(kind, "finance")], kind)
     assert.deepEqual(RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 300, deleteAfterSeconds: 604_800 }, "five retries backing off from ten seconds under a five-minute cap: longer than an ordinary failover")
     for (const job of recordBillableEvents) {
       assert.ok(JOBS.includes(job), job.queue)
@@ -281,7 +294,7 @@ describe("the job registry", () => {
 
   test("holds the Registry's consumer (M11 of #293): one entry on outbox.application-decided.registry that starts fresh, so a decision relayed before it ran is never applied", () => {
     assert.deepEqual(applyPauseGrants.map((job) => [job.queue, job.inherits, job.startsFresh]), [["outbox.application-decided.registry", "outbox.application-decided", true]])
-    assert.deepEqual(OUTBOX_ROUTES.get("application-decided"), ["outbox.application-decided.registry"], "the relay sends a decision to it from the first start")
+    assert.deepEqual(ROUTES.get("application-decided"), ["outbox.application-decided.registry"], "the relay sends a decision to it from the first start")
     assert.equal(openTickets.some((job) => job.startsFresh === true) || recordBillableEvents.some((job) => job.startsFresh === true), false, "the others take their kinds' backlog")
   })
 
@@ -290,7 +303,7 @@ describe("the job registry", () => {
       ["outbox.pickup-completed.counting", "outbox.pickup-completed", true],
       ["outbox.pickup-corrected.counting", "outbox.pickup-corrected", true],
     ])
-    assert.deepEqual(OUTBOX_ROUTES.get("pickup-completed"), ["outbox.pickup-completed.finance", "outbox.pickup-completed.customer-notices", "outbox.pickup-completed.counting"])
+    assert.deepEqual(ROUTES.get("pickup-completed"), ["outbox.pickup-completed.finance", "outbox.pickup-completed.customer-notices", "outbox.pickup-completed.counting"])
   })
 
   test("holds the staff notices' consumer (O16 of #290): one entry per kind on outbox.<kind>.notifications, never scheduled, on the seam's policy", () => {
@@ -321,7 +334,7 @@ describe("the job registry", () => {
       assert.ok(JOBS.includes(job), job.queue)
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS })
     }
-    assert.deepEqual(OUTBOX_ROUTES.get("pickup-failed"), [consumerQueue("pickup-failed", "resolution"), consumerQueue("pickup-failed", "finance"), consumerQueue("pickup-failed", "customer-notices")])
+    assert.deepEqual(ROUTES.get("pickup-failed"), [consumerQueue("pickup-failed", "resolution"), consumerQueue("pickup-failed", "finance"), consumerQueue("pickup-failed", "customer-notices")])
   })
 
   test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {
@@ -342,7 +355,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
 
   test("every consumer takes outbox kinds alone, each context's from the list its domain rule declares against the outbox's", () => {
     const kinds = new Set<string>(OUTBOX_KINDS)
-    for (const job of OUTBOX_CONSUMERS) assert.ok(job.inherits !== undefined && kinds.has(job.inherits.slice("outbox.".length)), `${job.queue} inherits ${job.inherits}, no outbox kind's queue`)
+    for (const job of CONSUMERS) assert.ok(job.inherits !== undefined && kinds.has(job.inherits.slice("outbox.".length)), `${job.queue} inherits ${job.inherits}, no outbox kind's queue`)
     for (const [context, list] of Object.entries({ RESOLUTION_EVENT_KINDS, FINANCE_EVENT_KINDS, NOTIFICATION_EVENTS, CUSTOMER_NOTICE_KINDS })) {
       for (const kind of list) assert.ok(kinds.has(kind), `${context} names ${kind}, no outbox kind`)
     }
@@ -402,7 +415,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.throws(() => defineOutboxConsumer({ name: "Finance", kinds: ["pickup-completed"], description: "Records.", handler: async () => {} }), /lowercase words joined by hyphens/)
 
     const lines: string[] = []
-    const context = { log: (line: string) => void lines.push(line) } as unknown as Parameters<(typeof jobs)[0]["handler"]>[1]
+    const context = jobContext({ log: (line) => void lines.push(line) })
     const event = (kind: string, id: string) => ({
       id,
       companyId: "01a0d3a5-e5e0-7000-8000-000000000002",
@@ -455,7 +468,7 @@ describe("defineJob", () => {
       },
     })
     assert.equal(job.queue, "test.echo")
-    const context = { log: (line: string) => void lines.push(line) } as unknown as Parameters<typeof job.handler>[1]
+    const context = jobContext({ log: (line) => void lines.push(line) })
     assert.equal(await job.handler([{ id: "1", name: "test.echo", data: { n: 7 }, expireInSeconds: 1, heartbeatSeconds: null, signal: AbortSignal.abort() }], context), 1)
     assert.deepEqual(lines, ["n=7"])
   })

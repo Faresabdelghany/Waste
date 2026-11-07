@@ -60,7 +60,7 @@ import { monthBefore } from "@waste/domain/finance/periods"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import type { Job } from "pg-boss"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export type RunBillingData = {
   /** One project, or null for every active project of every company: what the schedule sends. */

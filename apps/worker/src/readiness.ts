@@ -16,14 +16,14 @@
 // known) and "unreachable" (started, and the read did not answer). The
 // contracts type (`WorkerReadinessResponse`) spells the same words on the wire.
 // A third read rides beside the two checks and decides nothing: the relay's
-// `staleOutboxCount` (jobs/relay-outbox.ts), the rows unpublished for longer
+// `staleOutboxCount` (runtime/relay-outbox.ts), the rows unpublished for longer
 // than an hour across companies, handed in by the composition root and
 // bounded like the checks; a ready body carries the number, and a count that
 // did not answer in time is left out rather than made a 503, since an event
 // nobody could publish is still an event and the probe is not the place to
 // decide about it. A fourth rides on the boss check itself: `deadLetters`,
 // the jobs waiting on `outbox.dead` (the consumers' dead-letter queue,
-// outbox/subscribe.ts) — pg-boss's cached `queuedCount` on that queue's row,
+// runtime/outbox.ts) — pg-boss's cached `queuedCount` on that queue's row,
 // read in the same `getQueues` as the failed count when the queue is among
 // the ones asked for — a job that failed past its retries and waits for an
 // operator's redrive; information for the operator, never a reason for a 503.

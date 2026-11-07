@@ -15,9 +15,9 @@ import { scaleTicket, scaleTicketLine } from "@waste/db/schema/scale-house"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
-import type { JobContext } from "../jobs"
-import { recordBillableEventFor } from "../jobs/record-billable-events"
-import type { RelayedEvent } from "../outbox/subscribe"
+import type { JobContext } from "../runtime/definition"
+import { recordBillableEventFor } from "../finance/record-billable-events"
+import type { RelayedEvent } from "../runtime/outbox"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
 

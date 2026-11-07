@@ -31,16 +31,19 @@ import type { OutboxKind } from "@waste/contracts/outbox"
 import { asc } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, type Boss } from "../boss"
-import { defineJob, type JobContext } from "../jobs"
-import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, relayOutbox, staleOutboxCount } from "../jobs/relay-outbox"
-import { OUTBOX_ROUTES } from "../outbox/routes"
-import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, type RelayedEvent } from "../outbox/subscribe"
+import { createBoss, startBoss, type Boss } from "../runtime/boss"
+import { CONSUMERS, relay, type WorkerContext } from "../jobs"
+import { defineJob } from "../runtime/definition"
+import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../runtime/relay-outbox"
+import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, routesOf, type RelayedEvent } from "../runtime/outbox"
 import { rolesUnderTest, withDatabaseName } from "./database"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 import { until } from "./until"
 
 const roles = rolesUnderTest()
+
+/** Where the registry's relay sends each kind. */
+const ROUTES = routesOf(CONSUMERS)
 
 /** A uuidv7-shaped id of this file's own: a nibble for the company, a counter for the row, so id order is the order they are spelled in. */
 const id = (n: number, tenant = 0) => `01a0d3a5-e5e0-7000-8000-00000000${tenant.toString(16)}${n.toString(16).padStart(3, "0")}`
@@ -64,20 +67,19 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   const sent: { queue: string; id: string }[] = []
   let sequence = 0
 
-  const context: JobContext = {
+  const context: WorkerContext = {
+    ...jobContext({
+      log: (message) => void lines.push(message),
+      send: (queue, data, options) => {
+        if (data && "id" in data && typeof data.id === "string") sent.push({ queue, id: data.id })
+        return boss.send(queue, data, options)
+      },
+    }),
     get api() {
       return api
     },
     get worker() {
       return worker
-    },
-    now: () => new Date(),
-    log: (message) => void lines.push(message),
-    complete: settlesNothing,
-    routing: fakeRouting(),
-    send: (queue, data, options) => {
-      if (data && "id" in data && typeof data.id === "string") sent.push({ queue, id: data.id })
-      return boss.send(queue, data, options)
     },
   }
 
@@ -141,9 +143,9 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     worker = createDb(withDatabaseName(roles.workerUrl, name), { max: 2 })
     boss = createBoss({ url: withDatabaseName(roles.workerUrl, name), log: (line) => void errors.push(line), monitorIntervalSeconds: 1 })
     // The relay without its schedule, so a tick runs only when this file sends one, and the consumer beside it: the wiring creates the outbox queues before either worker starts.
-    running = await startBoss(boss, [defineJob({ ...relayOutbox, schedule: undefined }), ...testConsumer], context)
+    running = await startBoss(boss, [defineJob({ ...relay, schedule: undefined }), ...testConsumer], context)
     // The relay sends by the registry's routes (#339): the other consumers' queues of their kinds, which nothing of this file works, brought up as the registry's start would.
-    for (const queues of OUTBOX_ROUTES.values()) for (const queue of queues) if (!running.queues.includes(queue)) await boss.createQueue(queue, OUTBOX_QUEUE_OPTIONS)
+    for (const queues of ROUTES.values()) for (const queue of queues) if (!running.queues.includes(queue)) await boss.createQueue(queue, OUTBOX_QUEUE_OPTIONS)
     await seedTenant(a, "A")
     await seedTenant(b, "B")
   })
@@ -181,7 +183,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     const b2 = await emit(b, "unload-recorded", { id: id(0x205), netKg: 1200 })
     sent.length = 0
 
-    const outcome = await relayOnce(context)
+    const outcome = await relayOnce(context, ROUTES)
     assert.deepEqual(outcome, { swept: 5, published: 5 })
     // A's rows first (the lowest id is A's), in id order; then B's, in id order: the sweep's order is the id's, and each company's transaction keeps it.
     assert.deepEqual(
@@ -214,7 +216,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     for (const job of jobs) {
       const event = RelayedJob.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
-      assert.ok((OUTBOX_ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]).includes(job.name), "the queue is a consumer's of the kind, or the kind's own where none takes it (#339)")
+      assert.ok((ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]).includes(job.name), "the queue is a consumer's of the kind, or the kind's own where none takes it (#339)")
       assert.equal(event.companyId, row.companyId, "the company travels with the event")
       assert.equal(event.publishedAt, row.publishedAt!.toISOString(), "the payload's stamp is the row's")
       assert.equal(event.updatedAt, row.updatedAt.toISOString())
@@ -227,7 +229,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
 
   test("a second relay over a published outbox publishes nothing", async () => {
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: 0, published: 0 })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: 0, published: 0 })
     assert.deepEqual(sent, [])
     assert.equal((await outboxJobs()).length, 9)
   })
@@ -241,7 +243,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     lines.length = 0
 
-    await assert.rejects(relayOnce(context), (error: Error) => {
+    await assert.rejects(relayOnce(context, ROUTES), (error: Error) => {
       assert.equal(error.message, "execution.relay-outbox: 1 of 2 companies failed to publish; 1 row published")
       assert.ok(Array.isArray(error.cause) && error.cause.length === 1)
       assert.match((error.cause as Error[])[0].message, /Queue outbox\.route-dispatched does not exist/)
@@ -262,7 +264,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order, b3 to Finance's queue and the counting rules'.
     await boss.createQueue(outboxQueue("route-dispatched"), { retryLimit: 3, retryDelay: 10, retryBackoff: true })
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: 2, published: 2 })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: 2, published: 2 })
     assert.deepEqual(
       sent.map((entry) => entry.id),
       [b3, b3, b4],
@@ -283,7 +285,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     lines.length = 0
 
-    await assert.rejects(relayOnce(context), (error: Error) => {
+    await assert.rejects(relayOnce(context, ROUTES), (error: Error) => {
       assert.equal(error.message, "execution.relay-outbox: 1 of 2 companies failed to publish; 1 row published", "A's transaction failed, B's went, in the one tick")
       return true
     })
@@ -299,15 +301,15 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.ok(!jobs.some((job) => job.name === outboxQueue("ticket-rejected")), "none of A's survived its transaction")
 
     // The same again: A still fails, B has nothing, and the tick throws with nothing published — the stale count climbs for A alone.
-    await assert.rejects(relayOnce(context), /1 of 1 company failed to publish; 0 rows published/)
+    await assert.rejects(relayOnce(context, ROUTES), /1 of 1 company failed to publish; 0 rows published/)
 
     // A's queue back (a consumer's next start, or the deploy that knows the kind): the first tick takes A's oldest hundred in id order, the second the other fifty, and a job that swept a batch's worth would follow itself at once.
     await boss.createQueue(outboxQueue("ticket-rejected"), OUTBOX_QUEUE_OPTIONS)
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: BATCH_SIZE, published: BATCH_SIZE })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: BATCH_SIZE, published: BATCH_SIZE })
     assert.deepEqual(sent.map((entry) => entry.id), poisoned.slice(0, BATCH_SIZE), "the oldest hundred, in id order")
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: 50, published: 50 })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: 50, published: 50 })
     assert.deepEqual(sent.map((entry) => entry.id), poisoned.slice(BATCH_SIZE))
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
     assert.equal((await outboxJobs()).filter((job) => job.name === outboxQueue("ticket-rejected")).length, 150, "one job per row, none twice")
@@ -320,14 +322,14 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     await owner.sql.begin(async (holding) => {
       await holding`select id from wms.outbox_event where id = ${a6} for update`
-      assert.deepEqual(await relayOnce(context), { swept: 3, published: 2 }, "the held row is left, the other two go")
+      assert.deepEqual(await relayOnce(context, ROUTES), { swept: 3, published: 2 }, "the held row is left, the other two go")
       assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, a5, b5, b5], "a5 to Resolution, Finance and the customer notices, b5 to Finance and the customer notices")
     })
     const rows = new Map((await outbox()).map((row) => [row.id, row]))
     assert.equal(rows.get(a6)!.publishedAt, null)
     assert.ok(rows.get(a5)!.publishedAt !== null && rows.get(b5)!.publishedAt !== null)
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: 1, published: 1 })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: 1, published: 1 })
     assert.deepEqual(sent.map((entry) => entry.id), [a6])
   })
 
@@ -339,7 +341,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     }
     sent.length = 0
     const before = (await outboxJobs()).length
-    const [first, second] = await Promise.all([relayOnce(context), relayOnce(context)])
+    const [first, second] = await Promise.all([relayOnce(context, ROUTES), relayOnce(context, ROUTES)])
     assert.equal(first.published + second.published, 6, `${first.published} + ${second.published}`)
     // Both swept before either committed, or one committed a company first and the other's sweep saw the rest: either way what one locked the other skipped, and nothing was taken twice.
     assert.equal(Math.max(first.swept, second.swept), 6, "at least one sweep saw all six")
@@ -363,7 +365,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(await staleOutboxCount(worker, new Date(twoHoursAgo.getTime() + 30 * 60 * 1_000)), 0, "half an hour after it was made, it is not yet stale")
     assert.equal(await staleOutboxCount(worker, now, 90 * 60 * 1_000), 1)
     assert.equal(await staleOutboxCount(worker, now, 3 * 60 * 60 * 1_000), 0)
-    await relayOnce(context)
+    await relayOnce(context, ROUTES)
     assert.equal(await staleOutboxCount(worker, now), 0, "published, however old")
     assert.ok((await outbox()).find((row) => row.id === stale)!.publishedAt !== null)
   })
@@ -374,7 +376,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     await boss.subscribe(outboxQueue("route-reassigned"), subscribed)
     const a8 = await emit(a, "route-reassigned", { id: id(0x240), status: "planned" })
     sent.length = 0
-    assert.deepEqual(await relayOnce(context), { swept: 1, published: 1 })
+    assert.deepEqual(await relayOnce(context, ROUTES), { swept: 1, published: 1 })
     assert.deepEqual(sent.map((entry) => [entry.queue, entry.id]), [["outbox.route-reassigned", a8]], "the kind's own queue, through send")
     assert.deepEqual(await boss.findJobs(subscribed, {}), [], "no copy on the subscribed queue: one door, so a consumer that also subscribed would not hear an event twice")
     const own = (await outboxJobs()).filter((job) => job.name === "outbox.route-reassigned")
@@ -448,8 +450,8 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   test("the constants the tick runs on", () => {
     assert.equal(BATCH_SIZE, 100)
     assert.equal(RELAY_INTERVAL_SECONDS, 5)
-    assert.equal(RELAY_QUEUE, relayOutbox.queue)
-    assert.deepEqual(relayOutbox.publishes, [{ queue: OUTBOX_DEAD_QUEUE, queueOptions: { retryLimit: 0, retentionSeconds: DEAD_LETTER_RETENTION_SECONDS } }, ...OUTBOX_QUEUES])
+    assert.equal(RELAY_QUEUE, relay.queue)
+    assert.deepEqual(relay.publishes, [{ queue: OUTBOX_DEAD_QUEUE, queueOptions: { retryLimit: 0, retentionSeconds: DEAD_LETTER_RETENTION_SECONDS } }, ...OUTBOX_QUEUES])
   })
 
   test("every outbox row is one of the two companies', and every one was published exactly once; the two jobs the consumer refused are dead letters, data intact", async () => {
@@ -458,7 +460,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual([...new Set(rows.map((row) => row.companyId))].sort(), [a.companyId, b.companyId].sort())
     const publishedIds = await owner.sql.unsafe<{ id: string }[]>(`select data->>'id' as id from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' and name <> '${OUTBOX_DEAD_QUEUE}' and data->>'companyId' is not null`)
     const ids = publishedIds.map((row) => row.id).filter((candidate) => rows.some((row) => row.id === candidate))
-    const routed = rows.reduce((total, row) => total + (OUTBOX_ROUTES.get(row.kind as OutboxKind)?.length ?? 1), 0)
+    const routed = rows.reduce((total, row) => total + (ROUTES.get(row.kind as OutboxKind)?.length ?? 1), 0)
     assert.equal(ids.length, routed + 1, "one job per row and consumer of its kind, plus the stray job the consumer test sent by hand")
     assert.equal(new Set(ids).size, rows.length, "every outbox row published once, none twice")
     // The consumer refused two jobs with no retry (a stray kind, and no event at all): both failed, and both are on the dead-letter queue with what they carried and where they came from, for an operator to read and redrive or delete.

@@ -3,7 +3,7 @@
 // is charged at when a completion names none, read and replaced whole as the
 // project's set under the Products module, since it is the catalogue's word
 // on what the work costs. The Finance consumer reads it when a completed
-// ticket's event arrives (apps/worker/src/jobs/finance-facts.ts); it is not
+// ticket's event arrives (apps/worker/src/finance/facts.ts); it is not
 // effective-dated, so an event already recorded keeps its product.
 //
 // A product a charge names is a product of the project (400 at its path),

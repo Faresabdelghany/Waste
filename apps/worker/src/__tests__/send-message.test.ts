@@ -19,12 +19,12 @@ import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
-import type { JobContext } from "../jobs/definition"
-import { MAX_ATTEMPTS, NO_CONSENT, sendMessage } from "../jobs/send-message"
+import { MAX_ATTEMPTS, NO_CONSENT, sendMessage } from "../messaging/send-message"
 import { LogOnlyProvider } from "../messaging/log-only"
 import type { MessagingProvider, OutgoingMessage } from "../messaging/provider"
 import { messagingProviderFromEnv } from "../messaging/select"
 import { at, dropConsumerTenant, seedConsumerTenant, testId, type ConsumerTenant } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
 const api = databaseUnderTest()
@@ -56,7 +56,8 @@ describe("messaging.send", { skip: api.skip || owner.skip }, () => {
     sent.push({ name, data })
     return testId()
   }
-  const context = (messaging?: MessagingProvider) => ({ api: pool, now: () => NOW, log: (line: string) => void lines.push(line), ...(messaging === undefined ? {} : { messaging }) }) as JobContext
+  const log = (line: string) => void lines.push(line)
+  const context = (messaging: MessagingProvider) => jobContext({ api: pool, now: () => NOW, log, messaging })
   let serviceEmail: string
   let billingSms: string
   let hanne: string
@@ -163,7 +164,7 @@ describe("messaging.send", { skip: api.skip || owner.skip }, () => {
   test("the log-only sender is the default: it sends nothing and logs the address masked", async () => {
     const queued = await queue(serviceEmail, hanne)
     lines.length = 0
-    assert.equal(await sendMessage({ companyId: tenant.companyId, messageId: queued.id }, context()), "sent")
+    assert.equal(await sendMessage({ companyId: tenant.companyId, messageId: queued.id }, context(messagingProviderFromEnv(undefined, log))), "sent")
     const row = await read(queued.id)
     assert.deepEqual([row.provider, row.providerMessageId], ["log", `log-${queued.id}`])
     assert.deepEqual(lines, [`messaging: log-only sender: email ${queued.id} to h***@parkvej.example, not sent`])

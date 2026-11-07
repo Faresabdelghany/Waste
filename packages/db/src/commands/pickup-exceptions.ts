@@ -1,7 +1,7 @@
 // The reads a Pickup Exception is judged from (Issue #293, M5), shared by the
 // API's history of a place (apps/api/src/routes/pickup-exceptions.ts, M5a)
 // and the Finance consumer that charges one at its stop's event (M5b,
-// apps/worker/src/jobs/finance-facts.ts): a project's rules with their
+// apps/worker/src/finance/facts.ts): a project's rules with their
 // ladders, the stops at a place that are exceptions as their rows say so,
 // and the proof that recorded each stop's outcome. The judging is the
 // domain's (@waste/domain/execution/pickup-exceptions); these are the

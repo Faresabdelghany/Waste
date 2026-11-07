@@ -32,12 +32,11 @@ import type { Job } from "pg-boss"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 import { visitById } from "@waste/db/shapes/site-visits"
 
-import type { JobContext } from "../jobs"
-import { recordBillableEvents, type Recorded } from "../jobs/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../outbox/subscribe"
+import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
+import { consumerQueue, type RelayedJob } from "../runtime/outbox"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropFinanceTenant, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -54,7 +53,7 @@ describe("finance.record-billable-events over a Site Visit's events (M4 of #293)
   const unpriced = testId()
   const lines: string[] = []
 
-  const context = (): JobContext => ({ api: pool, worker: pool, now: () => NOON, log: (message) => void lines.push(message), send: async () => null, complete: settlesNothing, routing: fakeRouting() })
+  const context = () => jobContext({ api: pool, worker: pool, now: () => NOON, log: (message) => void lines.push(message), send: async () => null })
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })

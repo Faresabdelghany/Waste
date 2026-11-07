@@ -36,8 +36,8 @@ import { NOTIFICATION_EVENTS, type NotificationEvent } from "@waste/domain/notif
 import type { AlertSeverity } from "@waste/domain/resolution/vocabulary"
 import { and, eq, exists, isNull, or, sql } from "drizzle-orm"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import type { JobContext } from "./definition"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import type { JobContext } from "../runtime/definition"
 
 /** The module whose view grant reads an alert: the board's. */
 export const ALERTS_MODULE = "operate.exceptions"
@@ -121,7 +121,7 @@ export async function notifyStaffFor(event: RelayedEvent<NotificationEvent>, { a
   return { event: event.id, kind: event.kind, queued }
 }
 
-/** The two registry entries, one per kind; spread into `OUTBOX_CONSUMERS`. */
+/** The two registry entries, one per kind; spread into `CONSUMERS` (../jobs.ts). */
 export const notifyStaff = defineOutboxConsumer({
   name: "notifications",
   kinds: NOTIFICATION_EVENTS,

@@ -39,11 +39,10 @@ import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 import { invoiceColumns } from "@waste/db/shapes/invoices"
 import { runColumns } from "@waste/db/shapes/billing-runs"
 
-import type { JobContext } from "../jobs"
-import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../jobs/run-billing"
+import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../finance/run-billing"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const roles = rolesUnderTest()
 const skip = roles.skip
@@ -59,15 +58,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
   let tenant: FinanceTenant
   const lines: string[] = []
 
-  const context = (now = FIRST_OF_OCTOBER): JobContext => ({
-    api,
-    worker,
-    now: () => now,
-    log: (message) => void lines.push(message),
-    send: async () => null,
-    complete: settlesNothing,
-    routing: fakeRouting(),
-  })
+  const context = (now = FIRST_OF_OCTOBER) => jobContext({ api, worker, now: () => now, log: (message) => void lines.push(message), send: async () => null })
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
