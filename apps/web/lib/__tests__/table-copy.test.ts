@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { KEPT_ON_API } from "../api/records/server-records"
 import { awaitedRowsSentence, recordCountLabel } from "../table-copy"
 
 describe("recordCountLabel", () => {
@@ -30,6 +31,10 @@ describe("awaitedRowsSentence", () => {
       awaitedRowsSentence({ status: "failed", problem: { type: "about:blank", title: "Service Unavailable", status: 503 } }),
       "The records could not be read (Service Unavailable). Reload the page to try again.",
     )
+  })
+
+  test("a switched module where no API is configured says the API keeps it", () => {
+    assert.equal(awaitedRowsSentence(KEPT_ON_API), "This list is kept on the API: sign in on the Pilot to read it.")
   })
 
   test("rows that are here, a module the role does not view and one on the browser's own path say nothing", () => {

@@ -13,7 +13,7 @@ import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 
 import type { TicketSla } from "@waste/contracts/ticket-sla"
 import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting, type ProjectPick } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

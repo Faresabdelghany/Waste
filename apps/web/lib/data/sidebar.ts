@@ -17,7 +17,6 @@ export type NavItem = {
   id: NavItemId
   label: string
   href: string
-  badge?: number
 }
 
 export type ActiveRouteSummary = {
@@ -37,78 +36,24 @@ export type SidebarFooterItem = {
 
 export const navItems: NavItem[] = [
   { id: "improve", label: "Dashboard", href: "/performance" },
-  { id: "operate", label: "Tickets", href: "/tickets", badge: 6 },
+  { id: "operate", label: "Tickets", href: "/tickets" },
   { id: "plan", label: "Map Planning", href: "/plan" },
   { id: "route-studio", label: "Route Studio", href: "/route-studio" },
   { id: "fleet", label: "Fleet", href: "/fleet" },
   { id: "customers", label: "Customers", href: "/customers" },
-  { id: "resources", label: "Assets & Inventory", href: "/resources", badge: 8 },
+  { id: "resources", label: "Assets & Inventory", href: "/resources" },
   { id: "service-providers", label: "Service providers", href: "/service-providers" },
-  { id: "commercial", label: "Price Engine", href: "/commercial", badge: 14 },
+  { id: "commercial", label: "Price Engine", href: "/commercial" },
 ]
 
 /**
- * A nav item's badge (#248): in fixture mode the registry's number; on the
- * Pilot (`pilot` given) only a count of rows the API answered — the open
+ * A nav item's badge (#248): a count of rows the API answered — the open
  * tickets once read, none before — and no badge on an item no count is read
- * for, never the registry's number.
+ * for.
  */
-export function navBadgeOf(item: NavItem, pilot: { openTickets: number | undefined } | null): number | undefined {
-  if (pilot === null) return item.badge
-  return item.id === "operate" ? pilot.openTickets : undefined
+export function navBadgeOf(item: NavItem, openTickets: number | undefined): number | undefined {
+  return item.id === "operate" ? openTickets : undefined
 }
-
-export const activeRoutes: ActiveRouteSummary[] = [
-  {
-    id: "route-1042",
-    name: "Central · Residual",
-    color: "var(--chart-5)",
-    progress: 82,
-    href: "/route-studio?module=live&record=route-1042",
-  },
-  {
-    id: "route-1048",
-    name: "Østerbro · Organic",
-    color: "var(--chart-3)",
-    progress: 64,
-    href: "/route-studio?module=live&record=route-1048",
-  },
-  {
-    id: "route-1039",
-    name: "Vesterbro · Paper",
-    color: "var(--chart-3)",
-    progress: 91,
-    href: "/route-studio?module=live&record=route-1039",
-  },
-  {
-    id: "route-1051",
-    name: "Amager · Glass",
-    color: "var(--chart-2)",
-    progress: 48,
-    href: "/route-studio?module=live&record=route-1051",
-  },
-]
-
-/**
- * The service provider manager sidebar mirrors the operator's Active Routes group,
- * scoped to NordRen ApS route days (RC-1048 running, RC-1052 planned).
- */
-export const serviceProviderActiveRoutes: ActiveRouteSummary[] = [
-  {
-    id: "route-day-1048",
-    name: "Østerbro · Organic",
-    color: "var(--chart-3)",
-    progress: 64,
-    href: "/service-provider-workspace/routes?module=routes&record=route-day-1048",
-  },
-  {
-    id: "route-day-1052",
-    name: "Østerbro · Paper",
-    color: "var(--chart-2)",
-    progress: 0,
-    href: "/service-provider-workspace/routes?module=routes&record=route-day-1052",
-  },
-]
 
 export const footerItems: SidebarFooterItem[] = [
   { id: "settings", label: "Settings", pane: "account" },

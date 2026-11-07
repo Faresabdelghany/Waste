@@ -56,7 +56,6 @@ export function InviteUserDialog({
   roles,
   projects,
   providers,
-  companyRecordId,
   invite,
 }: {
   open: boolean
@@ -64,7 +63,6 @@ export function InviteUserDialog({
   roles: readonly PickerOption[]
   projects: readonly PickerOption[]
   providers: readonly PickerOption[]
-  companyRecordId?: string
   /** The store's write: the outcome once the API has answered, or undefined when the record went to the browser instead. */
   invite: (record: BusinessRecord) => Promise<WriteOutcome> | undefined
 }) {
@@ -119,7 +117,7 @@ export function InviteUserDialog({
     }
     setRefusal(null)
     setSubmitting(true)
-    const record = inviteRecord({ fullName, email, role, access, companyRecordId }, mintInviteId())
+    const record = inviteRecord({ fullName, email, role, access }, mintInviteId())
     // No outcome means the record went to the browser, which on the Pilot
     // is no Invitation at all: said so, never a success.
     const outcome: Promise<WriteOutcome> =

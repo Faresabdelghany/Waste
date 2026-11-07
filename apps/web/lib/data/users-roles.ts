@@ -1,15 +1,7 @@
 // Settings › Users & roles (Issue #163), apart from React: what the pane
 // lists, what its pickers offer, and the record its Add user writes. The pane
-// has two sources and never mixes them:
-//
-//   without the adapter — the organisation store's users and roles, merged
-//   with the fixture access records and the service-provider workspace's, as
-//   the prototype has always shown them (`kind: "fixtures"`);
-//
-//   with it — the access module's records alone, once the store has loaded
-//   them (`kind: "api"`): no fixture, no record made in the browser, and
-//   nothing at all until the API has answered, since a fixture user shown
-//   on the Pilot while the list loads is a user who does not exist.
+// lists the access module's records alone, once the store has loaded them:
+// nothing at all until the API has answered.
 //
 // The invitation is a record the user adapter turns into the `UserInvite`
 // body (lib/api/records/organisation.ts, `toCreateBody`): the address, the
@@ -23,7 +15,7 @@ import { typed, typedFlag } from "@/lib/api/records/adapter"
 import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
 import type { ModuleState } from "@/lib/api/records/server-records"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { projectRecordsOf } from "./project-scope"
 import type { RoleAccessMap } from "./role-permissions"
 
@@ -47,29 +39,6 @@ export type RoleRow = {
   permissions: string
 }
 
-/** The organisation store's users, companies, projects and roles, and the two fixture record sets, as the pane read them before the adapter. */
-export type FixtureUsersRoles = {
-  organizationUsers: readonly {
-    id: string
-    companyId: string
-    fullName: string
-    email: string
-    role: string
-    status: string
-    accessMode: "none" | "selected-projects" | "all-company-projects"
-    projectIds: readonly string[]
-    isPrimaryAdministrator: boolean
-    serviceProviderName?: string
-  }[]
-  companies: readonly { id: string; name: string }[]
-  projects: readonly { id: string; name: string }[]
-  roles: readonly { id: string; name: string; type: string; scope: string; permissions: string }[]
-  accessRecords: readonly BusinessRecord[]
-  serviceProviderAccessRecords: readonly BusinessRecord[]
-}
-
-export type UsersRolesSource = ({ kind: "fixtures" } & FixtureUsersRoles) | { kind: "api"; module: ModuleState; companyName: string }
-
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
 
 /**
@@ -84,11 +53,10 @@ export const COMPANY_ADMINISTRATOR_ROLE_ID = roleWebIdOf({ id: "", key: "company
 export const coversEveryProject = (roleId: string): boolean => roleId === COMPANY_ADMINISTRATOR_ROLE_ID
 
 /**
- * What a table says on the Pilot while it has no rows: the list is still
- * being read, the read failed with the API's own detail, or the person's
- * role does not view the module, in the store's sentence — never the
- * fixtures. Null once the module is ready, when an empty table means what
- * it says.
+ * What a table says while it has no rows: the list is still being read, the
+ * read failed with the API's own detail, or the person's role does not view
+ * the module, in the store's sentence. Null once the module is ready, when an
+ * empty table means what it says.
  */
 export function pilotEmptyState(module: ModuleState, noun: "users" | "roles"): { message: string; hint: string } | null {
   if (module.status === "ready") return null
@@ -102,24 +70,18 @@ export function pilotEmptyState(module: ModuleState, noun: "users" | "roles"): {
 }
 
 /** The users the tab lists, sorted by name. */
-export function userRowsOf(source: UsersRolesSource): UserRow[] {
-  if (source.kind === "api") {
-    if (source.module.status !== "ready") return []
-    return source.module.records
-      .filter((record) => userAdapter.owns(record))
-      .map((record) => apiUserRow(record, source.companyName))
-      .sort(byName)
-  }
-  return fixtureUserRows(source)
+export function userRowsOf(module: ModuleState, companyName: string): UserRow[] {
+  if (module.status !== "ready") return []
+  return module.records
+    .filter((record) => userAdapter.owns(record))
+    .map((record) => apiUserRow(record, companyName))
+    .sort(byName)
 }
 
-/** The roles the tab lists: the API's in list order, the store's in its own. */
-export function roleRowsOf(source: UsersRolesSource): RoleRow[] {
-  if (source.kind === "api") {
-    if (source.module.status !== "ready") return []
-    return source.module.records.filter((record) => roleAdapter.owns(record)).map(apiRoleRow)
-  }
-  return source.roles.map(({ id, name, type, scope, permissions }) => ({ id, name, type, scope, permissions }))
+/** The roles the tab lists, in the API's order. */
+export function roleRowsOf(module: ModuleState): RoleRow[] {
+  if (module.status !== "ready") return []
+  return module.records.filter((record) => roleAdapter.owns(record)).map(apiRoleRow)
 }
 
 function apiUserRow(record: BusinessRecord, companyName: string): UserRow {
@@ -146,107 +108,6 @@ function apiRoleRow(record: BusinessRecord): RoleRow {
     scope: record.facts.Scope ?? typed(record, "scope") ?? "",
     permissions: record.description,
   }
-}
-
-// ---------------------------------------------------------------------------
-// The prototype's merge, as the pane read it before the adapter
-// ---------------------------------------------------------------------------
-
-function roleForRecord(record: BusinessRecord) {
-  if (record.submittedValues?.role) return String(record.submittedValues.role)
-  if (record.facts.Roles) return record.facts.Roles
-
-  const context = record.context.toLowerCase()
-  if (context.includes("foreman")) return "Service Provider Foreman"
-  if (context.includes("manager")) return "Service Provider Manager"
-  return "User"
-}
-
-function projectAccessForRecord(record: BusinessRecord) {
-  if (record.submittedValues?.projectAccess) {
-    return String(record.submittedValues.projectAccess)
-  }
-  if (/^\d+$/.test(record.facts.Projects ?? "")) {
-    return record.context.split("·").slice(1).join("·").trim() || record.context
-  }
-  return record.facts.Projects ?? record.context
-}
-
-function organizationForRecord(record: BusinessRecord) {
-  if (record.submittedValues?.serviceProvider) {
-    return String(record.submittedValues.serviceProvider)
-  }
-  if (record.facts["Service provider"]) {
-    return record.facts["Service provider"].replace(/\s+only$/i, "")
-  }
-  return "Kystbyen Renovation"
-}
-
-function emailForRecord(record: BusinessRecord) {
-  if (record.submittedValues?.email) return String(record.submittedValues.email)
-  if (record.id === "user-olivia") return "olivia.larsen@kystbyen.example"
-  if (record.id === "user-temp") return "integration.user@kystbyen.example"
-  return "Managed service provider account"
-}
-
-function fixtureUserRows({ organizationUsers, companies, projects, accessRecords, serviceProviderAccessRecords }: FixtureUsersRoles): UserRow[] {
-  const companyById = new Map(companies.map((company) => [company.id, company]))
-  const projectById = new Map(projects.map((project) => [project.id, project]))
-  const normalizedUsers = organizationUsers.map((user) => {
-    const company = companyById.get(user.companyId)
-    const projectAccess =
-      user.accessMode === "all-company-projects"
-        ? ALL_PROJECTS_ACCESS
-        : user.accessMode === "none"
-          ? NO_PROJECT_ACCESS
-          : user.projectIds
-              .map((projectId) => projectById.get(projectId)?.name)
-              .filter(Boolean)
-              .join(", ") || NO_PROJECT_ACCESS
-
-    return {
-      id: user.id,
-      name: user.fullName,
-      email: user.email,
-      role: user.role,
-      organization: user.serviceProviderName ?? company?.name ?? "Unknown company",
-      projectAccess,
-      status: user.status,
-      primaryAdministrator: user.isPrimaryAdministrator,
-    }
-  })
-  const normalizedUserIds = new Set(organizationUsers.map((user) => user.id))
-  const normalizedUserEmails = new Set(organizationUsers.map((user) => user.email.toLowerCase()))
-  const officeUsers = accessRecords
-    .filter(
-      (record) =>
-        !normalizedUserIds.has(record.id) &&
-        !normalizedUserEmails.has(emailForRecord(record).toLowerCase()) &&
-        (record.recordKind === "User" || (record.facts.Identity !== "Role" && !record.id.startsWith("role-"))),
-    )
-    .map((record) => ({
-      id: record.id,
-      name: record.name,
-      email: emailForRecord(record),
-      role: roleForRecord(record),
-      organization: organizationForRecord(record),
-      projectAccess: projectAccessForRecord(record),
-      status: record.status,
-      primaryAdministrator: false,
-    }))
-
-  const serviceProviderUsers = serviceProviderAccessRecords.map((record) => ({
-    id: record.id,
-    name: record.owner && record.owner !== "Contract Team" ? record.owner : record.name,
-    email: emailForRecord(record),
-    role: roleForRecord(record),
-    organization: organizationForRecord(record),
-    projectAccess: projectAccessForRecord(record),
-    status: record.status,
-    primaryAdministrator: false,
-  }))
-
-  return [...normalizedUsers, ...officeUsers, ...serviceProviderUsers].sort(byName)
 }
 
 // ---------------------------------------------------------------------------
@@ -288,8 +149,6 @@ export type Invite = {
   /** A role the store loaded, by its web id. */
   role: PickerOption
   access: InviteAccess
-  /** The web id of the caller's company record, once the organisation module has loaded. */
-  companyRecordId?: string
 }
 
 /**
@@ -325,7 +184,6 @@ export function inviteRecord(invite: Invite, id: string): BusinessRecord {
     related: [],
     source: "Waste API",
     freshness: "Just now",
-    companyId: invite.companyRecordId ?? FIXTURE_COMPANY_ID,
     ...(projectIds === undefined ? {} : { projectIds }),
     ...(provider === undefined ? {} : { serviceProviderId: provider.id }),
     recordKind: "User",
@@ -367,7 +225,7 @@ export type NewRole = {
  * reads the `RoleCreate` body off — its copy trimmed, and the matrix it starts
  * from, as the role it copies carries it, or none.
  */
-export function newRoleRecord(role: NewRole, id: string, companyRecordId?: string): BusinessRecord {
+export function newRoleRecord(role: NewRole, id: string): BusinessRecord {
   const name = role.name.trim()
   const description = role.description.trim()
   const grants = role.startFrom === undefined ? [] : (grantsOfRecord(role.startFrom) ?? [])
@@ -384,7 +242,6 @@ export function newRoleRecord(role: NewRole, id: string, companyRecordId?: strin
     related: [],
     source: "Waste API",
     freshness: "Just now",
-    companyId: companyRecordId ?? FIXTURE_COMPANY_ID,
     recordKind: "Role",
     submittedValues: { name, scope: role.scope, description, system: false, [GRANTS_KEY]: JSON.stringify(grants) },
   }

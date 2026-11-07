@@ -55,7 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStoreRecords } from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/waste/business-record-store"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -292,9 +292,9 @@ function ReassignRouteDialog({
   onClose: () => void
   onReassign: (updated: BusinessRecord, pickups: BusinessRecord[]) => void
 }) {
-  const driverRecords = useStoreRecords("fleet", "drivers")
-  const vehicleRecords = useStoreRecords("fleet", "vehicles")
-  const pickupRecords = useStoreRecords("route-studio", "pickups")
+  const driverRecords = useModuleRecords("fleet", "drivers").records
+  const vehicleRecords = useModuleRecords("fleet", "vehicles").records
+  const pickupRecords = useModuleRecords("route-studio", "pickups").records
   const currentDriver = record.facts.Driver ?? record.owner ?? "Unassigned"
   const currentVehicle = record.facts.Vehicle ?? "Unassigned"
   const [driver, setDriver] = useState(currentDriver)
@@ -547,7 +547,7 @@ function OverviewTab({
   // the fallback for fixture routes (issue #23). Manual stop edits sit in an
   // overlay so the store-backed derivation stays hydration-safe, and "Reset
   // route" simply clears the overlay back to the source of truth.
-  const pickupRecords = useStoreRecords("route-studio", "pickups")
+  const pickupRecords = useModuleRecords("route-studio", "pickups").records
   const generatedStops = useMemo(
     () => generatedRouteStops(record, pickupRecords),
     [pickupRecords, record],

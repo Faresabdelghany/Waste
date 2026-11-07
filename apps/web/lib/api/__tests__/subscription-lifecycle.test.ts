@@ -10,8 +10,6 @@ import { describe, test } from "node:test"
 
 import type { Agreement, AgreementTerminated, Subscription, SubscriptionPause, SubscriptionPaused } from "@waste/contracts/agreements"
 
-import { AGREEMENTS_MODULE } from "../../data/agreements"
-import { FIXTURE_COMPANY_ID, getModuleDefinition } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import {
   agreementAdapter,
@@ -31,8 +29,7 @@ import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-24T10:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-const fixtures = getModuleDefinition(AGREEMENTS_MODULE)?.records ?? []
-const context: MappingContext = { fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 
 const PRODUCT = "01a0d2a4-a280-700a-8000-000000000001"
 const OTHER_PRODUCT = "01a0d2a4-a280-700a-8000-000000000002"
@@ -49,7 +46,7 @@ const state: ServerRecordsState = new Map([["customers.agreements", current]])
 /** One action on one row against a scripted API, answering what the API answered and what it was asked. */
 async function act(record: typeof agreementRecord, name: string, input: Record<string, unknown>, answer: unknown) {
   const { fetch, calls } = scripted([() => json(answer, 200)])
-  const outcome = await actOnRecord(clientOver(fetch), agreementsModule, current, record, name, input, { fixtures, state, now: NOW })
+  const outcome = await actOnRecord(clientOver(fetch), agreementsModule, current, record, name, input, { state, now: NOW })
   return { outcome, calls }
 }
 const sent = (calls: { url: string; init: RequestInit }[]) => calls.map((call) => [call.init.method, call.url.replace("http://api.test", ""), bodyOf(call)])

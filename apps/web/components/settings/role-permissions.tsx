@@ -7,7 +7,6 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import { RecordPageHeader } from "@/components/page-layout"
-import { useOrganizationStore } from "@/components/settings/organization-store"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -27,7 +26,6 @@ import {
 import {
   ROLE_PERMISSION_ACTIONS,
   ROLE_PERMISSION_ACTION_LABELS,
-  effectiveRoleAccess,
   rolePermissionCellCount,
   rolePermissionSections,
   type RoleAccessMap,
@@ -228,31 +226,6 @@ function PermissionSectionCard({
         </CollapsibleContent>
       </section>
     </Collapsible>
-  )
-}
-
-/** Fixture mode's panel: the organisation store's role, every tick saved to the browser as it is made. */
-export function RolePermissionsPanel({
-  roleId,
-  onBack,
-}: {
-  roleId: string
-  onBack: () => void
-}) {
-  const { roles, updateRoleAccess } = useOrganizationStore()
-  const role = roles.find((candidate) => candidate.id === roleId)
-  const access = useMemo(
-    () => (role ? effectiveRoleAccess(role) : {}),
-    [role],
-  )
-  if (!role) return <RoleGone onBack={onBack} />
-  return (
-    <RolePermissionsMatrix
-      title={role.name}
-      access={access}
-      onAccessChange={(next) => updateRoleAccess({ roleId: role.id, access: next })}
-      onBack={onBack}
-    />
   )
 }
 

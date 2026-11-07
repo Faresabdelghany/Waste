@@ -17,12 +17,10 @@ import { useCommandRunner, useModuleReady } from "@/components/waste/commands/us
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DISMISS_TICKET, MATCH_TICKET, ticketCommandsOffered } from "@/lib/api/records/weighbridge"
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
-import type { BusinessRecord } from "@/lib/data/business-modules"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { DISMISS_FORM, MATCH_FORM, WEIGHBRIDGE_MODULE } from "@/lib/data/weighbridge"
 
 const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
-const NO_ROUTES: readonly BusinessRecord[] = []
 
 const FORMS = { [MATCH_TICKET]: MATCH_FORM, [DISMISS_TICKET]: DISMISS_FORM } as const
 
@@ -31,7 +29,7 @@ export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(WEIGHBRIDGE_MODULE)
   const { busy, run } = useCommandRunner(WEIGHBRIDGE_MODULE, record.id)
   const [open, setOpen] = useState<keyof typeof FORMS | null>(null)
-  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, NO_ROUTES)
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const master = useServerModuleState(MASTER_MODULE.workspaceId, MASTER_MODULE.moduleId)
   const offered = ticketCommandsOffered(record) as (keyof typeof FORMS)[]
   const project = record.projectIds?.[0]

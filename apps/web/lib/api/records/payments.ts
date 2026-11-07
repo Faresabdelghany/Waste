@@ -19,11 +19,10 @@ import type { BankLine, BankLines, BankLinesResult, CustomerStatement, Payment, 
 import type { BankFile } from "@waste/domain/finance/payments"
 
 import { formatMinor, minorOf } from "@/lib/commercial/money"
-import { FIXTURE_COMPANY_ID } from "@/lib/data/business-modules"
 import { INVOICE_PREFIX, INVOICES_MODULE, isInvoiceDocument, isPaymentRecord, PAYMENT_PREFIX, PAYMENT_RECORD_KIND, PAYMENT_SOURCE_LABELS, PAYMENTS_MODULE, paymentRecordStatus } from "@/lib/data/commercial"
 
 import { command, create, get, listAll } from "../client"
-import { inheritedPresentation, moduleKeyOf, said, stampFacts, typed, webIdOf, type Client, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, moduleKeyOf, said, stampFacts, typed, webIdOf, type Client, type ResourceAdapter, type ServerModule } from "./adapter"
 import { amountRefusal, firstMoved, named, projectOf } from "./billing"
 import { refusal } from "./places"
 import { nameVia, typedReference } from "./references"
@@ -83,7 +82,7 @@ export const paymentAdapter: ResourceAdapter<PaymentResource> = {
       name: `${money(payment.amountMinor)} · ${payment.paidOn}`,
       context: `${from} · ${payment.paidOn}`,
       status,
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(payment, context.now),
       value: money(payment.amountMinor),
       description:
@@ -108,7 +107,6 @@ export const paymentAdapter: ResourceAdapter<PaymentResource> = {
       },
       related: [...(payer === undefined ? [] : [payer.name]), ...invoices.map((invoice) => invoice.name)],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: PAYMENT_RECORD_KIND,
       submittedValues: {

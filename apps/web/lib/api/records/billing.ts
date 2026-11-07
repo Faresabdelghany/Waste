@@ -49,7 +49,7 @@ import { BILLABLE_EVENT_STATUSES, CREDIT_REASONS, type ExclusionReason } from "@
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { isAgreementRecord } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { lastDayIn } from "@waste/domain/periods"
 import {
@@ -81,7 +81,7 @@ import {
 } from "@/lib/data/commercial"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { inheritedPresentation, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -276,7 +276,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
       name: `${EVENT_KIND_LABELS[event.kind]} · ${product?.name ?? "no product"}`,
       context: `${customerName ?? agreementNumber ?? "No agreement"} · ${event.serviceDate}`,
       status: statusLabel(event.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(event, context.now),
       value: net ?? (event.status === "blocked" ? block : undefined) ?? "",
       description: block === undefined ? `A ${EVENT_KIND_LABELS[event.kind].toLowerCase()} event of ${event.serviceDate}.` : `Blocked: ${block}. ${event.status === "blocked" ? "Reprice it once what blocks it is put right, or cancel it." : ""}`.trim(),
@@ -311,7 +311,6 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
       },
       related: [agreement?.name, product?.name, route?.name, unload?.name].filter((part): part is string => part !== undefined),
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: EVENT_RECORD_KIND,
       submittedValues: {
@@ -482,7 +481,7 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
       name: `Billing run ${period}`,
       context: `${project.name} · ${run.eventCount} event${run.eventCount === 1 ? "" : "s"}`,
       status: statusLabel(run.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(run, context.now),
       value: `${run.invoiceCount} invoice${run.invoiceCount === 1 ? "" : "s"}`,
       description: `The ready events of ${project.name} with service dates ${period}, bundled per payer.`,
@@ -498,7 +497,6 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
         ...(run.note === null ? {} : { Note: run.note }),
       },
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: BILLING_RUN_RECORD_KIND,
       submittedValues: { projectId: project.webId, periodFrom: run.periodFrom, periodTo: run.periodTo, ...(run.note === null ? {} : { note: run.note }) },
@@ -580,7 +578,7 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
       name: document.label,
       context: `${customer.name} · ${isInvoice ? (period ?? document.issuedOn) : `credits ${credits?.name ?? "an invoice"}`}`,
       status: isInvoice ? standing.status : "Credit note",
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(document, context.now),
       value: money(document.grossMinor),
       description: isInvoice ? `Issued to ${customer.name} on ${document.issuedOn}, due ${document.dueOn}.` : `Credits ${credits?.name ?? "an invoice"} of ${customer.name}.`,
@@ -604,7 +602,6 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
       },
       related: [customer.name, ...(run === undefined ? [] : [run.name]), ...(credits === undefined ? [] : [credits.name])],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: isInvoice ? INVOICE_RECORD_KIND : CREDIT_NOTE_RECORD_KIND,
       submittedValues: {

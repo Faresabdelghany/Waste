@@ -9,13 +9,12 @@
 //   problem when the API refused or did not answer, and `not-granted` when
 //   the person's role does not view it, so it is never asked for at all
 //   (Issue #200): nothing failed, and its problem is the store's own
-//   sentence for a pane to show. Until it is `ready` the store answers the
-//   module's fixtures — the same as the browser-only path shows before
-//   hydration — and never a mixture of the two, so a list is either the
-//   server's or the prototype's and nobody counts both.
+//   sentence for a pane to show. Where no API is configured every switched
+//   module is `kept-on-api` (`KEPT_ON_API`): the API is its one source, and
+//   the browser keeps no copy of it. Until it is `ready` the store answers
+//   no rows of it at all.
 //
-//   A record's web id is the adapter's (adapter.ts: a fixture's id when the
-//   seed derived the row from it, else `<prefix>-<uuid>`), and the server's
+//   A record's web id is the adapter's (adapter.ts: `<prefix>-<uuid>`), and the server's
 //   id is kept beside it in `serverIds`; a write looks the server id up by
 //   the web id, so a patch goes to the row's own route. A record the
 //   workspace has just made keeps the id it minted for the session
@@ -70,10 +69,9 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
-import { isCompanyRecord } from "./organisation"
 import { dayIn } from "./clock"
 
-export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed"
+export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed" | "kept-on-api"
 
 export type ModuleState = {
   status: ModuleStatus
@@ -94,9 +92,19 @@ export type ServerRecordsState = ReadonlyMap<string, ModuleState>
 export const IDLE: ModuleState = { status: "idle", records: [], serverIds: new Map(), problem: null, loadedAt: null }
 
 /**
+ * What a page, a pane or a list whose subject the API alone holds says where
+ * no API is configured: fixture mode keeps no copy of a switched module.
+ */
+export function keptOnApi(subject: string): string {
+  return `${subject} is kept on the API: sign in on the Pilot to read it.`
+}
+
+/** Every switched module where no API is configured: no rows, and the sentence a pane shows in their place. */
+export const KEPT_ON_API: ModuleState = { ...IDLE, status: "kept-on-api", problem: genericProblem(UNREACHABLE_STATUS, keptOnApi("This list")) }
+
+/**
  * A module the person's `/me` role does not view (`viewableModules`): never
- * requested, so no read failed and nobody is told; `getRecords` answers its
- * fixtures, the one state not `ready` that it does, and its problem is the sentence a pane shows in
+ * requested, so no read failed and nobody is told; its problem is the sentence a pane shows in
  * place of rows — a 403 in the API's shape, which ends no session.
  */
 export function notGranted(moduleKey: string): ModuleState {
@@ -119,25 +127,16 @@ export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId,
   return state.get(moduleKeyOf(workspaceId, moduleId)) ?? IDLE
 }
 
-/**
- * A switched module's records: the server's once they are here, else the
- * fixtures, which `getRecords` hands out only where the role does not view
- * the module, or nobody is signed in. Never both.
- */
-export function recordsOf(module: ModuleState, fixtures: readonly BusinessRecord[]): BusinessRecord[] {
-  return module.status === "ready" ? module.records : [...fixtures]
-}
-
 /** `notGranted` tells a pane its problem is the role's, not a read that failed: nothing was read, so it says the rows are not shown to the role. */
 export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: boolean; notGranted: boolean; problem: Problem | null }
 
 /**
- * What a pane reading its own switched module is told on the Pilot
- * (`useModuleRecords`): the rows once the module is ready; before, none — a
- * fixture shown there is a row that does not exist — `pending` while the
- * read is still to come or out, and otherwise the problem the pane shows in
- * their place: the API's for a read that failed, the store's own for a
- * module the person's role does not view (`notGranted`).
+ * What a pane reading its own switched module is told (`useModuleRecords`):
+ * the rows once the module is ready; before, none — `pending` while the read
+ * is still to come or out, and otherwise the problem the pane shows in their
+ * place: the API's for a read that failed, the store's own for a module the
+ * person's role does not view (`notGranted`) or one kept on the API where
+ * none is configured.
  */
 export function paneAnswerOf(module: ModuleState): PaneAnswer {
   if (module.status === "ready") return { records: module.records, ready: true, pending: false, notGranted: false, problem: null }
@@ -219,23 +218,9 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
   }
 }
 
-/**
- * The web id of the company record, once the organisation module has loaded
- * it; undefined before. Asked of the company adapter's own `owns` and the
- * record's kind, not of the id prefix alone: a customer organisation carries
- * `company-` too (registry.ts), and the tenant is the one row that is a
- * Company.
- */
-export function companyRecordIdOf(state: ServerRecordsState): string | undefined {
-  const organisation = state.get(moduleKeyOf("configure", "organization"))
-  return organisation?.records.find(isCompanyRecord)?.id
-}
-
 export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string> }
 
 export type LoadOptions = {
-  /** The module's fixtures, the seed's origin. */
-  fixtures: readonly BusinessRecord[]
   /** Everything loaded so far, for the resolver. */
   state: ServerRecordsState
   now?: Date
@@ -273,7 +258,7 @@ function heldIdsOf(held: ModuleState | undefined, lists: ModuleLists): Map<strin
  * which one a row keeps never hangs on the list's order; a session's first
  * read takes the adapter's.
  */
-export function mapModule(module: ServerModule, lists: ModuleLists, { fixtures, state, now }: LoadOptions): LoadResult {
+export function mapModule(module: ServerModule, lists: ModuleLists, { state, now }: LoadOptions): LoadResult {
   const records: BusinessRecord[] = []
   const serverIds = new Map<string, string>()
   const byServerId = new Map<string, BusinessRecord>()
@@ -282,14 +267,13 @@ export function mapModule(module: ServerModule, lists: ModuleLists, { fixtures, 
   for (const [index, adapter] of module.resources.entries()) {
     const resources = lists[index]
     if (resources === null) continue
-    const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds, byServerId }), companyRecordId: companyRecordIdOf(state), now }
+    const context: MappingContext = { resolve: resolverOver(state, { records, serverIds, byServerId }), now }
     for (const resource of resources) {
       const mapped = adapter.toRecord(resource, context)
-      // A fixture lends its id to one row. A second row the mapping matches
-      // onto the same fixture (two accounts with one full name), or onto an
-      // id another row is held under, keeps the server's id instead, so no
-      // two rows share a web id — a write or a command looks the server id
-      // up by it and would reach the wrong row.
+      // A row the mapping names by an id another row holds or is held under
+      // keeps the server's id instead, so no two rows share a web id — a
+      // write or a command looks the server id up by it and would reach the
+      // wrong row.
       const id = heldIds.get(resource.id) ?? (serverIds.has(mapped.id) || claimed.has(mapped.id) ? webIdOf(adapter.prefix, resource.id) : mapped.id)
       const record = id === mapped.id ? mapped : { ...mapped, id }
       records.push(record)
@@ -409,8 +393,6 @@ export type ServerStore = {
 }
 
 export type ReadOptions = {
-  /** The module's fixtures, the seed's origin. */
-  fixtures: readonly BusinessRecord[]
   /** Whether the session the read belongs to is still the store's: false once the person or the API has changed. */
   alive: () => boolean
   /** The clock a read that lands is stamped with. */
@@ -458,7 +440,7 @@ async function listModuleAgain(client: ApiClient, module: ServerModule, alive: (
  * own refusal is written nowhere either, since it has ended the session and
  * /login says why. The problem comes back for the caller to report.
  */
-export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { fixtures, alive, now = Date.now, retryDelaysMs = READ_RETRY_DELAYS_MS }: ReadOptions): Promise<Problem | null> {
+export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { alive, now = Date.now, retryDelaysMs = READ_RETRY_DELAYS_MS }: ReadOptions): Promise<Problem | null> {
   if (!alive()) return null
   const key = moduleKeyOf(module.workspaceId, module.moduleId)
   store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
@@ -470,7 +452,7 @@ export async function readModuleInto(store: ServerStore, client: ApiClient, modu
     // read was out keeps the id it was minted under and the rows that name it
     // name that one (#240). The stamp is the snapshot the read began with:
     // the server's answer is no newer.
-    const result = mapModule(module, lists, { fixtures, state: store.getSnapshot() })
+    const result = mapModule(module, lists, { state: store.getSnapshot() })
     store.set((state) => new Map(state).set(key, loaded(result, now(), mappedAgainstOf(module, started))))
     return null
   } catch (error) {
@@ -517,8 +499,8 @@ export function withoutRecord(module: ModuleState, recordId: string): ModuleStat
  * minted one for the rest of the session — the workspace has already put it
  * in the address bar, selected it and may have linked to it, and the
  * prototype treats a minted id as canonical — across every read again of the
- * module in the session (`mapModule`, #240); the adapter's own id (a
- * fixture's, or `<prefix>-<uuid>`) is the next session's. The server id is
+ * module in the session (`mapModule`, #240); the adapter's own id
+ * (`<prefix>-<uuid>`) is the next session's. The server id is
  * what the row is written under either way. A read that landed before the
  * answer holds the row already, under the adapter's id: the minted one takes
  * its place, so one server row is one row here.
@@ -621,7 +603,7 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
   if (isSoftDeleted(record)) {
     return { kind: "refused", recordId: record.id, problem: genericProblem(400, `The API has no delete: a ${adapter.prefix} is deactivated or moved to another status, not deleted`) }
   }
-  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const context: MappingContext = { resolve: resolverOver(options.state), now: options.now }
   const serverId = current.serverIds.get(record.id)
   const requests = trackingClient(client)
   try {
@@ -644,9 +626,8 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
     const resource = await adapter.update(requests.client, serverId, body)
-    // Under the row's own web id, whatever the mapping would now derive — a
-    // fixture matched by a name the write just changed — so one server row
-    // stays one row here, as `withCreated` keeps a minted id.
+    // Under the row's own web id, whatever the mapping would now derive, so
+    // one server row stays one row here, as `withCreated` keeps a minted id.
     return mappedAnswer(record, serverId, () => ({ kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId }))
   } catch (error) {
     if (error instanceof PartialWrite) {
@@ -749,7 +730,7 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
   if (command === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
-  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const context: MappingContext = { resolve: resolverOver(options.state), now: options.now }
   const touches = command.touches ?? []
   const requests = trackingClient(client)
   let sent = false
@@ -802,7 +783,7 @@ export async function actOnRecord<Answer = unknown>(client: ApiClient, module: S
   if (action === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
-  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const context: MappingContext = { resolve: resolverOver(options.state), now: options.now }
   try {
     const body = action.toBody?.(input ?? {}, record, context)
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
@@ -830,7 +811,7 @@ export async function rereadRecord(client: ApiClient, module: ServerModule, curr
   if (adapter.read === undefined) return refused(genericProblem(400, `A ${adapter.prefix} is not read back on its own`))
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet`))
-  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const context: MappingContext = { resolve: resolverOver(options.state), now: options.now }
   try {
     const resource = await adapter.read(client, serverId)
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }

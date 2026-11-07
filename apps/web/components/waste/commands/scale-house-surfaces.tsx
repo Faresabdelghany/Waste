@@ -48,15 +48,14 @@ import { recordsForProject } from "@/lib/data/project-scope"
 import { REWEIGH_FORM, SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND, TARE_FORM, VEHICLE_TARE_RECORD_KIND, VOID_TICKET_FORM, WEIGH_IN_FORM, WEIGH_OUT_FORM } from "@/lib/data/scale-house"
 
 const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
-const NO_RECORDS: readonly BusinessRecord[] = []
 
 const optionOf = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: record.name })
 
 /** The pickers Weigh in reads: our own stations with a weighbridge for the site, the project's agreements of the customer picked, the rest the command surfaces' own. */
 function useWindowPickers(): RelationPickers {
   const pickers = useRelationPickers()
-  const places = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId, NO_RECORDS)
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, NO_RECORDS)
+  const places = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId)
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] => {
     if (field.id === "unloadingStationId") {
       return places.records.filter((record) => unloadingStationAdapter.owns(record) && record.submittedValues?.ownership === "company" && record.submittedValues?.weighbridgeAvailable === true).map(optionOf)
@@ -126,7 +125,7 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
   const offered = (tare ? tareCommandsOffered(record) : ticketCommandsOffered(record)) as FormName[]
   const fractionOptions: BusinessFormOption[] = (master?.records ?? []).filter((row) => masterDataKindOf(row) === "waste-fraction").map(optionOf)
   // The window's products (M16b of #293): the ticket's project's, sold by the tonne or the cubic metre.
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_RECORDS)
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const project = record.projectIds?.[0]
   const productOptions: BusinessFormOption[] = recordsForProject(products.records.filter(isProductRecord), project)
     .filter((row) => row.submittedValues?.priceUnit === "tonne" || row.submittedValues?.priceUnit === "m3")

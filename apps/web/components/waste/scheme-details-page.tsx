@@ -115,11 +115,11 @@ import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
+import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
 import { dayIn } from "@/lib/api/records/clock"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
-import { validationWhenUnplaced } from "@/lib/data/route-schemes"
-import { useBusinessRecordStore, useServerModuleState, useStoreRecords, whenSaved } from "@/components/waste/business-record-store"
+import { planAheadToggledSentence, validationWhenUnplaced } from "@/lib/data/route-schemes"
+import { useBusinessRecordStore, useServerModuleState, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import { SchemeSeasonsCard } from "@/components/waste/scheme-seasons"
 import {
@@ -224,22 +224,22 @@ export function SchemeDetailsPage({
   const [generateOpen, setGenerateOpen] = useState(false)
   // The lifecycle's dialogs on the Pilot (O21 of #290): the Plan Ahead window, the next version, the archive.
   const [lifecycleDialog, setLifecycleDialog] = useState<"window" | "successor" | "archive" | null>(null)
-  const schemes = useStoreRecords("route-studio", "schemes")
-  const allRoutes = useStoreRecords("route-studio", "routes")
-  const allPickups = useStoreRecords("route-studio", "pickups")
-  const calendarRecords = useStoreRecords(
+  const schemes = useModuleRecords("route-studio", "schemes").records
+  const allRoutes = useModuleRecords("route-studio", "routes").records
+  const allPickups = useModuleRecords("route-studio", "pickups").records
+  const calendarRecords = useModuleRecords(
     COLLECTION_CALENDARS_MODULE.workspaceId,
     COLLECTION_CALENDARS_MODULE.moduleId,
-  )
-  const projects = useStoreRecords("configure", "organization")
+  ).records
+  const projects = useModuleRecords("configure", "organization").records
   // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178), on the project's clock (#255).
   const schemeProject = projects.find((project) => project.id === stringValueOf(record, "projectId"))
   const generation = useSchemeGenerationRuns(record, schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
-  const areas = useStoreRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
-  const allocations = useStoreRecords("fleet", "vehicle-planning")
-  const containers = useStoreRecords("resources", "containers")
-  const vehicles = useStoreRecords("fleet", "vehicles")
-  const drivers = useStoreRecords("fleet", "drivers")
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId).records
+  const allocations = useModuleRecords("fleet", "vehicle-planning").records
+  const containers = useModuleRecords("resources", "containers").records
+  const vehicles = useModuleRecords("fleet", "vehicles").records
+  const drivers = useModuleRecords("fleet", "drivers").records
 
   const today = todayIso()
   const values = record.submittedValues ?? {}
@@ -284,7 +284,6 @@ export function SchemeDetailsPage({
   const canGenerate =
     schemeCanGenerateRoutes(record, today) && blockingIssues.length === 0
   const planAheadOn = isPlanAheadEnabled(record)
-  const planAheadDays = planAheadDaysOf(record)
   // The day an archive or a new version is judged from: the project's, as the API judges it.
   const projectToday = dayIn(new Date(), schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
   const storedScheme = schemes.find((candidate) => candidate.id === record.id) ?? record
@@ -348,13 +347,7 @@ export function SchemeDetailsPage({
     // never be frozen into the store.
     const stored = schemes.find((candidate) => candidate.id === record.id) ?? record
     whenSaved(upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled)), () =>
-      toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", {
-        description: enabled
-          ? onApi
-            ? `${record.name} keeps its next ${planAheadDays} days planned through the nightly plan-ahead run.`
-            : `${record.name} generates its next 7 days automatically when Route Studio loads.`
-          : `${record.name} stops auto-generating; already-generated routes remain.`,
-      }),
+      toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", { description: planAheadToggledSentence(stored, enabled) }),
     )
   }
 
@@ -578,7 +571,7 @@ function SchemeDetailsTab({
   onEdit?: () => void
   onEditGroups?: () => void
 }) {
-  const serviceProviders = useStoreRecords("service-providers", "service-providers")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers").records
   const facts = record.facts ?? {}
   const recurrence = recurrenceFromValues(values)
   const serviceDays = serviceDaysFromValues(values)

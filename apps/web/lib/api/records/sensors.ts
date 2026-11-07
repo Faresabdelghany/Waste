@@ -17,11 +17,11 @@
 import type { FillReading, Sensor, SensorPairing } from "@waste/contracts/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, listPage, patch, type ApiClient } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, NO_PRESENTATION, isLocalRefusal, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
 import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, tokenOf, withStatus } from "./places"
@@ -79,13 +79,12 @@ export function toSensorRecord(sensor: Sensor, context: MappingContext): Busines
     name: sensor.identifier,
     context: `${NETWORK_LABELS[sensor.network]} · ${container ?? "not paired"}`,
     status: statusLabel(sensor.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(sensor, context.now),
     value: reading === null ? "No reading" : `${reading.fillPercent}%`,
     description: sensor.notes ?? "",
     related: container === undefined ? [] : [`Container ${container}`],
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: "Sensor",
     submittedValues: {

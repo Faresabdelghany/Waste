@@ -89,9 +89,9 @@ const runOf = (over: Partial<GenerationRun> = {}): GenerationRun =>
 const succeeded = runOf({ status: "succeeded", startedAt: "2026-09-30T12:00:20.000Z", finishedAt: "2026-09-30T12:00:22.000Z", routesCreated: 5, pickupsWritten: 39 })
 const failed = runOf({ status: "failed", startedAt: "2026-09-30T12:00:20.000Z", finishedAt: "2026-09-30T12:00:21.000Z", error: "Error: the scheme has no planning area to match inside" })
 
-const record = routeSchemeAdapter.toRecord(central, { fixtures: [], resolve: NOTHING_RESOLVED, now: NOW })
+const record = routeSchemeAdapter.toRecord(central, { resolve: NOTHING_RESOLVED, now: NOW })
 const onApi: ModuleState = loaded({ records: [record], serverIds: new Map([[record.id, CENTRAL_ID]]) }, 1)
-const options = { fixtures: [], state: new Map([["route-studio.schemes", onApi]]), now: NOW }
+const options = { state: new Map([["route-studio.schemes", onApi]]), now: NOW }
 const WINDOW = { from: "2026-10-01", to: "2026-10-07" }
 
 const request = (call: Call) => `${call.init.method ?? "GET"} ${call.url.replace("http://api.test", "")}`
@@ -407,7 +407,7 @@ describe("the scheme after its run", () => {
     assert.equal((await rereadRecord(clientOver(fetch), routeSchemesModule, unsaved, record, options)).kind, "refused")
     const project = projectAdapter.toRecord(
       { id: PROJECT_ID, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
-      { fixtures: [], resolve: NOTHING_RESOLVED, now: NOW },
+      { resolve: NOTHING_RESOLVED, now: NOW },
     )
     const organisation = loaded({ records: [project], serverIds: new Map([[project.id, PROJECT_ID]]) }, 1)
     const unread = await rereadRecord(clientOver(fetch), organisationModule, organisation, project, options)

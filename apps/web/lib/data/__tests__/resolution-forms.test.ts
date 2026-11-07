@@ -17,14 +17,14 @@ import { loaded, resolverOver, type ServerRecordsState } from "../../api/records
 import { ASSIGNEE_ACCOUNT_KEY, ticketAdapter } from "../../api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, ALERT_LIST_INITIAL, alertListReaders, createAlertRecord, ticketValuesOfAlert } from "../alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
+import { type BusinessRecord } from "../business-modules"
 import { NO_ONE } from "../properties"
 import { createTicketRecord, MINE, offersSubTicket, opennessOf, recollectionStopOptions, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const ids = {
   user: "01a0d2a4-a280-7004-8000-000000000001",
@@ -62,7 +62,7 @@ const rows: Array<[string, BusinessRecord, string]> = [
   ["configure.templates", row(`team-${ids.team}`, "Ticket team"), ids.team],
 ]
 const state: ServerRecordsState = new Map(rows.map(([key, record, serverId]) => [key, loaded({ records: [record], serverIds: new Map([[record.id, serverId]]) }, 1)]))
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 const web = (key: string) => rows.find(([module]) => module === key)?.[1].id ?? ""
 
 const fieldIdsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))

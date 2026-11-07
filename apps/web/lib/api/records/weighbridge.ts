@@ -9,13 +9,12 @@
 // for the rest.
 import type { WeighbridgeTicket } from "@waste/contracts/weighbridge"
 
-import { FIXTURE_COMPANY_ID } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { TICKET_STATUS_LABELS, UNMATCHED_LABELS, WEIGHBRIDGE_MODULE, WEIGHBRIDGE_PREFIX, WEIGHBRIDGE_RECORD_KIND } from "@/lib/data/weighbridge"
 
 import { command, get, listAll, type ApiFile } from "../client"
-import { inheritedPresentation, said, stampFacts, typed, webIdOf, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, said, stampFacts, typed, webIdOf, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
@@ -61,7 +60,7 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
       name: `${ticket.ticketNumber} · ${ticket.vehicleRegistration}`,
       context: `${station} · ${route ?? "No route"}`,
       status: TICKET_STATUS_LABELS[ticket.status],
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(ticket, context.now),
       value: kilograms(ticket.netKg),
       description:
@@ -87,7 +86,6 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
       },
       related: [station, ...(route === undefined ? [] : [route])],
       allowedTransitions: [],
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: project === undefined ? [] : [project.webId],
       recordKind: WEIGHBRIDGE_RECORD_KIND,
       submittedValues: { status: ticket.status, ...(ticket.unmatchedReason === null ? {} : { unmatchedReason: ticket.unmatchedReason }), ...(ticket.unloadId === null ? {} : { unloadId: webIdOf("unload", ticket.unloadId) }) },

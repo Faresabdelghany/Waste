@@ -12,17 +12,14 @@
 // The price lists are the first kind of `commercial.price-rows`, the module
 // the API grants `/price-lists` under; its table lists the rows alone (the
 // command surface's `shows`), and Settings › Commercial › Price lists reads
-// the lists. In fixture mode the lists are a browser bucket of their own,
-// `FIXTURE_PRICE_LISTS_BUCKET`, seeded with the two fixture lists, so the
-// fixture Price Rows table is what it was (the Users & roles precedent: one
-// source by mode, never both).
+// the lists.
 import type { InvoicePaymentStatus } from "@waste/domain/finance/payments"
 import { BILLABLE_EVENT_KINDS, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, type BillableEventKind, type BlockReason, type CancelReason, type CreditReason, type PaymentSource } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
 import { ofKind } from "@/lib/api/records/adapter"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, type BusinessRecord, type ModuleLocation } from "./business-modules"
+import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
 export const PRODUCTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "products" }
 export const PRICE_ROWS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "price-rows" }
@@ -30,8 +27,6 @@ export const EVENTS_MODULE: ModuleLocation = { workspaceId: "commercial", module
 export const BILLING_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "billing" }
 export const INVOICES_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "invoices" }
 export const PAYMENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "payments" }
-/** Fixture mode's price lists: a browser bucket of their own, never a module the API answers. */
-export const FIXTURE_PRICE_LISTS_BUCKET: ModuleLocation = { workspaceId: "commercial", moduleId: "price-lists" }
 /** The routes an event names (slice 6). */
 export const ROUTES_MODULE_LOCATION: ModuleLocation = { workspaceId: "route-studio", moduleId: "routes" }
 
@@ -130,41 +125,3 @@ const CONSUMER_CANCEL_REASONS = ["pickup-corrected", "visit-voided", "weight-rev
 export const OFFICE_CANCEL_REASONS = CANCEL_REASONS.filter((reason): reason is Exclude<CancelReason, (typeof CONSUMER_CANCEL_REASONS)[number]> => !(CONSUMER_CANCEL_REASONS as readonly CancelReason[]).includes(reason))
 export const CREDIT_REASON_OPTIONS = optionsOf(CREDIT_REASONS, CREDIT_REASON_LABELS)
 export { BILLABLE_EVENT_KINDS, BLOCK_REASONS }
-
-// ---------------------------------------------------------------------------
-// Fixture mode's price lists
-// ---------------------------------------------------------------------------
-
-/**
- * A price list as both modes' Settings pane keeps it: the wire's fields as
- * typed values, its end the last day in force. In fixture mode the two lists
- * the prototype's registry held, under the codes its rows are tagged with.
- */
-function fixturePriceList(id: string, projectId: string, name: string, { notes, validFrom, isDefault }: { notes: string; validFrom: string; isDefault: boolean }): BusinessRecord {
-  return {
-    id,
-    name,
-    context: `${name} · DKK`,
-    status: "Active",
-    owner: "Mette Holm",
-    value: `From ${validFrom}`,
-    updated: validFrom,
-    description: notes,
-    facts: { Kind: PRICE_LIST_RECORD_KIND, Code: name, Currency: "DKK", Default: isDefault ? "Yes" : "No", "Valid from": validFrom },
-    related: [],
-    source: "Price Engine",
-    freshness: "Live",
-    companyId: FIXTURE_COMPANY_ID,
-    projectIds: [projectId],
-    recordKind: PRICE_LIST_RECORD_KIND,
-    submittedValues: { projectId, code: name, name, currency: "DKK", isDefault, notes, validFrom },
-  }
-}
-
-/** The four lists the prototype's registry held — every tag its fixture rows carry, the two negotiated deals' among them — so a fixture row's list is one of them. */
-export const FIXTURE_PRICE_LISTS: readonly BusinessRecord[] = [
-  fixturePriceList("price-list-copenhagen-2026", FIXTURE_PROJECT_IDS.copenhagen, "PL-Copenhagen-2026", { notes: "Annual tariff for Copenhagen municipal collection.", validFrom: "2026-01-01", isDefault: true }),
-  fixturePriceList("price-list-harbor-2026", FIXTURE_PROJECT_IDS.harbor, "PL-Harbor-2026", { notes: "Annual tariff for the Harbor service area.", validFrom: "2026-01-01", isDefault: true }),
-  fixturePriceList("price-list-negotiated-osterbro", FIXTURE_PROJECT_IDS.copenhagen, "Negotiated · Østerbro Housing", { notes: "Negotiated deal for Østerbro Housing Association.", validFrom: "2026-02-03", isDefault: false }),
-  fixturePriceList("price-list-negotiated-norrebro", FIXTURE_PROJECT_IDS.copenhagen, "Negotiated · Nørrebro CoWork", { notes: "Negotiated deal for Nørrebro CoWork ApS.", validFrom: "2026-04-08", isDefault: false }),
-]

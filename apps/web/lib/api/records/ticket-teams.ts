@@ -15,12 +15,12 @@
 import type { Team, TeamCreate, TeamPatch } from "@waste/contracts/ticket-teams"
 
 import { splitMultiValue } from "@/lib/data/business-form-records"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 import { TICKET_TEAMS_MODULE, TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 
 import { create, listAll, patch, put } from "../client"
-import { inheritedPresentation, ofKind, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, ofKind, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { userAdapter } from "./organisation"
 import { sameSet } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -61,11 +61,10 @@ export function toTicketTeamRecord(team: Team, context: MappingContext): Busines
     name: team.name,
     context: members.length === 1 ? "1 member" : `${members.length} members`,
     status: statusLabel(team.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(team, context.now),
     description: "A team the company's tickets wait with.",
     facts: { Members: members.length === 0 ? "None" : members.join(", "), Status: statusLabel(team.status) },
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [],
     recordKind: "Ticket team",
     submittedValues: {

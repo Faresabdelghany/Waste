@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertResolve, NAMES_A_SUBJECT as CONTRACT_NAMES_A_SUBJECT } from "@waste/contracts/alerts"
 import type { Project } from "@waste/contracts/organisation"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { ACKNOWLEDGE_ALERT, alertAdapter, ALERTS_MODULE, alertsModule, LINK_ALERT_TICKET, NAMES_A_SUBJECT, RESOLVE_ALERT } from "../records/alerts"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
@@ -22,11 +22,9 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
-const fixturesOf = (workspaceId: "configure" | "operate", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const fixtures = fixturesOf("operate", "exceptions")
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: fixturesOf("configure", "organization"), resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const vehicleId = "01a0d2a4-a280-7013-8000-000000000001"
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
@@ -44,8 +42,8 @@ const state: ServerRecordsState = new Map([
   ["operate.tickets", loaded({ records: [t1001], serverIds: serverIdsOf([t1001], [ticketId]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
-const options = { fixtures, state, now: NOW }
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
+const options = { state, now: NOW }
 
 const stale: Alert = {
   id: "01a0d2a4-a280-7041-8000-000000000001",

@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 import { MessageTemplateCreate, MessageTemplatePatch, unknownPlaceholderSentence as contractsSentence, type MessageTemplate } from "@waste/contracts/messaging"
 
 import { NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf, unknownPlaceholderSentence } from "../message-templates"
-import { settingsPaneOffered } from "../settings-panes"
+import { settingsPane, settingsPaneDrawnWithoutApi } from "../settings-panes"
 
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
 const stored: MessageTemplate = {
@@ -55,8 +55,7 @@ describe("a message template's draft (#291 C15)", () => {
 
   test("reads its channel, its purpose and whether it is retired, and is the Pilot's pane under Tickets & communication's grants", () => {
     assert.equal(templateLine({ ...stored, status: "inactive" }), "E-mail · Service · Inactive")
-    assert.equal(settingsPaneOffered("message-templates", true), true)
-    assert.equal(settingsPaneOffered("message-templates", false), false)
+    assert.equal(settingsPaneDrawnWithoutApi(settingsPane("message-templates")), false, "without an API the pane says its subject is kept on the API")
     assert.deepEqual(templatesAccessOf([{ moduleKey: "configure.templates", actions: ["view"] }]), { view: true, create: false, edit: false })
   })
 })

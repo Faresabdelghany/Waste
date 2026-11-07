@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation"
 import { useMemo, type ComponentType } from "react"
 import {
   ClipboardText,
-  ChartBar,
   HouseLine,
   MagnifyingGlass,
   Path,
@@ -32,12 +31,11 @@ import {
 } from "@/components/ui/sidebar"
 import { ProgressCircle } from "@/components/progress-circle"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { useProviderWorkspace } from "@/components/waste/provider-account"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import {
   resolveActiveRouteSummaries,
-  routeDayFixtures,
   useActiveRoutes,
 } from "@/components/waste/active-routes-store"
 
@@ -87,7 +85,6 @@ const personaDefinitions: Record<LeanPersona, PersonaSidebarDefinition> = {
 }
 
 const serviceProviderNavItems: PersonaNavItem[] = [
-  { label: "Dashboard", href: "/service-provider-workspace", icon: ChartBar },
   { label: "Routes", href: "/service-provider-workspace/routes", icon: Path },
   { label: "Fleet", href: "/service-provider-workspace/fleet", icon: Truck },
   { label: "Tickets", href: "/service-provider-workspace/tickets", icon: Ticket },
@@ -95,7 +92,7 @@ const serviceProviderNavItems: PersonaNavItem[] = [
   { label: "Team", href: "/service-provider-workspace/team", icon: UsersThree },
 ]
 
-/** The workspace's landing, which on the Pilot is its routes (#291 C24): the fixture dashboard's figures are the prototype's. */
+/** The workspace's landing, which is its routes (#291 C24). */
 const PROVIDER_LANDING = "/service-provider-workspace"
 
 /**
@@ -111,25 +108,15 @@ function ServiceProviderManagerSidebar() {
   const { starredRouteIds } = useActiveRoutes("service-provider")
   const { getRecords } = useBusinessRecordStore()
   const provider = useProviderWorkspace()
-  const navItems = apiConfigured ? serviceProviderNavItems.filter((item) => item.href !== PROVIDER_LANDING) : serviceProviderNavItems
 
-  // On the Pilot a pin is a starred route the API holds, read from its rows alone (#248).
-  const routesOnApi = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
+  // A pin is a starred route the API holds, read from its rows alone (#248).
   const activeRouteItems = useMemo(
-    () =>
-      resolveActiveRouteSummaries(
-        starredRouteIds,
-        apiConfigured ? (routesOnApi?.status === "ready" ? routesOnApi.records : []) : getRecords("route-studio", "routes", routeDayFixtures),
-        "service-provider",
-        apiConfigured,
-      ),
-    [apiConfigured, getRecords, routesOnApi, starredRouteIds],
+    () => resolveActiveRouteSummaries(starredRouteIds, getRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId), "service-provider"),
+    [getRecords, starredRouteIds],
   )
 
   const isItemActive = (href: string): boolean => {
-    if (href === PROVIDER_LANDING) return pathname === PROVIDER_LANDING
-    // On the Pilot the landing is the routes.
-    if (apiConfigured && pathname === PROVIDER_LANDING) return href === `${PROVIDER_LANDING}/routes`
+    if (pathname === PROVIDER_LANDING) return href === `${PROVIDER_LANDING}/routes`
     return pathname.startsWith(href)
   }
 
@@ -166,7 +153,7 @@ function ServiceProviderManagerSidebar() {
         <SidebarGroup className="px-2 py-1">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {navItems.map((item) => {
+              {serviceProviderNavItems.map((item) => {
                 const ItemIcon = item.icon
                 return (
                   <SidebarMenuItem key={item.href}>

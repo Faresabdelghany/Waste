@@ -30,8 +30,6 @@ import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { CHANGE_SERVICE_FORM, PAUSE_FORM, pauseLine, pauseOffers, stopsToRemoveSentence, TERMINATE_FORM } from "@/lib/data/subscription-lifecycle"
 import type { SubscriptionPause } from "@waste/contracts/agreements"
 
-const NO_FIXTURES: readonly BusinessRecord[] = []
-
 /** The project a row is in, as its form typed it. */
 const projectOf = (record: BusinessRecord): string | undefined => (typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined)
 
@@ -93,7 +91,7 @@ function TerminateSurface({ record }: RowSurfaceProps) {
 
 function SubscriptionLifecycleSurface({ record }: RowSurfaceProps) {
   const { sendAction, moduleReady, today, busy, setBusy, reread, options } = useLifecycle(record)
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_FIXTURES)
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   // Bumped after each write the API took, so the pauses are read again.
   const [version, setVersion] = useState(0)
   const pauses = useRowHistory(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, record, version, subscriptionPauses)

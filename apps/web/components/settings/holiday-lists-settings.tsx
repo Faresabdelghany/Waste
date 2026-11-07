@@ -33,7 +33,7 @@ import { toast } from "sonner"
 
 import { ChipOverflow } from "@/components/chip-overflow"
 import { RecordPageHeader, TableCard } from "@/components/page-layout"
-import { AssetPanelShell } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -50,7 +50,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { savedRow, useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
 import { RecordActionsMenu } from "@/components/waste/business-record-views"
@@ -64,7 +63,7 @@ import {
 } from "@/components/waste/business-view-options-popover"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { COUNTRY_CODES, countryName, suggestedHolidayListName } from "@/lib/data/countries"
 import { csvFileName, downloadCsv } from "@/lib/data/csv"
@@ -81,11 +80,9 @@ import {
   shownHolidayName,
   withHolidayListDraft,
   withHolidayListEntries,
-  withProjectCalendar,
   type HolidayListDraft,
   type HolidayListRow,
   type HolidayListStatus,
-  type ProjectCalendarSettings,
 } from "@/lib/data/holiday-lists"
 import { projectRecordsOf } from "@/lib/data/project-scope"
 import {
@@ -97,12 +94,12 @@ import {
   type BusinessFilters,
   type FilterValueReaders,
 } from "@waste/domain/business-filters"
-import { isSoftDeleted, softDeletedRecord } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { typedString } from "@waste/domain/record-values"
 import { holidayListCountry, holidayListEntries, holidayListName, holidayListYears, isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
 import { knownHolidaysOfYear, type HolidayEntry } from "@waste/domain/route-schemes/holiday-lists"
 import { holidayNamesForCountry, knownHolidayListName } from "@waste/domain/route-schemes/holiday-names"
-import { projectHolidayListName, projectWeekend } from "@waste/domain/route-schemes/project-calendar"
+import { projectHolidayListName } from "@waste/domain/route-schemes/project-calendar"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
@@ -113,9 +110,6 @@ const ACTOR_NAME = "Olivia Larsen"
 
 /** Where the projects and the company live — the module resolveProjectCalendar reads a project's list name from. */
 const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
-const NO_RECORDS: readonly BusinessRecord[] = []
-const ORGANISATION_FIXTURES = getModuleDefinition(ORGANISATION_MODULE)?.records ?? NO_RECORDS
-const CALENDAR_FIXTURES = getModuleDefinition(COLLECTION_CALENDARS_MODULE)?.records ?? NO_RECORDS
 
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"
@@ -165,13 +159,12 @@ type ListDialogState = { mode: "create"; country?: string } | { mode: "edit"; re
 
 export function HolidayListsSettings() {
   const { upsertRecord, sendAction, refreshModule } = useBusinessRecordStore()
-  const onApi = useApiConfigured()
   const [openListId, setOpenListId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<ListDialogState | null>(null)
 
   // On the Pilot, the API's rows once they are here and nothing before (Issue #175).
-  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, ORGANISATION_FIXTURES)
-  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, CALENDAR_FIXTURES)
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId)
   const ready = organisation.ready && calendars.ready
   const organisationRecords = organisation.records.filter((record) => !isSoftDeleted(record))
   const projects = projectRecordsOf(organisationRecords)
@@ -190,15 +183,10 @@ export function HolidayListsSettings() {
     })
   }
 
-  // A project keeps the list it rests on by name: a rename is written to each project on the list.
-  const moveProject = (project: BusinessRecord, settings: ProjectCalendarSettings) => {
-    void upsertRecord(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, withProjectCalendar(project, settings))
-  }
-
   const submitListDialog = (draft: HolidayListDraft, startWith: readonly HolidayEntry[]) => {
     if (!dialog) return
     if (dialog.mode === "create") {
-      const record = createHolidayListRecord(draft, startWith, { actorName: ACTOR_NAME, companyId: company?.id })
+      const record = createHolidayListRecord(draft, startWith, { actorName: ACTOR_NAME })
       saveList(record, `${record.name} added`, (row) => {
         setDialog(null)
         setOpenListId(row.id)
@@ -207,13 +195,11 @@ export function HolidayListsSettings() {
     }
     const before = dialog.record
     const oldName = holidayListName(before)
-    const resting = projectsOn(before)
     saveList(withHolidayListDraft(before, draft), `${draft.name.trim()} updated`, () => {
       setDialog(null)
       if (oldName === draft.name.trim()) return
-      // A rename follows to the projects on the list: the API's key does it on the Pilot, which the projects are read again for; here the pane does.
-      if (onApi) void refreshModule(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
-      else for (const project of resting) moveProject(project, { holidayList: draft.name.trim(), weekend: projectWeekend(project) })
+      // A rename follows to the projects on the list through the API's key, which the projects are read again for.
+      void refreshModule(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
     })
   }
 
@@ -223,17 +209,12 @@ export function HolidayListsSettings() {
       toast.error(`${record.name} is in use`, { description: `${count(resting.length, "project")} rest on it: move ${resting.length === 1 ? "it" : "them"} to another list first.` })
       return
     }
-    if (onApi) {
-      void removeHolidayList(sendAction, record.id).then((outcome) => {
-        if (outcome.kind !== "done") return
-        toast.success(`${record.name} removed`)
-        setOpenListId(null)
-        void refreshModule(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId)
-      })
-      return
-    }
-    const removed = softDeletedRecord(record, { reason: "Removed in Settings › Holiday lists", actorName: ACTOR_NAME, deletionLogId: `holiday-list-removal-${record.id}` })
-    saveList(removed, `${record.name} removed`, () => setOpenListId(null))
+    void removeHolidayList(sendAction, record.id).then((outcome) => {
+      if (outcome.kind !== "done") return
+      toast.success(`${record.name} removed`)
+      setOpenListId(null)
+      void refreshModule(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId)
+    })
   }
 
   // The module whose problem the pane says, the projects first.

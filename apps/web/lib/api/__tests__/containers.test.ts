@@ -14,11 +14,11 @@ import type { Project } from "@waste/contracts/organisation"
 import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type DecommissionReason, type StockMovement } from "@waste/contracts/stock"
 import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@waste/domain/service-frequencies"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
 import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { CONTAINERS_MODULE, containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
+import { containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
 import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -27,11 +27,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-
-const fixtures = getModuleDefinition(CONTAINERS_MODULE)?.records ?? []
-const inventoryFixtures = getModuleDefinition(INVENTORY_MODULE)?.records ?? []
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-const masterFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "master" })?.records ?? []
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -84,8 +79,8 @@ const inStock: Container = {
 const retiredPlacement: ContainerServicePlacement = { ...placed, id: "01a0d2a4-a280-7015-8000-000000000099", containerId: inStock.id, validFrom: "2026-01-01", validTo: "2026-09-01" }
 
 // What the store has loaded when containers load: the organisation, then master data.
-const projectRecords = [copenhagen, harbor].map((project) => projectAdapter.toRecord(project, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW }))
-const masterContext: MappingContext = { fixtures: masterFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const projectRecords = [copenhagen, harbor].map((project) => projectAdapter.toRecord(project, { resolve: NOTHING_RESOLVED, now: NOW }))
+const masterContext: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const masterRecords = [
   wasteFractionAdapter.toRecord(residual, masterContext),
   wasteFractionAdapter.toRecord(organic, masterContext),
@@ -100,7 +95,7 @@ const state: ServerRecordsState = new Map([
   ["configure.master", loaded({ records: masterRecords, serverIds: serverIdsOf(masterRecords, [residual.id, organic.id, bin240.id, bin660.id, wornOut.id]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
 
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 const copenhagenWebId = projectRecords[0].id
@@ -123,7 +118,6 @@ const formRecord = (values: Record<string, string>): BusinessRecord => ({
   related: [],
   source: "Waste",
   freshness: "Live",
-  companyId: FIXTURE_COMPANY_ID,
   projectIds: values.projectId ? [values.projectId] : [],
   recordKind: "Container",
   submittedValues: values,
@@ -139,7 +133,7 @@ describe("the containers module", () => {
 
   test("reads the containers and the placements together and files every placement under its container", async () => {
     const { fetch, calls } = scripted([() => pageOf([bin91007, inStock]), () => pageOf([placed, retiredPlacement])])
-    const result = await loadModule(clientOver(fetch), containersModule, { fixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), containersModule, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => call.url),
       ["http://api.test/containers?limit=200", "http://api.test/placements?limit=200"],
@@ -147,7 +141,7 @@ describe("the containers module", () => {
     assert.deepEqual(
       result.records.map((record) => record.id),
       [`asset-${bin91007.id}`, `asset-${inStock.id}`],
-      "no fixture lends its id: a server container is asset-<uuid>, the API's id the handle the schemes name it by",
+      "a server container is asset-<uuid>, the API's id the handle the schemes name it by",
     )
     assert.equal(result.serverIds.get(`asset-${bin91007.id}`), bin91007.id)
     assert.equal(result.records[0].submittedValues?.placementId, placed.id)
@@ -167,7 +161,6 @@ describe("a container", () => {
     assert.equal(stocked.status, "In warehouse")
     assert.equal(record.recordKind, "Container")
     assert.deepEqual(record.projectIds, [copenhagenWebId])
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
     assert.equal(record.source, "Waste API")
     assert.equal(containerAdapter.statuses, undefined, "the asset state moves only by command")
     assert.ok(containerAdapter.owns(record))
@@ -256,7 +249,7 @@ describe("a container", () => {
   test("a move of the asset state through an edit is refused before the API: it is the ledger's", async () => {
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, bin91007.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), containersModule, current, { ...record, status: "In service" }, { fixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, { ...record, status: "In service" }, { state, now: NOW })
     assert.equal(outcome.kind, "refused")
     assert.equal(calls.length, 0)
   })
@@ -268,7 +261,7 @@ describe("writing a container", () => {
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/containers/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
     const made = formRecord({ projectId: copenhagenWebId, containerId: "BIN-95001", containerType: bin240WebId })
-    const outcome = await writeRecord(clientOver(fetch), containersModule, current, made, { fixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, made, { state, now: NOW })
     assert.equal(calls[0].url, "http://api.test/containers")
     assert.equal(calls[0].init.method, "POST")
     assert.ok(ContainerCreate.safeParse(bodyOf(calls[0])).success)
@@ -288,7 +281,7 @@ describe("writing a container", () => {
       () => pageOf([{ ...placed, wasteFractionId: organic.id }]),
     ])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, bin91007.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), containersModule, current, edited, { fixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, edited, { state, now: NOW })
     assert.deepEqual(
       calls.map((call) => `${call.init.method} ${call.url}`),
       [`PATCH http://api.test/containers/${bin91007.id}`, `PATCH http://api.test/placements/${placed.id}`, `GET http://api.test/placements?limit=200&containerId=${bin91007.id}`],
@@ -307,7 +300,7 @@ describe("writing a container", () => {
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, rfid: "E2091007" } }
     const { fetch, calls } = scripted([() => json({ ...bin91007, rfid: "E2091007" }), () => problem(503, "The API is unavailable")])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, bin91007.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), containersModule, current, edited, { fixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, edited, { state, now: NOW })
     assert.deepEqual(calls.map((call) => call.init.method), ["PATCH", "GET"], "the patch landed; the placements' read failed")
     assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId, outcome.problem.detail] : outcome.kind, [record.id, bin91007.id, "The API is unavailable"])
   })
@@ -316,7 +309,7 @@ describe("writing a container", () => {
     const { fetch } = scripted([() => problem(409, "A container labelled BIN-91007 is already registered")])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
     const made = formRecord({ projectId: copenhagenWebId, containerId: "BIN-91007", containerType: bin240WebId })
-    const outcome = await writeRecord(clientOver(fetch), containersModule, current, made, { fixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, made, { state, now: NOW })
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.equal(problemSentence(outcome.problem), "A container labelled BIN-91007 is already registered")
@@ -328,7 +321,7 @@ describe("the container's commands", () => {
   const record = containerAdapter.toRecord({ ...bin91007, placements: [] }, context())
   const stocked = containerAdapter.toRecord({ ...inStock, placements: [retiredPlacement] }, context())
   const current = loaded({ records: [record, stocked], serverIds: new Map([[record.id, bin91007.id], [stocked.id, inStock.id]]) }, 1)
-  const options = { fixtures, state, now: NOW }
+  const options = { state, now: NOW }
   const movement = { id: "01a0d2a4-a280-7022-8000-000000000002", recordedAt: "2026-09-30T11:59:00.000Z", projectId: copenhagen.id, containerId: bin91007.id, kind: "receipt", fromKind: "supplier", fromWarehouseId: null, toKind: "warehouse", toWarehouseId: warehouseId, placementId: null, occurredAt: "2026-09-30T11:59:00.000Z", recordedBy: "01a0d2a4-a280-7005-8000-000000000001", reason: null, reference: null, correctsMovementId: null }
   const received: Container = { ...bin91007, assetState: { status: "in-warehouse", warehouseId, placementId: null, since: movement.occurredAt, movementId: movement.id } }
 
@@ -488,7 +481,7 @@ describe("the inventory module", () => {
 
   test("lists the ledger across containers, oldest first, each movement a row naming its container by label", async () => {
     const { fetch, calls } = scripted([() => pageOf([receipt, toMaintenance])])
-    const result = await loadModule(clientOver(fetch), inventoryModule, { fixtures: inventoryFixtures, state: withContainers, now: NOW })
+    const result = await loadModule(clientOver(fetch), inventoryModule, { state: withContainers, now: NOW })
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/stock-movements?limit=200"])
     assert.deepEqual(result.records.map((record) => record.name), ["Receipt · BIN-99017", "Transfer · BIN-99017"])
     const [first, second] = result.records
@@ -505,7 +498,7 @@ describe("the inventory module", () => {
   })
 
   test("read again after a container's command, it stays ready with its rows while the read is out, then holds the movement the command appended (#198)", async () => {
-    const before = await loadModule(clientOver(scripted([() => pageOf([receipt])]).fetch), inventoryModule, { fixtures: inventoryFixtures, state: withContainers, now: NOW })
+    const before = await loadModule(clientOver(scripted([() => pageOf([receipt])]).fetch), inventoryModule, { state: withContainers, now: NOW })
     const store = createExternalStore<ServerRecordsState>(new Map([...withContainers, ["resources.inventory", loaded(before, 1)]]))
     let whileOut: string[] | undefined
     const { fetch, calls } = scripted([
@@ -515,7 +508,7 @@ describe("the inventory module", () => {
         return pageOf([receipt, toMaintenance])
       },
     ])
-    const problem = await readModuleInto(store, clientOver(fetch), inventoryModule, { fixtures: inventoryFixtures, alive: () => true, now: () => 9 })
+    const problem = await readModuleInto(store, clientOver(fetch), inventoryModule, { alive: () => true, now: () => 9 })
     assert.equal(problem, null)
     assert.deepEqual(calls.map((call) => call.url), ["http://api.test/stock-movements?limit=200"])
     assert.deepEqual(whileOut, ["Receipt · BIN-99017"])
@@ -531,7 +524,7 @@ describe("the inventory module", () => {
     assert.deepEqual(stockMovementAdapter.toPatchBody(movement, { ...movement, name: "Edited" }, context()), { path: "kind", message: "The ledger is append-only: a wrong movement is corrected by adjusting its container" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [movement], serverIds: new Map([[movement.id, receipt.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), inventoryModule, current, { ...movement, id: "resources-stock-movement-1", recordKind: "Stock movement" }, { fixtures: inventoryFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), inventoryModule, current, { ...movement, id: "resources-stock-movement-1", recordKind: "Stock movement" }, { state, now: NOW })
     assert.equal(outcome.kind, "refused")
     assert.equal(calls.length, 0)
   })

@@ -45,14 +45,14 @@ import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek, PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { OWNERSHIP_LABELS, SERVED_PUBLICLY } from "@/lib/data/containers"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isSharedPointRecord } from "@/lib/data/properties"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { CONTAINER_PLACE_MODULES, containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
@@ -381,11 +381,10 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
       name: resource.label,
       context: [typeName, project?.name].filter(Boolean).join(" · "),
       status,
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(resource, context.now),
       description: "A container of the registry; where it stands is its Stock Movement ledger's reading.",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Container",
       submittedValues: {
@@ -541,12 +540,11 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
       name: `${kind} · ${container}`,
       context: `${from} → ${to}`,
       status: kind,
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       value: shownOn(movement.occurredAt, timezone).slice(0, 10),
       ...stampFacts(movement, context.now),
       description: "A Stock Movement of the container ledger, append-only.",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Stock movement",
       submittedValues: { containerId: webIdVia(context, CONTAINER_PREFIX, movement.containerId), kind: movement.kind },

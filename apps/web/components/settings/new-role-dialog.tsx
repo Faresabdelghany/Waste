@@ -42,7 +42,6 @@ export function NewRoleDialog({
   onOpenChange,
   scopes,
   roles,
-  companyRecordId,
   create,
   onCreated,
 }: {
@@ -51,7 +50,6 @@ export function NewRoleDialog({
   scopes: readonly string[]
   /** The access module's role records, the ones a new role may start from. */
   roles: readonly BusinessRecord[]
-  companyRecordId?: string
   /** The store's write: the outcome once the API has answered, or undefined when the record went to the browser instead. */
   create: (record: BusinessRecord) => Promise<WriteOutcome> | undefined
   /** The new role's web id, once the API has it: its permissions open next. */
@@ -88,7 +86,7 @@ export function NewRoleDialog({
     setRefusal(null)
     setSubmitting(true)
     const source = roles.find((candidate) => candidate.id === startFrom)
-    const record = newRoleRecord({ name, scope, description, startFrom: source }, mintRoleId(), companyRecordId)
+    const record = newRoleRecord({ name, scope, description, startFrom: source }, mintRoleId())
     // No outcome means the record went to the browser, which on the Pilot is no role at all: said so, never a success.
     const outcome: Promise<WriteOutcome> =
       create(record) ??

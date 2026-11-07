@@ -14,7 +14,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ArrowClockwise, CheckCircle, Gear, Warning } from "@phosphor-icons/react/dist/ssr"
 
-import { AssetPanelShell, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { useReport } from "@/components/insight/use-report"
 import { Button } from "@/components/ui/button"
 import { useApiSession } from "@/components/waste/api-session-store"

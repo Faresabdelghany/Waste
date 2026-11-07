@@ -56,7 +56,7 @@ import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/record
 import { formatMinor } from "@/lib/commercial/money"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
 import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PAYMENT_PREFIX, PAYMENT_SOURCE_LABELS, PAYMENTS_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import {
@@ -192,7 +192,7 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
     setValues(submitted)
     // A run is for a closed period: Last day is held to the picked project's today on its own clock.
     const projectWebId = typeof submitted.projectId === "string" ? submitted.projectId : undefined
-    const today = dayIn(new Date(), timezoneOfProject(getRecords("configure", "organization", getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []), projectWebId))
+    const today = dayIn(new Date(), timezoneOfProject(getRecords("configure", "organization"), projectWebId))
     const body = billingRunBody(blankNone(submitted), resolve, today)
     if (isLocalRefusal(body)) {
       toast.error("The run was not previewed", { description: body.message })

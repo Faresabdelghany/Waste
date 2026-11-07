@@ -29,11 +29,11 @@
 import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
 import { formatDayMonth } from "@waste/domain/days"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { masterDataKindOf } from "@/lib/data/master-data"
 
 import { command, create, listAll } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, wallClockIn } from "./clock"
 import { driverAdapter, vehicleAdapter } from "./fleet"
 import { depotAdapter, projectMoved, refusal } from "./places"
@@ -160,12 +160,11 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
       name: `${dayLabel(start)} · ${vehicle}`,
       context: `${driver ?? "No driver"} · ${start.slice(11)}–${end.slice(11)}`,
       status: statusLabel(allocation.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(allocation, context.now),
       value: capacity,
       description: "A time-bounded reservation of a vehicle, and where it applies a driver, for expected work.",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
       recordKind: "Vehicle allocation",
       submittedValues: {

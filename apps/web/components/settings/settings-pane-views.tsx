@@ -66,32 +66,21 @@ export const SETTINGS_PANE_ICONS: Record<SettingsPaneIcon, ComponentType<{ class
   warning: Warning,
 }
 
-const fixtureForm = dynamic(() => import("./fixture-settings").then((module) => module.FixtureSettingsPane))
-
 export const SETTINGS_PANE_VIEWS: Record<SettingsPaneId, ComponentType<SettingsPaneProps>> = {
   account: dynamic(() => import("./fixture-settings").then((module) => module.AccountSettings)),
-  notifications: fixtureForm,
   "notifications-on-api": dynamic(() => import("./notifications-settings-on-api").then((module) => module.NotificationsSettingsOnApi)),
-  company: dynamic(() => import("./company-projects-management").then((module) => module.CompanyProjectsManagement)),
   access: dynamic(() => import("./organization-access-management").then((module) => module.OrganizationAccessManagement)),
-  "asset-management": dynamic(() => import("./asset-management-settings").then((module) => module.AssetManagementSettings)),
   areas: dynamic(() => import("./planning-areas-settings").then((module) => module.PlanningAreasSettings)),
   "collection-calendars": dynamic(() => import("./collection-calendars-settings").then((module) => module.CollectionCalendarsSettings)),
   "holiday-lists": dynamic(() => import("./holiday-lists-settings").then((module) => module.HolidayListsSettings)),
   "operations-bulky-schedules": dynamic(() => import("./bulky-schedules-settings").then((module) => module.BulkySchedulesSettings)),
   "master-data": dynamic(() => import("./master-data-settings").then((module) => module.MasterDataSettings)),
-  "operations-setup": fixtureForm,
-  "ticket-comms": fixtureForm,
   tickets: dynamic(() => import("./tickets-settings").then((module) => module.TicketsSettings)),
   "message-templates": dynamic(() => import("./message-templates-settings").then((module) => module.MessageTemplatesSettings)),
-  finance: fixtureForm,
   "finance-invoicing": dynamic(() => import("./finance-settings-on-api").then((module) => module.FinanceSettingsOnApi)),
-  pricing: dynamic(() => import("./fixture-settings").then((module) => module.CommercialDefaultsSettings)),
-  integrations: fixtureForm,
   "integrations-on-api": dynamic(() => import("./integrations-settings-on-api").then((module) => module.IntegrationsSettingsOnApi)),
-  portals: fixtureForm,
   "portals-on-api": dynamic(() => import("./portals-settings-on-api").then((module) => module.PortalsSettingsOnApi)),
-  "commercial-products": dynamic(() => import("./commercial-settings").then((module) => module.ProductsByModePane)),
+  "commercial-products": dynamic(() => import("./commercial-catalogue-panes").then((module) => module.ProductsPane)),
   "commercial-price-lists": dynamic(() => import("./commercial-catalogue-panes").then((module) => module.PriceListsPane)),
   "commercial-visit-rules": dynamic(() => import("./visit-rules-settings").then((module) => module.VisitRulesSettings)),
   "pickup-exception-charges": dynamic(() => import("./pickup-exception-charges-settings").then((module) => module.PickupExceptionChargesSettings)),

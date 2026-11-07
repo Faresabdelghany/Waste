@@ -41,13 +41,10 @@ import { VOID_VISIT } from "@/lib/api/records/site-visits"
 import { readFrequentVisitors } from "@/lib/api/site-visits"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import { agreementsOfCustomer } from "@/lib/data/bulky"
-import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 import { PROPERTIES_MODULE } from "@/lib/data/properties"
 import { CHECK_IN_PATH, CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CREDENTIAL_VALUE_KEY, SITE_ACCESS_MODULE, SITE_VISITS_MODULE, tradeSentence, VISIT_VOIDED_KEY } from "@/lib/data/site-visits"
-
-const NO_RECORDS: readonly BusinessRecord[] = []
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 
 const field = (id: string, label: string, relation?: ModuleLocation) => ({ id, label, type: "select" as const, required: true, ...(relation === undefined ? {} : { relation }) })
 
@@ -60,8 +57,8 @@ export function RegisterCredentialSurface({ label }: PrimarySurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const moduleReady = useModuleReady(SITE_ACCESS_MODULE)
   const openRecord = useOpenRecord(SITE_ACCESS_MODULE.moduleId)
-  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
-  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
+  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId)
 
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<AccessCredentialKind>("plate")

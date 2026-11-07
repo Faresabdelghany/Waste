@@ -1,22 +1,16 @@
 // The Registry's demo rows (2026-09-25): what `pnpm db:seed` writes into the
-// fifteen tables of Issue #78, derived from the web prototype's fixtures so
-// that the adapter of build-order step 4 ("fixtures become seed data") has the
-// same company to show on the server as the browser shows from
-// `apps/web/lib/data/business-modules.ts`.
+// fifteen tables of Issue #78. They were derived from the web prototype's
+// fixtures, which went once these modules read the API alone: the seed is the
+// demo tenant's one source, and local development and e2e read it through the
+// API.
 //
-// Derived, not imported: `packages/db` may not depend on the web (ADR-0001 runs
-// the other way, and the web may not depend on this package either), so the
-// explicit fixture records are copied here as literals. The two generated
-// sets — the fifty seeded properties and the hundred seeded containers — are
-// not: their tables and arithmetic are `@waste/domain/fixtures/seeded-registry`
-// (issue #99), the one spelling the web's `buildSeededPropertyRecords` and
-// `buildSeededContainerRecords` read too, so `property-seed-101` here is the
-// Ryesgade 3 the prototype shows, `asset-seed-91001` is BIN-91001 standing at
-// it, and a change to the generator reaches both.
+// The explicit rows are literals here. The two generated sets — the fifty
+// seeded properties and the hundred seeded containers — are
+// `@waste/domain/fixtures/seeded-registry`'s (issue #99), its tables and
+// arithmetic.
 // `__tests__/seed-registry-generator.test.ts` holds these rows to it.
 // REGISTRY_IDS keys every row by the prototype's record id (`asset-82014`,
-// `property-seed-101`, `AGR-2408`) so the adapter can map one onto the other
-// without a lookup table of its own.
+// `property-seed-101`, `AGR-2408`).
 //
 // Where a fixture value is read into a column it does not spell exactly, the
 // rule is written beside the table it applies to, and every such rule is

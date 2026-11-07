@@ -15,8 +15,8 @@ import { ActivityClose, ActivityReject, ServiceProviderActivity as ActivitySchem
 
 import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { activityCommandsOffered, activityCorrectable, activityOpenForm, closeBodyOf, createActivityRecord, kindsOpenedBy, PROVIDER_ACTIVITIES_MODULE, REASON_NEEDED, rejectBodyOf } from "../../data/provider-activities"
+import { type BusinessRecord } from "../../data/business-modules"
+import { activityCommandsOffered, activityCorrectable, activityOpenForm, closeBodyOf, createActivityRecord, kindsOpenedBy, REASON_NEEDED, rejectBodyOf } from "../../data/provider-activities"
 import { commandOffered } from "../../data/provider-workspace"
 import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULES } from "../records/modules"
@@ -27,8 +27,6 @@ import { loaded, resolverOver, type ServerRecordsState } from "../records/server
 const NOW = new Date("2026-08-13T12:00:00Z")
 const STAMPS = { createdAt: "2026-08-01T09:00:00.000Z", updatedAt: "2026-08-01T09:30:00.000Z" }
 
-const fixtures = getModuleDefinition(PROVIDER_ACTIVITIES_MODULE)?.records ?? []
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const NORDREN = "01a0d2a4-a280-7003-8000-000000000001"
@@ -80,7 +78,7 @@ const followUp: ServiceProviderActivity = {
   effectiveFrom: null,
 }
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 /** A route of the scheme's group, as the routes module maps one: its project by web id, its scheme and group by their chips, which a provider's reader holds. */
 const route: BusinessRecord = { ...projectRecord, id: "route-rc-1048", name: "RC-1048", recordKind: "Route", submittedValues: { projectId: projectRecord.id, schemeId: `scheme-${SCHEME}`, collectionGroupId: `group-${GROUP}` } }
 /** An award, as the service areas module maps one: its project by web id. */
@@ -90,7 +88,7 @@ const state: ServerRecordsState = new Map([
   ["route-studio.routes", loaded({ records: [route], serverIds: new Map([[route.id, "01a0d2a4-a280-7030-8000-000000000001"]]) }, 1)],
   ["service-providers.service-areas", loaded({ records: [award], serverIds: new Map([[award.id, AREA]]) }, 1)],
 ])
-const context: MappingContext = { fixtures, resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 
 describe("an Activity as a record", () => {
   test("is the module's on the API, `provider-activity-<uuid>`, named by its number and subject, its command surface its own", () => {

@@ -6,8 +6,7 @@
 // is the signed-in account's (#291 C24): its provider and its name from
 // `/me`, its role's grants as `/me` answers them, and no pinned project,
 // since a provider's account works in none and the API fences every row it
-// reads to its provider. Its landing is its routes there, the fixture
-// dashboard's figures being the prototype's.
+// reads to its provider. Its landing is its routes.
 import Link from "next/link"
 import { Suspense, useEffect, useState, type ReactNode } from "react"
 
@@ -16,7 +15,6 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
 import { useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
-import { ServiceProviderDashboard } from "@/components/insight/provider-dashboard"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
@@ -257,15 +255,6 @@ export function RestrictedWorkspaceShell({
         </RestrictedFrame>
       )
     }
-  }
-
-  // The service provider landing page is a bespoke dashboard, not a module list — in fixture mode; on the Pilot it lands on the routes.
-  if (persona === "service-provider" && pageId === "dashboard" && provider === null) {
-    return (
-      <RestrictedFrame persona={persona}>
-        <ServiceProviderDashboard />
-      </RestrictedFrame>
-    )
   }
 
   const page =

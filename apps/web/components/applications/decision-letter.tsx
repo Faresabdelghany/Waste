@@ -10,14 +10,11 @@ import { useModuleRecords } from "@/components/waste/business-record-store"
 import { Button } from "@/components/ui/button"
 import { customersModule } from "@/lib/api/records/registry"
 import { APPLICATION_SERVER_ID_KEY, APPLICATIONS_MODULE, decisionLetterOf, letterOffered } from "@/lib/data/applications"
-import type { BusinessRecord } from "@/lib/data/business-modules"
-
-const NO_FIXTURES: readonly BusinessRecord[] = []
 
 export function DecisionLetterPage({ applicationId }: { applicationId: string }) {
   const { me } = useApiSession()
-  const applications = useModuleRecords(APPLICATIONS_MODULE.workspaceId, APPLICATIONS_MODULE.moduleId, NO_FIXTURES)
-  const customers = useModuleRecords(customersModule.workspaceId, customersModule.moduleId, NO_FIXTURES)
+  const applications = useModuleRecords(APPLICATIONS_MODULE.workspaceId, APPLICATIONS_MODULE.moduleId)
+  const customers = useModuleRecords(customersModule.workspaceId, customersModule.moduleId)
   // By the server id the record carries: the store's web id of a row made in another tab is that tab's alone.
   const record = applications.records.find((candidate) => candidate.submittedValues?.[APPLICATION_SERVER_ID_KEY] === applicationId)
   const customerId = typeof record?.submittedValues?.customerId === "string" ? record.submittedValues.customerId : undefined

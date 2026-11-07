@@ -20,7 +20,7 @@ import {
   defaultAssetView,
   sortByView,
   type AssetView,
-} from "@/components/settings/asset-management-settings"
+} from "@/components/settings/settings-pane-kit"
 import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { Badge } from "@/components/ui/badge"
@@ -39,7 +39,6 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { PlanningAreaVersionsDialog } from "@/components/settings/planning-area-versions"
-import { useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
   useBusinessRecordStore,
@@ -74,8 +73,6 @@ import { todayIso } from "@waste/domain/route-schemes/recurrence"
 
 const ACTOR_NAME = "Olivia Larsen"
 
-const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })
-
 const isAreasModule = (location: ModuleLocation) =>
   location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
 
@@ -100,7 +97,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const relationRecords = (location: ModuleLocation): BusinessRecord[] => {
     const module = getModuleDefinition(location)
     return module
-      ? getRecords(location.workspaceId, module.id, module.records).filter(
+      ? getRecords(location.workspaceId, module.id).filter(
           (record) => !isSoftDeleted(record),
         )
       : []
@@ -108,9 +105,9 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
 
   // The pane's own module and the projects it names: on the Pilot, the API's
   // rows once they are here and nothing before (Issue #175).
-  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, areasModule.records)
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const areaRecords = areas.records.filter((record) => !isSoftDeleted(record))
-  const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
+  const organisation = useModuleRecords("configure", "organization")
   const projectRecords = organisation.records.filter(
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
   )
@@ -134,10 +131,9 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
     return records.map((record) => ({ value: record.id, label: record.name }))
   }
 
-  // On the Pilot the drawing and its confirmation are the API's: an area
-  // registered undrawn, or one whose version is not the one in force today,
-  // carries no polygon on the form, and a rename must not have to paste one.
-  const configured = useApiConfigured()
+  // The drawing and its confirmation are the API's: an area registered
+  // undrawn, or one whose version is not the one in force today, carries no
+  // polygon on the form, and a rename must not have to paste one.
   const editSchema = useMemo(
     () => ({
       ...schema,
@@ -145,16 +141,14 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
       submitLabel: "Save changes",
       description:
         "Update this planning area. Changes apply immediately to every scheme, container, and service area that references it.",
-      sections: configured
-        ? schema.sections.map((section) => ({
-            ...section,
-            fields: section.fields.map((field) =>
-              field.id === "geometry" || field.id === "geometryConfirmed" ? { ...field, required: false } : field,
-            ),
-          }))
-        : schema.sections,
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((field) =>
+          field.id === "geometry" || field.id === "geometryConfirmed" ? { ...field, required: false } : field,
+        ),
+      })),
     }),
-    [configured, schema],
+    [schema],
   )
 
   useLinkedRecord(params.record, areaRecords, hydrated && areas.ready, setEditingArea)
@@ -303,11 +297,9 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
                       </StatusBadge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      {configured && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setVersionsOf(record)} aria-label={`Boundary versions of ${record.name}`}>
-                          <ListBullets className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setVersionsOf(record)} aria-label={`Boundary versions of ${record.name}`}>
+                        <ListBullets className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

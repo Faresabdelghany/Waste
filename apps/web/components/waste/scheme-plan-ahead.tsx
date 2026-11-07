@@ -15,7 +15,7 @@ import { useApiConfigured } from "@/components/waste/api-session-store"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
-  useStoreRecords,
+  useModuleRecords,
 } from "@/components/waste/business-record-store"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { runPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
@@ -24,15 +24,15 @@ import { todayIso } from "@waste/domain/route-schemes/recurrence"
 export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const hydrated = useBusinessRecordsHydrated()
   const onApi = useApiConfigured()
-  const schemes = useStoreRecords("route-studio", "schemes")
-  const existingRoutes = useStoreRecords("route-studio", "routes")
-  const existingPickups = useStoreRecords("route-studio", "pickups")
-  const calendarRecords = useStoreRecords(
+  const schemes = useModuleRecords("route-studio", "schemes").records
+  const existingRoutes = useModuleRecords("route-studio", "routes").records
+  const existingPickups = useModuleRecords("route-studio", "pickups").records
+  const calendarRecords = useModuleRecords(
     COLLECTION_CALENDARS_MODULE.workspaceId,
     COLLECTION_CALENDARS_MODULE.moduleId,
-  )
-  const projectRecords = useStoreRecords("configure", "organization")
-  const containers = useStoreRecords("resources", "containers")
+  ).records
+  const projectRecords = useModuleRecords("configure", "organization").records
+  const containers = useModuleRecords("resources", "containers").records
   const { upsertRecord } = useBusinessRecordStore()
 
   // Once per mount: the run's own upserts re-notify every store subscriber,

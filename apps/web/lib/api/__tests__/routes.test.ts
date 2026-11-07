@@ -18,7 +18,7 @@ import { PickupAdd } from "@waste/contracts/pickups"
 import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
@@ -63,9 +63,6 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
 const at = (lng: number, lat: number) => ({ type: "Point" as const, coordinates: [lng, lat] as [number, number] })
-
-const fixturesOf = (workspaceId: "configure" | "fleet" | "resources" | "route-studio", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const fixtures = fixturesOf("route-studio", "routes")
 
 // The seeded rows the store has loaded before the routes, as the API answers them.
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -115,13 +112,13 @@ const NO_SHIFT: RouteShift = { shift: null, startsAt: null, workSeconds: null, o
 const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail => ({ ...route, pickups: [], activePlan: null, workload: NO_WORKLOAD, shift: NO_SHIFT, session: null, sessions: [], unloads: [], ...over })
 
 // What the store has loaded when the routes load: the organisation, the places, the fleet.
-const noResolve = (moduleFixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures: moduleFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
-const projectRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const depotRecord = depotAdapter.toRecord(nordhavn, noResolve(fixturesOf("resources", "depots")))
-const stationRecord = unloadingStationAdapter.toRecord(arc, noResolve(fixturesOf("resources", "depots")))
+const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
+const projectRecord = projectAdapter.toRecord(copenhagen, noResolve)
+const depotRecord = depotAdapter.toRecord(nordhavn, noResolve)
+const stationRecord = unloadingStationAdapter.toRecord(arc, noResolve)
 const organisationState = (): ServerRecordsState => new Map([["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)]])
-const vehicleRecords = [wh24, wh31, trailer].map((vehicle) => vehicleAdapter.toRecord(vehicle, { ...noResolve(fixturesOf("fleet", "vehicles")), resolve: resolverOver(organisationState()) }))
-const driverRecords = [mads, freja].map((driver) => driverAdapter.toRecord(driver, { ...noResolve(fixturesOf("fleet", "drivers")), resolve: resolverOver(organisationState()) }))
+const vehicleRecords = [wh24, wh31, trailer].map((vehicle) => vehicleAdapter.toRecord(vehicle, { ...noResolve, resolve: resolverOver(organisationState()) }))
+const driverRecords = [mads, freja].map((driver) => driverAdapter.toRecord(driver, { ...noResolve, resolve: resolverOver(organisationState()) }))
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
@@ -130,8 +127,8 @@ const state: ServerRecordsState = new Map([
   ["fleet.drivers", loaded({ records: driverRecords, serverIds: serverIdsOf(driverRecords, [mads.id, freja.id]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
-const options = { fixtures, state, now: NOW }
+const context = (resolver: Resolver = resolve): MappingContext => ({ resolve: resolver, now: NOW })
+const options = { state, now: NOW }
 const pageOf = (items: unknown[], nextCursor: string | null = null) => json({ items, nextCursor })
 
 const [wh24Record, wh31Record, trailerRecord] = vehicleRecords
@@ -164,7 +161,7 @@ describe("the routes module", () => {
     assert.deepEqual(
       result.records.map((record) => record.id),
       [`route-${planned.id}`, `route-${second.id}`],
-      "RC-1042 is a fixture's name too: a server route is route-<uuid> from the start",
+      "a server route is route-<uuid> from the start",
     )
     assert.equal(result.serverIds.get(`route-${planned.id}`), planned.id)
   })
@@ -187,7 +184,6 @@ describe("a route", () => {
     assert.equal(record.recordKind, "Route")
     assert.equal(record.source, "Waste API")
     assert.deepEqual(record.projectIds, [projectRecord.id])
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
     assert.deepEqual(record.facts, {
       Project: "Copenhagen Central",
       "Route scheme": `scheme-${schemeId}`,
@@ -261,7 +257,7 @@ describe("a route", () => {
     assert.equal(valueOf({ planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 }), "0 stops")
   })
 
-  test("its Stops fact counts every stop it has, decided or not, as a generated route's does in fixture mode: the scheme's routes table reads it (#252)", () => {
+  test("its Stops fact counts every stop it has, decided or not: the scheme's routes table reads it (#252)", () => {
     const stopsOf = (progress: Route["progress"]) => routeAdapter.toRecord({ ...planned, progress }, context()).facts.Stops
     assert.equal(stopsOf({ planned: 4, completed: 0, skipped: 0, failed: 0, total: 4, fraction: 0 }), "4")
     assert.equal(stopsOf({ planned: 0, completed: 2, skipped: 1, failed: 1, total: 4, fraction: 1 }), "4")

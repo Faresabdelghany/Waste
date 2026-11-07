@@ -13,7 +13,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, planAheadToggledSentence, PREVIEW_UNPLACED, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the guided setup's routes a week, as it says them (#280)", () => {
   test("whole counts as they are, one route in the singular", () => {
@@ -451,5 +451,24 @@ describe("This collection only on the Pilot", () => {
     const days = schemeEditOnApi(before, edited(before, { serviceDays: "monday, friday", collectionGroups: withGroup("group-south", { days: ["friday"] }) }), routes, TODAY)
     assert.equal(days.kind === "ask" ? days.question.options.single.unavailable : null, ONE_OFF_ONLY)
     assert.equal(days.kind === "ask" ? days.question.nextCollectionDate : null, "2026-10-05", "the scheme's next route after today")
+  })
+})
+
+describe("what turning Plan Ahead on or off says, from the row menu and the scheme page alike", () => {
+  const scheme = (submittedValues: BusinessRecord["submittedValues"]): BusinessRecord =>
+    ({ id: "scheme-central", name: "Central A", submittedValues }) as BusinessRecord
+
+  test("on: the scheme's own window, the nightly run keeping it planned", () => {
+    assert.equal(planAheadToggledSentence(scheme({ planAheadDays: "14" }), true), "Central A keeps its next 14 days planned through the nightly plan-ahead run.")
+    assert.equal(planAheadToggledSentence(scheme({ planAheadDays: "1" }), true), "Central A keeps its next 1 day planned through the nightly plan-ahead run.")
+  })
+
+  test("on, for a scheme that names no window or one out of bounds: the default week", () => {
+    assert.equal(planAheadToggledSentence(scheme({}), true), "Central A keeps its next 7 days planned through the nightly plan-ahead run.")
+    assert.equal(planAheadToggledSentence(scheme({ planAheadDays: "90" }), true), "Central A keeps its next 7 days planned through the nightly plan-ahead run.")
+  })
+
+  test("off: its routes stay", () => {
+    assert.equal(planAheadToggledSentence(scheme({ planAheadDays: "14" }), false), "Central A stops auto-generating; already-generated routes remain.")
   })
 })

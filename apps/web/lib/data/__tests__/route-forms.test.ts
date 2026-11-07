@@ -18,7 +18,7 @@ import { ADD_STOP, ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } 
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { AGREEMENTS_MODULE } from "../agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "../allocations"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
+import { type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { WAREHOUSES_MODULE } from "../containers"
 import { MASTER_DATA_MODULE } from "../master-data"
@@ -56,9 +56,9 @@ const route: Route = {
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
 const freja: Driver = { id: "01a0d2a4-a280-7014-8000-000000000002", ...STAMPS, projectId: route.projectId, name: "Freja Nielsen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: null, status: "active", notes: null, shift: null }
-const frejaRecord = driverAdapter.toRecord(freja, { fixtures: [], resolve: NOTHING_RESOLVED, now: NOW })
+const frejaRecord = driverAdapter.toRecord(freja, { resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([["fleet.drivers", loaded({ records: [frejaRecord], serverIds: new Map([[frejaRecord.id, freja.id]]) }, 1)]])
-const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const context: MappingContext = { resolve: resolverOver(state), now: NOW }
 const record = routeAdapter.toRecord(route, context)
 
 const fieldIdsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))

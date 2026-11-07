@@ -19,12 +19,12 @@ import type { DropOffPoint } from "@waste/contracts/drop-off-points"
 import type { OpeningException, WeeklyWindow } from "@waste/domain/resources/drop-off-points"
 import { DROP_OFF_POINT_KINDS, DROP_OFF_POINT_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { DROP_OFF_KIND_OPTIONS, exceptionsOf, exceptionsText, exceptionsToSave, weeklyHoursOf, weeklyHoursText } from "@/lib/data/drop-off-points"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, wallClockIn } from "./clock"
 import {
   coordinatesFact,
@@ -116,12 +116,11 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint> = {
       name: point.name,
       context: `${KIND_LABELS[point.kind]} · ${project.name ?? "Project"}`,
       status: statusLabel(point.status),
-      ...inheritedPresentation(undefined),
+      ...NO_PRESENTATION,
       ...stampFacts(point, context.now),
       value: point.openAlways ? "Open always" : (hours.split("\n")[0] ?? ""),
       description: point.notes ?? "",
       facts,
-      companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: "Drop-off Point",
       submittedValues: {

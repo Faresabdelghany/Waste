@@ -12,13 +12,13 @@ import type { InspectionPhotoExtension } from "@waste/domain/inspections/rules"
 
 import { PROPERTY_PREFIX } from "@/lib/data/agreements"
 import { splitMultiValue } from "@/lib/data/business-form-records"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { FINDING_LABELS, INSPECTION_PREFIX, INSPECTION_RECORD_KIND, INSPECTIONS_MODULE, OUTCOME_LABELS, STATUS_LABELS } from "@/lib/data/inspections"
 import { isPropertyRecord } from "@/lib/data/properties"
 import { putObject } from "@/lib/driver/reads"
 
 import { command, create, get, listAll, patch, post, type ApiClient } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, shownOn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -54,7 +54,7 @@ export function toInspectionRecord(inspection: FieldInspection, context: Mapping
     name: `${subject} · ${inspected.slice(0, 10)}`,
     context: OUTCOME_LABELS[inspection.outcome],
     status: STATUS_LABELS[inspection.status],
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(inspection, context.now),
     value: findings.length === 0 ? "Nothing found" : findings.join(" · "),
     description: inspection.note ?? (findings.length === 0 ? "Nothing was found." : `Found: ${findings.join(", ").toLowerCase()}.`),
@@ -71,7 +71,6 @@ export function toInspectionRecord(inspection: FieldInspection, context: Mapping
     },
     related: [subject],
     allowedTransitions: [],
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: INSPECTION_RECORD_KIND,
     submittedValues: {

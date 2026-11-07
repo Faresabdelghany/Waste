@@ -10,8 +10,7 @@ import { describe, test } from "node:test"
 import { BOTH_GROSS_AND_TARE as WIRE_BOTH, NET_IS_GROSS_LESS_TARE as WIRE_NET, SAY_WHY_REFUSED as WIRE_SAY_WHY, UnloadCreate, type Unload } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject, type WeightReview } from "@waste/contracts/weight-control"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { WEIGHTS_MODULE } from "../../data/provider-money"
+import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -21,7 +20,6 @@ import { BOTH_GROSS_AND_TARE, differenceOf, NET_IS_GROSS_LESS_TARE, REVIEW_LABEL
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
-const fixtures = getModuleDefinition(WEIGHTS_MODULE)?.records ?? []
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
 const ROUTE = "01a0d2a4-a280-7030-8000-000000000001"
 const STATION = "01a0d2a4-a280-7020-8000-000000000002"
@@ -55,7 +53,7 @@ const raw: Unload = {
 /** As the adapter lists it: a ledger row with a resource's stamps. */
 const unload = { ...raw, createdAt: raw.recordedAt, updatedAt: raw.recordedAt }
 
-const bare: MappingContext = { fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
+const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const plain = (id: string, name: string, extra: Partial<BusinessRecord> = {}): BusinessRecord =>
   ({ id, name, context: "", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "", freshness: "", recordKind: "", submittedValues: {}, ...extra }) as BusinessRecord
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
@@ -99,7 +97,7 @@ describe("the weighbridge in the office (O9 of #290)", () => {
     assert.equal((unloadAdapter.toCreateBody!(made({ occurredAt: "" }), mapping) as { path: string }).path, "occurredAt")
 
     const { fetch, calls } = scripted([() => json({ ...raw, source: "dispatch", sessionId: null, deviceId: null }, 201, { location: `/unloads/${raw.id}` })])
-    const outcome = await writeRecord(clientOver(fetch), weightsModule, moduleOf([], []), made({}), { fixtures, state: at, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), weightsModule, moduleOf([], []), made({}), { state: at, now: NOW })
     assert.deepEqual([calls[0].init.method, calls[0].url], ["POST", `http://api.test/routes/${ROUTE}/unloads`])
     assert.deepEqual(bodyOf(calls[0]), { unloadingStationId: STATION, wasteFractionId: RESIDUAL, netKg: 7200, occurredAt: "2026-09-29T13:05:00.000Z" }, "the route is the path's, never the body's")
     assert.equal(outcome.kind, "created")
@@ -188,7 +186,7 @@ describe("the weights module", () => {
       () => json(review("corrected", "01a0d2a4-a280-7096-8000-000000000002"), 201),
       () => json({ ...unload, weightReview: { status: "corrected", latestReviewId: "r", correctionUnloadId: "01a0d2a4-a280-7096-8000-000000000002" } }),
     ])
-    const options = { fixtures, state }
+    const options = { state }
     const approved = await commandRecord(clientOver(fetch), weightsModule, current, record, "approve", { note: "" }, options)
     assert.equal(approved.kind, "done")
     if (approved.kind === "done") assert.equal(approved.record.status, "Approved")

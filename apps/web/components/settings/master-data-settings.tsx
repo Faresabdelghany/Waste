@@ -20,7 +20,7 @@ import {
   defaultAssetView,
   sortByView,
   type AssetView,
-} from "@/components/settings/asset-management-settings"
+} from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -50,7 +50,6 @@ import type {
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
 import {
-  getModuleDefinition,
   type BusinessRecord,
   type ModuleLocation,
 } from "@/lib/data/business-modules"
@@ -74,9 +73,6 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 const ACTOR_NAME = "Olivia Larsen"
 /** Where the project records live — what a service frequency names. */
 const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
-const NO_RECORDS: readonly BusinessRecord[] = []
-const MASTER_FIXTURES = getModuleDefinition(MASTER_DATA_MODULE)?.records ?? NO_RECORDS
-const ORGANISATION_FIXTURES = getModuleDefinition(ORGANISATION_MODULE)?.records ?? NO_RECORDS
 const STATUS_OPTIONS = ["Effective"] as const
 
 /** What the table's detail column says of a row: the fact its kind is known by. */
@@ -111,8 +107,8 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
 
   // The module and the projects its frequencies name: on the Pilot, the API's
   // rows once they are here and nothing before.
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, MASTER_FIXTURES)
-  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, ORGANISATION_FIXTURES)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
   const rows = master.records.filter((record) => !isSoftDeleted(record))
   const projectRecords = organisation.records.filter(
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),

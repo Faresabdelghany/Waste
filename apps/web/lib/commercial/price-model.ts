@@ -49,13 +49,11 @@ export type ServiceProviderPriceModel = {
 
 export type HistoryEntry = { at: string; who: string; what: string }
 
-// Fixture mode's model. The price lists a row may name are Settings ›
-// Commercial › Price lists' records (`FIXTURE_PRICE_LISTS`, lib/data/
-// commercial.ts); the row's "Price list" fact stores the list's name as its
-// tag. Its zones, customer types and container types are the fixtures' own
-// words, the browser registries that once listed them retired with #185. On
-// the Pilot a row is the API's (lib/api/records/pricing.ts) and this model
-// reads nothing of it.
+// The prototype's price model, a row's "Price list" fact storing the list's
+// name as its tag. Its zones, customer types and container types are the
+// prototype's own words, the browser registries that once listed them retired
+// with #185. A row the API holds is lib/api/records/pricing.ts's, and this
+// model reads nothing of it.
 export const SERVICE_PROVIDER_PERFORMANCE = {
   formula: "coefficient = 1 + a × (b − complaint share)",
   a: 0.5,

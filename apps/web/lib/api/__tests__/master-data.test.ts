@@ -27,10 +27,10 @@ import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { DecommissionReason } from "@waste/contracts/stock"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { createMasterDataRecord, KEY_REFUSAL, MASTER_DATA_MODULE, masterDataKindOf, NO_TREATMENT, WASTE_CODE_REFUSAL } from "../../data/master-data"
+import type { BusinessRecord } from "../../data/business-modules"
+import { createMasterDataRecord, KEY_REFUSAL, masterDataKindOf, NO_TREATMENT, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { containerTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -40,12 +40,7 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const module = getModuleDefinition(MASTER_DATA_MODULE)
-if (!module) throw new Error("no module configure.master")
-const masterFixtures = module.records
-const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
-
-const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: masterFixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve, now: NOW })
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts, resources.ts).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -65,9 +60,10 @@ const wornOut: DecommissionReason = { id: "01a0d2a4-a280-702e-8000-000000000001"
 const stolen: DecommissionReason = { ...wornOut, id: "01a0d2a4-a280-702e-8000-000000000002", code: "stolen", name: "Stolen", status: "inactive" }
 const glassCrane: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000004", key: "glass-crane", name: "Glass crane", description: "Crane over the igloo", containerTypeIds: [igloo.id] }
 const trailer: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000006", key: "closed-trailer", name: "Closed trailer", description: null, containerTypeIds: [] }
+const COPENHAGEN = webIdOf("project", copenhagen.id)
 
 // The organisation module as the store has it when master data loads.
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { fixtures: organisationFixtures, resolve: NOTHING_RESOLVED, now: NOW })
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)]])
 const resolve = resolverOver(state)
 
@@ -76,7 +72,7 @@ const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 /** The module loaded over the four seeded lists, in the module's own order. */
 async function loadedMaster() {
   const { fetch, calls } = scripted([() => pageOf([residual, glass]), () => pageOf([bin240, igloo, unmeasured]), () => pageOf([weekly, monthly, onDemand, twiceWeekly]), () => pageOf([rearLoader, glassCrane, trailer]), () => pageOf([foodInGlass, hazardous]), () => pageOf([wornOut, stolen])])
-  const result = await loadModule(clientOver(fetch), masterDataModule, { fixtures: masterFixtures, state, now: NOW })
+  const result = await loadModule(clientOver(fetch), masterDataModule, { state, now: NOW })
   return { result, calls }
 }
 
@@ -110,7 +106,7 @@ describe("the master data module", () => {
       "decommission-reason",
       "decommission-reason",
     ])
-    assert.equal(result.records.length, 16, "the fixture master-data sets lend nothing: no row is one of them")
+    assert.equal(result.records.length, 16)
     assert.equal(result.serverIds.get(`fraction-${residual.id}`), residual.id)
     const crane = result.records.find((record) => record.name === "Glass crane")
     assert.equal(crane?.facts["Container types"], "Igloo · 2,500 L", "a vehicle type names its container types by the rows loaded before it")
@@ -193,7 +189,6 @@ describe("a waste fraction", () => {
     assert.equal(record.facts.Kind, "Waste fraction")
     assert.equal(record.facts.Key, "residual")
     assert.deepEqual(record.projectIds, [], "the company's, so every scope shows it")
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
     assert.deepEqual(record.submittedValues, { kind: "waste-fraction", name: "Residual", key: "residual" })
     assert.equal(wasteFractionAdapter.statuses, undefined)
     assert.ok(wasteFractionAdapter.owns(record))
@@ -298,7 +293,7 @@ describe("a waste fraction", () => {
     const created: WasteFraction = { ...residual, id: "019995e0-0000-7000-8000-0000000000f1", key: "hard-plastic", name: "Hard plastic" }
     const { fetch, calls } = scripted([() => json(created, 201, { location: `/waste-fractions/${created.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), masterDataModule, current, made, { fixtures: masterFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), masterDataModule, current, made, { state, now: NOW })
     assert.equal(calls[0].init.method, "POST")
     assert.equal(calls[0].url, "http://api.test/waste-fractions")
     assert.deepEqual(bodyOf(calls[0]), { key: "hard-plastic", name: "Hard plastic" })
@@ -308,7 +303,7 @@ describe("a waste fraction", () => {
     assert.equal(outcome.record.name, "Hard plastic")
 
     const refused = scripted([() => problem(409, 'The company already has a waste fraction with the key "hard-plastic"')])
-    const answer = await writeRecord(clientOver(refused.fetch), masterDataModule, current, made, { fixtures: masterFixtures, state, now: NOW })
+    const answer = await writeRecord(clientOver(refused.fetch), masterDataModule, current, made, { state, now: NOW })
     assert.equal(answer.kind, "refused")
     if (answer.kind !== "refused") return
     assert.equal(problemSentence(answer.problem), 'The company already has a waste fraction with the key "hard-plastic"')
@@ -365,19 +360,19 @@ describe("a container type", () => {
 })
 
 describe("a service frequency", () => {
-  const lookups = { projectName: (id: string) => (id === FIXTURE_PROJECT_IDS.copenhagen ? "Copenhagen Central" : undefined), containerTypeName: () => undefined }
+  const lookups = { projectName: (id: string) => (id === COPENHAGEN ? "Copenhagen Central" : undefined), containerTypeName: () => undefined }
   const made = (values: Record<string, string>) => createMasterDataRecord("service-frequency", values, { now: 1, actorName: "Olivia Larsen", lookups })
 
   test("is a record in its project, its cadence read off the three numbers the way the contract explains them", () => {
     const record = serviceFrequencyAdapter.toRecord(weekly, context(resolve))
     assert.equal(record.id, `frequency-${weekly.id}`)
     assert.equal(record.context, "Service frequency · Copenhagen Central")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [COPENHAGEN])
     assert.equal(record.facts.Project, "Copenhagen Central")
     assert.equal(record.facts.Cadence, "Every week")
     assert.equal(record.value, "Every week")
     assert.equal(record.facts.Description, "One collection per week on the serviced weekday.")
-    assert.deepEqual(record.submittedValues, { kind: "service-frequency", name: "Every week", projectId: FIXTURE_PROJECT_IDS.copenhagen, description: "One collection per week on the serviced weekday.", collectionsPerWeek: "1", weeksBetween: "1" })
+    assert.deepEqual(record.submittedValues, { kind: "service-frequency", name: "Every week", projectId: COPENHAGEN, description: "One collection per week on the serviced weekday.", collectionsPerWeek: "1", weeksBetween: "1" })
     assert.equal(serviceFrequencyAdapter.toRecord(monthly, context(resolve)).facts.Cadence, "Once a month")
     assert.equal(serviceFrequencyAdapter.toRecord(onDemand, context(resolve)).facts.Cadence, "On demand")
     assert.equal(serviceFrequencyAdapter.toRecord(twiceWeekly, context(resolve)).facts.Cadence, "2 collections a week, every 3 days")
@@ -385,10 +380,10 @@ describe("a service frequency", () => {
   })
 
   test("the create body names the project by its server id and carries the numbers given, on demand being none", () => {
-    const body = serviceFrequencyAdapter.toCreateBody?.(made({ name: "Every 3 weeks", projectId: FIXTURE_PROJECT_IDS.copenhagen, description: "Every third week.", collectionsPerWeek: "1", weeksBetween: "3" }), context(resolve))
+    const body = serviceFrequencyAdapter.toCreateBody?.(made({ name: "Every 3 weeks", projectId: COPENHAGEN, description: "Every third week.", collectionsPerWeek: "1", weeksBetween: "3" }), context(resolve))
     assert.deepEqual(body, { projectId: copenhagen.id, name: "Every 3 weeks", description: "Every third week.", collectionsPerWeek: 1, weeksBetween: 3 })
     assert.ok(ServiceFrequencyCreate.safeParse(body).success)
-    const demand = serviceFrequencyAdapter.toCreateBody?.(made({ name: "On call", projectId: FIXTURE_PROJECT_IDS.copenhagen }), context(resolve))
+    const demand = serviceFrequencyAdapter.toCreateBody?.(made({ name: "On call", projectId: COPENHAGEN }), context(resolve))
     assert.deepEqual(demand, { projectId: copenhagen.id, name: "On call" })
     assert.ok(ServiceFrequencyCreate.safeParse(demand).success)
   })
@@ -396,10 +391,10 @@ describe("a service frequency", () => {
   test("is refused here without a project the store loaded, without a name, with a number that is no count, or with a cadence the one rule refuses — in the contract's own sentence", () => {
     assert.equal(LOCAL_ONE_CADENCE, ONE_CADENCE, "one rule, one sentence: the adapter quotes the contract's")
     assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: "project-nowhere" }), context(resolve)), { path: "projectId", message: "Pick a project" })
-    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "", projectId: FIXTURE_PROJECT_IDS.copenhagen }), context(resolve)), { path: "name", message: "A service frequency needs a name" })
-    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: FIXTURE_PROJECT_IDS.copenhagen, weeksBetween: "1.5" }), context(resolve)), { path: "weeksBetween", message: "Weeks between is a whole number, 1 or more" })
-    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: FIXTURE_PROJECT_IDS.copenhagen, weeksBetween: "2" }), context(resolve)), { path: "collectionsPerWeek", message: ONE_CADENCE }, "an interval needs a rate")
-    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: FIXTURE_PROJECT_IDS.copenhagen, collectionsPerWeek: "1", weeksBetween: "2", daysBetween: "3" }), context(resolve)), { path: "collectionsPerWeek", message: ONE_CADENCE }, "two intervals are two ways of saying the same thing")
+    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "", projectId: COPENHAGEN }), context(resolve)), { path: "name", message: "A service frequency needs a name" })
+    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: COPENHAGEN, weeksBetween: "1.5" }), context(resolve)), { path: "weeksBetween", message: "Weeks between is a whole number, 1 or more" })
+    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: COPENHAGEN, weeksBetween: "2" }), context(resolve)), { path: "collectionsPerWeek", message: ONE_CADENCE }, "an interval needs a rate")
+    assert.deepEqual(serviceFrequencyAdapter.toCreateBody?.(made({ name: "Weekly", projectId: COPENHAGEN, collectionsPerWeek: "1", weeksBetween: "2", daysBetween: "3" }), context(resolve)), { path: "collectionsPerWeek", message: ONE_CADENCE }, "two intervals are two ways of saying the same thing")
   })
 
   test("a patch carries what moved, a cleared number as null, and holds the merged cadence to the rule; the project does not move", () => {

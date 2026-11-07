@@ -24,14 +24,12 @@ import { SET_STOCK_MINIMUMS, setStockMinimums, stockLine, warehouseStock, type M
 import { WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
-const NO_RECORDS = [] as const
-
 /** A warehouse's stock by container type, against its minimums, and the editor of the minimums. */
 export function WarehouseStockSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
   const moduleReady = useModuleReady(WAREHOUSES_MODULE)
   const offered = useCommandOffered(WAREHOUSES_MODULE)(SET_STOCK_MINIMUMS)
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, NO_RECORDS)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
   const masterIds = useServerModuleState(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)?.serverIds
   const types = master.records.filter((row) => masterDataKindOf(row) === "container-type")
   const typeName = useServerNames(MASTER_DATA_MODULE, "container-type")

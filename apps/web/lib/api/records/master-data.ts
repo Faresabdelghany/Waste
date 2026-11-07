@@ -31,7 +31,7 @@ import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { DecommissionReason } from "@waste/contracts/stock"
 import type { VehicleType, VehicleTypeCreate } from "@waste/contracts/vehicle-types"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import {
   keyMovedRefusal,
@@ -47,7 +47,7 @@ import {
 } from "@/lib/data/master-data"
 
 import { create, get, listAll, patch, put } from "../client"
-import { inheritedPresentation, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "./adapter"
 
 export { ONE_CADENCE } from "@/lib/data/master-data"
 
@@ -91,12 +91,11 @@ function recordOf(kind: MasterDataKind, resource: Resource, values: BusinessForm
     context: shown.context,
     // No status on the wire: a row the API holds is in force, in the module's own word.
     status: "Effective",
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(resource, context.now),
     value: shown.value,
     description: `${details.label} of the company's master data.`,
     facts: shown.facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: shown.projectIds,
     recordKind: shown.recordKind,
     submittedValues: masterDataTypedValues(kind, values),

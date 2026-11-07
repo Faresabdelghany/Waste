@@ -13,7 +13,7 @@ import { toast } from "sonner"
 
 import type { TicketCharges } from "@waste/contracts/tickets"
 import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting, type ProjectPick } from "@/components/settings/use-project-setting"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -34,7 +34,7 @@ const asIs = (id: string) => id
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Default teams tabs. */
 export function TicketChargesSettings({ tabs, pick: shared }: { tabs?: ReactNode; pick: ProjectPick }) {
   const resolve = useServerResolver()
-  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, [])
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const session = useApiSession()
   const setting = useProjectSetting<TicketCharges, TicketChargePicks>({ name: "ticket-charges", readable: true, read: readTicketCharges }, shared)
   const { project, base, saving } = setting

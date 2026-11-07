@@ -7,6 +7,9 @@ export type FixtureIdentity = {
   avatarUrl?: string
 }
 
+/** The project the office's shell works in, as its sidebar names it: on the Pilot the workspace pins it where `/me` names it (`projectScopeOfMe`). */
+export const OPERATOR_PROJECT_NAME = "Copenhagen Central"
+
 export const OPERATOR_IDENTITY: FixtureIdentity = {
   name: "Olivia Larsen",
   detail: "Operations manager",

@@ -15,11 +15,11 @@ import { PlanningAreaBoundaryCreate, PlanningAreaBoundaryPatch, PlanningAreaCrea
 import { calendarFromRecord } from "@waste/domain/route-schemes/calendar"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { COLLECTION_CALENDARS_MODULE, createCollectionCalendarRecord } from "../../data/collection-calendars"
 import { createPlanningAreaRecord, PLANNING_AREAS_MODULE, planningAreaFormValues, planningAreaPurpose, planningAreaTableRow } from "../../data/planning-areas"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { companyAdapter, projectAdapter } from "../records/organisation"
 import {
@@ -43,16 +43,7 @@ import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const fixturesOf = (moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId: "configure", moduleId })
-  if (!module) throw new Error(`no module configure.${moduleId}`)
-  return module.records
-}
-const areaFixtures = fixturesOf("areas")
-const calendarFixtures = fixturesOf("calendars")
-const organisationFixtures = fixturesOf("organization")
-
-const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve, now: NOW })
 
 // The seeded demo company as the API answers it (packages/db/src/seed).
 const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null, postalAddress: null }
@@ -87,16 +78,18 @@ const central2026: CollectionCalendar = {
 const harborCalendar: CollectionCalendar = { ...central2026, id: "01a0d2a4-a280-7018-8000-000000000003", projectId: harbor.id, name: "Harbor Offices service calendar", validFrom: "2026-09-01", validTo: "2027-09-01" }
 
 // The organisation module as the store has it when the planning modules load.
-const companyRecord = companyAdapter.toRecord(company, context(organisationFixtures))
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, context(organisationFixtures))
-const harborRecord = projectAdapter.toRecord(harbor, context(organisationFixtures))
+const companyRecord = companyAdapter.toRecord(company, context())
+const copenhagenRecord = projectAdapter.toRecord(copenhagen, context())
+const harborRecord = projectAdapter.toRecord(harbor, context())
+const copenhagenWebId = webIdOf("project", copenhagen.id)
+const harborWebId = webIdOf("project", harbor.id)
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [companyRecord, copenhagenRecord, harborRecord], serverIds: new Map([[companyRecord.id, company.id], [copenhagenRecord.id, copenhagen.id], [harborRecord.id, harbor.id]]) }, 1)],
 ])
 const resolve = resolverOver(state)
-const areaContext = (): MappingContext => context(areaFixtures, resolve)
-const calendarContext = (): MappingContext => context(calendarFixtures, resolve)
-const lookups = { projectName: (id: string) => (id === FIXTURE_PROJECT_IDS.copenhagen ? "Copenhagen Central" : undefined), recordName: () => undefined }
+const areaContext = (): MappingContext => context(resolve)
+const calendarContext = (): MappingContext => context(resolve)
+const lookups = { projectName: (id: string) => (id === copenhagenWebId ? "Copenhagen Central" : undefined), recordName: () => undefined }
 
 const withBoundaries = (area: PlanningArea, boundaries: PlanningAreaBoundary[]): PlanningAreaResource => ({ ...area, boundaries })
 
@@ -115,9 +108,9 @@ describe("a planning area read", () => {
     ])
   })
 
-  test("a seeded area is its fixture record, with the version in force as its geometry, its dates and its Active status", () => {
+  test("an area is area-<uuid>, with the version in force as its geometry, its dates and its Active status", () => {
     const record = planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext())
-    assert.equal(record.id, "area-indreby")
+    assert.equal(record.id, webIdOf("area", indreby.id))
     assert.equal(record.name, "Indre By Operations")
     assert.equal(record.context, "Route planning · Copenhagen Central")
     assert.equal(record.status, "Active")
@@ -125,13 +118,12 @@ describe("a planning area read", () => {
     assert.equal(record.facts["Area purpose"], "Route planning")
     assert.equal(record.facts["Effective from"], "2026-01-01")
     assert.equal(record.facts["Effective to"], undefined)
-    assert.equal(record.value, "—", "nothing measures coverage; the fixture's figure is not the API's")
-    assert.equal(record.owner, "Operations Admin", "presentation the wire does not carry is the fixture's")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
+    assert.equal(record.value, "—", "nothing measures coverage")
+    assert.equal(record.owner, "", "presentation the wire does not carry is empty")
+    assert.deepEqual(record.projectIds, [copenhagenWebId])
     assert.equal(record.recordKind, "Operational Planning Area version")
     assert.equal(planningAreaPurpose(record), "route-planning")
-    assert.equal(record.submittedValues?.projectId, FIXTURE_PROJECT_IDS.copenhagen)
+    assert.equal(record.submittedValues?.projectId, copenhagenWebId)
     assert.equal(record.submittedValues?.areaCode, "OP-CEN-01")
     assert.equal(record.submittedValues?.effectiveFrom, "2026-01-01")
     assert.equal(record.submittedValues?.boundaryId, indrebyBoundary.id)
@@ -146,13 +138,13 @@ describe("a planning area read", () => {
 
   test("the status is a reading of the versions against the day: none is Draft, only an upcoming one Upcoming, only an ended one Expired; the dates are the version's, the end as the last day in force", () => {
     const undrawn = planningAreaAdapter.toRecord(withBoundaries(nordhavn, []), areaContext())
-    assert.equal(undrawn.id, "area-harbor-1")
+    assert.equal(undrawn.id, webIdOf("area", nordhavn.id))
     assert.equal(undrawn.status, "Draft")
     assert.equal(undrawn.submittedValues?.geometry, undefined)
     assert.equal(undrawn.facts["Effective from"], undefined)
 
     const upcoming = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired, valbyUpcoming]), areaContext())
-    assert.equal(upcoming.id, `area-${valby.id}`, "a row no fixture names is area-<uuid>")
+    assert.equal(upcoming.id, webIdOf("area", valby.id))
     assert.equal(upcoming.status, "Upcoming")
     assert.equal(upcoming.submittedValues?.effectiveFrom, "2027-01-01")
     assert.equal(upcoming.submittedValues?.boundaryId, valbyUpcoming.id)
@@ -183,22 +175,16 @@ describe("a planning area read", () => {
   })
 
   test("the day is read in the project's own timezone, so the version in force is the project's and not the browser's", () => {
-    const lateEvening = context(areaFixtures, resolve)
+    const lateEvening = context(resolve)
     lateEvening.now = new Date("2026-09-30T23:30:00Z")
     const fromOctober: PlanningAreaBoundary = { ...indrebyBoundary, validFrom: "2026-10-01" }
     // Copenhagen is already on 1 October at 23:30Z; the record reads the version as in force.
     assert.equal(planningAreaAdapter.toRecord(withBoundaries(indreby, [fromOctober]), lateEvening).status, "Active")
-    const newYorkProject = projectAdapter.toRecord({ ...harbor, timezone: "America/New_York" }, context(organisationFixtures))
+    const newYorkProject = projectAdapter.toRecord({ ...harbor, timezone: "America/New_York" }, context())
     const newYork: ServerRecordsState = new Map([["configure.organization", loaded({ records: [newYorkProject], serverIds: new Map([[newYorkProject.id, harbor.id]]) }, 1)]])
-    const evening = context(areaFixtures, resolverOver(newYork))
+    const evening = context(resolverOver(newYork))
     evening.now = new Date("2026-09-30T23:30:00Z")
     assert.equal(planningAreaAdapter.toRecord(withBoundaries(nordhavn, [{ ...fromOctober, projectId: harbor.id, planningAreaId: nordhavn.id }]), evening).status, "Upcoming")
-  })
-
-  test("a seeded area is its fixture by the reference it quotes, so a renamed area keeps the id the fixtures of other modules name", () => {
-    const renamed = planningAreaAdapter.toRecord(withBoundaries({ ...indreby, name: "Indre By" }, [indrebyBoundary]), areaContext())
-    assert.equal(renamed.id, "area-indreby")
-    assert.equal(renamed.name, "Indre By")
   })
 
   test("an area has no status on the wire: the adapter lists none and every move is refused before the API", () => {
@@ -238,7 +224,7 @@ describe("the polygon a form's geometry text spells", () => {
 })
 
 describe("the record the Areas & Zones pane writes", () => {
-  const values: Record<string, string> = { areaName: "Valby Test Area", areaCode: "OP-VAL-01", projectId: FIXTURE_PROJECT_IDS.copenhagen, purpose: "notification", effectiveFrom: "2026-10-01", effectiveTo: "2026-12-31", geometry: JSON.stringify(polygon) }
+  const values: Record<string, string> = { areaName: "Valby Test Area", areaCode: "OP-VAL-01", projectId: copenhagenWebId, purpose: "notification", effectiveFrom: "2026-10-01", effectiveTo: "2026-12-31", geometry: JSON.stringify(polygon) }
   const made = (overrides: Record<string, string> = {}) => createPlanningAreaRecord({ ...values, ...overrides }, { now: 1_700_000_000_000, actorName: "Olivia Larsen", lookups })
 
   test("becomes a PlanningAreaCreate the contracts accept: the project by its server id, the code, the purpose, and the first version drawn from the geometry with the end as the first day out of force", () => {
@@ -270,7 +256,7 @@ describe("the record the Areas & Zones pane writes", () => {
     const written = { ...valby, boundary: { ...indrebyBoundary, id: "019995e0-0000-7000-8000-0000000000e5", planningAreaId: valby.id, validFrom: "2026-10-01", validTo: "2027-01-01" } }
     const { fetch, calls } = scripted([() => json(written, 201, { location: `/planning-areas/${valby.id}` })])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), planningAreasModule, current, made(), { fixtures: areaFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), planningAreasModule, current, made(), { state, now: NOW })
     assert.equal(calls[0].url, "http://api.test/planning-areas")
     assert.equal(calls[0].init.method, "POST")
     assert.deepEqual(bodyOf(calls[0]), { projectId: copenhagen.id, code: "OP-VAL-01", name: "Valby Test Area", purpose: "notification", boundary: { boundary: polygon, validFrom: "2026-10-01", validTo: "2027-01-01" } })
@@ -285,12 +271,12 @@ describe("the record the Areas & Zones pane writes", () => {
   test("the API's refusals come back as its sentences: a code the project has, and a polygon PostGIS calls invalid, at the path the body carried it", async () => {
     const current = loaded({ records: [], serverIds: new Map() }, 1)
     const taken = scripted([() => problem(409, 'This project already has a planning area coded "OP-VAL-01"')])
-    const refused = await writeRecord(clientOver(taken.fetch), planningAreasModule, current, made(), { fixtures: areaFixtures, state, now: NOW })
+    const refused = await writeRecord(clientOver(taken.fetch), planningAreasModule, current, made(), { state, now: NOW })
     assert.equal(refused.kind, "refused")
     if (refused.kind === "refused") assert.equal(problemSentence(refused.problem), 'This project already has a planning area coded "OP-VAL-01"')
 
     const invalid = scripted([() => problem(400, "The request body is invalid", [{ path: "boundary.boundary", message: "Not a valid polygon" }])])
-    const crossed = await writeRecord(clientOver(invalid.fetch), planningAreasModule, current, made(), { fixtures: areaFixtures, state, now: NOW })
+    const crossed = await writeRecord(clientOver(invalid.fetch), planningAreasModule, current, made(), { state, now: NOW })
     assert.equal(crossed.kind, "refused")
     if (crossed.kind === "refused") assert.equal(problemSentence(crossed.problem), "The request body is invalid — boundary.boundary: Not a valid polygon")
   })
@@ -305,7 +291,7 @@ describe("an edited planning area", () => {
     assert.deepEqual(body, { area: { name: "Indre By", purpose: "service-operations" } })
     assert.ok(PlanningAreaPatch.safeParse((body as { area: unknown }).area).success)
     assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ areaCode: "OP-CEN-02" }), areaContext()), { path: "areaCode", message: "The reference is set once: an area that needs another reference is another area" })
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ projectId: FIXTURE_PROJECT_IDS.harbor }), areaContext()), { path: "projectId", message: "An area stays in its project" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ projectId: harborWebId }), areaContext()), { path: "projectId", message: "An area stays in its project" })
     assert.equal(planningAreaAdapter.toPatchBody(before, before, areaContext()), null, "nothing moved, nothing sent")
   })
 
@@ -324,7 +310,7 @@ describe("an edited planning area", () => {
     const renamed = { ...indreby, name: "Indre By" }
     const { fetch } = scripted([() => json(renamed), () => json({ items: [indrebyBoundary], nextCursor: null })])
     const current = loaded({ records: [before], serverIds: new Map([[before.id, indreby.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), planningAreasModule, current, edited({ areaName: "Indre By" }), { fixtures: areaFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), planningAreasModule, current, edited({ areaName: "Indre By" }), { state, now: NOW })
     assert.equal(outcome.kind, "updated")
     if (outcome.kind !== "updated") return
     assert.equal(outcome.record.id, before.id)
@@ -334,11 +320,11 @@ describe("an edited planning area", () => {
   test("through the store's write, a rename whose versions could not be read back has landed, and a version written before a refused rename is a partial refusal, read again (#263)", async () => {
     const current = loaded({ records: [before], serverIds: new Map([[before.id, indreby.id]]) }, 1)
     const unread = scripted([() => json({ ...indreby, name: "Indre By" }), () => problem(503, "The API is unavailable")])
-    const landed = await writeRecord(clientOver(unread.fetch), planningAreasModule, current, edited({ areaName: "Indre By" }), { fixtures: areaFixtures, state, now: NOW })
+    const landed = await writeRecord(clientOver(unread.fetch), planningAreasModule, current, edited({ areaName: "Indre By" }), { state, now: NOW })
     assert.deepEqual(landed.kind === "landed" ? [landed.recordId, landed.serverId] : landed.kind, [before.id, indreby.id])
     const redrawn = JSON.stringify(RING.slice(0, 4).map(([lng, lat]) => [lng + 0.01, lat]))
     const partly = scripted([() => json(indrebyBoundary), () => problem(409, "Another area is called Indre By")])
-    const refused = await writeRecord(clientOver(partly.fetch), planningAreasModule, current, edited({ areaName: "Indre By", geometry: redrawn }), { fixtures: areaFixtures, state, now: NOW })
+    const refused = await writeRecord(clientOver(partly.fetch), planningAreasModule, current, edited({ areaName: "Indre By", geometry: redrawn }), { state, now: NOW })
     assert.deepEqual(refused.kind === "refused" ? [refused.problem.detail, refused.partial] : refused.kind, ["Another area is called Indre By", true], "the version stands: the row is read again, never put back")
   })
 
@@ -440,17 +426,17 @@ describe("an area's boundary version history (O21 of #290)", () => {
 })
 
 describe("a collection calendar read", () => {
-  test("is calendar-<uuid>, never the fixture's id, since nothing names a calendar by id: the project's calendars are found by project", () => {
+  test("is calendar-<uuid> under its project's web id: the project's calendars are found by project", () => {
     const record = collectionCalendarAdapter.toRecord(central2026, calendarContext())
     assert.equal(record.id, `calendar-${central2026.id}`)
     assert.equal(record.name, "Copenhagen Central 2026")
     assert.equal(record.status, "Active")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [copenhagenWebId])
     assert.equal(record.recordKind, "Collection Calendar")
     assert.equal(record.facts.Project, "Copenhagen Central")
     assert.equal("Holidays" in record.facts, false)
     assert.equal(record.facts.Validity, "2026-01-01 – 2026-12-31")
-    assert.equal(record.submittedValues?.projectId, FIXTURE_PROJECT_IDS.copenhagen)
+    assert.equal(record.submittedValues?.projectId, copenhagenWebId)
     assert.equal(record.submittedValues?.validFrom, "2026-01-01")
     assert.equal(record.submittedValues?.validTo, "2026-12-31", "the last day in force, as the form and the readers spell it")
     assert.equal(record.submittedValues?.holidayDates, undefined, "a calendar carries no holidays")
@@ -462,7 +448,7 @@ describe("a collection calendar read", () => {
     const calendar = calendarFromRecord(record)
     assert.equal(calendar?.validFrom, "2026-01-01")
     assert.equal(calendar?.validTo, "2026-12-31")
-    const resolved = resolveProjectCalendar(FIXTURE_PROJECT_IDS.copenhagen, { projects: [copenhagenRecord], calendars: [record] })
+    const resolved = resolveProjectCalendar(copenhagenWebId, { projects: [copenhagenRecord], calendars: [record] })
     assert.equal(resolved.list?.name, "Danish public holidays")
     assert.equal(resolved.list?.dates.size, 0, "no list record of that name among the calendars, so no days")
     const open = collectionCalendarAdapter.toRecord({ ...harborCalendar, validTo: null }, calendarContext())
@@ -472,7 +458,7 @@ describe("a collection calendar read", () => {
 })
 
 describe("the record the Collection calendars pane writes", () => {
-  const values = { calendarName: "Copenhagen Central 2028", projectId: FIXTURE_PROJECT_IDS.copenhagen, weekStart: "monday", validFrom: "2028-01-01", validTo: "2028-12-31", timezone: "Europe/Copenhagen" }
+  const values = { calendarName: "Copenhagen Central 2028", projectId: copenhagenWebId, weekStart: "monday", validFrom: "2028-01-01", validTo: "2028-12-31", timezone: "Europe/Copenhagen" }
   const made = (overrides: Record<string, string> = {}) => createCollectionCalendarRecord({ ...values, ...overrides }, { now: 1_700_000_000_000, actorName: "Olivia Larsen", lookups })
   test("becomes a CollectionCalendarCreate the contracts accept: the project by its server id, the period with its end as the first day out of force, and no holidays", () => {
     const record = made()
@@ -502,7 +488,7 @@ describe("the record the Collection calendars pane writes", () => {
     const written: CollectionCalendar = { ...central2026, id: "019995e0-0000-7000-8000-0000000000f1", name: "Copenhagen Central 2028", validFrom: "2028-01-01", validTo: "2029-01-01" }
     const current = loaded({ records: [], serverIds: new Map() }, 1)
     const { fetch, calls } = scripted([() => json(written, 201, { location: `/collection-calendars/${written.id}` })])
-    const outcome = await writeRecord(clientOver(fetch), collectionCalendarsModule, current, made(), { fixtures: calendarFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), collectionCalendarsModule, current, made(), { state, now: NOW })
     assert.equal(calls[0].url, "http://api.test/collection-calendars")
     assert.equal((bodyOf(calls[0]) as { name: string }).name, "Copenhagen Central 2028")
     assert.equal(outcome.kind, "created")
@@ -512,7 +498,7 @@ describe("the record the Collection calendars pane writes", () => {
     }
 
     const taken = scripted([() => problem(409, 'This project already has a collection calendar called "Copenhagen Central 2028"')])
-    const refused = await writeRecord(clientOver(taken.fetch), collectionCalendarsModule, current, made(), { fixtures: calendarFixtures, state, now: NOW })
+    const refused = await writeRecord(clientOver(taken.fetch), collectionCalendarsModule, current, made(), { state, now: NOW })
     assert.equal(refused.kind, "refused")
     if (refused.kind === "refused") assert.equal(problemSentence(refused.problem), 'This project already has a collection calendar called "Copenhagen Central 2028"')
   })
@@ -527,7 +513,7 @@ describe("an edited collection calendar", () => {
     assert.deepEqual(body, { name: "Copenhagen Central 2026 (revised)", validTo: "2026-07-01" })
     assert.ok(CollectionCalendarPatch.safeParse(body).success)
     assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "" }), calendarContext()), { validTo: null })
-    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ projectId: FIXTURE_PROJECT_IDS.harbor }), calendarContext()), { path: "projectId", message: "A calendar stays in its project" })
+    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ projectId: harborWebId }), calendarContext()), { path: "projectId", message: "A calendar stays in its project" })
     assert.equal(collectionCalendarAdapter.toPatchBody(before, before, calendarContext()), null)
   })
 

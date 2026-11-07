@@ -22,7 +22,7 @@ import { STOCK_PLACES, ADJUSTMENT_TARGETS } from "@waste/domain/resources/vocabu
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 
 import { AGREEMENTS_MODULE } from "./agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
+import { type BusinessRecord, type ModuleLocation } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
 
@@ -121,7 +121,6 @@ export function mintedRecord({ id, name, status, recordKind, facts = {}, values 
     related: [],
     source: "Waste API",
     freshness: "Now",
-    companyId: FIXTURE_COMPANY_ID,
     projectIds: projectId === "" ? [] : [projectId],
     recordKind,
     submittedValues: values,

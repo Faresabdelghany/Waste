@@ -25,13 +25,11 @@ import { useModuleReady, useRecordsByServerId, useRowHistory, useServerNames } f
 import { dayAndTimeOn, wallClockIn } from "@/lib/api/records/clock"
 import { actOnStation, ADJUST_STOCK, CANCEL_LOAD, DISPUTE_LOAD, loadLine, RECEIVE_LOAD, RECONCILE_LOAD, SEND_LOAD, stationLoads, stationStock, stockLine } from "@/lib/api/records/haul-out"
 import type { BusinessFormOption } from "@/lib/data/business-form-types"
-import { getModuleDefinition } from "@/lib/data/business-modules"
 import { VEHICLES_MODULE } from "@/lib/data/allocations"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { adjustDraft, destinationChoices, isTransferStation, loadCommandsOffered, projectChoices, receiptDraft, sendDraft, STATIONS_MODULE, vehicleChoices } from "@/lib/data/haul-out"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
-const NO_RECORDS: never[] = []
 /** What a station that is not a transfer station reads: nothing, and no request. */
 const nothing = async (): Promise<never[]> => []
 const VERB = { receive: "Record receipt", reconcile: "Reconcile", dispute: "Dispute", cancel: "Cancel load" } as const
@@ -80,10 +78,10 @@ export function TransferStationSurface({ record }: RowSurfaceProps) {
   const stock = useRowHistory(STATIONS_MODULE.workspaceId, STATIONS_MODULE.moduleId, record, version, transfer ? stationStock : nothing)
   const loads = useRowHistory(STATIONS_MODULE.workspaceId, STATIONS_MODULE.moduleId, record, version, transfer ? stationLoads : nothing)
   const projectByServerId = useRecordsByServerId(ORGANISATION_MODULE)
-  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, getModuleDefinition(ORGANISATION_MODULE)?.records ?? NO_RECORDS)
-  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, NO_RECORDS)
-  const stations = useModuleRecords(STATIONS_MODULE.workspaceId, STATIONS_MODULE.moduleId, NO_RECORDS)
-  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, NO_RECORDS)
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
+  const stations = useModuleRecords(STATIONS_MODULE.workspaceId, STATIONS_MODULE.moduleId)
+  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
   const projectName = useServerNames(ORGANISATION_MODULE, "project")
   const fractionName = useServerNames(MASTER_DATA_MODULE, "waste-fraction")
   const stationName = useServerNames(STATIONS_MODULE, "station")

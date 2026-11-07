@@ -31,7 +31,6 @@ function container(
 }
 
 const ryesgade = { Address: "Ryesgade 45, 2200 København N", Property: "Ryesgade 45" }
-const jagtvej = { Address: "Jagtvej 10, 2200 København N", Property: "Jagtvej 10" }
 
 function point(id: string, lng: number, lat: number, fractions: string[]): MapPoint {
   return {

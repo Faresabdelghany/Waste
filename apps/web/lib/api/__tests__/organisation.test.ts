@@ -1,6 +1,5 @@
-// The Organisation & Access mappings (Issue #81): a wire resource of the
-// seeded demo company becomes the fixture record the seed derived it from, a
-// row no fixture names becomes a `<prefix>-<uuid>` record, and a record the
+// The Organisation & Access mappings (Issue #81): a wire resource becomes a
+// `<prefix>-<uuid>` record (a seeded role `role-<key>`), and a record the
 // workspace hands back becomes exactly the body the API's contracts accept —
 // held here against the contracts' own zod schemas, which the web meets in
 // its tests and nowhere in its bundle (CLAUDE.md, contracts).
@@ -11,9 +10,9 @@ import { RoleCreate, RolePatch, UserInvite, UserPatch, type Role, type User } fr
 import { CompanyPatch, ProjectCreate, ProjectPatch, ServiceProviderCreate, ServiceProviderPatch, type Company, type Project, type ServiceProvider } from "@waste/contracts/organisation"
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
-import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { isInProjectScope, isProjectRecordId, projectRecordsOf } from "../../data/project-scope"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import type { BusinessRecord } from "../../data/business-modules"
+import { isInProjectScope, isProjectRecordId, projectRecordsOf, type ProjectRecordId } from "../../data/project-scope"
+import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import {
   accessMapOf,
   accessModule,
@@ -36,13 +35,7 @@ import { customerAdapter } from "../records/registry"
 const NOW = new Date("2026-09-25T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const fixturesOf = (workspaceId: "configure" | "service-providers", moduleId: string) => {
-  const module = getModuleDefinition({ workspaceId, moduleId })
-  if (!module) throw new Error(`no module ${workspaceId}.${moduleId}`)
-  return module.records
-}
-
-const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHING_RESOLVED, companyRecordId?: string): MappingContext => ({ fixtures, resolve, companyRecordId, now: NOW })
+const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve, now: NOW })
 
 // The seeded demo company as the API answers it (packages/db/src/seed/demo.ts).
 const COMPANY_ID = "01a0d2a4-a280-7001-8000-000000000001"
@@ -102,44 +95,33 @@ function resolverOver(entries: Array<[BusinessRecord, string]>): Resolver {
 }
 
 describe("the company", () => {
-  const fixtures = fixturesOf("configure", "organization")
-
-  test("the tenant's row is the fixture company record, by its legal name, with the wire's fields over the fixture's facts", () => {
-    const record = companyAdapter.toRecord(company, context(fixtures))
-    assert.equal(record.id, FIXTURE_COMPANY_ID)
+  test("the tenant's row is company-<uuid>, named by its legal name, with the wire's fields as its facts", () => {
+    const record = companyAdapter.toRecord(company, context())
+    assert.equal(record.id, webIdOf("company", COMPANY_ID))
     assert.equal(record.name, "Kystbyen Renovation A/S")
     assert.equal(record.status, "Active")
     assert.equal(record.facts.CVR, "12345678")
     assert.equal(record.facts.Country, "Denmark")
-    assert.equal(record.facts.Currency, "DKK", "a fact the wire does not carry is inherited from the fixture")
     assert.equal(record.updated, "Today")
     assert.equal(record.source, "Waste API")
-    assert.equal(record.owner, "Company Admin", "presentation the wire does not carry is the fixture's")
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
-  })
-
-  test("a company the fixtures never named still takes the tenant id, since every fixture's companyId is it", () => {
-    const record = companyAdapter.toRecord({ ...company, name: "Anywhere", legalName: "Anywhere A/S" }, context(fixtures))
-    assert.equal(record.id, FIXTURE_COMPANY_ID)
-    assert.equal(record.owner, "")
   })
 
   test("a patch says only what moved, and the contracts accept it", () => {
-    const before = companyAdapter.toRecord(company, context(fixtures))
+    const before = companyAdapter.toRecord(company, context())
     const after = { ...before, submittedValues: { ...before.submittedValues, legalName: "Kystbyen Renovation ApS", country: "Denmark" } }
-    const body = companyAdapter.toPatchBody(before, after, context(fixtures))
+    const body = companyAdapter.toPatchBody(before, after, context())
     assert.deepEqual(body, { legalName: "Kystbyen Renovation ApS" })
     assert.ok(CompanyPatch.safeParse(body).success)
-    assert.equal(companyAdapter.toPatchBody(before, before, context(fixtures)), null, "nothing moved, nothing sent")
+    assert.equal(companyAdapter.toPatchBody(before, before, context()), null, "nothing moved, nothing sent")
   })
 
   test("the registration number travels from the typed value alone; a fact is presentation and is never read back", () => {
-    const before = companyAdapter.toRecord(company, context(fixtures))
+    const before = companyAdapter.toRecord(company, context())
     assert.equal(before.submittedValues?.registrationNumber, "12345678", "the read seeds the form, so the value is always typed")
     const factOnly = { ...before, facts: { ...before.facts, CVR: "99999999" } }
-    assert.equal(companyAdapter.toPatchBody(before, factOnly, context(fixtures)), null, "a changed fact moves nothing")
+    assert.equal(companyAdapter.toPatchBody(before, factOnly, context()), null, "a changed fact moves nothing")
     const typedChange = { ...before, submittedValues: { ...before.submittedValues, registrationNumber: "87654321" } }
-    assert.deepEqual(companyAdapter.toPatchBody(before, typedChange, context(fixtures)), { registrationNumber: "87654321" })
+    assert.deepEqual(companyAdapter.toPatchBody(before, typedChange, context()), { registrationNumber: "87654321" })
   })
 
   test("the company's status is the API's to state: the adapter lists no status a patch may carry", () => {
@@ -147,49 +129,49 @@ describe("the company", () => {
   })
 
   test("the tenant's record is told from a customer organisation by kind, not by the company- prefix both carry", () => {
-    const tenant = companyAdapter.toRecord(company, context(fixtures))
+    const tenant = companyAdapter.toRecord(company, context())
     assert.ok(isCompanyRecord(tenant))
-    const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
+    const osterbroId = "01a0d2a4-a280-700b-8000-000000000002"
     const osterbro = customerAdapter.toRecord(
-      { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" },
-      context(customerFixtures),
+      { id: osterbroId, ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" },
+      context(),
     )
-    assert.equal(osterbro.id, "company-osterbro-housing", "the customer organisation's fixture id carries company- too")
+    assert.equal(osterbro.id, webIdOf("company", osterbroId), "a customer organisation's id carries company- too")
     assert.ok(companyAdapter.owns(osterbro), "by prefix alone the company adapter would claim it")
     assert.ok(!isCompanyRecord(osterbro), "by kind it does not")
   })
 
   test("the invoice identity (#291 C4) reads back as facts and typed values, and a patch sets it and clears it", () => {
-    const before = companyAdapter.toRecord(company, context(fixtures))
+    const before = companyAdapter.toRecord(company, context())
     assert.equal(before.facts["VAT number"], undefined, "no identity, no fact")
     assert.equal(before.submittedValues?.vatNumber, undefined)
     const set = { ...before, submittedValues: { ...before.submittedValues, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" } }
-    const body = companyAdapter.toPatchBody(before, set, context(fixtures))
+    const body = companyAdapter.toPatchBody(before, set, context())
     assert.deepEqual(body, { vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" })
     assert.ok(CompanyPatch.safeParse(body).success)
-    const read = companyAdapter.toRecord({ ...company, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }, context(fixtures))
+    const read = companyAdapter.toRecord({ ...company, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }, context())
     assert.equal(read.facts["VAT number"], "DK12345678")
     assert.equal(read.facts.IBAN, "DK5000400440116243")
     assert.equal(read.facts.BIC, "DABADKKK")
     assert.equal(read.facts["FIK creditor"], "85123456")
     assert.equal(read.submittedValues?.fikCreditorNumber, "85123456")
-    assert.equal(companyAdapter.toPatchBody(read, read, context(fixtures)), null, "an identity read back moves nothing")
+    assert.equal(companyAdapter.toPatchBody(read, read, context()), null, "an identity read back moves nothing")
     const cleared = { ...read, submittedValues: { ...read.submittedValues, fikCreditorNumber: "" } }
-    assert.deepEqual(companyAdapter.toPatchBody(read, cleared, context(fixtures)), { fikCreditorNumber: null })
+    assert.deepEqual(companyAdapter.toPatchBody(read, cleared, context()), { fikCreditorNumber: null })
   })
 
   test("the postal address (#291 C5) reads back as a fact and a typed value, a patch sets it whole and a blank clears it", () => {
-    const before = companyAdapter.toRecord(company, context(fixtures))
+    const before = companyAdapter.toRecord(company, context())
     assert.equal(before.facts["Postal address"], undefined)
     const address = "Havnegade 4\n2100 København Ø"
     const set = { ...before, submittedValues: { ...before.submittedValues, postalAddress: address } }
-    const body = companyAdapter.toPatchBody(before, set, context(fixtures))
+    const body = companyAdapter.toPatchBody(before, set, context())
     assert.deepEqual(body, { postalAddress: address })
     assert.ok(CompanyPatch.safeParse(body).success)
-    const read = companyAdapter.toRecord({ ...company, postalAddress: address }, context(fixtures))
+    const read = companyAdapter.toRecord({ ...company, postalAddress: address }, context())
     assert.equal(read.facts["Postal address"], "Havnegade 4, 2100 København Ø", "one line in a fact")
     assert.equal(read.submittedValues?.postalAddress, address)
-    assert.deepEqual(companyAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, postalAddress: "  " } }, context(fixtures)), { postalAddress: null })
+    assert.deepEqual(companyAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, postalAddress: "  " } }, context()), { postalAddress: null })
   })
 
   test("the company is not created here", () => {
@@ -199,36 +181,31 @@ describe("the company", () => {
 })
 
 describe("the projects", () => {
-  const fixtures = fixturesOf("configure", "organization")
-
-  test("a seeded project is its fixture record: the fixture id, the wire's fields, the fixture's presentation", () => {
-    const record = projectAdapter.toRecord(copenhagen, context(fixtures, NOTHING_RESOLVED, FIXTURE_COMPANY_ID))
-    assert.equal(record.id, FIXTURE_PROJECT_IDS.copenhagen)
+  test("a project is project-<uuid>, with the wire's fields as its facts", () => {
+    const record = projectAdapter.toRecord(copenhagen, context())
+    assert.equal(record.id, webIdOf("project", copenhagen.id))
     assert.equal(record.name, "Copenhagen Central")
     assert.equal(record.context, "Project · municipality")
     assert.equal(record.status, "Active")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen], "a project record scopes itself")
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
+    assert.deepEqual(record.projectIds, [record.id], "a project record scopes itself")
     assert.equal(record.facts.Language, "Danish")
     assert.equal(record.facts.Weekend, "Sat–Sun")
     assert.equal(record.facts["Holiday list"], "Danish public holidays")
-    assert.equal(record.facts.WeekStart, "Monday", "a fact only the fixture knows stays")
-    assert.equal(record.value, "Core + Live + Invoicing")
     assert.equal(record.submittedValues?.weekend, "saturday, sunday")
     assert.equal(record.submittedValues?.holidayList, "Danish public holidays")
   })
 
   test("a project without a holiday list carries neither the fact nor the typed value", () => {
-    const record = projectAdapter.toRecord(harbor, context(fixtures))
-    assert.equal(record.id, FIXTURE_PROJECT_IDS.harbor)
+    const record = projectAdapter.toRecord(harbor, context())
+    assert.equal(record.id, webIdOf("project", harbor.id))
     assert.equal(record.status, "Onboarding")
     assert.equal(record.facts["Holiday list"], undefined)
     assert.equal(record.submittedValues?.holidayList, undefined)
   })
 
-  test("resolveProjectCalendar reads a server project as it reads a fixture one", () => {
-    const projects = [copenhagen, harbor, aarhus].map((project) => projectAdapter.toRecord(project, context(fixtures)))
-    const calendar = resolveProjectCalendar(FIXTURE_PROJECT_IDS.copenhagen, { projects, calendars: [] })
+  test("resolveProjectCalendar reads a server project's weekend and holiday list", () => {
+    const projects = [copenhagen, harbor, aarhus].map((project) => projectAdapter.toRecord(project, context()))
+    const calendar = resolveProjectCalendar(projects[0].id, { projects, calendars: [] })
     assert.equal(calendar.list?.name, "Danish public holidays")
     assert.deepEqual(calendar.weekend, ["saturday", "sunday"])
     const cairoLike = resolveProjectCalendar(projects[2].id, { projects, calendars: [] })
@@ -236,13 +213,13 @@ describe("the projects", () => {
     assert.deepEqual(cairoLike.weekend, ["friday", "saturday"])
   })
 
-  test("a project no fixture names is project-<uuid>, which the scope vocabulary reads as a project record", () => {
-    const record = projectAdapter.toRecord(aarhus, context(fixtures))
+  test("a project's project-<uuid> is what the scope vocabulary reads as a project record", () => {
+    const record = projectAdapter.toRecord(aarhus, context())
     assert.equal(record.id, `project-${aarhus.id}`)
     assert.ok(isProjectRecordId(record.id))
     assert.equal(record.facts.Weekend, "Fri–Sat")
     assert.equal(record.owner, "")
-    const organisation = [companyAdapter.toRecord(company, context(fixtures)), record]
+    const organisation = [companyAdapter.toRecord(company, context()), record]
     assert.deepEqual(
       projectRecordsOf(organisation).map((project) => project.id),
       [record.id],
@@ -251,94 +228,94 @@ describe("the projects", () => {
 
   test("a record the workspace made becomes a ProjectCreate the contracts accept, the weekend and list included", () => {
     const record: BusinessRecord = {
-      ...projectAdapter.toRecord(aarhus, context(fixtures)),
+      ...projectAdapter.toRecord(aarhus, context()),
       id: "organization-project-1700000000000",
       submittedValues: { name: "Aarhus North", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", weekend: "friday, saturday" },
     }
-    const body = projectAdapter.toCreateBody?.(record, context(fixtures))
+    const body = projectAdapter.toCreateBody?.(record, context())
     assert.deepEqual(body, { name: "Aarhus North", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", weekend: ["friday", "saturday"], holidayList: null, status: "active" })
     const parsed = ProjectCreate.safeParse(body)
     assert.ok(parsed.success, JSON.stringify(parsed.error))
   })
 
   test("a create missing what the API requires is refused here, naming the field", () => {
-    const record: BusinessRecord = { ...projectAdapter.toRecord(aarhus, context(fixtures)), submittedValues: { name: "X", kind: "Contract" } }
-    assert.deepEqual(projectAdapter.toCreateBody?.(record, context(fixtures)), { path: "language", message: "A project needs a language" })
+    const record: BusinessRecord = { ...projectAdapter.toRecord(aarhus, context()), submittedValues: { name: "X", kind: "Contract" } }
+    assert.deepEqual(projectAdapter.toCreateBody?.(record, context()), { path: "language", message: "A project needs a language" })
   })
 
   test("the Holiday lists pane's write becomes a patch of the weekend and the list, and a taken-away list is null", () => {
-    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const before = projectAdapter.toRecord(copenhagen, context())
     const renamed = { ...before, submittedValues: { ...before.submittedValues, weekend: "friday, saturday", holidayList: "Egyptian public holidays" } }
-    assert.deepEqual(projectAdapter.toPatchBody(before, renamed, context(fixtures)), { weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" })
+    assert.deepEqual(projectAdapter.toPatchBody(before, renamed, context()), { weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" })
     const withoutList = { ...before, submittedValues: { ...before.submittedValues } }
     delete withoutList.submittedValues.holidayList
-    const body = projectAdapter.toPatchBody(before, withoutList, context(fixtures))
+    const body = projectAdapter.toPatchBody(before, withoutList, context())
     assert.deepEqual(body, { holidayList: null })
     assert.ok(ProjectPatch.safeParse(body).success)
   })
 
   test("Settings › Portals & branding publishes a project under a slug and takes it down again (#293, #487): the public address reads back as a fact and a typed value", () => {
-    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const before = projectAdapter.toRecord(copenhagen, context())
     assert.equal(before.submittedValues?.publicSlug, undefined)
     const published = { ...before, submittedValues: { ...before.submittedValues, publicSlug: "kystbyen" } }
-    const body = projectAdapter.toPatchBody(before, published, context(fixtures))
+    const body = projectAdapter.toPatchBody(before, published, context())
     assert.deepEqual(body, { publicSlug: "kystbyen" })
     assert.ok(ProjectPatch.safeParse(body).success)
-    const read = projectAdapter.toRecord({ ...copenhagen, publicSlug: "kystbyen" }, context(fixtures))
+    const read = projectAdapter.toRecord({ ...copenhagen, publicSlug: "kystbyen" }, context())
     assert.equal(read.facts["Public address"], "/p/kystbyen")
     assert.equal(read.submittedValues?.publicSlug, "kystbyen")
     const unpublished = { ...read, submittedValues: { ...read.submittedValues } }
     delete unpublished.submittedValues.publicSlug
-    assert.deepEqual(projectAdapter.toPatchBody(read, unpublished, context(fixtures)), { publicSlug: null })
+    assert.deepEqual(projectAdapter.toPatchBody(read, unpublished, context()), { publicSlug: null })
   })
 
   test("Settings › Finance & invoicing sets a project's payment terms and reference scheme (#291 C4): they read back as facts and typed values, and a patch says only what moved", () => {
-    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const before = projectAdapter.toRecord(copenhagen, context())
     assert.equal(before.facts["Payment terms"], "30 days")
     assert.equal(before.facts["Payment reference"], "None")
     assert.equal(before.submittedValues?.paymentTermsDays, "30")
     assert.equal(before.submittedValues?.paymentReferenceScheme, "none")
-    assert.equal(projectAdapter.toPatchBody(before, before, context(fixtures)), null, "terms read back move nothing")
+    assert.equal(projectAdapter.toPatchBody(before, before, context()), null, "terms read back move nothing")
     const after = { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: "14", paymentReferenceScheme: "fik-71" } }
-    const body = projectAdapter.toPatchBody(before, after, context(fixtures))
+    const body = projectAdapter.toPatchBody(before, after, context())
     assert.deepEqual(body, { paymentTermsDays: 14, paymentReferenceScheme: "fik-71" })
     assert.ok(ProjectPatch.safeParse(body).success)
-    const read = projectAdapter.toRecord({ ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context(fixtures))
+    const read = projectAdapter.toRecord({ ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context())
     assert.equal(read.facts["Payment terms"], "14 days")
     assert.equal(read.facts["Payment reference"], "FIK 71")
   })
 
   test("Settings › Finance & invoicing holds a project's hires and jobs for review (M14 of #293): a flag read back as a fact and patched only when it moved", () => {
-    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const before = projectAdapter.toRecord(copenhagen, context())
     assert.equal(before.facts["Hires and jobs"], "Billed as charged")
     assert.equal(before.submittedValues?.holdForReview, false)
-    const body = projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, holdForReview: true } }, context(fixtures))
+    const body = projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, holdForReview: true } }, context())
     assert.deepEqual(body, { holdForReview: true })
     assert.ok(ProjectPatch.safeParse(body).success)
-    assert.equal(projectAdapter.toRecord({ ...copenhagen, holdForReview: true }, context(fixtures)).facts["Hires and jobs"], "Held for review")
+    assert.equal(projectAdapter.toRecord({ ...copenhagen, holdForReview: true }, context()).facts["Hires and jobs"], "Held for review")
   })
 
   test("terms the API would refuse are refused here, naming the field, on a patch and a create", () => {
-    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const before = projectAdapter.toRecord(copenhagen, context())
     const refused = { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" }
     for (const terms of ["", "4.5", "366", "thirty"]) {
-      assert.deepEqual(projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: terms } }, context(fixtures)), refused, terms)
+      assert.deepEqual(projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: terms } }, context()), refused, terms)
     }
     const made = { ...before, id: "organization-project-1700000000000", submittedValues: { name: "Odense", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", paymentTermsDays: "400" } }
-    assert.deepEqual(projectAdapter.toCreateBody?.(made, context(fixtures)), refused)
-    const terms = projectAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, paymentTermsDays: "8", paymentReferenceScheme: "fik-75" } }, context(fixtures))
+    assert.deepEqual(projectAdapter.toCreateBody?.(made, context()), refused)
+    const terms = projectAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, paymentTermsDays: "8", paymentReferenceScheme: "fik-75" } }, context())
     assert.deepEqual(terms, { name: "Odense", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", paymentTermsDays: 8, paymentReferenceScheme: "fik-75" })
     assert.ok(ProjectCreate.safeParse(terms).success)
   })
 
   test("a controlled action that moved the status is a status patch; the adapter lists exactly the statuses the wire has, so the store refuses the rest before a patch is built", () => {
-    const before = projectAdapter.toRecord(harbor, context(fixtures))
-    const body = projectAdapter.toPatchBody(before, { ...before, status: "Active" }, context(fixtures))
+    const before = projectAdapter.toRecord(harbor, context())
+    const body = projectAdapter.toPatchBody(before, { ...before, status: "Active" }, context())
     assert.deepEqual(body, { status: "active" })
     assert.ok(ProjectPatch.safeParse(body).success)
     assert.deepEqual(projectAdapter.statuses, ["active", "onboarding"])
     // A patch to a status the wire has no word for says nothing — which is why writeRecord refuses it first (server-records.test.ts).
-    assert.equal(projectAdapter.toPatchBody(before, { ...before, status: "Suspended" }, context(fixtures)), null)
+    assert.equal(projectAdapter.toPatchBody(before, { ...before, status: "Suspended" }, context()), null)
   })
 
   test("weekendLabel spells two consecutive days with a dash and anything else with commas", () => {
@@ -351,15 +328,13 @@ describe("the projects", () => {
 })
 
 describe("the service providers", () => {
-  const fixtures = fixturesOf("service-providers", "service-providers")
-
-  test("a seeded provider is its fixture record with the wire's fields over it", () => {
-    const record = serviceProviderAdapter.toRecord(nordren, context(fixtures))
-    assert.equal(record.id, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
-    assert.equal(record.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+  test("a provider is service-provider-<uuid>, its own provider, its country and registration number its context, with the wire's fields as its facts", () => {
+    const record = serviceProviderAdapter.toRecord(nordren, context())
+    assert.equal(record.id, webIdOf("service-provider", nordren.id))
+    assert.equal(record.serviceProviderId, record.id)
+    assert.equal(record.context, "Denmark · 40291188")
     assert.equal(record.facts.CVR, "40291188")
     assert.equal(record.facts["Primary contact"], "Lars Mikkelsen")
-    assert.equal(record.facts["Service area"], "CA-Ø-2", "the fixture's facts stay beside the wire's")
     assert.equal(record.status, "Active")
   })
 
@@ -374,26 +349,24 @@ describe("the service providers", () => {
 
   test("the create body spells the country as a code and the contracts accept it", () => {
     const record: BusinessRecord = {
-      ...serviceProviderAdapter.toRecord(nordren, context(fixtures)),
+      ...serviceProviderAdapter.toRecord(nordren, context()),
       id: "service-providers-service-provider-company-1",
       submittedValues: { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "Norway", contactName: "Kari", contactEmail: "kari@fjord.example" },
     }
-    const body = serviceProviderAdapter.toCreateBody?.(record, context(fixtures))
+    const body = serviceProviderAdapter.toCreateBody?.(record, context())
     assert.deepEqual(body, { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "NO", contactName: "Kari", contactEmail: "kari@fjord.example" })
     assert.ok(ServiceProviderCreate.safeParse(body).success)
-    const patch = serviceProviderAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, contactName: "Ola" } }, context(fixtures))
+    const patch = serviceProviderAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, contactName: "Ola" } }, context())
     assert.deepEqual(patch, { contactName: "Ola" })
     assert.ok(ServiceProviderPatch.safeParse(patch).success)
   })
 })
 
 describe("the roles", () => {
-  const fixtures = fixturesOf("configure", "access")
-
   test("a seeded role's web id is role-<key>, the id the charter defaults are keyed by; a custom role's is the server's", () => {
     assert.equal(roleWebIdOf(administrator), "role-company-administrator")
     assert.equal(roleWebIdOf(custom), `role-${custom.id}`)
-    const record = roleAdapter.toRecord(administrator, context(fixtures))
+    const record = roleAdapter.toRecord(administrator, context())
     assert.equal(record.id, "role-company-administrator")
     assert.equal(record.facts.Type, "System")
     assert.equal(record.value, "4 permissions")
@@ -406,23 +379,22 @@ describe("the roles", () => {
   })
 
   test("a custom role the Settings dialog made becomes a RoleCreate the contracts accept", () => {
-    const record: BusinessRecord = { ...roleAdapter.toRecord(custom, context(fixtures)), id: "role-mint-1", submittedValues: { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" } }
-    const body = roleAdapter.toCreateBody?.(record, context(fixtures))
+    const record: BusinessRecord = { ...roleAdapter.toRecord(custom, context()), id: "role-mint-1", submittedValues: { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" } }
+    const body = roleAdapter.toCreateBody?.(record, context())
     assert.deepEqual(body, { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" })
     assert.ok(RoleCreate.safeParse(body).success)
-    const patch = roleAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, description: "Nights and weekends" } }, context(fixtures))
+    const patch = roleAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, description: "Nights and weekends" } }, context())
     assert.ok(RolePatch.safeParse(patch).success)
     assert.deepEqual(patch, { description: "Nights and weekends" })
   })
 })
 
 describe("the users", () => {
-  const fixtures = fixturesOf("configure", "access")
-  const organisationFixtures = fixturesOf("configure", "organization")
-  const roleRecord = roleAdapter.toRecord(administrator, context(fixtures))
-  const customRecord = roleAdapter.toRecord(custom, context(fixtures))
-  const copenhagenRecord = projectAdapter.toRecord(copenhagen, context(organisationFixtures))
-  const nordrenRecord = serviceProviderAdapter.toRecord(nordren, context(fixturesOf("service-providers", "service-providers")))
+  const roleRecord = roleAdapter.toRecord(administrator, context())
+  const customRecord = roleAdapter.toRecord(custom, context())
+  const copenhagenRecord = projectAdapter.toRecord(copenhagen, context())
+  const nordrenRecord = serviceProviderAdapter.toRecord(nordren, context())
+  const copenhagenScope = copenhagenRecord.id as ProjectRecordId
   const resolve = resolverOver([
     [roleRecord, administrator.id],
     [customRecord, custom.id],
@@ -430,9 +402,9 @@ describe("the users", () => {
     [nordrenRecord, nordren.id],
   ])
 
-  test("the seeded administrator is the fixture user, its role, projects and provider read through the resolver", () => {
-    const record = userAdapter.toRecord(olivia, context(fixtures, resolve))
-    assert.equal(record.id, "user-olivia")
+  test("a user is user-<uuid>, its role, projects and provider read through the resolver", () => {
+    const record = userAdapter.toRecord(olivia, context(resolve))
+    assert.equal(record.id, webIdOf("user", olivia.id))
     assert.equal(record.status, "Active")
     assert.equal(record.facts.Roles, "Company Administrator")
     assert.equal(record.facts.Projects, ALL_PROJECTS_ACCESS)
@@ -440,80 +412,79 @@ describe("the users", () => {
     assert.equal(record.facts["Primary administrator"], "Yes")
     assert.equal(record.submittedValues?.roleId, "role-company-administrator")
     assert.equal(record.submittedValues?.role, "Company Administrator")
-    assert.equal(record.projectIds, undefined, "all projects is company-wide: no project at all, whatever the fixture was filed under")
-    assert.ok(isInProjectScope(record, "project-cairo"), "so the administrator shows in a project the fixture never named")
-    assert.ok(isInProjectScope(record, FIXTURE_PROJECT_IDS.copenhagen))
+    assert.equal(record.projectIds, undefined, "all projects is company-wide: no project at all")
+    assert.ok(isInProjectScope(record, "project-cairo"), "so the administrator shows in every project")
+    assert.ok(isInProjectScope(record, copenhagenScope))
   })
 
   test("a provider's user carries the provider and an invited status, and is company-wide too", () => {
-    const record = userAdapter.toRecord(lars, context(fixtures, resolve))
+    const record = userAdapter.toRecord(lars, context(resolve))
     assert.equal(record.status, "Invited")
     assert.equal(record.facts.Identity, "Invitation pending")
     assert.equal(record.facts["Service provider"], "NordRen ApS")
-    assert.equal(record.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
+    assert.equal(record.serviceProviderId, webIdOf("service-provider", nordren.id))
     assert.equal(record.submittedValues?.serviceProvider, "NordRen ApS")
     assert.equal(record.context, "NordRen ApS · service provider")
     assert.equal(record.projectIds, undefined)
   })
 
   test("a user with Project Access is scoped to those projects by web id", () => {
-    const record = userAdapter.toRecord(viewer, context(fixtures, resolve))
+    const record = userAdapter.toRecord(viewer, context(resolve))
     assert.equal(record.id, `user-${viewer.id}`)
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
+    assert.deepEqual(record.projectIds, [webIdOf("project", copenhagen.id)])
     assert.equal(record.facts.Projects, "Copenhagen Central")
     assert.equal(record.facts.Roles, "Night Dispatch")
-    assert.ok(isInProjectScope(record, FIXTURE_PROJECT_IDS.copenhagen))
+    assert.ok(isInProjectScope(record, copenhagenScope))
     assert.ok(!isInProjectScope(record, "project-cairo"), "and hidden from a project it does not work in")
   })
 
   test("a role the resolver does not know reads as Role and keeps the server id, so the row still shows", () => {
-    const record = userAdapter.toRecord(viewer, context(fixtures))
+    const record = userAdapter.toRecord(viewer, context())
     assert.equal(record.facts.Roles, "Role")
     assert.equal(record.submittedValues?.roleId, custom.id)
   })
 
   test("an invitation becomes a UserInvite the contracts accept, one way of reaching things at a time", () => {
-    const base = userAdapter.toRecord(viewer, context(fixtures, resolve))
+    const base = userAdapter.toRecord(viewer, context(resolve))
     const allProjects: BusinessRecord = { ...base, id: "user-mint-1", submittedValues: { fullName: "New Person", email: "new@kystbyen.example", roleId: "role-company-administrator", projectAccess: ALL_PROJECTS_ACCESS } }
-    const invite = userAdapter.toCreateBody?.(allProjects, context(fixtures, resolve))
+    const invite = userAdapter.toCreateBody?.(allProjects, context(resolve))
     assert.deepEqual(invite, { email: "new@kystbyen.example", fullName: "New Person", roleId: administrator.id, allProjects: true })
     assert.ok(UserInvite.safeParse(invite).success)
 
-    const selected: BusinessRecord = { ...allProjects, submittedValues: { ...allProjects.submittedValues, projectAccess: "Copenhagen Central", projectIds: FIXTURE_PROJECT_IDS.copenhagen } }
-    const invite2 = userAdapter.toCreateBody?.(selected, context(fixtures, resolve))
+    const selected: BusinessRecord = { ...allProjects, submittedValues: { ...allProjects.submittedValues, projectAccess: "Copenhagen Central", projectIds: copenhagenRecord.id } }
+    const invite2 = userAdapter.toCreateBody?.(selected, context(resolve))
     assert.deepEqual(invite2, { email: "new@kystbyen.example", fullName: "New Person", roleId: administrator.id, projectIds: [copenhagen.id] })
     assert.ok(UserInvite.safeParse(invite2).success)
 
-    const provider: BusinessRecord = { ...allProjects, serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren, submittedValues: { ...allProjects.submittedValues, projectAccess: "Service provider", roleId: `role-${custom.id}` } }
-    const invite3 = userAdapter.toCreateBody?.(provider, context(fixtures, resolve))
+    const provider: BusinessRecord = { ...allProjects, serviceProviderId: nordrenRecord.id, submittedValues: { ...allProjects.submittedValues, projectAccess: "Service provider", roleId: `role-${custom.id}` } }
+    const invite3 = userAdapter.toCreateBody?.(provider, context(resolve))
     assert.deepEqual(invite3, { email: "new@kystbyen.example", fullName: "New Person", roleId: custom.id, serviceProviderId: nordren.id })
     assert.ok(UserInvite.safeParse(invite3).success)
   })
 
   test("an invitation naming a role or a project the server does not hold is refused here", () => {
-    const base = userAdapter.toRecord(viewer, context(fixtures, resolve))
+    const base = userAdapter.toRecord(viewer, context(resolve))
     const noRole: BusinessRecord = { ...base, id: "user-mint-2", submittedValues: { fullName: "X", email: "x@y.example", roleId: "role-nowhere", projectAccess: ALL_PROJECTS_ACCESS } }
-    assert.deepEqual(userAdapter.toCreateBody?.(noRole, context(fixtures, resolve)), { path: "roleId", message: "Pick a role" })
+    assert.deepEqual(userAdapter.toCreateBody?.(noRole, context(resolve)), { path: "roleId", message: "Pick a role" })
     const noProjects: BusinessRecord = { ...base, id: "user-mint-3", projectIds: ["project-nowhere"], submittedValues: { fullName: "X", email: "x@y.example", roleId: "role-company-administrator", projectAccess: "Nowhere", projectIds: "project-nowhere" } }
-    assert.deepEqual(userAdapter.toCreateBody?.(noProjects, context(fixtures, resolve)), { path: "projectIds", message: "Pick the projects the user works in, or all of them" })
+    assert.deepEqual(userAdapter.toCreateBody?.(noProjects, context(resolve)), { path: "projectIds", message: "Pick the projects the user works in, or all of them" })
   })
 
   test("a renamed or re-roled user is a UserPatch the contracts accept", () => {
-    const before = userAdapter.toRecord(viewer, context(fixtures, resolve))
-    const body = userAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, fullName: "Viewer Renamed", roleId: "role-company-administrator" } }, context(fixtures, resolve))
+    const before = userAdapter.toRecord(viewer, context(resolve))
+    const body = userAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, fullName: "Viewer Renamed", roleId: "role-company-administrator" } }, context(resolve))
     assert.deepEqual(body, { fullName: "Viewer Renamed", roleId: administrator.id })
     assert.ok(UserPatch.safeParse(body).success)
   })
 })
 
 describe("what an adapter owns", () => {
-  test("a fixture's id, a webIdOf, and a record the workspace just made under the form's recordKind", () => {
+  test("a webIdOf, and a record the workspace just made under the form's recordKind", () => {
     const minted = (id: string, recordKind?: string) => ({ id, recordKind }) as BusinessRecord
-    assert.ok(projectAdapter.owns(minted("project-copenhagen")))
     assert.ok(projectAdapter.owns(minted(`project-${aarhus.id}`)))
     assert.ok(projectAdapter.owns(minted("organization-project-1700000000000", "Project")))
     assert.ok(!projectAdapter.owns(minted("organization-project-1700000000000")), "a minted id without its kind is nobody's")
-    assert.ok(!projectAdapter.owns(minted("company-kystbyen-dk", "Company")))
+    assert.ok(!projectAdapter.owns(minted(webIdOf("company", COMPANY_ID), "Company")))
     assert.ok(userAdapter.owns(minted("access-user-1700000000000", "User")))
     assert.ok(userAdapter.owns(minted("service-provider-workspace-service-provider-user-1", "Service provider user")))
     assert.ok(!userAdapter.owns(minted("role-company-administrator", "Role")))

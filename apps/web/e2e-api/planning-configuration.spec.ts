@@ -16,9 +16,9 @@ test("the Layers control draws a seeded planning area's outline from the API's b
   const layers = page.getByRole("dialog", { name: "Layers" })
   await expect(layers).toContainText("Planning areas")
   await expect(page.locator("[data-area-outline]")).toHaveCount(0)
-  // A seeded area keeps its fixture id while the modules still on fixtures name it by it.
   await layers.getByRole("checkbox", { name: /Indre By Operations/ }).click()
-  await expect(page.locator('[data-area-outline="area-indreby"]')).toBeVisible()
+  await expect(page.locator("[data-area-outline]")).toHaveCount(1)
+  await expect(page.locator("[data-area-outline]")).toBeVisible()
   await expect(page.getByTestId("layers-count")).toHaveText(/^1\/\d+$/)
   // Cairo's area is seeded without a boundary and places no container: nothing to draw.
   await expect(layers.getByRole("checkbox", { name: /Nasr City Operations/ })).toBeDisabled()

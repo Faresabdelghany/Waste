@@ -15,7 +15,7 @@ import { SCALE_TICKET_PARTIES, SCALE_TICKET_VOID_REASONS, TARE_SOURCES, type Sca
 
 import { AGREEMENT_PREFIX, isAgreementRecord } from "@/lib/data/agreements"
 import { isProductRecord, PRODUCT_PREFIX } from "@/lib/data/commercial"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import {
@@ -33,7 +33,7 @@ import {
 } from "@/lib/data/scale-house"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, said, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, said, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference } from "./references"
@@ -99,7 +99,7 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
     name: `${ticketLabel(ticket.number)} · ${ticket.vehiclePlate}`,
     context: `${site} · ${party}`,
     status: SCALE_TICKET_STATUS_LABELS[ticket.status],
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(ticket, context.now),
     value: ticket.netKg === null ? kilograms(ticket.grossKg) : kilograms(ticket.netKg),
     description:
@@ -134,7 +134,6 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
     },
     related: [site, ...(route === undefined ? [] : [route])],
     allowedTransitions: [],
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: SCALE_TICKET_RECORD_KIND,
     submittedValues: {
@@ -268,7 +267,7 @@ export function toVehicleTareRecord(tare: VehicleTare, context: MappingContext):
     name: tare.label === null ? keys : `${keys} · ${tare.label}`,
     context: `Registered tare${owner === undefined ? "" : ` · ${owner}`}`,
     status: VEHICLE_TARE_STATUS_LABELS[tare.status],
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(tare, context.now),
     value: kilograms(tare.tareKg),
     description: `Weighed empty on ${tare.weighedOn}.`,
@@ -282,7 +281,6 @@ export function toVehicleTareRecord(tare: VehicleTare, context: MappingContext):
     },
     related: owner === undefined ? [] : [owner],
     allowedTransitions: [],
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     recordKind: VEHICLE_TARE_RECORD_KIND,
     submittedValues: { projectId: project.webId, status: tare.status, plate: tare.plate, tareKg: String(tare.tareKg), weighedOn: tare.weighedOn },

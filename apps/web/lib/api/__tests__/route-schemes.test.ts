@@ -30,24 +30,22 @@ import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 
-import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft } from "../../data/route-schemes"
+import type { BusinessRecord } from "../../data/business-modules"
+import { schemeValuesOfDraft } from "../../data/route-schemes"
 import { problemSentence } from "../problem"
-import { type MappingContext } from "../records/adapter"
+import { webIdOf, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import { planningAreaAdapter } from "../records/planning"
-import { ARCHIVE_SCHEME, PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL, routeSchemeAdapter, routeSchemesModule, schemeOccurrences, SERVER_GROUP_IDS_KEY, SUCCEED_SCHEME } from "../records/route-schemes"
+import { PLAN_AHEAD_DAYS_KEY } from "../../data/route-schemes"
+import { ARCHIVE_SCHEME, PLAN_AHEAD_DAYS_REFUSAL, routeSchemeAdapter, routeSchemesModule, schemeOccurrences, SERVER_GROUP_IDS_KEY, SUCCEED_SCHEME } from "../records/route-schemes"
 import { loaded, loadModule, resolverOver, writeRecord, type ModuleState, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted, type Call } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const TODAY = "2026-09-30"
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
-
-const fixturesOf = (workspaceId: "configure" | "service-providers" | "route-studio", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
-const schemeFixtures = fixturesOf(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId)
 
 // The seeded rows the schemes name, as the API answers them (packages/db/src/seed).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -58,6 +56,8 @@ const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ..
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id] }
+const COPENHAGEN_WEB_ID = webIdOf("project", copenhagen.id)
+const INDRE_BY_WEB_ID = webIdOf("area", indreBy.id)
 
 // Resources is still on fixtures here (slice 5a): the fleet and the places are named by the API's ids alone.
 const WH24 = "01a0d2a4-a280-7021-8000-000000000001"
@@ -126,15 +126,15 @@ const osterbro: RouteScheme = {
 }
 
 // The modules the schemes resolve against, as the store has them when the schemes load.
-const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: fixturesOf("configure", "organization"), resolve: resolverOver(new Map()), now: NOW })
+const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: resolverOver(new Map()), now: NOW })
 const organisationState = loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)
-const providerRecord = serviceProviderAdapter.toRecord(nordren, { fixtures: fixturesOf("service-providers", "service-providers"), resolve: resolverOver(new Map()), now: NOW })
+const providerRecord = serviceProviderAdapter.toRecord(nordren, { resolve: resolverOver(new Map()), now: NOW })
 const withOrganisation: ServerRecordsState = new Map([
   ["configure.organization", organisationState],
   ["service-providers.service-providers", loaded({ records: [providerRecord], serverIds: new Map([[providerRecord.id, nordren.id]]) }, 1)],
 ])
-const areaRecord = planningAreaAdapter.toRecord({ ...indreBy, boundaries: [indreByBoundary] }, { fixtures: fixturesOf("configure", "areas"), resolve: resolverOver(withOrganisation), now: NOW })
-const masterContext: MappingContext = { fixtures: [], resolve: resolverOver(new Map()), now: NOW }
+const areaRecord = planningAreaAdapter.toRecord({ ...indreBy, boundaries: [indreByBoundary] }, { resolve: resolverOver(withOrganisation), now: NOW })
+const masterContext: MappingContext = { resolve: resolverOver(new Map()), now: NOW }
 const masterRecords: Array<[BusinessRecord, string]> = [
   [wasteFractionAdapter.toRecord(residual, masterContext), residual.id],
   [wasteFractionAdapter.toRecord(organic, masterContext), organic.id],
@@ -147,7 +147,7 @@ const state: ServerRecordsState = new Map([
   ["configure.master", loaded({ records: masterRecords.map(([record]) => record), serverIds: new Map(masterRecords.map(([record, id]) => [record.id, id])) }, 1)],
 ])
 
-const context = (): MappingContext => ({ fixtures: schemeFixtures, resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
+const context = (): MappingContext => ({ resolve: resolverOver(state), now: NOW })
 const recordOf = (scheme: RouteScheme): BusinessRecord => routeSchemeAdapter.toRecord(scheme, context())
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
@@ -161,7 +161,7 @@ function schemesState(scheme: RouteScheme): { module: ModuleState; record: Busin
 async function edited(scheme: RouteScheme, change: (record: BusinessRecord) => BusinessRecord, answers: Array<(call: Call) => Response>, writeState: ServerRecordsState = state) {
   const { module, record } = schemesState(scheme)
   const { fetch, calls } = scripted(answers)
-  const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, change(record), { fixtures: schemeFixtures, state: writeState, now: NOW })
+  const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, change(record), { state: writeState, now: NOW })
   return { outcome, calls, record }
 }
 
@@ -190,7 +190,7 @@ describe("the route schemes module", () => {
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {
     const { fetch, calls } = scripted([() => pageOf([central, osterbro])])
-    const result = await loadModule(clientOver(fetch), routeSchemesModule, { fixtures: schemeFixtures, state, now: NOW })
+    const result = await loadModule(clientOver(fetch), routeSchemesModule, { state, now: NOW })
     assert.deepEqual(calls.map(request), ["GET /route-schemes?limit=200"])
     assert.deepEqual(
       result.records.map((record) => record.id),
@@ -206,12 +206,11 @@ describe("a scheme read", () => {
     assert.equal(record.name, "RS-Central · Week A")
     assert.equal(record.status, "Validated")
     assert.equal(record.recordKind, "Route Scheme")
-    assert.deepEqual(record.projectIds, ["project-copenhagen"])
-    assert.equal(record.companyId, FIXTURE_COMPANY_ID)
+    assert.deepEqual(record.projectIds, [COPENHAGEN_WEB_ID])
     const values = record.submittedValues ?? {}
     assert.equal(values.schemeName, "RS-Central · Week A")
-    assert.equal(values.projectId, "project-copenhagen")
-    assert.equal(values.planningAreaId, "area-indreby", "the area by the id its module lends it")
+    assert.equal(values.projectId, COPENHAGEN_WEB_ID)
+    assert.equal(values.planningAreaId, INDRE_BY_WEB_ID, "the area by the id its module lends it")
     assert.equal(values.serviceType, "Container collection", "the form's word for the wire's token")
     assert.equal(values.frequency, "weekly")
     assert.equal(values.weekRotation, "")
@@ -324,13 +323,12 @@ function quickRecord(over: { values?: Record<string, string | boolean>; group?: 
     description: "",
     facts: {},
     related: [],
-    companyId: FIXTURE_COMPANY_ID,
-    projectIds: ["project-copenhagen"],
+    projectIds: [COPENHAGEN_WEB_ID],
     recordKind: "Route Scheme",
     submittedValues: {
       schemeName: "Paper · Mondays",
-      projectId: "project-copenhagen",
-      planningAreaId: "area-indreby",
+      projectId: COPENHAGEN_WEB_ID,
+      planningAreaId: INDRE_BY_WEB_ID,
       wasteFraction: "Residual",
       serviceType: "Container collection",
       frequency: "weekly",
@@ -413,14 +411,14 @@ describe("a scheme the quick form makes", () => {
     const answer: RouteScheme = { ...central, id: "019995e0-0000-7000-8000-0000000000c1", name: "Paper · Mondays", collectionGroups: [groupOf({ id: "019995e0-0000-7000-8000-0000000000c2", routeSchemeId: "019995e0-0000-7000-8000-0000000000c1", name: "Paper · Mondays", days: ["monday", "thursday"] })], serviceDays: ["monday", "thursday"] }
     const { fetch, calls } = scripted([() => json(answer, 201, { location: `/route-schemes/${answer.id}` })])
     const module = loaded({ records: [], serverIds: new Map() }, 1)
-    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, quickRecord(), { fixtures: schemeFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, quickRecord(), { state, now: NOW })
     assert.deepEqual(calls.map(request), ["POST /route-schemes"])
     assert.ok(RouteSchemeCreate.safeParse(bodyOf(calls[0])).success)
     assert.equal(outcome.kind, "created")
     assert.equal(outcome.kind === "created" ? outcome.record.submittedValues?.schemeName : undefined, "Paper · Mondays")
   })
 
-  test("is refused before the API when it names what the API does not hold: a fraction by a name no master data row has, a fixture vehicle, no project", () => {
+  test("is refused before the API when it names what the API does not hold: a fraction by a name no master data row has, a vehicle or a driver it does not hold, no project", () => {
     assert.deepEqual(routeSchemeAdapter.toCreateBody?.(quickRecord({ group: { fractions: ["Garden waste"] } }), context()), { path: "wasteFraction", message: 'The API holds no waste fraction named "Garden waste"' })
     assert.deepEqual(routeSchemeAdapter.toCreateBody?.(quickRecord({ group: { containerTypes: ["Skip · 10 m³"] } }), context()), { path: "matchContainerTypes", message: 'The API holds no container type named "Skip · 10 m³"' })
     assert.deepEqual(routeSchemeAdapter.toCreateBody?.(quickRecord({ group: { ruleVehicleType: "Hook lift" } }), context()), { path: "matchVehicleType", message: 'The API holds no vehicle type named "Hook lift"' })
@@ -431,7 +429,7 @@ describe("a scheme the quick form makes", () => {
 
   test("a name the master data does not hold is refused at the store's seam, in the words the person reads, and nothing is sent — no rule is written without it", async () => {
     const { fetch, calls } = scripted([])
-    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, loaded({ records: [], serverIds: new Map() }, 1), quickRecord({ group: { fractions: ["Residual", "Garden waste"] } }), { fixtures: schemeFixtures, state, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, loaded({ records: [], serverIds: new Map() }, 1), quickRecord({ group: { fractions: ["Residual", "Garden waste"] } }), { state, now: NOW })
     assert.equal(calls.length, 0)
     assert.equal(outcome.kind === "refused" ? problemSentence(outcome.problem) : outcome.kind, 'The request body is invalid — wasteFraction: The API holds no waste fraction named "Garden waste"')
   })
@@ -441,8 +439,8 @@ describe("a scheme the guided setup makes (#178)", () => {
   // The wizard's draft as step 5 hands it over: two rule groups inheriting step 1's fraction, the fleet and the depot by the web ids their modules lend.
   const draft: GuidedSchemeData = {
     schemeName: "Guided · Residual North and South",
-    projectId: "project-copenhagen",
-    planningAreaId: "area-indreby",
+    projectId: COPENHAGEN_WEB_ID,
+    planningAreaId: INDRE_BY_WEB_ID,
     wasteFraction: "Residual",
     serviceType: "Kerbside collection",
     frequency: "weekly",
@@ -680,7 +678,7 @@ describe("an edit of a scheme", () => {
     const record = { ...recordOf(central), submittedValues: { ...recordOf(central).submittedValues, ruleMasterIds: "{}" } }
     const { fetch, calls } = scripted([schemeAnswer()])
     const module = loaded({ records: [record], serverIds: new Map([[record.id, central.id]]) }, 1)
-    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, withValues({ plannedStartTime: "07:00" })(record), { fixtures: schemeFixtures, state: unread, now: NOW })
+    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, withValues({ plannedStartTime: "07:00" })(record), { state: unread, now: NOW })
     assert.equal(outcome.kind, "updated")
     assert.deepEqual(one(calls), { plannedStartTime: "07:00" })
   })

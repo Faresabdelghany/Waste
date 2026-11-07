@@ -57,7 +57,7 @@ import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopServic
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
@@ -66,7 +66,7 @@ import { formatDistance, formatDuration } from "@/lib/map-planning/format"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, NO_PRESENTATION, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
@@ -221,13 +221,12 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     name: route.label,
     context: [project.name ?? project.webId, area].filter(Boolean).join(" · "),
     status: statusLabel(route.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
     description: `${route.routeSchemeId === null ? "The office's own route, with no scheme," : `Generated from ${scheme?.name ?? "its route scheme"}`} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
     ...(route.planned.serviceProviderId === null ? {} : { serviceProviderId: webIdVia(context, "service-provider", route.planned.serviceProviderId) }),
     recordKind: "Route",

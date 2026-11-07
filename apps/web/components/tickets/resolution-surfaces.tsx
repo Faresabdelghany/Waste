@@ -5,7 +5,7 @@
 // raises one by hand through `AlertCreate`'s; an alert's details offer
 // acknowledge, resolve, Open ticket — the New ticket form on the alert's
 // words and links, answering it — and the link to a ticket that exists. A
-// ticket's details are its own dialog (TicketDetailsDialog.tsx). Nothing is
+// ticket's details are its own dialog (ticket-details-live.tsx). Nothing is
 // offered until the module reads the API's rows: before that, and after its
 // load failed, a write would reach the browser's bucket and never the API.
 import { useState, type ReactNode } from "react"

@@ -15,7 +15,7 @@
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 
 import type { MessageTemplate } from "@waste/contracts/messaging"
-import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { ProjectPicker, useProjectSetting } from "@/components/settings/use-project-setting"
 import { CustomerNoticesSection } from "@/components/settings/customer-notices-section"
 import { Badge } from "@/components/ui/badge"

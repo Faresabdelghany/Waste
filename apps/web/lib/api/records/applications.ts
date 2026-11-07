@@ -14,11 +14,11 @@ import { APPLICATION_CHANNELS, APPLICATION_KINDS } from "@waste/domain/registry/
 
 import { APPLICATION_SERVER_ID_KEY, APPLICATION_STATUS_KEY, APPLICATIONS_MODULE, channelLabel, dayOf, DECISION_KEY, decideBodyOf, kindLabel, outcomeLabel, periodText, type RecordedDecision } from "@/lib/data/applications"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX, isSubscriptionRecord } from "@/lib/data/agreements"
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal, requiredText, tokenOf } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -78,12 +78,11 @@ export function toApplicationRecord(application: Application, context: MappingCo
     name: `Application ${application.number} · ${kindLabel(application.kind)}`,
     context: [customer, place].filter((part) => part !== undefined).join(" · "),
     status: statusLabel(application.status),
-    ...inheritedPresentation(undefined),
+    ...NO_PRESENTATION,
     ...stampFacts(application, context.now),
     value: reading,
     description: application.statement,
     facts,
-    companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [projectWebId],
     recordKind: APPLICATION_RECORD_KIND,
     submittedValues: {

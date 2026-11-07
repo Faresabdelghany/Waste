@@ -12,16 +12,9 @@ import {
 } from "react"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
-import {
-  getWorkspaceDefinition,
-  type BusinessRecord,
-} from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { migrateLegacyState } from "@/lib/data/legacy-ids"
-import {
-  activeRoutes,
-  serviceProviderActiveRoutes,
-  type ActiveRouteSummary,
-} from "@/lib/data/sidebar"
+import type { ActiveRouteSummary } from "@/lib/data/sidebar"
 import { ACTIVE_ROUTES_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 
 // Two generations of this store live behind the current key (see
@@ -30,9 +23,9 @@ import { ACTIVE_ROUTES_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 // replaced it. `readPersisted` hands over whichever the browser holds and
 // `loadStoredState` recognises both shapes. The chain stops at the first key
 // that holds anything, so a newer key with an unreadable value is not backed
-// out of into an older one: no writer ever produced such a value, and the
-// fixture pins are the better answer to a corrupt newer store than pins the
-// user last saw generations ago.
+// out of into an older one: no writer ever produced such a value, and no pins
+// are the better answer to a corrupt newer store than pins the user last saw
+// generations ago.
 //
 // State persisted before the Contractor → Service provider rename keyed the
 // second scope by the old persona name. lib/data/legacy-ids.ts leaves this
@@ -50,10 +43,10 @@ export type ActiveRoutesScope = "operator" | "service-provider"
 
 type StarredRoutesState = Record<ActiveRoutesScope, string[]>
 
-// The server (and every hydrating component) sees the fixture pins only.
+// The server (and every hydrating component) sees no pins.
 const DEFAULT_STARRED_ROUTES: StarredRoutesState = {
-  operator: activeRoutes.map((route) => route.id),
-  "service-provider": serviceProviderActiveRoutes.map((route) => route.id),
+  operator: [],
+  "service-provider": [],
 }
 
 type ActiveRoutesValue = {
@@ -106,7 +99,7 @@ export function ActiveRoutesStoreProvider({
       const stored = loadStoredState()
       if (stored) store.set(stored)
     } catch {
-      // A corrupt or unavailable browser store keeps the fixture pins.
+      // A corrupt or unavailable browser store keeps no pins.
     }
     const persist = () => {
       try {
@@ -168,20 +161,6 @@ export function useActiveRoutes(scope: ActiveRoutesScope): ActiveRoutesValue {
   )
 }
 
-/** Fixture route days backing the Route Studio routes table. */
-export const routeDayFixtures: readonly BusinessRecord[] =
-  getWorkspaceDefinition("route-studio").modules.find(
-    (module) => module.id === "routes",
-  )?.records ?? []
-
-const curatedSummariesByScope: Record<
-  ActiveRoutesScope,
-  Map<string, ActiveRouteSummary>
-> = {
-  operator: new Map(activeRoutes.map((route) => [route.id, route])),
-  "service-provider": new Map(serviceProviderActiveRoutes.map((route) => [route.id, route])),
-}
-
 const routesTableHrefByScope: Record<ActiveRoutesScope, string> = {
   operator: "/route-studio?module=routes&record=",
   "service-provider": "/service-provider-workspace/routes?module=routes&record=",
@@ -196,8 +175,7 @@ const ROUTE_PIN_COLORS = [
 ]
 
 /**
- * Sidebar summary for a starred route day that has no curated fixture entry.
- * Route records carry no live completion figure, so progress falls back to a
+ * Sidebar summary for a starred route day. Route records carry no live completion figure, so progress falls back to a
  * lifecycle-based placeholder (parseable "n/m stops" values win when present).
  */
 function summarizeStarredRoute(
@@ -230,22 +208,16 @@ function summarizeStarredRoute(
 }
 
 /**
- * Sidebar entries for a scope's starred routes, in starring order: fixture
- * pins keep their curated summary; other ids are summarized from their route
- * record and dropped when no record exists (e.g. a deleted created route).
- * On the Pilot (`onApi`, `routeRecords` the API's rows alone) no curated
- * summary stands in: a pin is a route the API holds, else nothing (#248).
+ * Sidebar entries for a scope's starred routes, in starring order, each
+ * summarized from its route record (`routeRecords`, the API's rows alone):
+ * a pin is a route the API holds, else nothing (#248).
  */
 export function resolveActiveRouteSummaries(
   starredRouteIds: readonly string[],
   routeRecords: readonly BusinessRecord[],
   scope: ActiveRoutesScope,
-  onApi = false,
 ): ActiveRouteSummary[] {
-  const curated = curatedSummariesByScope[scope]
   return starredRouteIds.flatMap((routeId) => {
-    const curatedSummary = onApi ? undefined : curated.get(routeId)
-    if (curatedSummary) return [curatedSummary]
     const record = routeRecords.find((candidate) => candidate.id === routeId)
     return record ? [summarizeStarredRoute(record, scope)] : []
   })

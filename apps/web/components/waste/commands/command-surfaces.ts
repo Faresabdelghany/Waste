@@ -181,7 +181,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "route-studio.pickups": { primary: null, rowActions: PickupCommandsSurface },
   "route-studio.live": { primary: null, rowActions: LiveRouteSurface, whileShown: LiveBoardRefresh },
   // Slice 8 (#182, #147): a ticket opened by the office's own form and worked
-  // in its own details (TicketDetailsDialog), the list opening on the open
+  // in its own details (LiveTicketDetailsDialog), the list opening on the open
   // ones; an alert raised by hand and moved by its commands, the queue
   // opening on what still needs attention.
   // O11 of #290: a bulky collection booked by its own dialog, its days read from the place's schedule; a booked one routed onto a route of its day or cancelled.
@@ -230,7 +230,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
-export function commandSurfaceFor(workspaceId: WorkspaceId, moduleId: string, configured: boolean): CommandSurface | undefined {
-  if (!configured || !isServerBacked(workspaceId, moduleId)) return undefined
+export function commandSurfaceFor(workspaceId: WorkspaceId, moduleId: string): CommandSurface | undefined {
+  if (!isServerBacked(workspaceId, moduleId)) return undefined
   return COMMAND_SURFACES[moduleKeyOf(workspaceId, moduleId)]
 }
