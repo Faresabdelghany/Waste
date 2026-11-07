@@ -48,8 +48,9 @@ import { alert, ticket, ticketBooking, ticketEvent, ticketType } from "@waste/db
 import { scaleTicket, scaleTicketLine } from "@waste/db/schema/scale-house"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupExceptionReason, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
+import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 import { eq, sql } from "drizzle-orm"
 
 /** A UUID version 7 for a test row: the clock in the first 48 bits, the version and variant nibbles, randomness in the rest. */
@@ -156,9 +157,9 @@ export async function seedFinanceTenant(pool: Database): Promise<FinanceTenant> 
       row(rows.residualHousing, tenant.products.residual.id, { customerId: tenant.customers.housing.id }),
       row(rows.bulky, tenant.products.bulky.id),
     ])
-    const signed = (id: string, number: string, customerId: string, status = "active") => ({ id, companyId, projectId: copenhagen, number, customerId, payerCustomerId: customerId, status, billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" })
+    const signed = (id: string, number: string, customerId: string, status: AgreementStatus = "active"): typeof agreement.$inferInsert => ({ id, companyId, projectId: copenhagen, number, customerId, payerCustomerId: customerId, status, billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" })
     await tx.insert(agreement).values([signed(tenant.agreements.housing.id, "AGR-100", tenant.customers.housing.id), signed(tenant.agreements.anna.id, "AGR-102", tenant.customers.anna.id), signed(tenant.agreements.draft.id, "AGR-103", tenant.customers.bo.id, "draft")])
-    const home = (id: string, name: string, address: string) => ({ id, companyId, projectId: copenhagen, name, address, kind: "residential", status: "active" })
+    const home = (id: string, name: string, address: string): typeof property.$inferInsert => ({ id, companyId, projectId: copenhagen, name, address, kind: "residential", status: "active" })
     await tx.insert(property).values([home(tenant.properties.parkvej.id, "Parkvej 18", "Parkvej 18, 2100 København Ø"), home(tenant.properties.havnegade.id, "Havnegade 3", "Havnegade 3, 1058 København K")])
     await tx.insert(routeScheme).values({ id: tenant.scheme.id, companyId, projectId: copenhagen, name: "Centrum Mondays", planningAreaId: tenant.planningAreas.centrum.id, serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday"], validFrom: "2026-01-01", status: "validated" })
     await tx.insert(collectionGroup).values({ id: tenant.scheme.groupId, companyId, projectId: copenhagen, routeSchemeId: tenant.scheme.id, name: "Group 1", position: 1, days: ["monday"], stopSource: "rule" })
@@ -421,7 +422,7 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
 }
 
 /** A project's Pickup Exception rule (#293 M5) in force from the year's start, its ladder by position. */
-export async function seedExceptionRule(pool: Database, tenant: FinanceTenant, rule: { outcome: PickupOutcome; reason?: PickupReason | null; freeCount: number; windowDays?: number; ladder: readonly string[] }): Promise<{ id: string }> {
+export async function seedExceptionRule(pool: Database, tenant: FinanceTenant, rule: { outcome: PickupOutcome; reason?: PickupExceptionReason | null; freeCount: number; windowDays?: number; ladder: readonly string[] }): Promise<{ id: string }> {
   const { companyId } = tenant
   const projectId = tenant.projects.copenhagen.id
   const id = testId()

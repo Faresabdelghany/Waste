@@ -14,6 +14,7 @@
 import { useState } from "react"
 import { DownloadSimple, WarningCircle } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { separatorForLocale } from "@waste/domain/imports/csv"
 
 import { Button } from "@/components/ui/button"
@@ -32,7 +33,7 @@ import { ReportCard, ReportNotice } from "./report-card"
 import { StatRow, StatTile } from "./stat-tile"
 import { useReport } from "./use-report"
 
-export function ComplianceTab({ projectId, today, viewed }: { projectId?: string; today: string; viewed: ReadonlySet<string> }) {
+export function ComplianceTab({ projectId, today, viewed }: { projectId?: string; today: string; viewed: ReadonlySet<ModuleKey> }) {
   const client = useApiClient()
   const weightsShown = viewed.has(WEIGHTS_MODULE)
   const [periodId, setPeriodId] = useState<CompliancePeriodId>(DEFAULT_PERIOD)

@@ -10,6 +10,8 @@
 // channel (`recipientOptions`), the rule the API holds.
 import type { CustomerContact } from "@waste/contracts/customers"
 import type { Message, MessageChannel, MessageStatus, MessageTemplate } from "@waste/contracts/messaging"
+import { ACTIVE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 
@@ -64,7 +66,7 @@ export function customerMessages(client: Parameters<typeof listPage>[0], serverI
 
 /** The active templates of every project the caller works in, for the dialog's picker. */
 export function activeTemplates(client: Parameters<typeof listAll>[0]): Promise<MessageTemplate[]> {
-  return listAll<MessageTemplate>(client, "/message-templates").then((templates) => templates.filter((template) => template.status === "active"))
+  return listAll<MessageTemplate>(client, "/message-templates").then((templates) => templates.filter((template) => takesReference(template.status, ACTIVE_TEMPLATE_STATUSES)))
 }
 
 /** Who a message on a channel may go to: the customer where it has an address on it, then each active contact that has one. */

@@ -11,8 +11,10 @@
 // what the prototype's form says, a mapping under records/. The store reads
 // this list, narrowed to what the person's grants let them view
 // (`viewableModules`), and nothing else to decide.
+
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
+import { viewedModules, type Grants } from "../grants"
 import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
@@ -174,8 +176,8 @@ export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module)
  * module's grant too (`alsoViewedUnder`: the ticket teams and types under the
  * tickets', #545 of #544) is read under either.
  */
-export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[], { provider = false }: { provider?: boolean } = {}): ServerModule[] {
-  const viewed = new Set<string>(grants.filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
+export function viewableModules(grants: Grants, modules: readonly ServerModule[], { provider = false }: { provider?: boolean } = {}): ServerModule[] {
+  const viewed = viewedModules(grants)
   return modules.filter((module) => (viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)) || (module.alsoViewedUnder ?? []).some((key) => viewed.has(key))) && (provider || module.providersOnly !== true))
 }
 

@@ -36,6 +36,7 @@ import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-mo
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 import { NO_ONE } from "@/lib/data/properties"
+import { workspaceHref } from "@/lib/data/workspace-href"
 
 import { command, get, listAll } from "../client"
 import { NO_PRESENTATION, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -139,7 +140,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
       ? `A stop the office added to its route${container === undefined ? ", at an address with no container" : ""}: generation never moves or skips it, the driver decides it, the dispatcher may remove it or correct its outcome.`
       : "A stop of a dated route: generation wrote it, the driver decides it, the dispatcher may remove it or correct its outcome.",
     facts,
-    deepLink: `/route-studio?module=routes&record=${routeWebId}`,
+    deepLink: workspaceHref(ROUTES_MODULE, routeWebId),
     projectIds: [project.webId],
     recordKind: "Pickup",
     submittedValues: {

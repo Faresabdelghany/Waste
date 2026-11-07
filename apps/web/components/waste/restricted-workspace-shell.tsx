@@ -26,7 +26,6 @@ import {
 } from "@/lib/data/business-modules"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
-import type { RoleAccessMap } from "@/lib/data/role-permissions"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
@@ -58,8 +57,6 @@ type RestrictedWorkspaceDefinition = {
   fixedScopeLabel: string
   /** Every record and relation option is isolated to this service provider. */
   serviceProviderScopeId?: string
-  /** Module capabilities resolve from this role's Settings permission matrix. */
-  permissionsRoleId?: string
   /** Signed-in identity written to audit events and created records. */
   actorName?: string
   pages: readonly RestrictedWorkspacePage[]
@@ -90,7 +87,6 @@ const restrictedWorkspaceDefinitions: Record<
     fixedProjectScope: FIXTURE_PROJECT_IDS.copenhagen,
     fixedScopeLabel: "NordRen ApS · CA-Ø-2",
     serviceProviderScopeId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
-    permissionsRoleId: "role-service-provider-manager",
     actorName: "Lars Mikkelsen",
     pages: [
       {
@@ -101,6 +97,8 @@ const restrictedWorkspaceDefinitions: Record<
         workspaceLabel: "Routes",
         navigationBasePath: "/service-provider-workspace/routes",
         showWorkspaceActions: true,
+        // Dispatch day and Balance day are the office's: each picks a project's day, and a provider's account works in no project.
+        showWorkspaceActionsOnApi: false,
         showFilters: true,
       },
       {
@@ -158,8 +156,6 @@ type WorkspaceScope = {
   fixedProjectScope: ProjectScope
   fixedScopeLabel: string
   serviceProviderScopeId?: string
-  permissionsRoleId?: string
-  roleGrants?: RoleAccessMap
   actorName?: string
   onApi: boolean
 }
@@ -266,7 +262,6 @@ export function RestrictedWorkspaceShell({
           fixedProjectScope: definition.fixedProjectScope,
           fixedScopeLabel: definition.fixedScopeLabel,
           serviceProviderScopeId: definition.serviceProviderScopeId,
-          permissionsRoleId: definition.permissionsRoleId,
           actorName: definition.actorName,
           onApi: false,
         }
@@ -274,7 +269,6 @@ export function RestrictedWorkspaceShell({
           fixedProjectScope: ALL_PROJECTS,
           fixedScopeLabel: provider.legalName,
           serviceProviderScopeId: providerWebId,
-          roleGrants: provider.access,
           actorName: provider.actorName,
           onApi: true,
         }
@@ -301,8 +295,6 @@ export function RestrictedWorkspaceShell({
           showPrimaryAction={showPrimaryAction}
           showFilters={page.showFilters}
           serviceProviderScopeId={scope.serviceProviderScopeId}
-          permissionsRoleId={scope.permissionsRoleId}
-          roleGrants={scope.roleGrants}
           actorName={scope.actorName}
         />
       </Suspense>

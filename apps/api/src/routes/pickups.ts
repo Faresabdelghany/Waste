@@ -21,7 +21,7 @@
 // agreement each valid that day, gives the place and the fraction, the way
 // generation resolves a stop — or an address of the
 // route's project, a property or a shared collection point served as a
-// subscription's is (routes/statuses.ts), with the fraction collected there:
+// subscription's is (@waste/domain/status-gates), with the fraction collected there:
 // an address-only stop, with no container. Its service (O3 of #290) is an
 // emptying, or a repair or a wash of a container where it stands; the office
 // may name a container the route stops at already — an extra emptying of one
@@ -79,7 +79,7 @@ import type { Action } from "@waste/domain/access/modules"
 import { bulkyBookingStatus, LIVE_STOP_STATUSES, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
-import type { OfficeStopService, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { OfficeStopService, PickupService } from "@waste/domain/execution/vocabulary"
 import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerService } from "@waste/domain/execution/work-orders"
 import { and, asc, desc, eq, gt, gte, inArray, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -90,7 +90,7 @@ import { emit } from "@waste/db/commands/outbox"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { requireDeparture, requireWarehouseTakesStock, type ContainerRef } from "@waste/db/commands/stock-ledger"
 import { stopOutcomeChanged } from "@waste/db/commands/stop-outcomes"
-import { placeOf, refuseUnservedPlace, type Place } from "@waste/domain/registry/served-places"
+import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 
 import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
@@ -222,7 +222,7 @@ async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: Rout
     .leftJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.id, bookingId)))
     .limit(1)
-  const status = bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus as PickupStatus | null })
+  const status = bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus })
   if (status === "routed" && row.stopRoute !== null) throw problem(409, { detail: `${onlyABookedBooking(status, "route")} (route ${routeLabel(row.stopRoute)}, stop ${row.stopPosition})` })
   if (status !== "booked") throw problem(409, { detail: onlyABookedBooking(status, "route") })
   if (row.day !== parent.operatingDate) throw problem(409, { detail: notTheBookingsDay(row.day, parent.operatingDate) })
@@ -298,7 +298,7 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
     if (body.wasteFractionId != null) await requireWasteFraction(tx, scope.companyId, body.wasteFractionId)
     if (!inForceOn(under, serviceDate)) throw problem(409, { detail: notInForceOn(serviceDate) })
     // The two statuses are text the columns' checks hold to the vocabulary, read as the statuses they are.
-    refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus } as Place, "stop")
+    refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus }, "stop")
     await requireDeparture(tx, principal.companyId, taken, "issue")
     return {
       label: taken.label,
@@ -371,7 +371,7 @@ async function refuseHeld(tx: Tx, principal: Principal, error: unknown, held: re
     .where(and(pickupScope(principal), eq(pickup[HOLDS[hold.index]], hold.id)))
     .limit(1)
   if (holder === undefined) throw error
-  throw problem(409, { detail: heldBy(hold.label, { service: holder.service as PickupService, route: routeLabel(holder.number), position: holder.position }) })
+  throw problem(409, { detail: heldBy(hold.label, { service: holder.service, route: routeLabel(holder.number), position: holder.position }) })
 }
 
 /** What the same work booked twice on a route is told: an office stop of the container for that service is planned there already. A double-sent Add stop meets it; a second visit is booked once the first is done or taken off. */
@@ -652,7 +652,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const { current, parent } = await lockedPickup(tx, principal, id)
         requireNotStarted(parent, A_STOP_IS_THE_DRIVERS)
-        const transition = pickupTransition(current.status as PickupStatus, "skip", current.position)
+        const transition = pickupTransition(current.status, "skip", current.position)
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         // A skip moves a planned pickup or refuses a decided one; the machine never answers "stay" for it, so that branch is a bug in the machine and not a client's.
         if (transition.kind !== "move") throw new Error(`a skip of pickup ${id} neither moved nor refused`)
@@ -685,7 +685,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const { current, parent } = await lockedPickup(tx, principal, id)
         requireRan(parent)
-        const transition = pickupCorrection(current.status as PickupStatus, outcome, current.position)
+        const transition = pickupCorrection(current.status, outcome, current.position)
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         if (transition.kind !== "move") throw new Error(`a correction of pickup ${id} neither moved nor refused`)
         // A cancelled bulky booking is collected by none of its stops (O11 of #290): a missed one is never corrected to completed, which would charge it.
@@ -720,7 +720,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           contaminantCodeId: tagged,
         })
         // What the outcome sets going (O3b, O3c of #290): a correction to completed makes a work order's movements and services its booked ticket, one away from completed tells the office the movements stand and tells the ticket.
-        await stopOutcomeChanged(tx, actorOf(principal), jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to, note, occurredAt: at.toISOString(), by: "office" }, at)
+        await stopOutcomeChanged(tx, actorOf(principal), jobs.send, row.id, { from: current.status, to: transition.to, note, occurredAt: at.toISOString(), by: "office" }, at)
         const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)

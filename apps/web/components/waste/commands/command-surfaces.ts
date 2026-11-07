@@ -23,7 +23,8 @@
 import type { ComponentType } from "react"
 
 import { AlertCommandsSurface, NewTicketSurface, RaiseAlertSurface } from "@/components/tickets/resolution-surfaces"
-import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
+import { mayTake, type Grants, type ModuleAction } from "@/lib/api/grants"
+import type { BusinessRecord, ModuleLocation, WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
@@ -37,7 +38,7 @@ import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { ActivityCommandsSurface, LogActivitySurface } from "./activity-surfaces"
 import { ApplicationCommandsSurface } from "./application-surfaces"
 import { BookBulkySurface, BulkyBookingCommandsSurface } from "./bulky-surfaces"
-import { CredentialCommandsSurface, RegisterCredentialSurface, SiteVisitCommandsSurface, SiteVisitsPrimarySurface } from "./site-visit-surfaces"
+import { CredentialCommandsSurface, RegisterCredentialSurface, SITE_VISITS_PRIMARY_ACTIONS, SiteVisitCommandsSurface, SiteVisitsPrimarySurface } from "./site-visit-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { DriverAbsenceSurface } from "./availability-surfaces"
 import { VehicleRowSurface } from "./compartment-surfaces"
@@ -47,7 +48,7 @@ import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfa
 import { CustomerCommandsSurface } from "./customer-surfaces"
 import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
-import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
+import { PRICE_ROWS_PRIMARY_ACTIONS, PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SCALE_HOUSE_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHBRIDGE_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { InspectionSurface } from "./inspection-surfaces"
@@ -55,7 +56,7 @@ import { ProposeRightSizingSurface, RightSizingSurface } from "./right-sizing-su
 import { ScaleHousePrimarySurface, ScaleHouseRowSurface } from "./scale-house-surfaces"
 import { SensorPairingSurface } from "./sensor-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
-import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
+import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, ROUTES_PRIMARY_ACTIONS, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
 import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
@@ -71,11 +72,18 @@ export type CommandSurface = {
    * What stands in for the module's primary action on the Pilot: its own
    * create form (`"form"`, the create going through the adapter as ever), a
    * dialog of the module's own, or nothing, for a module the wire only reads.
-   * A dialog of the module's own is offered with the create grant alone,
-   * whatever the fixture form (#186: Settlements' is disabled); the form,
-   * where the module's fixture form offers one (`primaryOf`).
+   * A dialog of the module's own is offered with its grants alone — the
+   * create unless `primaryActions` names others — whatever the fixture form
+   * (#186: Settlements' is disabled); the form, where the module's fixture
+   * form offers one (`primaryOf`).
    */
   primary: "form" | ComponentType<PrimarySurfaceProps> | null
+  /**
+   * The actions a dialog of the module's own holds where not all are its
+   * create, each the grant its API route checks: the dialog stands where any
+   * is held, and shows each action under its own (`primaryGranted`).
+   */
+  primaryActions?: readonly ModuleAction[]
   /** The row's commands, and what they read (a ledger, a history), in its details. */
   rowActions?: ComponentType<RowSurfaceProps>
   /**
@@ -126,7 +134,12 @@ export function genericEditOffered(surface: CommandSurface | undefined, record: 
   return typeof surface?.genericEdit === "function" && record != null && surface.genericEdit(record)
 }
 
-/** Which primary action a module offers: its surface's own dialog with the create grant alone, its form where the fixture form offers one (`formOffered`), or none. */
+/** Whether the account may take a module's primary action: any action its surface's own dialog names (`primaryActions`), else the module's create. */
+export function primaryGranted(surface: CommandSurface | undefined, module: ModuleLocation, grants: Grants | null): boolean {
+  return (surface?.primaryActions ?? [{ module, action: "create" }]).some((action) => mayTake(grants, action))
+}
+
+/** Which primary action a module offers: its surface's own dialog with its grants alone (`primaryGranted`), its form where the fixture form offers one (`formOffered`), or none. */
 export function primaryOf(surface: CommandSurface | undefined, granted: boolean, formOffered: boolean): "surface" | "form" | null {
   if (!granted) return null
   if (surface !== undefined && surface.primary !== "form") return surface.primary === null ? null : "surface"
@@ -177,7 +190,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // office's ad-hoc route, and a route's Add stop the office's stop, so the
   // stops still have no create of their own. O5 of #290: Dispatch day stands
   // beside New route, a project's day of routes dispatched in one request.
-  "route-studio.routes": { primary: RoutesPrimarySurface, rowActions: RouteCommandsSurface },
+  "route-studio.routes": { primary: RoutesPrimarySurface, primaryActions: Object.values(ROUTES_PRIMARY_ACTIONS), rowActions: RouteCommandsSurface },
   "route-studio.pickups": { primary: null, rowActions: PickupCommandsSurface },
   "route-studio.live": { primary: null, rowActions: LiveRouteSurface, whileShown: LiveBoardRefresh },
   // Slice 8 (#182, #147): a ticket opened by the office's own form and worked
@@ -187,7 +200,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // O11 of #290: a bulky collection booked by its own dialog, its days read from the place's schedule; a booked one routed onto a route of its day or cancelled.
   "operate.bulky-bookings": { primary: BookBulkySurface, rowActions: BulkyBookingCommandsSurface },
   // #393: the attendant's check-in is its own page, with the likely trades beside it; a visit is voided with why, never edited.
-  "operate.site-visits": { primary: SiteVisitsPrimarySurface, rowActions: SiteVisitCommandsSurface },
+  "operate.site-visits": { primary: SiteVisitsPrimarySurface, primaryActions: Object.values(SITE_VISITS_PRIMARY_ACTIONS), rowActions: SiteVisitCommandsSurface },
   // #393: a plate or a card registered by its own dialog under its holder; its label and end edited, and blocked or unblocked, in its details.
   "customers.site-access": { primary: RegisterCredentialSurface, rowActions: CredentialCommandsSurface },
   // M23 of #293: an inspection recorded by the module's form, its photos added and Close in its details; corrected by the generic Edit while open.
@@ -201,7 +214,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // event moves by its two commands; a run is previewed before it runs; an
   // invoice is read and credited, never edited.
   "commercial.products": { primary: ProductsPrimarySurface, rowActions: ProductCommandsSurface },
-  "commercial.price-rows": { primary: PriceRowsPrimarySurface, rowActions: PriceRowCommandsSurface, list: PRICE_ROWS_LIST },
+  "commercial.price-rows": { primary: PriceRowsPrimarySurface, primaryActions: Object.values(PRICE_ROWS_PRIMARY_ACTIONS), rowActions: PriceRowCommandsSurface, list: PRICE_ROWS_LIST },
   "commercial.events": { primary: AddManualEventSurface, rowActions: EventCommandsSurface, list: EVENTS_LIST },
   "commercial.billing": { primary: RunBillingSurface, rowActions: BillingRunSurface, list: BILLING_LIST },
   "commercial.invoices": { primary: null, rowActions: InvoiceSurface, list: INVOICES_LIST },

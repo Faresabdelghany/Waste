@@ -15,6 +15,7 @@
 // week is told against the period whole weeks before, so its weeks are cut on
 // the same weekdays and set beside each other like for like.
 import type { Rate, ReportInterval, ServiceInterval, ServiceReport, ServiceScheme, TonnageReport, TonnageRow } from "@waste/contracts/reports"
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { windowDays } from "@waste/domain/insight/intervals"
 import { addDays } from "@waste/domain/days"
 
@@ -127,16 +128,11 @@ export function throughputOf(current: readonly ServiceInterval[], previous: read
   }))
 }
 
-/** The modules a role grants `view` on, as `/me` answers them. */
-export function viewedModules(grants: readonly { moduleKey: string; actions: readonly string[] }[] | undefined): Set<string> {
-  return new Set((grants ?? []).filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
-}
-
 /** The weights' grant: the tonnage and the waste-data reports count the unloads under it. */
-export const WEIGHTS_MODULE = "route-studio.weights"
+export const WEIGHTS_MODULE: ModuleKey = "route-studio.weights"
 
 /** The waste-data filing's Improve module (#291 slice 29). */
-export const COMPLIANCE_MODULE = "improve.compliance"
+export const COMPLIANCE_MODULE: ModuleKey = "improve.compliance"
 
 /**
  * The Dashboard's tabs, Improve's modules, each shown under its own grant;
@@ -148,17 +144,17 @@ export const DASHBOARD_TABS = [
   { id: "performance", label: "Performance", moduleKey: "improve.performance", needs: [] },
   { id: "analytics", label: "Analytics", moduleKey: "improve.analytics", needs: [] },
   { id: "compliance", label: "Compliance", moduleKey: COMPLIANCE_MODULE, needs: [WEIGHTS_MODULE] },
-] as const satisfies readonly { id: string; label: string; moduleKey: string; needs: readonly string[] }[]
+] as const satisfies readonly { id: string; label: string; moduleKey: ModuleKey; needs: readonly ModuleKey[] }[]
 
 export type DashboardTabId = (typeof DASHBOARD_TABS)[number]["id"]
 
 /** The tabs a role is shown: its module viewed, and every module the tab needs beside it. */
-export function tabsShown(viewed: ReadonlySet<string>): (typeof DASHBOARD_TABS)[number][] {
-  return DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey) && tab.needs.every((moduleKey: string) => viewed.has(moduleKey)))
+export function tabsShown(viewed: ReadonlySet<ModuleKey>): (typeof DASHBOARD_TABS)[number][] {
+  return DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey) && tab.needs.every((moduleKey: ModuleKey) => viewed.has(moduleKey)))
 }
 
 /** The revenue report's grant: the invoices', not Improve's. */
-export const REVENUE_MODULE = "commercial.invoices"
+export const REVENUE_MODULE: ModuleKey = "commercial.invoices"
 
 /** The scheme table's columns, as the screen and its CSV read them. */
 export const SCHEME_COLUMNS = ["Route scheme", "Project", "Routes", "Started", "On time", "Late", "Pickups due", "Completed", "Missed", "Open", "Collection rate", "On-time rate"] as const

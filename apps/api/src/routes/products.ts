@@ -26,7 +26,7 @@
 // The grant is the Price Engine's own, `commercial.products`: the master data
 // a product points at is `configure.master`'s, written through the catalogue
 // routes, and nothing here widens that.
-import { Product, ProductCreate, ProductPatch, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/contracts/catalogue"
+import { Product, ProductCreate, ProductPatch } from "@waste/contracts/catalogue"
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
@@ -87,9 +87,9 @@ function productOf(row: Row): Product {
     id: row.id,
     projectId: row.projectId,
     name: row.name,
-    kind: row.kind as ProductKind,
-    status: row.status as ProductStatus,
-    unit: row.unit as ProductUnit,
+    kind: row.kind,
+    status: row.status,
+    unit: row.unit,
     containerTypeId: row.containerTypeId,
     wasteFractionId: row.wasteFractionId,
     serviceFrequencyId: row.serviceFrequencyId,

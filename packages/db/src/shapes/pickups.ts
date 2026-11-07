@@ -4,7 +4,6 @@
 // door emit the pickup events with the `Pickup` as the route answers it,
 // through these.
 import type { Pickup } from "@waste/contracts/pickups"
-import type { FillLevel, PickupOrigin, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -48,10 +47,10 @@ export function pickupOf(row: PickupRow): Pickup {
     routeId: row.routeId,
     containerId: row.containerId,
     position: row.position,
-    status: row.status as PickupStatus,
-    origin: row.origin as PickupOrigin,
-    service: row.service as PickupService,
-    reason: row.reason as PickupReason | null,
+    status: row.status,
+    origin: row.origin,
+    service: row.service,
+    reason: row.reason,
     contaminantCodeId: row.contaminantCodeId,
     note: row.note,
     propertyId: row.propertyId,
@@ -64,7 +63,7 @@ export function pickupOf(row: PickupRow): Pickup {
     replacementContainerId: row.replacementContainerId,
     bulkyBookingId: row.bulkyBookingId,
     movedFromPickupId: row.movedFromPickupId,
-    fill: row.fillLevel as FillLevel | null,
+    fill: row.fillLevel,
     ...stampsOf(row),
   }
 }

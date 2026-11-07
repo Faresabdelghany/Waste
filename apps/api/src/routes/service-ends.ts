@@ -28,6 +28,7 @@ import type { JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
+import { OPEN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } from "drizzle-orm"
 import { projectToday } from "@waste/db/commands/project-clock"
 
@@ -42,9 +43,6 @@ export type Window = { from: string; to: string | null }
 
 /** The run to ask of each scheme, by id: from a day through its last service date to read, both inclusive. */
 export type RunWindows = ReadonlyMap<string, { from: string; to: string }>
-
-/** The routes a stop at a container can still be standing on: not yet completed or cancelled. */
-const OPEN_ROUTES = ["planned", "ready", "active"] as const
 
 /** How far back a container's stops say which schemes serve it, for days given back: the window the office's routes are read over (`ROUTES_WINDOW_DAYS` in the web's records). */
 export const SERVED_DAYS = 35
@@ -90,7 +88,7 @@ export async function stopsLeft(tx: Tx, scope: Scope, containerIds: readonly str
         eq(pickup.projectId, scope.projectId),
         or(...which),
         eq(pickup.status, "planned"),
-        inArray(route.status, [...OPEN_ROUTES]),
+        inArray(route.status, [...OPEN_ROUTE_STATUSES]),
         within(window),
       ),
     )

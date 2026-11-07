@@ -31,7 +31,7 @@ export const driverAbsence = wms.table(
     ...timestamps,
     ...validity,
     driverId: uuid().notNull(),
-    reason: text().notNull(),
+    reason: text({ enum: DRIVER_ABSENCE_REASONS }).notNull(),
     note: text(),
   },
   (t) => [
@@ -39,7 +39,7 @@ export const driverAbsence = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.driverId], driver),
     validPeriod(t),
-    oneOf(t.reason, DRIVER_ABSENCE_REASONS),
+    oneOf(t.reason),
     // A project's absences by when they start: the planner's read of who is away.
     tenantIndex(t, t.projectId, t.validFrom),
   ],
@@ -56,7 +56,7 @@ export const vehicleUnavailability = wms.table(
     ...validity,
     /** A powered vehicle or a trailer. */
     vehicleId: uuid().notNull(),
-    reason: text().notNull(),
+    reason: text({ enum: VEHICLE_UNAVAILABILITY_REASONS }).notNull(),
     note: text(),
   },
   (t) => [
@@ -64,7 +64,7 @@ export const vehicleUnavailability = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.vehicleId], vehicle),
     validPeriod(t),
-    oneOf(t.reason, VEHICLE_UNAVAILABILITY_REASONS),
+    oneOf(t.reason),
     tenantIndex(t, t.projectId, t.validFrom),
   ],
 )

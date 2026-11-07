@@ -118,7 +118,7 @@ import { stopMissed } from "@waste/domain/resolution/ticket-stops"
 import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, type CaseRule, type ProblemAsFound, type Superseding } from "@waste/domain/resolution/cases"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { RESOLUTION_EVENT_KINDS, ticketFor, type EventFacts, type ResolutionEventKind, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
-import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { labelOf, ticketColumns, type TicketRow } from "@waste/db/shapes/tickets"
@@ -308,7 +308,7 @@ async function asFound(tx: Tx, companyId: string, problem: TicketRow): Promise<P
     .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, problem.id), isNotNull(ticketEvent.recordedBy)))
     .limit(1)
   return {
-    status: problem.status as TicketStatus,
+    status: problem.status,
     assigneeUserAccountId: problem.assigneeUserAccountId,
     createdBy: problem.createdBy,
     edited: problem.updatedAt.getTime() !== problem.createdAt.getTime(),
@@ -319,7 +319,7 @@ async function asFound(tx: Tx, companyId: string, problem: TicketRow): Promise<P
 /** A comment on a case, nobody's, as the history's snapshot of the case. */
 const commentOn = (row: TicketRow, body: string, sourceEventId: string | null): TicketEventDraft => ({
   kind: "comment",
-  status: row.status as TicketStatus,
+  status: row.status,
   assigneeUserAccountId: row.assigneeUserAccountId,
   resolution: null,
   body,
@@ -339,7 +339,7 @@ const commentOn = (row: TicketRow, body: string, sourceEventId: string | null): 
  */
 async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: TicketRow, at: Date, send: Send): Promise<Superseding> {
   const found = superseding(await asFound(tx, companyId, problem))
-  const how = found === "duplicate" && ticketTransition(problem.status as TicketStatus, "complete", labelOf(problem)).kind === "move" ? "duplicate" : "named"
+  const how = found === "duplicate" && ticketTransition(problem.status, "complete", labelOf(problem)).kind === "move" ? "duplicate" : "named"
   if (how === "duplicate") {
     const folded = await tx
       .select({ body: ticketEvent.body })

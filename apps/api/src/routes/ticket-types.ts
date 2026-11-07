@@ -34,7 +34,7 @@ import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermissi
 import type { Action } from "@waste/domain/access/modules"
 import { notPlannable, plannedService } from "@waste/domain/resolution/automation"
 import { DEFAULT_TYPE_OFFERED } from "@waste/domain/resolution/ticket-types"
-import { TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, type TicketActionTrigger, type TicketCommand, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { advisoryLock, lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -108,7 +108,7 @@ async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise
   return rows.map((row) => {
     const own: TicketTypeField[] = fields
       .filter((field) => field.ticketTypeId === row.id)
-      .map(({ ticketTypeId: _type, ...field }) => ({ ...field, input: field.input as TicketFieldInput, requirement: field.requirement as TicketFieldRequirement }))
+      .map(({ ticketTypeId: _type, ...field }) => ({ ...field, input: field.input, requirement: field.requirement }))
     const permissions: TicketTypePermission[] = TICKET_COMMANDS.flatMap((command) => {
       const roleIds = grants.filter((grant) => grant.ticketTypeId === row.id && grant.command === command).map((grant) => grant.roleId)
       return roleIds.length === 0 ? [] : [{ command, roleIds }]
@@ -119,21 +119,21 @@ async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise
       .sort((one, other) => triggerOrder(one.trigger) - triggerOrder(other.trigger))
       .map(({ ticketTypeId: _type, ...action }) => ({
         ...action,
-        trigger: action.trigger as TicketActionTrigger,
-        kind: action.kind as TicketActionKind,
-        priority: action.priority as TicketPriority | null,
-        command: action.command as TicketActionCommand | null,
-        resolution: action.resolution as TicketResolution | null,
-        recipient: action.recipient as TicketMessageRecipient | null,
+        trigger: action.trigger,
+        kind: action.kind,
+        priority: action.priority,
+        command: action.command,
+        resolution: action.resolution,
+        recipient: action.recipient,
       }))
-    return { id: row.id, name: row.name, kind: row.kind as TicketKind, description: row.description, status: row.status as TicketTypeStatus, isDefault: row.isDefault, fields: own, permissions, actions: automation, ...stampsOf(row) }
+    return { id: row.id, name: row.name, kind: row.kind, description: row.description, status: row.status, isDefault: row.isDefault, fields: own, permissions, actions: automation, ...stampsOf(row) }
   })
 }
 
 const typeOf = async (tx: Tx, companyId: string, row: Row): Promise<TicketType> => (await typesOf(tx, companyId, [row]))[0]
 
 /** Makes the kind's default this type alone: the default that was is unmade first, under the kind's lock, so the index holding one default per kind never meets two. */
-async function unmakeDefaults(tx: Tx, companyId: string, kind: string, except?: string): Promise<void> {
+async function unmakeDefaults(tx: Tx, companyId: string, kind: TicketKind, except?: string): Promise<void> {
   await advisoryLock(tx, `ticket-type-default:${companyId}:${kind}`)
   await tx
     .update(ticketType)
@@ -452,7 +452,7 @@ export function ticketTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .returning(columns)
         if (row === undefined) throw noSuchType(id)
         const vehicles = await vehicleProjects(tx, principal, id, actions)
-        const issues = await referenceIssues(tx, principal.companyId, row.kind as TicketKind, actions, vehicles)
+        const issues = await referenceIssues(tx, principal.companyId, row.kind, actions, vehicles)
         if (issues.length > 0) throw invalidRequest("body", issues)
         await tx.delete(ticketTypeAction).where(and(eq(ticketTypeAction.companyId, principal.companyId), eq(ticketTypeAction.ticketTypeId, id)))
         const placed = new Map<string, number>()

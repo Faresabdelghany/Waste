@@ -30,6 +30,8 @@ import { templateInactive } from "@waste/db/commands/messaging"
 import { messageTemplate } from "@waste/db/schema/messaging"
 import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { CUSTOMER_NOTICE_EVENTS } from "@waste/domain/notifications/vocabulary"
+import { ACTIVE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -131,8 +133,10 @@ async function requireTemplates(tx: Tx, companyId: string, projectId: string, ru
     return []
   })
   if (issues.length > 0) throw invalidRequest("body", issues)
-  const inactive = rules.map((rule) => found.get(rule.templateId)).find((template) => template !== undefined && template.status !== "active")
-  if (inactive !== undefined) throw problem(409, { detail: templateInactive(inactive.name) })
+  for (const rule of rules) {
+    const template = found.get(rule.templateId)
+    if (template !== undefined) refuseUnless(template.status, ACTIVE_TEMPLATE_STATUSES, templateInactive(template.name))
+  }
 }
 
 export function notificationRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {

@@ -45,7 +45,7 @@ import { ticketBookingBackfill } from "../sql/ticket-booking"
 import { ticketTypesBackfill, ticketTypesRequired, ticketTypesSeed } from "../sql/ticket-types"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -205,7 +205,7 @@ const opened = (values: Partial<typeof ticket.$inferInsert>): typeof ticket.$inf
     occurredAt: at(9),
     createdBy: a.account,
     ...values,
-  }
+  } satisfies Partial<typeof ticket.$inferInsert>
   return { ticketTypeId: typeOf(row.companyId, row.kind), ...row }
 }
 
@@ -436,7 +436,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await refuse({ status: "completed", closedAt: at(16), resolution: "serviced", recollectionRouteId: a.secondRoute }, /ticket_recollection_shape/, "a re-collection route with another resolution")
       await refuse({ parentTicketId: a.spare }, /ticket_parent_shape/, "its own parent")
       await refuse({ status: "created" as TicketStatus }, /ticket_status_one_of/, "the prototype's Created folds into open")
-      await refuse({ source: "driver" }, /ticket_source_one_of/, "Execution spells the device driver-app")
+      await refuse({ source: outside("driver") }, /ticket_source_one_of/, "Execution spells the device driver-app")
       // The shapes that stand: completed with a re-collection, completed without one, rejected, and reopened with everything cleared.
       await tx.insert(ticket).values([
         opened({ id: a.spare, number: 8900, status: "completed", closedAt: at(16), resolution: "recollected", recollectionRouteId: a.secondRoute }),
@@ -488,7 +488,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
         }
       }
       assert.equal(rows, 80, "four kinds, twenty rows each: the provider's thread is the third visibility (#291 slice 23b)")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketEvent).values(comment({ kind: "edited" }))), refusedWith("23514", /ticket_event_kind_one_of|ticket_event_kind_shape/), "the history of a field edit is the audit log's")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketEvent).values(comment({ kind: outside("edited") }))), refusedWith("23514", /ticket_event_kind_one_of|ticket_event_kind_shape/), "the history of a field edit is the audit log's")
     }))
 
   test("one comment per outbox event (23505 ticket_event_source_event_id_idx), a null passing; the history reads in recording order through its index", () =>
@@ -517,7 +517,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await refuse({ status: "acknowledged" }, /alert_stamps_shape/, "acknowledged without its stamp")
       await refuse({ status: "acknowledged", acknowledgedAt: at(11), acknowledgedBy: a.account, resolvedAt: at(12), resolvedBy: a.account }, /alert_stamps_shape/, "acknowledged and resolved")
       await refuse({ status: "resolved", acknowledgedAt: at(11), acknowledgedBy: a.account }, /alert_stamps_shape/, "resolved without its stamp")
-      await refuse({ status: "linked" }, /alert_stamps_shape|alert_status_one_of/, "linked to a ticket is a reading of ticket_id")
+      await refuse({ status: outside("linked") }, /alert_stamps_shape|alert_status_one_of/, "linked to a ticket is a reading of ticket_id")
       // The shapes that stand, one per status: a resolved alert acknowledged first, and one resolved straight away.
       await tx.insert(alert).values([
         raised({ id: a.spare }),
@@ -619,7 +619,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
         { ...event, id: a.fourth, kind: "ticket-assigned" },
         { ...event, id: a.fifth, kind: "alert-raised", aggregateKind: "alert" },
       ])
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.sixth, kind: "alert-acknowledged", aggregateKind: "alert" })), refusedWith("23514", /outbox_event_kind_one_of/), "an alert's acknowledgement is nobody's news")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.sixth, kind: outside("alert-acknowledged"), aggregateKind: "alert" })), refusedWith("23514", /outbox_event_kind_one_of/), "an alert's acknowledgement is nobody's news")
     }))
 
   test("ticket_booking (#422) keeps every booking: one ticket per stop (23505), the stop of the ticket's own project and company (23503), and the API role appends and never rewrites (42501)", async () => {
@@ -683,7 +683,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
 
   test("a kind has one default type, and the default is offered (23505 ticket_type_default_kind_key, 23514 ticket_type_default_shape); a field offers choices exactly when it is a choice, each key and place once (#545 of #544)", () =>
     seeded(async (tx) => {
-      const type = { companyId: a.company, kind: "container-request" }
+      const type = { companyId: a.company, kind: "container-request" } as const
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketType).values({ ...type, id: a.spare, name: "Bulky waste collection", isDefault: true })), refusedWith("23505", /ticket_type_default_kind_key/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.update(ticketType).set({ status: "inactive" }).where(eq(ticketType.id, typeOf(a.company, "container-request")))), refusedWith("23514", /ticket_type_default_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketType).values({ ...type, id: a.spare, name: "Container request" })), refusedWith("23505", /ticket_type_name_key/), "a name is one type's")

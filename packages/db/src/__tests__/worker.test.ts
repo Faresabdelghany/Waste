@@ -79,7 +79,7 @@ describe("migration 0011, the worker role and pg-boss's schema", { skip: databas
   })
 
   test("as wms_worker, a read crosses companies — the fence bypassed by construction — and a write is refused (42501), where the same write as wms_api under withCompany lands", async () => {
-    const row = (n: "a" | "b") => ({ id: companyId(n), companyId: companyId(n), name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `2000000${n === "a" ? 1 : 2}`, country: "DK", status: "active" })
+    const row = (n: "a" | "b"): typeof company.$inferInsert => ({ id: companyId(n), companyId: companyId(n), name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `2000000${n === "a" ? 1 : 2}`, country: "DK", status: "active" })
     await rolledBackIn(
       (body) => owner.db.transaction(body),
       async (tx) => {

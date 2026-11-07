@@ -24,7 +24,6 @@ import { routeLabel } from "@waste/domain/numbering"
 import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/resolution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
-import type { TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -60,7 +59,7 @@ export async function bookTicket(tx: Tx, companyId: string, booking: TicketRow, 
   await appendTicketEvent(
     tx,
     { companyId, projectId: row.projectId, id: row.id },
-    { kind: "comment", status: row.status as TicketStatus, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: line.body, visibility: "internal", objectKey: null, recordedBy: line.recordedBy, sourceEventId: null },
+    { kind: "comment", status: row.status, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: line.body, visibility: "internal", objectKey: null, recordedBy: line.recordedBy, sourceEventId: null },
     mint,
   )
   return row
@@ -102,7 +101,7 @@ export async function bookingTicket(tx: Tx, companyId: string, pickupId: string)
 /** A comment of the office's eyes alone, recorded by the actor, the ticket's status and assignee as they stand. */
 const comment = (row: TicketRow, body: string, actor: Actor) => ({
   kind: "comment" as const,
-  status: row.status as TicketStatus,
+  status: row.status,
   assigneeUserAccountId: row.assigneeUserAccountId,
   resolution: null,
   body,
@@ -121,7 +120,7 @@ const comment = (row: TicketRow, body: string, actor: Actor) => ({
  * take off.
  */
 export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop, at: Date, automation: AutomationCause, stillBooked?: StopRef, mint: IdMinter = newId): Promise<void> {
-  if (ticketTransition(current.status as TicketStatus, "complete", labelOf(current)).kind !== "move") {
+  if (ticketTransition(current.status, "complete", labelOf(current)).kind !== "move") {
     await appendTicketEvent(tx, ticketRefOf(actor.companyId, current), comment(current, servedAfterClose({ position: stop.position, route: stop.routeLabel, service: stop.service }), actor), mint)
     return
   }
@@ -158,7 +157,7 @@ async function bookedStop(tx: Tx, companyId: string, pickupId: string): Promise<
     .where(and(eq(pickup.companyId, companyId), eq(pickup.id, pickupId)))
     .limit(1)
   if (row === undefined) throw new Error(`pickup ${pickupId} decided and then not there`)
-  return { pickupId, routeId: row.routeId, position: row.position, routeLabel: routeLabel(row.number), service: row.service as PickupService, status: row.status }
+  return { pickupId, routeId: row.routeId, position: row.position, routeLabel: routeLabel(row.number), service: row.service, status: row.status }
 }
 
 /**

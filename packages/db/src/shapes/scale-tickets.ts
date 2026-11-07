@@ -2,8 +2,6 @@
 // row types and `scaleTicketOf`, which the scale house answers and
 // `scale-ticket-completed` and `scale-ticket-voided` carry.
 import type { ScaleTicket } from "@waste/contracts/scale-house"
-import type { WeighbridgeUnmatchedReason } from "@waste/domain/execution/vocabulary"
-import type { ScaleTicketParty, ScaleTicketStatus, ScaleTicketVoidReason, TareSource } from "@waste/domain/scale-house/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -68,23 +66,23 @@ export const scaleTicketOf = (row: ScaleTicketRow, lines: readonly ScaleLineRow[
   trailerPlate: row.trailerPlate,
   containerRef: row.containerRef,
   vehicleId: row.vehicleId,
-  party: row.party as ScaleTicketParty,
+  party: row.party,
   customerId: row.customerId,
   agreementId: row.agreementId,
   visitorName: row.visitorName,
   grossKg: row.grossKg,
   weighedInAt: row.weighedInAt.toISOString(),
   tareKg: row.tareKg,
-  tareSource: row.tareSource as TareSource | null,
+  tareSource: row.tareSource,
   vehicleTareId: row.vehicleTareId,
   weighedOutAt: instantOf(row.weighedOutAt),
   netKg: row.netKg,
-  status: row.status as ScaleTicketStatus,
+  status: row.status,
   lines: lines.map((line) => ({ id: line.id, position: line.position, wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality, netKg: line.netKg, productId: line.productId, volumeLitres: line.volumeLitres })),
   routeId: row.routeId,
   unloadId: row.unloadId,
-  unmatchedReason: row.unmatchedReason as WeighbridgeUnmatchedReason | null,
-  voidReason: row.voidReason as ScaleTicketVoidReason | null,
+  unmatchedReason: row.unmatchedReason,
+  voidReason: row.voidReason,
   voidNote: row.voidNote,
   voidedAt: instantOf(row.voidedAt),
   note: row.note,

@@ -5,7 +5,6 @@
 // the account through `assigneeOf` and answers it in its own words — a 400
 // at the body's field, or the automation's line; the write is here: the
 // assignee, one `assigned` row, and `ticket-assigned` to an account.
-import type { TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -60,7 +59,7 @@ export async function assignTicket(tx: Tx, current: TicketRow, assignee: string 
   await appendTicketEvent(
     tx,
     ticketRefOf(companyId, row),
-    { kind: "assigned", status: row.status as TicketStatus, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: assignment.note, visibility: "internal", objectKey: null, recordedBy: assignment.by, sourceEventId: null },
+    { kind: "assigned", status: row.status, assigneeUserAccountId: row.assigneeUserAccountId, resolution: null, body: assignment.note, visibility: "internal", objectKey: null, recordedBy: assignment.by, sourceEventId: null },
     assignment.newId,
   )
   if (row.assigneeUserAccountId !== null) await emit(tx, { companyId }, { aggregateId: row.id, kind: "ticket-assigned", payload: ticketOf(row), projectId: row.projectId, occurredAt: assignment.at })

@@ -59,7 +59,7 @@
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `EXECUTION_VOCABULARIES`
 // names them all for the test that walks them.
-import { without } from "../lists"
+import { isOneOf, without } from "../lists"
 
 /** Where a dated Route stands: #97 B's five, verbatim. */
 export const ROUTE_STATUSES = ["planned", "ready", "active", "completed", "cancelled"] as const
@@ -196,6 +196,28 @@ export type OutboundLoadStatus = (typeof OUTBOUND_LOAD_STATUSES)[number]
 
 /** The statuses that carry the receiving site's ticket: every one the load reaches once received. A value beside the lists. */
 export const RECEIVED_LOAD_STATUSES = without(OUTBOUND_LOAD_STATUSES, "departed", "cancelled")
+
+/** A stop that was missed: skipped or failed, so nothing was collected there — what a re-collection may not name, and what an outcome gives a reason for. A value of `PICKUP_STATUSES`, not a vocabulary. */
+export const MISSED_PICKUP_STATUSES = ["skipped", "failed"] as const satisfies readonly PickupStatus[]
+export type MissedPickupStatus = (typeof MISSED_PICKUP_STATUSES)[number]
+
+/** Whether a stop in this status was missed: skipped or failed. Takes a status read as text too, as a form's value is. */
+export const pickupMissed = (status: string): status is MissedPickupStatus => isOneOf(status, MISSED_PICKUP_STATUSES)
+
+/** The statuses a contaminant code is named by a new tag or a new rule in (`@waste/domain/status-gates`); a stop tagged before keeps its tag. */
+export const ACTIVE_CONTAMINANT_CODE_STATUSES = ["active"] as const satisfies readonly ContaminantCodeStatus[]
+
+// Where a route is in its day, as the rules that ask read it. Values of
+// `ROUTE_STATUSES`, not vocabularies: a status a route gains is placed in each.
+
+/** A route not yet started: its order, its day and its assignment still move. */
+export const NOT_STARTED_ROUTE_STATUSES = ["planned", "ready"] as const satisfies readonly RouteStatus[]
+/** A route dispatched and not yet ended: the driver's, and kept by a scheme's archive. */
+export const DISPATCHED_ROUTE_STATUSES = ["ready", "active"] as const satisfies readonly RouteStatus[]
+/** A route that has not ended: planned, dispatched or under way. */
+export const OPEN_ROUTE_STATUSES = without(ROUTE_STATUSES, "completed", "cancelled")
+/** A route that went out: under way or completed, so a vehicle drove it and a load came from it. */
+export const RAN_ROUTE_STATUSES = ["active", "completed"] as const satisfies readonly RouteStatus[]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const EXECUTION_VOCABULARIES = {

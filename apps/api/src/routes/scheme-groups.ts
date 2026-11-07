@@ -44,7 +44,7 @@
 // gates a new reference and never an existing one), a vehicle named afresh
 // is not retired and a driver named afresh is active — a 409 naming the row
 // and its status, run after every 400 through `requireFleetInService`
-// (routes/statuses.ts) — where a group whose vehicle later retires is not
+// (@waste/domain/status-gates) — where a group whose vehicle later retires is not
 // refused on an unrelated patch. Those two sets are read and held present in
 // one statement each (`rowsPresent`, routes/sets.ts, since the last rounds of
 // the #101 review — the read first, the missing entry derived from it, the
@@ -98,9 +98,10 @@ import {
   type GroupStructure,
   type NamedResource,
 } from "@waste/domain/planning/checks"
-import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import type { Refusal } from "@waste/domain/refusal"
 import { firstRunDay } from "@waste/domain/resources/availability"
+import { refuseRetiredVehicle, refuseUnavailableDriver } from "@waste/domain/resources/fleet"
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
@@ -127,7 +128,6 @@ import { schemeWarningsOf } from "./scheme-reconciliation"
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
 import { seasonsOf } from "./scheme-seasons"
 import { stamp } from "./shared"
-import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 import { oneDay, refuseCrewsAway } from "./availability-rules"
 
 /** What a route module takes beside the guard: the app's clock, which "today" on a project's clock is rendered from; a test pins it. */
@@ -216,17 +216,17 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
     projectId: row.projectId,
     name: row.name,
     planningAreaId: row.planningAreaId,
-    serviceType: row.serviceType as ServiceType,
-    frequency: row.frequency as RecurrenceFrequency,
-    serviceDays: row.serviceDays as ServiceDay[],
-    weekRotation: row.weekRotation as WeekRotation | null,
+    serviceType: row.serviceType,
+    frequency: row.frequency,
+    serviceDays: row.serviceDays,
+    weekRotation: row.weekRotation,
     // Postgres spells the start with seconds; the wire does not (`timeOf`).
     plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),
-    holidayPolicy: row.holidayPolicy as HolidayPolicy,
-    editPolicy: row.editPolicy as SchemeEditPolicy,
+    holidayPolicy: row.holidayPolicy,
+    editPolicy: row.editPolicy,
     planAhead: row.planAhead,
     planAheadDays: row.planAheadDays,
-    status: row.status as RouteSchemeStatus,
+    status: row.status,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     depotId: row.depotId,
     unloadingStationId: row.unloadingStationId,
@@ -245,13 +245,13 @@ type GroupSets = { wasteFractionIds: string[]; containerTypeIds: string[]; conta
 
 /** The row on the wire: a rule group carries its rule and no containers, a manual group its containers and no rule. */
 function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
-  const stopSource = row.stopSource as StopSource
+  const stopSource = row.stopSource
   return {
     id: row.id,
     routeSchemeId: row.routeSchemeId,
     name: row.name,
     position: row.position,
-    days: row.days as ServiceDay[],
+    days: row.days,
     stopSource,
     rule: stopSource === "rule" ? { wasteFractionIds: sets.wasteFractionIds, containerTypeIds: sets.containerTypeIds, vehicleTypeId: row.ruleVehicleTypeId, planningAreaId: row.rulePlanningAreaId } : null,
     containerIds: sets.containerIds,
@@ -470,13 +470,13 @@ const driverOf = (scope: Scope): SQL => eq(driver.projectId, scope.projectId)
 async function readVehicles(tx: Tx, where: SQL | undefined): Promise<VehicleRow[]> {
   const rows = await tx.select(vehicleColumns).from(vehicle).where(where)
   // The coded columns are text with a CHECK in the database and a vocabulary here.
-  return rows as VehicleRow[]
+  return rows
 }
 
 /** The same for the drivers `where` names. */
 async function readDrivers(tx: Tx, where: SQL | undefined): Promise<DriverRow[]> {
   const rows = await tx.select(driverColumns).from(driver).where(where)
-  return rows as DriverRow[]
+  return rows
 }
 
 /**
@@ -571,7 +571,7 @@ export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupRe
 }
 
 /**
- * The fleet a body named afresh is in service (#79's rule, routes/statuses.ts):
+ * The fleet a body named afresh is in service (#79's rule, @waste/domain/status-gates):
  * a retired vehicle, an inactive or a suspended driver is a 409 naming the
  * row, its status and what a collection group needs, the vehicles before the
  * drivers in body order — `refs` as `requireGroupReferences` was handed them

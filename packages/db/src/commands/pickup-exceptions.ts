@@ -8,7 +8,7 @@
 // statements it asks for, spelled once so the history and the charge read the
 // same rows.
 import type { PickupExceptionRuleFacts, PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
-import { CODED_PROOF_KINDS, PICKUP_EXCEPTION_REASONS, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
 import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -52,8 +52,8 @@ export async function exceptionRulesOf(tx: Tx, companyId: string, projectId: str
     id: row.id,
     validFrom: row.validFrom,
     validTo: row.validTo,
-    outcome: row.outcome as PickupOutcome,
-    reason: row.reason as PickupReason | null,
+    outcome: row.outcome,
+    reason: row.reason,
     contaminantCodeId: row.contaminantCodeId,
     freeCount: row.freeCount,
     windowDays: row.windowDays,
@@ -90,11 +90,11 @@ export async function exceptionStopsAt(tx: Tx, companyId: string, projectId: str
     .orderBy(asc(route.serviceDate), asc(pickup.id))
   return rows.map((row) => ({
     id: row.id,
-    status: row.status as PickupStatus,
-    reason: row.reason as PickupReason | null,
+    status: row.status,
+    reason: row.reason,
     contaminantCodeId: row.contaminantCodeId,
-    origin: row.origin as PickupOrigin,
-    service: row.service as PickupService,
+    origin: row.origin,
+    service: row.service,
     serviceDate: row.serviceDate,
     place: place.id,
   }))

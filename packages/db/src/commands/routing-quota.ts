@@ -36,7 +36,7 @@ export async function quotaRows(tx: Tx, keys: { companyId: string; provider: str
     .from(routingQuota)
     .where(and(eq(routingQuota.companyId, keys.companyId), eq(routingQuota.provider, keys.provider)))
   const order = (family: string) => ROUTING_QUOTA_FAMILIES.indexOf(family as RoutingQuotaFamily)
-  return rows.map((row) => ({ ...row, family: row.family as RoutingQuotaFamily })).sort((a, b) => order(a.family) - order(b.family))
+  return rows.map((row) => ({ ...row, family: row.family })).sort((a, b) => order(a.family) - order(b.family))
 }
 
 /** Writes a family's standing, making the row the first time; the trigger moves `updated_at`. */

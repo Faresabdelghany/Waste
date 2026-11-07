@@ -18,7 +18,7 @@
 // `trailerId` a `trailer`, and a row of the other kind is refused in that
 // kind's words, since the two columns of an allocation must never hold the
 // same vehicle and the kind is what keeps them apart. Both rows carry their
-// status, since a route naming one afresh holds it (routes/statuses.ts) and a
+// status, since a route naming one afresh holds it (@waste/domain/status-gates) and a
 // second read for one column would be the same statement over again; the
 // column sets are exported so routes/scheme-groups.ts reads a body's whole
 // fleet in one statement per table and gets the same rows.
@@ -83,7 +83,7 @@ export async function findVehicle(tx: Tx, scope: Scope, id: string, kind: Vehicl
     .limit(1)
   if (row === undefined) throw invalidRequest("body", [{ path, message: ownedBy === undefined ? notAVehicleOf(kind) : notOwnFleet(kind === "trailer" ? "trailer" : "vehicle", ownedBy.provider) }])
   // The coded columns are text with a CHECK in the database and a vocabulary here.
-  return row as VehicleRow
+  return row
 }
 
 /** What a licence check reads of a driver, the name a sentence calls them by, and the status a new reference is held to. */
@@ -114,5 +114,5 @@ export async function findDriver(tx: Tx, scope: Scope, id: string, path = "drive
     )
     .limit(1)
   if (row === undefined) throw invalidRequest("body", [{ path, message: ownedBy === undefined ? NOT_A_DRIVER : notOwnFleet("driver", ownedBy.provider) }])
-  return row as DriverRow
+  return row
 }

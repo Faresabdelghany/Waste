@@ -29,7 +29,7 @@
 // is later — so a patch that moves the start later judges the groups' drivers
 // again on the new start, since that day moved, refused at `validFrom` —
 // named afresh, the vehicle is not retired and the driver is active (a 409
-// naming the row and its status, after every 400, routes/statuses.ts), and on
+// naming the row and its status, after every 400, @waste/domain/status-gates), and on
 // a validated scheme no vehicle or driver is on two groups a shared day
 // (routes/scheme-groups.ts, with the other structural rules). A rule's vehicle
 // type is one of the company's rows since the same migration. Today is the
@@ -89,7 +89,6 @@ import { project } from "@waste/db/schema/organisation"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { schemeRecurrenceOf } from "@waste/domain/planning/generation"
 import { DAILY_HAS_NO_SEASONS, DAILY_SERVES_EVERY_DAY, dailyHasNoSeasons, dailyServesEveryDay, GROUPS_MAX, WEEK_ROTATION_WITH_FORTNIGHTLY, weekRotationShape, withinServiceDays } from "@waste/domain/planning/schemes"
-import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/route-schemes/holiday-names"
 import { generateOccurrences, SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type HolidayList, NO_HOLIDAYS } from "@waste/domain/days"
@@ -431,7 +430,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         if (patch.holidayPolicy !== undefined && patch.holidayPolicy !== current.holidayPolicy) {
           // A new holiday policy re-decides the scheme's holidays: the held routes it moves go back to the scheme (#226).
           const calendar = await projectCalendarOf(tx, principal.companyId, current.projectId)
-          await releaseHolidayHolds(tx, principal.companyId, current.projectId, { before: calendar, after: calendar, policy: { routeSchemeId: id, before: current.holidayPolicy as HolidayPolicy, after: patch.holidayPolicy } })
+          await releaseHolidayHolds(tx, principal.companyId, current.projectId, { before: calendar, after: calendar, policy: { routeSchemeId: id, before: current.holidayPolicy, after: patch.holidayPolicy } })
         }
         // A set restated as it stands writes nothing, so the audit trail records only a change.
         if (seasons !== undefined && !sameSeasons(seasons, storedSeasons)) await writeSeasons(tx, scope, id, seasons, { replacing: true })
@@ -493,9 +492,9 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const recurrence: SchemeRecurrence = {
           // `validTo` is the first day out of force; the domain's `effectiveTo` is the last day in it, and schemeRecurrenceOf is where the two meet, for the generation job too.
           ...schemeRecurrenceOf({
-            frequency: scheme.frequency as RecurrenceFrequency,
-            serviceDays: scheme.serviceDays as ServiceDay[],
-            weekRotation: scheme.weekRotation as WeekRotation | null,
+            frequency: scheme.frequency,
+            serviceDays: scheme.serviceDays,
+            weekRotation: scheme.weekRotation,
             validFrom: scheme.validFrom,
             validTo: scheme.validTo,
             seasons: await storedSeasonsOf(tx, principal.companyId, id),
@@ -505,8 +504,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const rows = generateOccurrences({
           recurrence,
           window,
-          holidayPolicy: scheme.holidayPolicy as HolidayPolicy,
-          calendar: { holidays, weekend: calendar.weekend as ServiceDay[] },
+          holidayPolicy: scheme.holidayPolicy,
+          calendar: { holidays, weekend: calendar.weekend },
         })
         return c.json(rows)
       },

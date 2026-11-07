@@ -80,7 +80,7 @@ export const company = wms.table(
     registrationNumber: text().notNull(),
     /** ISO 3166-1 alpha-2. */
     country: text().notNull(),
-    status: text().notNull(),
+    status: text({ enum: COMPANY_STATUSES }).notNull(),
     /** The route-number counter (Issue #104): the next `RC-<n>` this company mints. Generation allocates a block in one `update … returning`, whose row lock is the serialisation; the default keeps a demo number from reading as a count. */
     nextRouteNumber: integer().notNull().default(1000),
     /** The ticket-number counter (Issue #109): the next `T-<n>` this company mints, one per ticket in one `update … returning` under the same row lock. */
@@ -109,7 +109,7 @@ export const company = wms.table(
     // table alone needs, so the label the refusal would print names the check
     // itself, the way every other call here names the helper that built it.
     check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`),
-    oneOf(t.status, COMPANY_STATUSES),
+    oneOf(t.status),
   ],
 )
 
@@ -203,9 +203,9 @@ export const project = wms.table(
     currency: text().notNull(),
     /** IANA (`Europe/Copenhagen`). */
     timezone: text().notNull(),
-    status: text().notNull(),
+    status: text({ enum: PROJECT_STATUSES }).notNull(),
     /** The days the project rests on; the domain's default (Saturday and Sunday) unless it says otherwise, and never all seven. */
-    weekend: text()
+    weekend: text({ enum: SERVICE_DAYS })
       .array()
       .notNull()
       .default(sql.raw(`'{${DEFAULT_WEEKEND.join(",")}}'`)),
@@ -221,7 +221,7 @@ export const project = wms.table(
     /** How many days after issue the project's invoices are due (#291 C4), unless a customer has terms of its own. */
     paymentTermsDays: integer().notNull().default(DEFAULT_PAYMENT_TERMS_DAYS),
     /** How its invoices are referenced for payment (#291 C4): none, or a FI card, which needs the company's creditor number. */
-    paymentReferenceScheme: text().notNull().default("none"),
+    paymentReferenceScheme: text({ enum: PAYMENT_REFERENCE_SCHEMES }).notNull().default("none"),
     /**
      * How far a weighbridge's net may differ from what the stops weighed on
      * board, in whole percent of the on-board load, before an unload reads as
@@ -246,14 +246,14 @@ export const project = wms.table(
     tenantKey(t),
     tenantReference(t, [t.holidayList], holidayList, [holidayList.name]).onUpdate("cascade"),
     tenantIndex(t, t.holidayList),
-    oneOf(t.status, PROJECT_STATUSES),
-    subsetOf(t.weekend, SERVICE_DAYS),
+    oneOf(t.status),
+    subsetOf(t.weekend),
     // A weekend leaves a working day: `subsetOf` holds the days to the seven,
     // this holds them to fewer than all seven. No helper spells it because no
     // other table has it; the label names the check itself.
     check(tableObjectName(t.id.table, "weekend_not_every_day", "project"), sql`cardinality(${t.weekend}) < ${sql.raw(String(SERVICE_DAYS.length))}`),
     uniqueOn(t.publicSlug),
-    oneOf(t.paymentReferenceScheme, PAYMENT_REFERENCE_SCHEMES),
+    oneOf(t.paymentReferenceScheme),
     // Due on issue at the soonest, within the domain's longest terms.
     check(tableObjectName(t.id.table, "payment_terms_range", "project"), sql`${t.paymentTermsDays} between 0 and ${sql.raw(String(PAYMENT_TERMS_MAX))}`),
     // The slug's shape, a key's (`@waste/domain/access/public-slug`):

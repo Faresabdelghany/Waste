@@ -27,7 +27,7 @@
 import type { Address } from "@waste/contracts/addresses"
 import type { AddressParts } from "@waste/domain/registry/address"
 import { AN_ADDRESS } from "@waste/domain/registry/customers"
-import type { Property, PropertyCreate, PropertyKind, PropertyParty, PropertyPartyHeld, PropertyPartyRole, PropertyPatch, PropertyStatus } from "@waste/contracts/customers"
+import type { Property, PropertyCreate, PropertyParty, PropertyPartyHeld, PropertyPatch } from "@waste/contracts/customers"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { property, propertyParty } from "@waste/db/schema/customers"
@@ -92,7 +92,7 @@ export async function partiesOf(tx: Tx, companyId: string, propertyIds: readonly
     .orderBy(asc(propertyParty.propertyId), asc(propertyParty.customerId), asc(propertyParty.role), asc(propertyParty.validFrom))
   for (const { propertyId, role, ...party } of rows) {
     const held = grouped.get(propertyId) ?? []
-    held.push({ ...party, role: role as PropertyPartyRole })
+    held.push({ ...party, role: role })
     grouped.set(propertyId, held)
   }
   return grouped
@@ -123,12 +123,12 @@ export function propertyOf(row: PropertyRow, held: readonly PropertyPartyHeld[])
     addressId: row.addressId,
     addressParts: partsOf(row),
     registryId: row.registryId,
-    kind: row.kind as PropertyKind,
+    kind: row.kind,
     location: row.location as FlatPoint | null,
     notes: row.notes,
     driverInstructions: row.driverInstructions,
     serviceWindow: serviceWindowOf(row),
-    status: row.status as PropertyStatus,
+    status: row.status,
     parties: [...held],
     ...stampsOf(row),
   }
@@ -284,8 +284,8 @@ export async function setPropertyParties(tx: Tx, principal: Principal, id: strin
     .from(propertyParty)
     .where(and(eq(propertyParty.companyId, parent.companyId), eq(propertyParty.propertyId, parent.id), lte(propertyParty.validFrom, today), or(isNull(propertyParty.validTo), sql`${propertyParty.validTo} > ${today}`)))
   const kept = new Set(asked.map(partyKey))
-  const held = new Set(current.map((party) => partyKey({ customerId: party.customerId, role: party.role as PropertyPartyRole })))
-  const leaving = current.filter((party) => !kept.has(partyKey({ customerId: party.customerId, role: party.role as PropertyPartyRole })))
+  const held = new Set(current.map((party) => partyKey({ customerId: party.customerId, role: party.role })))
+  const leaving = current.filter((party) => !kept.has(partyKey({ customerId: party.customerId, role: party.role })))
   const corrected = leaving.filter((party) => party.validFrom === today).map((party) => party.id)
   const ended = leaving.filter((party) => party.validFrom !== today).map((party) => party.id)
   if (corrected.length > 0) await tx.delete(propertyParty).where(and(eq(propertyParty.companyId, parent.companyId), inArray(propertyParty.id, corrected)))

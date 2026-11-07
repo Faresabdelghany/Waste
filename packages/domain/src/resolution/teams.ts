@@ -11,3 +11,6 @@ export const EACH_MEMBER_ONCE = eachOnceSentence("account")
 
 /** What a project's defaults naming a kind or a type twice are told. */
 export const EACH_KIND_ONCE = eachOnceSentence("kind or ticket type", "a ticket goes to one team")
+
+/** What a new ticket, a patch moving a ticket's team, a rule or a project's default naming a retired team is told (`ACTIVE_TEAM_STATUSES`). */
+export const retiredTeam = (name: string): string => `The team ${JSON.stringify(name)} is retired; a ticket waits with an active team`

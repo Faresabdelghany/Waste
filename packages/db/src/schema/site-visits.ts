@@ -52,7 +52,7 @@ export const accessCredential = wms.table(
     ...projectScoped,
     ...timestamps,
     ...validity,
-    kind: text().notNull(),
+    kind: text({ enum: ACCESS_CREDENTIAL_KINDS }).notNull(),
     /** Normalised: upper case, no spaces, no hyphens. */
     value: text().notNull(),
     /** What the office calls it: `Van 2`, `Garden card`. */
@@ -74,7 +74,7 @@ export const accessCredential = wms.table(
     projectReference(t, [t.propertyId], property),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.kind, ACCESS_CREDENTIAL_KINDS),
+    oneOf(t.kind),
     check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ ${sql.raw(`'${CREDENTIAL_VALUE_PATTERN}'`)}`),
     // A business's Customer with its Agreement, or a household's Property: exactly one holder.
     check(
@@ -101,23 +101,23 @@ export const siteVisit = wms.table(
     occurredAt: instant().notNull(),
     /** The visit's day on its project's clock: the day it is charged on. */
     serviceDate: date().notNull(),
-    source: text().notNull(),
+    source: text({ enum: SITE_VISIT_SOURCES }).notNull(),
     /** The gate's own id of its read (M8 of #293), the idempotency key; null for the attendant's check-in. */
     externalId: text(),
-    identification: text().notNull(),
+    identification: text({ enum: SITE_VISIT_IDENTIFICATIONS }).notNull(),
     /** The plate or the card as read, normalised; null where the Property was found by its address. */
     identifierValue: text(),
     credentialId: uuid(),
     propertyId: uuid(),
     customerId: uuid(),
     agreementId: uuid(),
-    outcome: text().notNull(),
-    refusalReason: text(),
+    outcome: text({ enum: SITE_VISIT_OUTCOMES }).notNull(),
+    refusalReason: text({ enum: SITE_VISIT_REFUSAL_REASONS }),
     /** The attendant; null for the gate's read. */
     recordedBy: uuid(),
     note: text(),
     /** What the visit was charged at when it was recorded: why, the household's n-th counted visit of the year, and the product, null where it is included; none on a refused visit. */
-    chargeBasis: text(),
+    chargeBasis: text({ enum: VISIT_CHARGE_BASES }),
     chargeN: integer(),
     chargeProductId: uuid(),
     /** A mistake voided, never deleted: the instant, the person (none for the gate's), the reason. */
@@ -137,17 +137,17 @@ export const siteVisit = wms.table(
     tenantReference(t, [t.voidedBy], userAccount),
     projectReference(t, [t.chargeProductId], product),
     projectKey(t),
-    oneOf(t.source, SITE_VISIT_SOURCES),
-    oneOf(t.chargeBasis, VISIT_CHARGE_BASES),
+    oneOf(t.source),
+    oneOf(t.chargeBasis),
     positive(t.chargeN),
     // An admitted visit keeps its charge's basis and a refused one none; a product only at a step of the ladder or a business's visit.
     check(
       tableObjectName(t.id.table, "charge_shape", "siteVisit"),
       sql`(${t.outcome} = 'admitted') = (${t.chargeBasis} is not null) and (${t.chargeProductId} is null or ${t.chargeBasis} in ('ladder', 'per-visit'))`,
     ),
-    oneOf(t.identification, SITE_VISIT_IDENTIFICATIONS),
-    oneOf(t.outcome, SITE_VISIT_OUTCOMES),
-    oneOf(t.refusalReason, SITE_VISIT_REFUSAL_REASONS),
+    oneOf(t.identification),
+    oneOf(t.outcome),
+    oneOf(t.refusalReason),
     // A refused visit carries its reason, and an admitted one none.
     check(tableObjectName(t.id.table, "outcome_shape", "siteVisit"), sql`(${t.outcome} = 'refused') = (${t.refusalReason} is not null)`),
     // A plate or a card is read as a value; a Property found by its address is none.

@@ -96,7 +96,7 @@ export const customer = wms.table(
     ...id,
     ...tenant,
     ...timestamps,
-    kind: text().notNull(),
+    kind: text({ enum: CUSTOMER_KINDS }).notNull(),
     name: text().notNull(),
     /** A CVR number in Denmark; optional for a person and an organisation alike. */
     registrationNumber: text(),
@@ -107,13 +107,13 @@ export const customer = wms.table(
     serviceMessagesAllowed: boolean().notNull().default(true),
     /** The customer's own payment terms (#291 C4), which its invoices are due by instead of their project's; null keeps the project's. */
     paymentTermsDays: integer(),
-    status: text().notNull(),
+    status: text({ enum: CUSTOMER_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantKey(t),
-    oneOf(t.kind, CUSTOMER_KINDS),
-    oneOf(t.status, CUSTOMER_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.status),
     lowercase(t.email),
     // The domain's range, as a project's terms are held to it; a null keeps the project's.
     check(tableObjectName(t.id.table, "payment_terms_range", "customer"), sql`${t.paymentTermsDays} between 0 and ${sql.raw(String(PAYMENT_TERMS_MAX))}`),
@@ -143,18 +143,18 @@ export const customerContact = wms.table(
     ...timestamps,
     customerId: uuid().notNull(),
     name: text().notNull(),
-    role: text().notNull(),
+    role: text({ enum: CONTACT_ROLES }).notNull(),
     email: text(),
     phone: text(),
-    status: text().notNull(),
+    status: text({ enum: CONTACT_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantKey(t),
     tenantReference(t, [t.customerId], customer),
     tenantIndex(t, t.customerId),
-    oneOf(t.role, CONTACT_ROLES),
-    oneOf(t.status, CONTACT_STATUSES),
+    oneOf(t.role),
+    oneOf(t.status),
     lowercase(t.email),
     check(tableObjectName(t.id.table, "channel_shape", "customerContact"), sql`${t.email} is not null or ${t.phone} is not null`),
   ],
@@ -184,14 +184,14 @@ export const property = wms.table(
     municipalityCode: text(),
     /** The property registry's identifier: a BFE number in Denmark. */
     registryId: text(),
-    kind: text().notNull(),
+    kind: text({ enum: PROPERTY_KINDS }).notNull(),
     /** Geocoded, null until it is. */
     location: geometry.point(),
     /** The office's own, never shown to a driver. */
     notes: text(),
     /** What the driver is told at the place — the gate code, where the bins stand (migration 0019): the Driver App's stop shows it. */
     driverInstructions: text(),
-    status: text().notNull(),
+    status: text({ enum: PROPERTY_STATUSES }).notNull(),
     /** The property's access hours (O14 of #290): when in the day a stop here may be served, both ends on the project's clock or neither. */
     serviceWindowStart: time(),
     serviceWindowEnd: time(),
@@ -202,8 +202,8 @@ export const property = wms.table(
     tenantUnique(t, t.projectId, t.name),
     timeWindow(t, "service", [t.serviceWindowStart, t.serviceWindowEnd]),
     projectKey(t),
-    oneOf(t.kind, PROPERTY_KINDS),
-    oneOf(t.status, PROPERTY_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.status),
     validGeometry(t.location),
     check(
       tableObjectName(t.id.table, "address_shape", "property"),
@@ -232,7 +232,7 @@ export const propertyParty = wms.table(
     ...validity,
     propertyId: uuid().notNull(),
     customerId: uuid().notNull(),
-    role: text().notNull(),
+    role: text({ enum: PROPERTY_PARTY_ROLES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -244,7 +244,7 @@ export const propertyParty = wms.table(
     tenantIndex(t, t.propertyId),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.customerId),
-    oneOf(t.role, PROPERTY_PARTY_ROLES),
+    oneOf(t.role),
   ],
 )
 
@@ -257,10 +257,10 @@ export const propertyGroup = wms.table(
     ...projectScoped,
     ...timestamps,
     name: text().notNull(),
-    purpose: text().notNull(),
+    purpose: text({ enum: PROPERTY_GROUP_PURPOSES }).notNull(),
     /** The Customer the Group answers to: a housing association, an administrator. */
     responsibleCustomerId: uuid(),
-    status: text().notNull(),
+    status: text({ enum: PROPERTY_GROUP_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -268,8 +268,8 @@ export const propertyGroup = wms.table(
     tenantReference(t, [t.responsibleCustomerId], customer),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.purpose, PROPERTY_GROUP_PURPOSES),
-    oneOf(t.status, PROPERTY_GROUP_STATUSES),
+    oneOf(t.purpose),
+    oneOf(t.status),
     tenantIndex(t, t.responsibleCustomerId),
   ],
 )
@@ -284,7 +284,7 @@ export const propertyGroupMember = wms.table(
     ...timestamps,
     propertyGroupId: uuid().notNull(),
     propertyId: uuid().notNull(),
-    role: text().notNull(),
+    role: text({ enum: PROPERTY_GROUP_MEMBER_ROLES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -294,7 +294,7 @@ export const propertyGroupMember = wms.table(
     tenantUnique(t, t.propertyGroupId, t.propertyId),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.propertyId),
-    oneOf(t.role, PROPERTY_GROUP_MEMBER_ROLES),
+    oneOf(t.role),
   ],
 )
 
@@ -307,23 +307,23 @@ export const sharedCollectionPoint = wms.table(
     ...projectScoped,
     ...timestamps,
     name: text().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: SHARED_COLLECTION_POINT_KINDS }).notNull(),
     address: text().notNull(),
     /** The place is the record, so the point is always located. */
     location: geometry.point().notNull(),
     /** How far a Property may be and still be served here. */
     eligibilityDistanceM: integer(),
-    operatingModel: text().notNull(),
-    accessMode: text().notNull(),
+    operatingModel: text({ enum: SHARED_COLLECTION_POINT_OPERATING_MODELS }).notNull(),
+    accessMode: text({ enum: SHARED_COLLECTION_POINT_ACCESS_MODES }).notNull(),
     /** What a user has to do or show, in words, where the mode alone does not say. */
     accessConditions: text(),
     /** When it is open, in words; opening hours as data are Planning's. */
     availability: text(),
     /** What the driver is told at the point (migration 0019): the Driver App's stop shows it. */
     driverInstructions: text(),
-    billingMode: text().notNull(),
+    billingMode: text({ enum: SHARED_COLLECTION_POINT_BILLING_MODES }).notNull(),
     responsibleCustomerId: uuid(),
-    status: text().notNull(),
+    status: text({ enum: SHARED_COLLECTION_POINT_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -333,11 +333,11 @@ export const sharedCollectionPoint = wms.table(
     projectKey(t),
     validGeometry(t.location),
     positive(t.eligibilityDistanceM),
-    oneOf(t.kind, SHARED_COLLECTION_POINT_KINDS),
-    oneOf(t.operatingModel, SHARED_COLLECTION_POINT_OPERATING_MODELS),
-    oneOf(t.accessMode, SHARED_COLLECTION_POINT_ACCESS_MODES),
-    oneOf(t.billingMode, SHARED_COLLECTION_POINT_BILLING_MODES),
-    oneOf(t.status, SHARED_COLLECTION_POINT_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.operatingModel),
+    oneOf(t.accessMode),
+    oneOf(t.billingMode),
+    oneOf(t.status),
     tenantIndex(t, t.responsibleCustomerId),
   ],
 )
@@ -352,7 +352,7 @@ export const sharedCollectionPointMember = wms.table(
     ...timestamps,
     sharedCollectionPointId: uuid().notNull(),
     propertyId: uuid().notNull(),
-    role: text().notNull(),
+    role: text({ enum: SHARED_COLLECTION_POINT_MEMBER_ROLES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -366,7 +366,7 @@ export const sharedCollectionPointMember = wms.table(
     unique(tableObjectName(t.companyId.table, "membership_key", "sharedCollectionPointMember")).on(t.companyId, t.sharedCollectionPointId, t.propertyId),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.propertyId),
-    oneOf(t.role, SHARED_COLLECTION_POINT_MEMBER_ROLES),
+    oneOf(t.role),
   ],
 )
 

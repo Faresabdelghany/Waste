@@ -2,7 +2,6 @@
 // `reviewOf`, which the office's decisions answer and `weight-reviewed`
 // carries.
 import type { WeightReview } from "@waste/contracts/weight-control"
-import type { WeightReviewDecision } from "@waste/domain/finance/vocabulary"
 
 import { weightReview } from "../schema/finance"
 
@@ -26,7 +25,7 @@ export function reviewOf(row: ReviewRow): WeightReview {
     recordedAt: row.recordedAt.toISOString(),
     projectId: row.projectId,
     unloadId: row.unloadId,
-    decision: row.decision as WeightReviewDecision,
+    decision: row.decision,
     note: row.note,
     correctionUnloadId: row.correctionUnloadId,
     reviewedBy: row.reviewedBy,

@@ -17,7 +17,7 @@
 // route's scheme and group are null together on an ad-hoc route.
 import type { Route, RouteProgress } from "@waste/contracts/routes"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import type { PickupStatus, RouteCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { PICKUP_STATUSES, type PickupStatus } from "@waste/domain/execution/vocabulary"
 import { routeLabel } from "@waste/domain/numbering"
 import { and, count, eq, inArray } from "drizzle-orm"
 
@@ -74,9 +74,9 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
     operatingDate: row.operatingDate,
     number: row.number,
     label: labelOf(row),
-    status: row.status as RouteStatus,
+    status: row.status,
     note: row.note,
-    cancelReasonCode: row.cancelReasonCode as RouteCancelReasonCode | null,
+    cancelReasonCode: row.cancelReasonCode,
     cancelledByGeneration: row.cancelledByGeneration,
     generationRunId: row.generationRunId,
     plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),
@@ -99,6 +99,9 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
   }
 }
 
+/** A count of zero for every pickup status, the vocabulary's. */
+const noneOfEach = (): Record<PickupStatus, number> => Object.fromEntries(PICKUP_STATUSES.map((status) => [status, 0])) as Record<PickupStatus, number>
+
 /**
  * The progress of every route asked for, by route: one aggregate over the
  * page's ids grouped by route and status, folded by the domain. A route with
@@ -114,8 +117,8 @@ export async function progressByRoute(tx: Tx, companyId: string, routeIds: reado
     .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, [...routeIds])))
     .groupBy(pickup.routeId, pickup.status)
   for (const row of rows) {
-    const counts = byRoute.get(row.routeId) ?? { planned: 0, completed: 0, skipped: 0, failed: 0 }
-    counts[row.status as PickupStatus] = row.n
+    const counts = byRoute.get(row.routeId) ?? noneOfEach()
+    counts[row.status] = row.n
     byRoute.set(row.routeId, counts)
   }
   return new Map(routeIds.map((id) => [id, progressOf(byRoute.get(id) ?? {})] as const))

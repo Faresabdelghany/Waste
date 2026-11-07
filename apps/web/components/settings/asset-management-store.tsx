@@ -29,10 +29,8 @@ import {
   type WasteFraction,
 } from "@/lib/data/asset-management-state"
 import { FIXTURE_PROJECT_IDS } from "@/lib/data/business-modules"
-import {
-  ASSET_MANAGEMENT_STORAGE_KEY,
-  readPersisted,
-} from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { ASSET_MANAGEMENT_STORAGE_KEY } from "@/lib/storage-keys"
 
 // The container type and its lifecycle vocabulary live beside the fixture
 // catalogue in lib/data/asset-catalogue.ts (Issue #39), the rest of the
@@ -279,6 +277,11 @@ const serverSnapshot: AssetManagementSnapshot = {
 const AssetManagementStoreContext =
   createContext<AssetManagementStoreHandle | null>(null)
 
+/** The configuration kept in the browser, over the defaults; without it the fixture configuration stands. */
+const keptState = persistedStore<AssetManagementState>(ASSET_MANAGEMENT_STORAGE_KEY, {
+  parse: (raw) => hydrateAssetManagementState(raw, defaultState),
+})
+
 function upsert<T extends EntityWithId>(items: T[], value: T) {
   return items.some((item) => item.id === value.id)
     ? items.map((item) => (item.id === value.id ? value : item))
@@ -371,28 +374,13 @@ export function AssetManagementStoreProvider({ children }: { children: ReactNode
   useEffect(() => {
     // The stored state over the defaults, seeded with the fixture container
     // types it has never been given (lib/data/asset-management-state.ts).
-    let stored: AssetManagementState | null = null
-    try {
-      stored = hydrateAssetManagementState(
-        readPersisted(window.localStorage, ASSET_MANAGEMENT_STORAGE_KEY),
-        defaultState,
-      )
-    } catch {
-      // Safe fixture configuration remains available when storage is unavailable.
-    }
+    const stored = keptState.read()
     store.set((current) =>
       stored ? { ...stored, hydrated: true } : { ...current, hydrated: true },
     )
     const persist = () => {
       const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
-      try {
-        window.localStorage.setItem(
-          ASSET_MANAGEMENT_STORAGE_KEY,
-          JSON.stringify(persistable),
-        )
-      } catch {
-        // Keep the in-memory configuration usable when persistence is blocked.
-      }
+      keptState.write(persistable)
     }
     persist()
     return store.subscribe(persist)

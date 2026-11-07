@@ -5,7 +5,7 @@
 // /contaminant-codes/:id/fractions`, as a station's fractions are
 // (routes/id-sets.ts). An empty set is every fraction. A code is retired by
 // its status, never deleted: a stop names the code it was tagged with, and a
-// status gates a new tag, never an existing one (routes/statuses.ts).
+// status gates a new tag, never an existing one (@waste/domain/status-gates).
 import { Page } from "@waste/contracts/pagination"
 import {
   ContaminantCode,
@@ -13,7 +13,6 @@ import {
   ContaminantCodeFractionsSet,
   ContaminantCodeListQuery,
   ContaminantCodePatch,
-  type ContaminantCodeStatus,
 } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
@@ -59,7 +58,7 @@ export const codeFractions: IdSet<typeof contaminantCodeFraction> = {
 }
 
 function codeOf(row: Row, wasteFractionIds: readonly string[]): ContaminantCode {
-  return { id: row.id, code: row.code, name: row.name, status: row.status as ContaminantCodeStatus, wasteFractionIds: [...wasteFractionIds], ...stampsOf(row) }
+  return { id: row.id, code: row.code, name: row.name, status: row.status, wasteFractionIds: [...wasteFractionIds], ...stampsOf(row) }
 }
 
 /** `unique (company_id, code)` and `unique (company_id, name)`: each is one code's inside a company. */

@@ -45,7 +45,7 @@ import { decommissionReasonsBackfill, decommissionReasonsSeed } from "../sql/dec
 import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -423,9 +423,9 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
         "into service without the placement",
       )
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ placementId: a.placement }))), refusedWith("23514", /stock_movement_placement_shape/), "a placement on a transfer")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "borrow" }))), refusedWith("23514", /stock_movement_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: outside("borrow") }))), refusedWith("23514", /stock_movement_kind_one_of/))
       // A place outside the vocabulary, on a pair every other check lets through: only the vocabulary's check refuses it.
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "adjustment", fromKind: "truck", fromWarehouseId: null, toKind: "warehouse" }))), refusedWith("23514", /stock_movement_from_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "adjustment", fromKind: outside("truck"), fromWarehouseId: null, toKind: "warehouse" }))), refusedWith("23514", /stock_movement_from_kind_one_of/))
       // Into service, with the placement and from the warehouse: the issue.
       await tx.insert(stockMovement).values(movement({ kind: "issue", toKind: "service", toWarehouseId: null, placementId: a.placement }))
     }))
@@ -467,8 +467,8 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
 
   test("the vocabulary checks of the fleet and the places, and the shape checks a table alone has (23514)", () =>
     seeded(async (tx) => {
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ requiredLicenceClass: "C" }))), refusedWith("23514", /vehicle_required_licence_class_one_of/), "the token is lowercase")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ kind: "bicycle" }))), refusedWith("23514", /vehicle_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ requiredLicenceClass: outside("C") }))), refusedWith("23514", /vehicle_required_licence_class_one_of/), "the token is lowercase")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ kind: outside("bicycle") }))), refusedWith("23514", /vehicle_kind_one_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ capacityKg: 0 }))), refusedWith("23514", /vehicle_capacity_kg_positive/))
       // A provider's vehicle names its provider and no other does.
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ ownership: "service-provider" }))), refusedWith("23514", /vehicle_provider_shape/))
@@ -487,7 +487,7 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
         refusedWith("23514", /driver_provider_shape/),
       )
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(driver).values({ id: a.third, companyId: a.company, projectId: a.project, name: "Jonas Lind", employment: "employee", status: "active", licenceClass: "CE" })),
+        tx.transaction((savepoint) => savepoint.insert(driver).values({ id: a.third, companyId: a.company, projectId: a.project, name: "Jonas Lind", employment: "employee", status: "active", licenceClass: outside("CE") })),
         refusedWith("23514", /driver_licence_class_one_of/),
       )
       // A driver with no licence on record is a real record.
@@ -565,7 +565,7 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicleAllocation).values(allocation({ plannedFrom: at(14), plannedTo: at(14) }))), refusedWith("23514", /vehicle_allocation_window/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicleAllocation).values(allocation({ plannedFrom: at(15), plannedTo: at(14) }))), refusedWith("23514", /vehicle_allocation_window/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicleAllocation).values(allocation({ status: "draft" }))), refusedWith("23514", /vehicle_allocation_status_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicleAllocation).values(allocation({ status: outside("draft") }))), refusedWith("23514", /vehicle_allocation_status_one_of/))
       const [row] = await tx.select({ status: vehicleAllocation.status }).from(vehicleAllocation).where(eq(vehicleAllocation.id, a.allocation))
       assert.equal(row.status, "planned", "the default")
       // The event's window is a snapshot and is not checked: what it copies passed the check already.

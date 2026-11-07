@@ -53,9 +53,9 @@ export const weighbridgeTicket = wms.table(
     /** The product as sent: a fraction's key, a waste code, or both. */
     fractionKey: text(),
     wasteCode: text(),
-    status: text().notNull(),
+    status: text({ enum: WEIGHBRIDGE_TICKET_STATUSES }).notNull(),
     /** Why the match found no route; kept once matched or dismissed, as what the ticket waited for. */
-    unmatchedReason: text(),
+    unmatchedReason: text({ enum: WEIGHBRIDGE_UNMATCHED_REASONS }),
     /** The route it was matched to and the Unload it was written as. */
     routeId: uuid(),
     unloadId: uuid(),
@@ -74,8 +74,8 @@ export const weighbridgeTicket = wms.table(
     tenantReference(t, [t.receivedBy], userAccount),
     // A replay is the same station's same ticket.
     tenantUnique(t, t.unloadingStationId, t.ticketNumber),
-    oneOf(t.status, WEIGHBRIDGE_TICKET_STATUSES),
-    oneOf(t.unmatchedReason, WEIGHBRIDGE_UNMATCHED_REASONS),
+    oneOf(t.status),
+    oneOf(t.unmatchedReason),
     positive(t.grossKg),
     positive(t.tareKg),
     positive(t.netKg),

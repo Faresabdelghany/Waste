@@ -6,8 +6,9 @@
 // the rules are @waste/domain/registry/applications'.
 import type { ApplicationDecide } from "@waste/contracts/applications"
 import { APPEAL_TEXT_NEEDED, appealTextNeeded, decisionPeriodRefusal, moveOf, type ApplicationCommand } from "@waste/domain/registry/applications"
-import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES, type ApplicationKind, type DecisionOutcome } from "@waste/domain/registry/vocabulary"
+import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES, UNDECIDED_APPLICATION_STATUSES, type ApplicationKind, type DecisionOutcome } from "@waste/domain/registry/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
+import { isOneOf } from "@waste/domain/lists"
 
 import type { LocalRefusal } from "../api/records/adapter"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -132,7 +133,7 @@ const statusOf = (record: Pick<BusinessRecord, "submittedValues">) => APPLICATIO
 /** Whether the generic Edit corrects the row: an undecided Application, received or in review, as the API's patch takes it. */
 export function applicationCorrectable(record: Pick<BusinessRecord, "submittedValues">): boolean {
   const status = statusOf(record)
-  return status === "received" || status === "in-review"
+  return status !== undefined && isOneOf(status, UNDECIDED_APPLICATION_STATUSES)
 }
 
 /** Whether the row's letter prints: a decided Application, never one reopened on an appeal, whose Decision is being reconsidered. */

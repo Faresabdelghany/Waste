@@ -51,7 +51,8 @@ import { countingRule, team, teamMember, ticket, ticketType } from "@waste/db/sc
 import { withCompany } from "@waste/db/tenant"
 import { countingTicketNotice } from "@waste/domain/notifications/notices"
 import { countingTicketText, periodOf } from "@waste/domain/resolution/counting-rules"
-import type { CountingPeriod, TicketKind } from "@waste/domain/resolution/vocabulary"
+import { ACTIVE_TEAM_STATUSES, ACTIVE_TICKET_TYPE_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm"
 import { NO_TICKET_LINKS } from "@waste/db/shapes/tickets"
@@ -113,7 +114,7 @@ async function noticeTeam(tx: Tx, send: JobContext["send"], companyId: string, o
 
 /** One rule's count at the stop's property: the ticket it opened, or undefined where the count is short or the period's ticket is open already. */
 async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">, companyId: string, stop: Pickup & { propertyId: string }, serviceDate: string, rule: Rule): Promise<string | undefined> {
-  const period = periodOf(serviceDate, rule.period as CountingPeriod)
+  const period = periodOf(serviceDate, rule.period)
   const [already] = await tx
     .select({ id: ticket.id })
     .from(ticket)
@@ -133,14 +134,14 @@ async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">,
     .where(and(eq(team.companyId, companyId), eq(team.id, rule.teamId)))
     .limit(1)
   const names = { wasteFraction: await nameOf(tx, wasteFraction, companyId, rule.wasteFractionId), containerType: await nameOf(tx, containerType, companyId, rule.containerTypeId) }
-  const text = countingTicketText({ name: rule.name, limit: rule.limit, period: rule.period as CountingPeriod }, { count, periodFrom: period.from }, names)
-  const teamTakesTickets = waitsWith.status === "active"
+  const text = countingTicketText({ name: rule.name, limit: rule.limit, period: rule.period }, { count, periodFrom: period.from }, names)
+  const teamTakesTickets = takesReference(waitsWith.status, ACTIVE_TEAM_STATUSES)
   const { row } = await openTicket(tx, {
     companyId,
     draft: {
       projectId: stop.projectId,
-      kind: type.kind as TicketKind,
-      ...(type.status === "active" ? { ticketTypeId: rule.ticketTypeId } : {}),
+      kind: type.kind,
+      ...(takesReference(type.status, ACTIVE_TICKET_TYPE_STATUSES) ? { ticketTypeId: rule.ticketTypeId } : {}),
       priority: "none",
       source: "counting-rule",
       ...text,

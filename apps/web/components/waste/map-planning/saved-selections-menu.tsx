@@ -24,7 +24,8 @@ import {
   serializeSavedSelections,
   type SavedSelection,
 } from "@/lib/map-planning/saved-selections"
-import { readPersisted, SAVED_SELECTIONS_STORAGE_KEY } from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { SAVED_SELECTIONS_STORAGE_KEY } from "@/lib/storage-keys"
 import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@waste/domain/map-planning/schedule"
 import type { SelectionShape } from "@waste/domain/map-planning/selection"
 import { cn } from "@/lib/utils"
@@ -41,6 +42,9 @@ const SHAPE_LABELS: Readonly<Record<SelectionShape["kind"], string>> = {
   rectangle: "Rectangle",
   polygon: "Polygon",
 }
+
+/** The named selections, kept in the browser alone; a blocked store leaves the menu empty but usable for the session. */
+const keptSelections = persistedStore<SavedSelection[]>(SAVED_SELECTIONS_STORAGE_KEY, { parse: parseSavedSelections, serialize: serializeSavedSelections })
 
 const newId = () => `sel-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 
@@ -65,24 +69,11 @@ export function SavedSelectionsMenu({ shape, filters, window, onLoad }: SavedSel
   // The list lives in the browser only; read it after mount so SSR and the
   // first client render agree, and never write before reading.
   useEffect(() => {
-    try {
-      setSelections(
-        parseSavedSelections(
-          readPersisted(globalThis.localStorage, SAVED_SELECTIONS_STORAGE_KEY),
-        ),
-      )
-    } catch {
-      // A blocked store leaves the menu empty but usable for the session.
-    }
+    setSelections(keptSelections.read() ?? [])
     setHydrated(true)
   }, [])
   useEffect(() => {
-    if (!hydrated) return
-    try {
-      globalThis.localStorage?.setItem(SAVED_SELECTIONS_STORAGE_KEY, serializeSavedSelections(selections))
-    } catch {
-      // Persistence blocked — the in-memory list still works.
-    }
+    if (hydrated) keptSelections.write(selections)
   }, [hydrated, selections])
 
   const save = (event: FormEvent) => {

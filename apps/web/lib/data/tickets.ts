@@ -11,6 +11,7 @@
 // about, each from its switched module — and a closed list by the wire's
 // token, shown as a person reads it.
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
+import { pickupMissed } from "@waste/domain/execution/vocabulary"
 import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
 import { statusLabel, statusToken } from "../api/records/adapter"
@@ -165,9 +166,6 @@ export const TICKET_COMMAND_FORMS: Readonly<Record<TicketCommandWithForm, Busine
   reopen: commandForm("Reopen", "A closed case opens again; say why.", "Reopen", [note("Why it is reopened", true)]),
 }
 
-/** A stop that was missed — skipped or failed — is no re-collection: the API refuses it (#111). */
-const MISSED_STOP = new Set(["skipped", "failed"])
-
 /**
  * The stops a completion's re-collection may name (#111): the picked route's
  * that are planned or collected, by the stops module's records, after None —
@@ -176,7 +174,7 @@ const MISSED_STOP = new Set(["skipped", "failed"])
 export function recollectionStopOptions(stops: readonly BusinessRecord[], routeWebId: string | undefined): BusinessFormOption[] {
   // A repair or a wash collects nothing (O3 of #290), so it is no re-collection.
   const empties = (stop: BusinessRecord) => (stop.submittedValues?.service ?? "empty") === "empty"
-  const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !MISSED_STOP.has(String(stop.submittedValues?.status ?? "")) && empties(stop))
+  const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !pickupMissed(String(stop.submittedValues?.status ?? "")) && empties(stop))
   return [{ value: NO_ONE, label: "None: the route alone" }, ...ofRoute.map((stop) => ({ value: stop.id, label: stop.status === "Planned" ? stop.name : `${stop.name} · ${stop.status}` }))]
 }
 

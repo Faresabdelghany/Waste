@@ -56,13 +56,16 @@ import { stamp } from "./shared"
  * record. The wire spells that id `customerId` or `propertyId` and the route
  * module translates, so this can be written once for all three.
  */
-export type Entry = { id: string; role: string }
+export type Entry<Role extends string = string> = { id: string; role: Role }
 
 /** The record a set hangs on, and the scope every row of the set inherits from it. */
 export type Parent = { companyId: string; projectId: string; id: string }
 
 /** A child table of a project-scoped record: the tenant, the project and a role on every row. */
 export type MemberTable = PgTable & { companyId: PgColumn; projectId: PgColumn; role: PgColumn }
+
+/** The roles a set's rows may carry, as its table's column declares them. */
+type RoleOf<Table extends MemberTable> = Table["$inferInsert"] extends { role: infer Role } ? Extract<Role, string> : never
 
 /** What reading and deleting a set need: the table and the two ids it is made of. */
 export type SetColumns = {
@@ -77,7 +80,7 @@ export type SetColumns = {
 export type MemberSet<Table extends MemberTable> = SetColumns & {
   table: Table
   /** One entry as a row of the table; the module spells it, since only it knows what its two id columns are called. */
-  rowOf: (entry: Entry, parent: Parent) => Table["$inferInsert"]
+  rowOf: (entry: Entry<RoleOf<Table>>, parent: Parent) => Table["$inferInsert"]
   /** Holds the whole list to what its key allows, in one statement, or refuses the request at the entry that is wrong. */
   require: (tx: Tx, parent: Parent, entries: readonly Entry[]) => Promise<void>
 }
@@ -130,7 +133,7 @@ export async function writeEntries<Table extends MemberTable>(
   tx: Tx,
   set: MemberSet<Table>,
   parent: Parent,
-  entries: readonly Entry[],
+  entries: readonly Entry<RoleOf<Table>>[],
 ): Promise<void> {
   if (entries.length === 0) return
   await tx.insert(set.table).values(entries.map((entry) => set.rowOf(entry, parent)))
@@ -155,7 +158,7 @@ export async function replaceSet<Table extends MemberTable, Row extends { id: st
   tx: Tx,
   set: MemberSet<Table>,
   companyId: string,
-  entries: readonly Entry[],
+  entries: readonly Entry<RoleOf<Table>>[],
   touch: (stamped: { updatedAt: SQL }) => Promise<Row[]>,
 ): Promise<Row | undefined> {
   const [row] = await touch(stamp())

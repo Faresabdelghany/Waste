@@ -460,7 +460,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual([...new Set(rows.map((row) => row.companyId))].sort(), [a.companyId, b.companyId].sort())
     const publishedIds = await owner.sql.unsafe<{ id: string }[]>(`select data->>'id' as id from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' and name <> '${OUTBOX_DEAD_QUEUE}' and data->>'companyId' is not null`)
     const ids = publishedIds.map((row) => row.id).filter((candidate) => rows.some((row) => row.id === candidate))
-    const routed = rows.reduce((total, row) => total + (ROUTES.get(row.kind as OutboxKind)?.length ?? 1), 0)
+    const routed = rows.reduce((total, row) => total + (ROUTES.get(row.kind)?.length ?? 1), 0)
     assert.equal(ids.length, routed + 1, "one job per row and consumer of its kind, plus the stray job the consumer test sent by hand")
     assert.equal(new Set(ids).size, rows.length, "every outbox row published once, none twice")
     // The consumer refused two jobs with no retry (a stray kind, and no event at all): both failed, and both are on the dead-letter queue with what they carried and where they came from, for an operator to read and redrive or delete.

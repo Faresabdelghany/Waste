@@ -40,7 +40,7 @@
 // to be ended first. An agreement's children are its subscriptions and a
 // subscription's are its placements, so a subscription's patch answers both.
 //
-// A status gates a new reference and never an existing one (routes/statuses.ts,
+// A status gates a new reference and never an existing one (@waste/domain/status-gates,
 // Issue #79): the customer an agreement names, as holder or as payer, is
 // active, the product a subscription names is active and its place is served
 // — a property active, a point open or restricted — each refused otherwise
@@ -76,8 +76,6 @@ import {
   AgreementTerminated,
   AgreementTermination,
   SubscriptionChange,
-  type AgreementStatus,
-  type BillingCadence,
 } from "@waste/contracts/agreements"
 import type { CustomerStatus } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
@@ -88,6 +86,8 @@ import { containerServicePlacement } from "@waste/db/schema/containers"
 import type { JobSender } from "@waste/db/jobs"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { count } from "@waste/domain/text"
+import { refuseInactiveCustomer, type Party } from "@waste/domain/registry/agreements"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -106,7 +106,6 @@ import { requireCustomer, requirePriceList, requireProduct, requireProperty, req
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 import type { ClockOptions } from "./scheme-groups"
 import { askRuns, stopsLeft } from "./service-ends"
-import { refuseInactiveCustomer, refuseUnofferedProduct, type Party } from "./statuses"
 import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
 const MODULE = "customers.agreements"
@@ -143,8 +142,8 @@ function agreementOf(row: Row): Agreement {
     number: row.number,
     customerId: row.customerId,
     payerCustomerId: row.payerCustomerId,
-    status: row.status as AgreementStatus,
-    billingCadence: row.billingCadence as BillingCadence,
+    status: row.status,
+    billingCadence: row.billingCadence,
     currency: row.currency,
     notes: row.notes,
     priceListId: row.priceListId,
@@ -285,7 +284,7 @@ async function partyStatuses(tx: Tx, companyId: string, customerId: string | und
   return { customerId: customer, payerCustomerId: payer }
 }
 
-/** The customer gate over both fields: each an inactive customer is refused in its own sentence (routes/statuses.ts). */
+/** The customer gate over both fields: each an inactive customer is refused in its own sentence (@waste/domain/status-gates). */
 function refuseInactiveParties(parties: Parties): void {
   refuseInactiveCustomer(parties.customerId, "customerId")
   refuseInactiveCustomer(parties.payerCustomerId, "payerCustomerId")
@@ -359,7 +358,7 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, b
     await requireAgreementList(tx, { companyId: principal.companyId, projectId: current.projectId }, patch.priceListId === undefined ? current.priceListId : patch.priceListId, patch.currency ?? current.currency)
   }
 
-  // Every 400 above, every 409 below (routes/statuses.ts).
+  // Every 400 above, every 409 below (@waste/domain/status-gates).
   refuseInactiveParties(parties)
   if (period !== undefined) {
     await refuseStranded(tx, subscription, strandedChildren(subscription, subscription.agreementId, { companyId: principal.companyId, id }, period), strandedSubscriptions)
@@ -389,7 +388,7 @@ export async function createSubscription(tx: Tx, principal: Principal, id: strin
   const pointStatus = await requireSharedCollectionPoint(tx, within, values.sharedCollectionPointId)
   requireWithin(parent, periodOf(values), OUTSIDE_AGREEMENT)
 
-  // Every 400 above, every 409 below (routes/statuses.ts).
+  // Every 400 above, every 409 below (@waste/domain/status-gates).
   refuseUnofferedProduct(productStatus)
   refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "subscription")
 
@@ -544,7 +543,7 @@ export async function changeSubscription(tx: Tx, principal: Principal, id: strin
   const takes = { productId: named ?? current.productId, quantity: quantity ?? current.quantity }
   if (named === undefined && takes.quantity === current.quantity) throw invalidRequest("body", [{ path: "", message: CHANGES_NOTHING }])
 
-  // Every 400 above, every 409 below (routes/statuses.ts).
+  // Every 400 above, every 409 below (@waste/domain/status-gates).
   refuseUnofferedProduct(productStatus)
   await refuseStranded(
     tx,

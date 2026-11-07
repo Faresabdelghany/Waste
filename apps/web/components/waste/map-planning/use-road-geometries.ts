@@ -23,7 +23,8 @@ import type { ApiClient } from "@/lib/api/client"
 import { previewRoad } from "@/lib/api/routing"
 import { roadGeometryKey, roadGeometryOfLegs, type RoadGeometry } from "@/lib/map-planning/road-geometry"
 import { createRoadGeometryCache, type RoadAnswer, type RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
-import { persistedKeys, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
 
 export type { RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
 
@@ -50,17 +51,16 @@ async function askPreview(stops: readonly LngLat[], signal: AbortSignal): Promis
 
 const roads = createRoadGeometryCache({ fetchRoad: askPreview })
 
+/** The roads the OSRM demo server answered before #173: never read, only forgotten. */
+const retiredRoads = persistedStore<never>(ROAD_GEOMETRY_STORAGE_KEY, { parse: () => null })
+
 let forgotten = false
 
 /** Removes the roads the maps kept in the browser from the OSRM demo server before #173, once a session. In an effect, never in render. */
 export function forgetStoredRoads(): void {
   if (forgotten) return
   forgotten = true
-  try {
-    for (const key of persistedKeys(ROAD_GEOMETRY_STORAGE_KEY)) globalThis.localStorage?.removeItem(key)
-  } catch {
-    // No storage, or a blocked one: nothing is read from it either way.
-  }
+  retiredRoads.forget()
 }
 
 /** A route of one stop has no road: nothing to fetch, nothing to draw between. */

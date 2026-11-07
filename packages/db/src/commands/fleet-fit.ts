@@ -26,7 +26,6 @@ import { pickup } from "@waste/db/schema/execution"
 import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { loadsWaste, stopLoadKg } from "@waste/domain/execution/workload"
-import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { firstMisfit, misfitSentence, type FitStop, type FitVehicle, type Misfit } from "@waste/domain/resources/fleet-fit"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
@@ -104,7 +103,7 @@ async function fitStops(tx: Tx, companyId: string, where: SQL | undefined): Prom
     .where(and(eq(pickup.companyId, companyId), eq(pickup.status, "planned"), where))
     .orderBy(asc(pickup.position), asc(pickup.id))
   return rows.flatMap((row) => {
-    const service = row.service as PickupService
+    const service = row.service
     if (!loadsWaste({ service })) return []
     return [{ wasteFractionId: row.wasteFractionId, kg: stopLoadKg({ service, volumeLitres: row.volumeLitres, densityKgPerCubicMetre: row.densityKgPerCubicMetre }), containerTypeId: row.containerTypeId }]
   })

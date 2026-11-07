@@ -63,8 +63,8 @@ export const agreement = wms.table(
     customerId: uuid().notNull(),
     /** Who is invoiced; the same Customer as `customer_id` in the common case. */
     payerCustomerId: uuid().notNull(),
-    status: text().notNull(),
-    billingCadence: text().notNull(),
+    status: text({ enum: AGREEMENT_STATUSES }).notNull(),
+    billingCadence: text({ enum: BILLING_CADENCES }).notNull(),
     /** ISO 4217 (`DKK`); the form defaults it to the project's. */
     currency: text().notNull(),
     /** Internal, never the portal's. */
@@ -84,8 +84,8 @@ export const agreement = wms.table(
     projectReference(t, [t.priceListId], priceList),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.status, AGREEMENT_STATUSES),
-    oneOf(t.billingCadence, BILLING_CADENCES),
+    oneOf(t.status),
+    oneOf(t.billingCadence),
     // The number is looked up by hand and is not a unique constraint, so it needs an index of its own.
     tenantIndex(t, t.number),
     tenantIndex(t, t.customerId),

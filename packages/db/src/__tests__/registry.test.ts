@@ -396,7 +396,7 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
 
   test("one agreement of a number at a time (23P01 agreement_no_overlap), and the number is free again once the first has ended", () =>
     seeded(async (tx) => {
-      const second = (validFrom: string) => ({
+      const second = (validFrom: string): typeof agreement.$inferInsert => ({
         id: a.spare,
         companyId: a.company,
         projectId: a.project,
@@ -418,7 +418,7 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
 
   test("one role of a customer at a property at a time (23P01 property_party_no_overlap), the next one beginning the day the last ended (#374)", () =>
     seeded(async (tx) => {
-      const again = (validFrom: string) => ({ id: a.spare, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "owner", validFrom })
+      const again = (validFrom: string): typeof propertyParty.$inferInsert => ({ id: a.spare, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "owner", validFrom })
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(propertyParty).values(again("2026-07-01"))), refusedWith("23P01", /property_party_no_overlap/))
       // The period is half-open, so the customer may hold the role again from the day it ended.
       await tx.update(propertyParty).set({ validTo: "2026-07-01" }).where(eq(propertyParty.id, a.propertyParty))

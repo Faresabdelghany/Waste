@@ -60,10 +60,8 @@ import {
   type WriteOutcome,
 } from "@/lib/api/records/server-records"
 import { sessionEnded, writeRouteOf } from "@/lib/api/records/write-gate"
-import {
-  BUSINESS_RECORDS_STORAGE_KEY,
-  readPersisted,
-} from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { BUSINESS_RECORDS_STORAGE_KEY } from "@/lib/storage-keys"
 
 import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "./api-session-store"
 
@@ -242,6 +240,22 @@ function isStoredRecords(value: unknown): value is StoredRecords {
   )
 }
 
+/**
+ * The records made and edited in the browser. Browsers that wrote records
+ * before the Contractor → Service provider rename still hold the old bucket
+ * keys ("contractors.contract-areas") and old ids inside records: they are
+ * migrated on load, and the persist that follows writes the migrated payload
+ * back. The migration is idempotent and returns the parsed object itself
+ * when nothing is legacy.
+ */
+const storedRecords = persistedStore<StoredRecords>(BUSINESS_RECORDS_STORAGE_KEY, {
+  parse: (raw) => {
+    const parsed: unknown = JSON.parse(raw)
+    if (!isStoredRecords(parsed)) return null
+    return hasLegacyIds(raw) ? migrateLegacyRecordBuckets(parsed, LEGACY_RECORD_KEY_RENAMES) : parsed
+  },
+})
+
 /** A refusal is told to the person in the API's words: the toast for a write or a read the API refused. */
 function reportProblem(what: string, problem: Problem) {
   toast.error(what, { description: problemSentence(problem) })
@@ -363,37 +377,11 @@ export function BusinessRecordStoreProvider({
 
   useEffect(() => {
     const store = stores.records
-    try {
-      const raw = readPersisted(
-        window.localStorage,
-        BUSINESS_RECORDS_STORAGE_KEY,
-      )
-      const parsed: unknown = raw ? JSON.parse(raw) : null
-      if (isStoredRecords(parsed)) {
-        // Browsers that wrote records before the Contractor → Service provider
-        // rename still hold the old bucket keys ("contractors.contract-areas")
-        // and old ids inside records. Migrate once on load; the migration is
-        // idempotent and returns the parsed object itself when nothing is
-        // legacy, and the persist below writes the migrated payload back.
-        store.set(
-          raw && hasLegacyIds(raw)
-            ? migrateLegacyRecordBuckets(parsed, LEGACY_RECORD_KEY_RENAMES)
-            : parsed,
-        )
-      }
-    } catch {
-      // A corrupt or unavailable browser store should not block the workspace.
-    }
+    const stored = storedRecords.read()
+    if (stored !== null) store.set(stored)
     stores.hydrated.set(true)
     const persist = () => {
-      try {
-        window.localStorage.setItem(
-          BUSINESS_RECORDS_STORAGE_KEY,
-          JSON.stringify(store.getSnapshot()),
-        )
-      } catch {
-        // The in-memory record graph remains usable when persistence is blocked.
-      }
+      storedRecords.write(store.getSnapshot())
     }
     persist()
     return store.subscribe(persist)

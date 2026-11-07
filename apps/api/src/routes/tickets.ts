@@ -65,7 +65,10 @@ import type { Action } from "@waste/domain/access/modules"
 import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
 import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
 import { closedTicket, ticketTransition } from "@waste/domain/resolution/transitions"
-import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand } from "@waste/domain/resolution/vocabulary"
+import { OPEN_ROUTE_STATUSES, pickupMissed } from "@waste/domain/execution/vocabulary"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -103,7 +106,6 @@ import {
 import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, dayWindow, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
-import { refuseUnofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
 import { openingIssues, refuseRetiredType, requireFieldsToComplete, requireMayGive, rulesOfTicket, typeAfterPatch, typeToOpen, valueIssues } from "./ticket-type-rules"
@@ -239,8 +241,8 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
           .limit(1)
   if (pickupId !== undefined && stop === undefined) throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
   if (stop !== undefined && stop.service !== "empty") throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_AN_EMPTYING }])
-  if (found.status === "completed" || found.status === "cancelled") throw problem(409, { detail: routeHasEnded(routeLabelOf(found), found.status) })
-  if (stop !== undefined && (stop.status === "skipped" || stop.status === "failed")) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
+  refuseUnless(found.status, OPEN_ROUTE_STATUSES, (status) => routeHasEnded(routeLabelOf(found), status))
+  if (stop !== undefined && pickupMissed(stop.status)) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
 /** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */
@@ -256,7 +258,7 @@ export const countedPropertyKept = (label: string): string => `${label} was open
 
 /** A closed ticket asked to change by the patch or by `assign`, neither of which asks the machine: the machine's own sentence. */
 function requireOpen(current: TicketRow): void {
-  const status = current.status as TicketStatus
+  const status = current.status
   if (isClosedTicketStatus(status)) throw problem(409, { detail: closedTicket(labelOf(current), status) })
 }
 
@@ -338,7 +340,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     { asPerson = true, at = now() }: { asPerson?: boolean; at?: Date } = {},
   ): Promise<{ row: TicketRow; wrote: boolean }> {
     const current = await lockedTicket(tx, principal, id)
-    const transition = ticketTransition(current.status as TicketStatus, command, labelOf(current))
+    const transition = ticketTransition(current.status, command, labelOf(current))
     if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
     if (transition.kind === "stay") return { row: current, wrote: false }
     if (asPerson) {
@@ -480,9 +482,9 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const opened = await findTicket(tx, principal, answered.id)
         const evidence = opened === undefined ? null : await stopEvidenceFor(tx, principal.companyId, opened)
         if (opened === undefined || evidence === null || !evidence.answeredByRecord) return created(c, "/tickets", answered)
-        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: opened.projectId, id: opened.id }, { status: opened.status as TicketStatus, assigneeUserAccountId: opened.assigneeUserAccountId }, evidence.reply, principal.user.id)
+        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: opened.projectId, id: opened.id }, { status: opened.status, assigneeUserAccountId: opened.assigneeUserAccountId }, evidence.reply, principal.user.id)
         // The type's opening actions may have closed it already: the reply stands, and the case is not closed twice.
-        if (isClosedTicketStatus(opened.status as TicketStatus)) return created(c, "/tickets", ticketOf(opened))
+        if (isClosedTicketStatus(opened.status)) return created(c, "/tickets", ticketOf(opened))
         const { row } = await moved(tx, principal, opened.id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null }), { asPerson: false, at })
         return created(c, "/tickets", ticketOf(row))
       },
@@ -840,7 +842,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const evidence = await stopEvidenceFor(tx, principal.companyId, current)
         if (evidence === null) throw problem(409, { detail: NO_STOP })
         // A completion the machine refuses is a 409, which discards the request's transaction and the reply with it (the guard, auth/principal.ts).
-        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
+        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
         const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null }), { at })).row : current
         return c.json(await detailOf(tx, principal, row), 201)
       },
@@ -923,7 +925,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           throw invalidRequest("body", [{ path: "objectKey", message: KEY_NAMES_ANOTHER }])
         }
         const ref = { companyId: principal.companyId, projectId: current.projectId, id: current.id }
-        const snapshot = { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }
+        const snapshot = { status: current.status, assigneeUserAccountId: current.assigneeUserAccountId }
         // A provider's comment is its thread (the contracts refuse it the customer's); a comment the customer reads is a reply, written the one way a reply is (ticket-evidence.ts), where its sending will be.
         const row =
           visibility === "customer" && !fromProvider

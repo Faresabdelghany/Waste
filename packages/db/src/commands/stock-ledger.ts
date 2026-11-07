@@ -76,7 +76,8 @@ import { ENDS_AFTER_IT_STARTS, type Period } from "@waste/domain/periods"
 import { Refused } from "@waste/domain/refusal"
 import { refuseUnservedPlace, type Place as ServedPlace } from "@waste/domain/registry/served-places"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
-import type { AssetStatus, DecommissionReasonStatus, StockMovementKind, StockPlaceKind, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { ACTIVE_DECOMMISSION_REASON_STATUSES, STOCKING_WAREHOUSE_STATUSES, type AssetStatus, type StockMovementKind, type StockPlaceKind, type WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, desc, eq, gte, lt, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -159,15 +160,12 @@ export const NOT_A_SERVICE_FREQUENCY = "Not a service frequency of this project"
 // conflict naming the warehouse and its status — the row named is really
 // there, and no better intent would do while the warehouse stands as it does.
 
-/** The warehouse statuses a movement may not arrive at. */
-export const WAREHOUSE_TAKES_NO_STOCK: readonly WarehouseStatus[] = ["draft", "closed"]
-
 /** What a movement into a closed or draft warehouse is told, naming the warehouse and its status. */
-export const takesNoStock = (name: string, status: WarehouseStatus): string => `${name} is ${status}; a movement arrives only at an active or restricted warehouse`
+export const takesNoStock = (name: string, status: Exclude<WarehouseStatus, (typeof STOCKING_WAREHOUSE_STATUSES)[number]>): string => `${name} is ${status}; a movement arrives only at an active or restricted warehouse`
 
 /** Holds the warehouse a movement arrives at open for stock: the #79 rule as the ledger applies it, and as a work order's booking judges the movement its completion will make. */
 export function requireWarehouseTakesStock(found: { name: string; status: WarehouseStatus }): void {
-  if (WAREHOUSE_TAKES_NO_STOCK.includes(found.status)) throw Refused.conflict(takesNoStock(found.name, found.status))
+  refuseUnless(found.status, STOCKING_WAREHOUSE_STATUSES, (status) => takesNoStock(found.name, status))
 }
 
 /** A place a movement leaves from or arrives at: a kind, and the warehouse when the kind is at one. */
@@ -230,7 +228,7 @@ async function lockedReading(tx: Tx, companyId: string, subject: ContainerRef): 
     .orderBy(desc(stockMovement.id))
     .limit(1)
   if (row === undefined) return null
-  const toKind = row.toKind as StockPlaceKind
+  const toKind = row.toKind
   const status = stateAfter({ toKind })
   // The kind check keeps every arrival at a place with a state; a row without one is a broken invariant, not a client's doing.
   if (status === null) throw new Error(`stock_movement ${row.movementId} arrived at a place with no asset state`)
@@ -397,7 +395,7 @@ async function arrivalWarehouse(tx: Tx, within: { companyId: string; projectId: 
     .limit(1)
   if (found === undefined) throw Refused.invalid("warehouseId", NOT_A_WAREHOUSE)
   // `status` is text with a CHECK in the database and the vocabulary's tuple here.
-  requireWarehouseTakesStock({ name: found.name, status: found.status as WarehouseStatus })
+  requireWarehouseTakesStock({ name: found.name, status: found.status })
 }
 
 /** The Decommission Reason a decommission names: the company's (invalid at `decommissionReasonId`) and active (a conflict), since a status gates a new reference. */
@@ -408,7 +406,7 @@ async function requireDecommissionReason(tx: Tx, companyId: string, id: string):
     .where(and(eq(decommissionReason.companyId, companyId), eq(decommissionReason.id, id)))
     .limit(1)
   if (found === undefined) throw Refused.invalid("decommissionReasonId", NOT_A_DECOMMISSION_REASON)
-  if ((found.status as DecommissionReasonStatus) !== "active") throw Refused.conflict(retiredReason(found.name))
+  refuseUnless(found.status, ACTIVE_DECOMMISSION_REASON_STATUSES, retiredReason(found.name))
 }
 
 /** Where the intent arrives, held to the container's project, and the Registry half where service opens or ends. */
@@ -553,7 +551,7 @@ async function findServedSubscription(tx: Tx, within: { companyId: string; proje
     .where(and(eq(subscription.companyId, within.companyId), eq(subscription.projectId, within.projectId), eq(subscription.id, id)))
     .limit(1)
   if (row === undefined) throw Refused.invalid("subscriptionId", NOT_A_SUBSCRIPTION)
-  return row as Period & ServedPlace
+  return row
 }
 
 /**

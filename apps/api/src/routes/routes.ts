@@ -49,7 +49,7 @@
 // rule's words), the depot the project's, the station the company's and
 // accepting at least one of the route's waste fractions (a route with no
 // pickups yet names any station) — each a 400 at its field; then, after
-// every 400, the statuses of what was named afresh (routes/statuses.ts): a
+// every 400, the statuses of what was named afresh (@waste/domain/status-gates): a
 // retired vehicle or trailer, an inactive or suspended driver is a 409 naming
 // the row, since the id is right and the row is there. A stored row the body
 // did not move is not asked its status (#79's rule).
@@ -92,13 +92,13 @@ import { routeScheme } from "@waste/db/schema/route-schemes"
 import { NOT_A_STATION, notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
 import { confirmNonWorkingDay, operatingDayReading, type OperatingDayReading } from "@waste/domain/execution/operating-day"
 import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
-import type { OfficeCancelReasonCode, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
-import type { HolidayPolicy } from "@waste/domain/planning/vocabulary"
+import type { OfficeCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
-import type { ServiceDay } from "@waste/domain/days"
-import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
+import { ACTIVE_VEHICLE_STATUSES, type VehicleStatus } from "@waste/domain/resources/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { count } from "@waste/domain/text"
+import { refuseUnavailableDriver } from "@waste/domain/resources/fleet"
 import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -129,7 +129,6 @@ import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./schem
 import { askGenerationBestEffort } from "./generation"
 import { handBackWindow } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
-import { refuseUnavailableDriver } from "./statuses"
 import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
 import { refuseAllocatedElsewhere, refuseDoubleBooked } from "./crew-day"
 import { refuseMisfit } from "./fleet-fit"
@@ -181,11 +180,10 @@ export const acceptsNone = (station: string): string => `${station} accepts none
  * holds (#104 §3) read from the office's side, in the domain's words
  * (`notInService`): a route goes out with a vehicle in service, so
  * `unavailable` and `maintenance` are refused here where an allocation,
- * planned for next month, takes them (routes/statuses.ts).
+ * planned for next month, takes them (`PLANNABLE_VEHICLE_STATUSES`).
  */
 function refuseVehicleNotActive(status: VehicleStatus, label: string, as: "vehicle" | "trailer" = "vehicle"): void {
-  if (status === "active") return
-  throw problem(409, { detail: notInService(label, status, as) })
+  refuseUnless(status, ACTIVE_VEHICLE_STATUSES, notInService(label, status, as))
 }
 
 /** What an order that is not exactly the route's open pickups is told, at `pickupIds`: how many it left out, and how many it named that are not open pickups of this route. */
@@ -286,7 +284,7 @@ async function requireOwnCrew(tx: Tx, companyId: string, current: RouteRow, crew
  * the same rule from the stop's side.
  */
 export function requireNotStarted(current: RouteRow, consequence: string): void {
-  if (orderIsOpen(current.status as RouteStatus)) return
+  if (orderIsOpen(current.status)) return
   const label = labelOf(current)
   switch (current.status) {
     case "active":
@@ -392,7 +390,7 @@ function routeOfDetail(detail: RouteDetail): Route {
 async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date): Promise<RouteDetail> {
   // Through the reach (#291 slice 23b): a provider dispatches a route its provider runs, to its own crew alone.
   const current = await lockedCrewedRoute(tx, principal, id)
-  const transition = routeTransition(current.status as RouteStatus, "dispatch", labelOf(current))
+  const transition = routeTransition(current.status, "dispatch", labelOf(current))
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   if (transition.kind === "stay") return await detailOf(tx, principal.companyId, current)
   if (current.plannedDriverId === null) throw problem(409, { detail: noPlannedDriver(labelOf(current)) })
@@ -442,9 +440,9 @@ async function operatingDayOf(tx: Tx, scope: Scope, current: RouteRow, day: stri
           .where(and(eq(routeScheme.companyId, scope.companyId), eq(routeScheme.id, current.routeSchemeId)))
           .limit(1)
   return operatingDayReading(
-    { weekend: calendar.weekend as ServiceDay[], holidays: holidayListOf(holidays, calendar.holidayList) },
+    { weekend: calendar.weekend, holidays: holidayListOf(holidays, calendar.holidayList) },
     day,
-    scheme === undefined ? null : { holidayPolicy: scheme.holidayPolicy as HolidayPolicy, serviceDays: scheme.serviceDays as ServiceDay[] },
+    scheme === undefined ? null : { holidayPolicy: scheme.holidayPolicy, serviceDays: scheme.serviceDays },
   )
 }
 
@@ -558,8 +556,8 @@ export async function cancelLockedRoute(tx: Tx, principal: Principal, current: R
     .returning(routeColumns)
   if (row === undefined) throw noSuchRoute(current.id)
   // The domain says what cancelling does beyond the status — which pickups close and what they become, and whether a session is running to end — and the statements write it. The status is text with a CHECK in the database and the vocabulary's here.
-  const cancellation = routeCancellation(current.status as RouteStatus)
-  const stops = (await pickupsOfRoute(tx, principal.companyId, row.id)).map((stop) => ({ id: stop.id, status: stop.status as PickupStatus }))
+  const cancellation = routeCancellation(current.status)
+  const stops = (await pickupsOfRoute(tx, principal.companyId, row.id)).map((stop) => ({ id: stop.id, status: stop.status }))
   const closing = openPickupsClose(stops, cancellation.closing.reason)
   const closed =
     closing.pickups.length === 0
@@ -997,7 +995,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedRoute(tx, principal, id)
-        const transition = routeTransition(current.status as RouteStatus, "cancel", labelOf(current))
+        const transition = routeTransition(current.status, "cancel", labelOf(current))
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
         return c.json(await cancelLockedRoute(tx, principal, current, transition.to, { reasonCode, reason }, now()))

@@ -42,10 +42,10 @@ export const tankInstallation = wms.table(
     propertyId: uuid().notNull(),
     /** The container that stands for the tank in the plan; one tank's at a time. */
     containerId: uuid().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: TANK_KINDS }).notNull(),
     /** What the tank holds, whole litres. */
     volumeLitres: integer().notNull(),
-    outlet: text().notNull(),
+    outlet: text({ enum: TANK_OUTLETS }).notNull(),
     /** Whole months between emptyings: 12 for a home, 24 for a holiday home, as the regulation says. */
     emptyingIntervalMonths: integer().notNull(),
     /** The last emptying before the platform knew the tank; a completed stop of its container is read before it. */
@@ -59,8 +59,8 @@ export const tankInstallation = wms.table(
     projectReference(t, [t.containerId], container),
     // An inspection carries the project with the tank it names.
     projectKey(t),
-    oneOf(t.kind, TANK_KINDS),
-    oneOf(t.outlet, TANK_OUTLETS),
+    oneOf(t.kind),
+    oneOf(t.outlet),
     positive(t.volumeLitres),
     check(tableObjectName(t.id.table, "emptying_interval_months_range", "tankInstallation"), sql`${t.emptyingIntervalMonths} between 1 and ${sql.raw(String(TANK_INTERVAL_MONTHS_MAX))}`),
     validPeriod(t),
@@ -80,7 +80,7 @@ export const tankInspection = wms.table(
     ...recorded,
     tankInstallationId: uuid().notNull(),
     inspectedOn: date().notNull(),
-    outcome: text().notNull(),
+    outcome: text({ enum: TANK_INSPECTION_OUTCOMES }).notNull(),
     findings: text(),
     /** When the tank is next to be inspected, where the inspector said. */
     nextInspectionOn: date(),
@@ -91,7 +91,7 @@ export const tankInspection = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.tankInstallationId], tankInstallation),
     tenantReference(t, [t.recordedBy], userAccount),
-    oneOf(t.outcome, TANK_INSPECTION_OUTCOMES),
+    oneOf(t.outcome),
     check(tableObjectName(t.id.table, "next_inspection_after", "tankInspection"), sql`${t.nextInspectionOn} is null or ${t.nextInspectionOn} > ${t.inspectedOn}`),
     // A tank's inspections, newest last.
     index(tableObjectName(t.companyId.table, "tank_installation_id_idx", "tankInspection")).on(t.companyId, t.tankInstallationId, t.inspectedOn),

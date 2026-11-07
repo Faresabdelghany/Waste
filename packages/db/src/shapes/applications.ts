@@ -2,7 +2,6 @@
 // latest Decision and `applicationOf`, which the office's routes answer and
 // `application-decided` carries.
 import type { Application, Decision } from "@waste/contracts/applications"
-import type { ApplicationChannel, ApplicationKind, ApplicationStatus, DecisionOutcome } from "@waste/domain/registry/vocabulary"
 import { and, desc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -43,7 +42,7 @@ export type DecisionRow = Pick<typeof applicationDecision.$inferSelect, keyof ty
 export const decisionOf = (row: DecisionRow): Decision => ({
   id: row.id,
   applicationId: row.applicationId,
-  outcome: row.outcome as DecisionOutcome,
+  outcome: row.outcome,
   conditions: row.conditions,
   validFrom: row.grantedFrom,
   validTo: row.grantedTo,
@@ -56,9 +55,9 @@ export const applicationOf = (row: ApplicationRow, decision: DecisionRow | undef
   id: row.id,
   projectId: row.projectId,
   number: row.number,
-  kind: row.kind as ApplicationKind,
-  status: row.status as ApplicationStatus,
-  channel: row.channel as ApplicationChannel,
+  kind: row.kind,
+  status: row.status,
+  channel: row.channel,
   receivedOn: row.receivedOn,
   customerId: row.customerId,
   propertyId: row.propertyId,

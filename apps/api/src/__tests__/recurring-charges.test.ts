@@ -10,6 +10,7 @@ import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agr
 import { product } from "@waste/db/schema/catalogue"
 import { billableEvent, priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
+import type { AgreementStatus, BillingCadence } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 
@@ -65,7 +66,7 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
         { id: products.unpriced, companyId, projectId: copenhagen, name: "Garden bin rental", kind: "recurring-service", status: "active", unit: "month", vatPercent: 25 },
       ])
       await tx.insert(priceListRow).values({ id: testId(), companyId, projectId: copenhagen, priceListId: fx.priceLists.default.id, productId: products.rental, unitPriceMinor: 30_000, validFrom: "2026-01-01" })
-      const anna = (id: string, number: string, billingCadence: string, status = "active") => ({ id, companyId, projectId: copenhagen, number, customerId: fx.customers.anna.id, payerCustomerId: fx.customers.anna.id, status, billingCadence, currency: "DKK", validFrom: "2026-01-01" })
+      const anna = (id: string, number: string, billingCadence: BillingCadence, status: AgreementStatus = "active"): typeof agreement.$inferInsert => ({ id, companyId, projectId: copenhagen, number, customerId: fx.customers.anna.id, payerCustomerId: fx.customers.anna.id, status, billingCadence, currency: "DKK", validFrom: "2026-01-01" })
       await tx.insert(agreement).values([anna(agreements.quarterly, "AGR-110", "quarterly"), anna(agreements.manual, "AGR-111", "manual"), anna(agreements.cancelled, "AGR-112", "monthly", "cancelled")])
       const sold = (name: Case, agreementId: string, options: { productId?: string; quantity?: number; validFrom?: string; propertyId?: string } = {}) => ({
         id: subscriptions[name],

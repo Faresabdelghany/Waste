@@ -127,7 +127,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     collection = await create(
       olivia,
       "/products",
-      // Active, since a subscription needs an active product (routes/statuses.ts, Issue #79).
+      // Active, since a subscription needs an active product (@waste/domain/status-gates, Issue #79).
       { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", serviceFrequencyId: weekly.id, status: "active" },
       Product,
     )

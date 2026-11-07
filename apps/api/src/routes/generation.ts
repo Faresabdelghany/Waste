@@ -60,7 +60,6 @@
 // does not exist here.
 import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "@waste/contracts/generation"
 import { Page } from "@waste/contracts/pagination"
-import type { GenerationRunStatus, GenerationTrigger } from "@waste/contracts/planning"
 import { GENERATE_ROUTES_QUEUE, startGenerationRun } from "@waste/db/commands/generation"
 import type { Tx } from "@waste/db/client"
 import { jobHeld, QueueMissing, type JobSender, type Send } from "@waste/db/jobs"
@@ -121,8 +120,8 @@ type RunRow = Pick<typeof generationRun.$inferSelect, keyof typeof runColumns>
 const runOf = (row: RunRow): GenerationRun => ({
   ...row,
   ...stampsOf(row),
-  trigger: row.trigger as GenerationTrigger,
-  status: row.status as GenerationRunStatus,
+  trigger: row.trigger,
+  status: row.status,
   startedAt: instantOf(row.startedAt),
   finishedAt: instantOf(row.finishedAt),
 })

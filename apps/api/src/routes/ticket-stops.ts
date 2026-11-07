@@ -21,7 +21,7 @@ import { bookTicket as bookTicketStop, plannedStopAnswering } from "@waste/db/co
 import { ticket } from "@waste/db/schema/resolution"
 import { answeredAlready, bookedFor, notAnsweredBy, onlyAnOpenTicket, servicesAnswering, stopMismatch } from "@waste/domain/resolution/ticket-stops"
 import type { PickupService } from "@waste/domain/execution/vocabulary"
-import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
 import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/shapes/tickets"
 
@@ -52,7 +52,7 @@ export async function requireTicketForStop(tx: Tx, principal: Principal, scope: 
     .for("update")
     .limit(1)
   if (row === undefined) throw invalidRequest("body", [{ path: "ticketId", message: NOT_A_TICKET }])
-  const kind = row.kind as TicketKind
+  const kind = row.kind
   if (!(servicesAnswering(kind) as readonly PickupService[]).includes(stop.service)) throw invalidRequest("body", [{ path: "service", message: notAnsweredBy(kind, stop.service) }])
   const onItsContainer = stopMismatch({ containerId: row.containerId, propertyId: null, sharedCollectionPointId: null }, { ...stop, propertyId: null, sharedCollectionPointId: null })
   if (onItsContainer !== undefined) throw invalidRequest("body", [onItsContainer])

@@ -33,7 +33,7 @@
 // its rows a 409 counting them. A row's patch moves its price, its note and
 // its end; a condition or a start never, since they are the key and the
 // period: end the row and add another. A price is a new reference to its
-// product, so the product is `active` (routes/statuses.ts, #79).
+// product, so the product is `active` (@waste/domain/status-gates, #79).
 //
 // The resolve read is `RESOLUTION_RULE` as code (@waste/domain/finance/pricing):
 // the caller names the product, the day and the conditions, every row of the
@@ -72,7 +72,6 @@
 // project the caller works in and a record never moves between projects; a
 // provider's account works in no project and so reaches no list (§3). The
 // grant is `commercial.price-rows` throughout, the resolve read included.
-import type { CustomerKind } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import {
   PriceList,
@@ -96,6 +95,7 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { IndexResult } from "@waste/contracts/finance"
 import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { resolvePrice, type PriceInput, type PriceLabels } from "@waste/domain/finance/pricing"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -113,7 +113,6 @@ import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requi
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
 import { answerOf, batchesOf, productStatuses, refusePlan } from "./indexation"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.price-rows"
 const PriceListPage = Page(PriceList)
@@ -184,7 +183,7 @@ function rowOf(row: PriceRowRow): PriceListRow {
     productId: row.productId,
     unitPriceMinor: row.unitPriceMinor,
     planningAreaId: row.planningAreaId,
-    customerKind: row.customerKind as CustomerKind | null,
+    customerKind: row.customerKind,
     containerTypeId: row.containerTypeId,
     wasteFractionId: row.wasteFractionId,
     customerId: row.customerId,
@@ -542,7 +541,7 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await requireConditions(tx, within, values)
         requireWithin(list, periodOf(values), OUTSIDE_PRICE_LIST)
 
-        // Every 400 above, every 409 below (routes/statuses.ts).
+        // Every 400 above, every 409 below (@waste/domain/status-gates).
         refuseUnofferedProduct(productStatus)
         const [row] = await refuseOverlap({ [ROW_RUNNING]: ROW_RUNNING_SENTENCE }, () =>
           tx

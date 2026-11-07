@@ -10,7 +10,7 @@
 // stand, since a channel moved alone changes what the subject must be (the
 // table's check is the backstop). The grant is `configure.templates`, Tickets
 // & communication's module, which the Ticket SLA is configured under too.
-import { MessageTemplate, MessageTemplateCreate, MessageTemplateListQuery, MessageTemplatePatch, type MessageChannel, type MessageTemplatePurpose, type MessageTemplateStatus } from "@waste/contracts/messaging"
+import { MessageTemplate, MessageTemplateCreate, MessageTemplateListQuery, MessageTemplatePatch } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { messageTemplate } from "@waste/db/schema/messaging"
@@ -57,11 +57,11 @@ const templateOf = (row: Row): MessageTemplate => ({
   id: row.id,
   projectId: row.projectId,
   name: row.name,
-  purpose: row.purpose as MessageTemplatePurpose,
-  channel: row.channel as MessageChannel,
+  purpose: row.purpose,
+  channel: row.channel,
   subject: row.subject,
   body: row.body,
-  status: row.status as MessageTemplateStatus,
+  status: row.status,
   ...stampsOf(row),
 })
 
@@ -195,7 +195,7 @@ export function messageTemplateRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await findTemplate(tx, principal, id)
         if (current === undefined) throw noSuchTemplate(id)
         const issue = channelShapeIssue({
-          channel: (patch.channel ?? current.channel) as MessageChannel,
+          channel: (patch.channel ?? current.channel),
           subject: patch.subject === undefined ? current.subject : patch.subject,
           body: patch.body ?? current.body,
         })

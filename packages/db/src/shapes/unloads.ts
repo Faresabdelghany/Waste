@@ -6,7 +6,6 @@ import type { WeightReviewState } from "@waste/contracts/finance"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { LoadReading, Unload } from "@waste/contracts/unloads"
 import { loadReading, onBoardByUnload } from "@waste/domain/execution/unloads"
-import type { ExecutionSource, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { possibleDuplicates } from "@waste/domain/execution/weighbridge"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
@@ -88,7 +87,7 @@ export function unloadOf(row: UnloadRow, load: LoadReading | null = null, possib
     sessionId: row.sessionId,
     unloadingStationId: row.unloadingStationId,
     wasteFractionId: row.wasteFractionId,
-    source: row.source as ExecutionSource,
+    source: row.source,
     occurredAt: row.occurredAt.toISOString(),
     recordedBy: row.recordedBy,
     deviceId: row.deviceId,
@@ -100,7 +99,7 @@ export function unloadOf(row: UnloadRow, load: LoadReading | null = null, possib
     objectKey: row.objectKey,
     note: row.note,
     weightReview: weightReviewOfRow(row),
-    refusal: row.refusalReason === null ? null : { reason: row.refusalReason as UnloadRefusalReason, note: row.refusalNote },
+    refusal: row.refusalReason === null ? null : { reason: row.refusalReason, note: row.refusalNote },
     load,
     possibleDuplicates: [...possibleDuplicates],
   }
@@ -173,7 +172,7 @@ async function duplicatesOf(tx: Tx, companyId: string, rows: readonly UnloadRow[
       id: sibling.id,
       routeId: sibling.routeId,
       wasteFractionId: sibling.wasteFractionId,
-      source: sibling.source as ExecutionSource,
+      source: sibling.source,
       refused: sibling.refusalReason !== null,
       settled: sibling.reviewStatus === "rejected" || sibling.reviewStatus === "corrected",
     })),

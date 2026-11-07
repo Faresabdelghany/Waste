@@ -38,13 +38,8 @@ import {
   SharedCollectionPointCreate,
   SharedCollectionPointMembersSet,
   SharedCollectionPointPatch,
-  type SharedCollectionPointAccessMode,
-  type SharedCollectionPointBillingMode,
-  type SharedCollectionPointKind,
   type SharedCollectionPointMember,
   type SharedCollectionPointMemberRole,
-  type SharedCollectionPointOperatingModel,
-  type SharedCollectionPointStatus,
 } from "@waste/contracts/customers"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
@@ -122,7 +117,7 @@ const memberOf = (entry: Entry): SharedCollectionPointMember => ({
   propertyId: entry.id,
   role: entry.role as SharedCollectionPointMemberRole,
 })
-const entryOf = (member: SharedCollectionPointMember): Entry => ({ id: member.propertyId, role: member.role })
+const entryOf = (member: SharedCollectionPointMember): Entry<SharedCollectionPointMemberRole> => ({ id: member.propertyId, role: member.role })
 
 /** The row on the wire, with the members the page loaded for it. The five coded fields are text with a CHECK in the database and an enum here; the point is the contracts' `FlatPoint`, since the column is `geometry(Point, 4326)`, flat, and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
 function pointOf(row: Row, served: readonly Entry[]): SharedCollectionPoint {
@@ -130,18 +125,18 @@ function pointOf(row: Row, served: readonly Entry[]): SharedCollectionPoint {
     id: row.id,
     projectId: row.projectId,
     name: row.name,
-    kind: row.kind as SharedCollectionPointKind,
+    kind: row.kind,
     address: row.address,
     location: row.location as FlatPoint,
     eligibilityDistanceM: row.eligibilityDistanceM,
-    operatingModel: row.operatingModel as SharedCollectionPointOperatingModel,
-    accessMode: row.accessMode as SharedCollectionPointAccessMode,
+    operatingModel: row.operatingModel,
+    accessMode: row.accessMode,
     accessConditions: row.accessConditions,
     driverInstructions: row.driverInstructions,
     availability: row.availability,
-    billingMode: row.billingMode as SharedCollectionPointBillingMode,
+    billingMode: row.billingMode,
     responsibleCustomerId: row.responsibleCustomerId,
-    status: row.status as SharedCollectionPointStatus,
+    status: row.status,
     members: served.map(memberOf),
     ...stampsOf(row),
   }

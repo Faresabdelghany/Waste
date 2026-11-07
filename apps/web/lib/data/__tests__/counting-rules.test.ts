@@ -7,6 +7,7 @@ import { describe, test } from "node:test"
 import { CountingRuleCreate, CountingRulePatch, CountingSimulationBody, type CountingRule } from "@waste/contracts/counting-rules"
 import { SIMULATION_DAYS_MAX, windowDays } from "@waste/domain/resolution/counting-rules"
 
+import type { Grants } from "../../api/grants"
 import {
   countingRuleBodyOf,
   countingRuleDraftOf,
@@ -42,7 +43,7 @@ const RULE: CountingRule = {
 
 describe("who may do what", () => {
   test("the templates' grant reads and writes, and the stops' beside it simulates", () => {
-    const grants = [{ moduleKey: "configure.templates", actions: ["view", "create", "edit"] }]
+    const grants: Grants = [{ moduleKey: "configure.templates", actions: ["view", "create", "edit"] }]
     assert.deepEqual(countingRulesAccessOf(grants), { view: true, create: true, edit: true, delete: false, simulate: false })
     assert.equal(countingRulesAccessOf([...grants, { moduleKey: "route-studio.pickups", actions: ["view"] }]).simulate, true)
     assert.equal(countingRulesAccessOf(undefined).view, false)

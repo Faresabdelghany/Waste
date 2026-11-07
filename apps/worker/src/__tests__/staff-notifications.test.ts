@@ -70,7 +70,7 @@ describe("the staff notices", { skip: api.skip || owner.skip }, () => {
       roleId,
       ...extra,
     })
-    const wants = (userAccountId: string, minSeverity: AlertSeverity) => ({ companyId, userAccountId, event: "alert-raised", minSeverity })
+    const wants = (userAccountId: string, minSeverity: AlertSeverity): typeof notificationPreference.$inferInsert => ({ companyId, userAccountId, event: "alert-raised", minSeverity })
     await withCompany(pool.db, companyId, async (tx) => {
       await tx.insert(role).values([
         { id: board, companyId, key: null, name: "Board", scope: "Company", description: "Watches the alerts", system: false },

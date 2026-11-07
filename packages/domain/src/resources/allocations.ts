@@ -2,6 +2,7 @@
 // reserved from and to, the end strictly after the start, and the window a
 // list asks over, both ends given or neither. An allocation is created
 // planned or confirmed; released is the command's alone.
+import { count } from "../text"
 import type { AllocationStatus } from "./vocabulary"
 
 /** The statuses only a command reaches: a create never names them. */
@@ -21,3 +22,9 @@ export const BOTH_ENDS_OF_THE_WINDOW = "Give both overlappingFrom and overlappin
 
 /** What a query whose overlapping window runs backwards is told. */
 export const OVERLAPPING_WINDOW_ORDERED = "overlappingTo is the end of the window, so it comes after overlappingFrom"
+
+/** What taking a row out of service under live allocations is refused with: "2 live allocations name this vehicle; release them first". */
+export const liveAllocationsName =
+  (what: "vehicle" | "driver") =>
+  (rows: number): string =>
+    `${count(rows, "live allocation")} ${rows === 1 ? "names" : "name"} this ${what}; release ${rows === 1 ? "it" : "them"} first`

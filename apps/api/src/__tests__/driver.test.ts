@@ -32,6 +32,7 @@ import {
 import { EACH_COMMAND_ONCE } from "@waste/domain/execution/command-batches"
 import { alreadyActive, doesNotChange, notActive, notDispatched } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import type { UnloadingStationStatus, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
 
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
@@ -131,7 +132,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     })
 
     test("GET /driver/me answers what a start picks from: the active powered vehicles and trailers of the driver profile's project, by id, each by its callsign or else its plate — not another project's, not one out of service, not another company's", async () => {
-      const setVehicle = (id: string, values: { status?: string; callsign?: string | null }) =>
+      const setVehicle = (id: string, values: { status?: VehicleStatus; callsign?: string | null }) =>
         withCompany(pool.db, a.companyId, (tx) => tx.update(vehicleTable).set(values).where(and(eq(vehicleTable.companyId, a.companyId), eq(vehicleTable.id, id))))
       // For this test alone: WH-77 out of service, so more than a retired vehicle is seen to stay off the list, and the trailer without its callsign, so its plate names it.
       await setVehicle(fleet.vehicles.drifting.id, { status: "unavailable" })
@@ -158,14 +159,14 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       // Ids minted in order and the rows written in reverse, so the order the door answers in is its own and not the order the rows went in.
       const glass = { id: mint(), key: "glass", name: "Glass" }
       const food = { id: mint(), key: "food", name: "Food waste" }
-      const station = (code: string, name: string, status: string, weighbridge: boolean, coordinates: [number, number]) => ({
+      const station = (code: string, name: string, status: UnloadingStationStatus, weighbridge: boolean, coordinates: [number, number]) => ({
         id: mint(),
         companyId,
         code,
         name,
         address: `${name}, Kystbyen`,
         location: { type: "Point" as const, coordinates },
-        ownership: "company",
+        ownership: "company" as const,
         weighbridge,
         status,
       })

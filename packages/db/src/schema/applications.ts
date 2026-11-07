@@ -44,9 +44,9 @@ export const application = wms.table(
     ...timestamps,
     /** The company's running count, what a decision letter quotes. */
     number: integer().notNull(),
-    kind: text().notNull(),
-    status: text().notNull().default("received"),
-    channel: text().notNull(),
+    kind: text({ enum: APPLICATION_KINDS }).notNull(),
+    status: text({ enum: APPLICATION_STATUSES }).notNull().default("received"),
+    channel: text({ enum: APPLICATION_CHANNELS }).notNull(),
     receivedOn: date().notNull(),
     customerId: uuid().notNull(),
     propertyId: uuid(),
@@ -64,9 +64,9 @@ export const application = wms.table(
     projectReference(t, [t.subscriptionId], subscription),
     projectKey(t),
     tenantUnique(t, t.number),
-    oneOf(t.kind, APPLICATION_KINDS),
-    oneOf(t.status, APPLICATION_STATUSES),
-    oneOf(t.channel, APPLICATION_CHANNELS),
+    oneOf(t.kind),
+    oneOf(t.status),
+    oneOf(t.channel),
     check(tableObjectName(t.id.table, "one_place", "application"), sql`${t.propertyId} is null or ${t.sharedCollectionPointId} is null`),
     check(tableObjectName(t.id.table, "statement_given", "application"), sql`length(btrim(${t.statement})) > 0`),
     tenantIndex(t, t.projectId),
@@ -86,7 +86,7 @@ export const applicationDecision = wms.table(
     ...projectScoped,
     ...recorded,
     applicationId: uuid().notNull(),
-    outcome: text().notNull(),
+    outcome: text({ enum: DECISION_OUTCOMES }).notNull(),
     /** What the grant holds the customer to, or why it was refused. */
     conditions: text(),
     /** The first day a grant is in force; null for a refusal. */
@@ -102,7 +102,7 @@ export const applicationDecision = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.applicationId], application),
     tenantReference(t, [t.decidedBy], userAccount),
-    oneOf(t.outcome, DECISION_OUTCOMES),
+    oneOf(t.outcome),
     // A refusal is in force for no period; a grant names its first day, and its end, where given, comes after it (ADR-0005).
     check(
       tableObjectName(t.id.table, "period_shape", "applicationDecision"),

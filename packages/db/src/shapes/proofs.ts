@@ -3,7 +3,6 @@
 // and route events carrying the proofs a command made all go through.
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { ProofOfService } from "@waste/contracts/proofs"
-import type { ExecutionSource, PickupOutcome, PickupReason, ProofKind } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -43,19 +42,19 @@ export function proofOf(row: ProofRow): ProofOfService {
     routeId: row.routeId,
     pickupId: row.pickupId,
     sessionId: row.sessionId,
-    kind: row.kind as ProofKind,
-    source: row.source as ExecutionSource,
+    kind: row.kind,
+    source: row.source,
     occurredAt: row.occurredAt.toISOString(),
     recordedBy: row.recordedBy,
     deviceId: row.deviceId,
     location: row.location as FlatPoint | null,
     locationAccuracyM: row.locationAccuracyM,
-    reason: row.reason as PickupReason | null,
+    reason: row.reason,
     note: row.note,
     weightKg: row.weightKg,
     volumeLitres: row.volumeLitres,
     objectKey: row.objectKey,
-    outcome: row.outcome as PickupOutcome | null,
+    outcome: row.outcome,
     contaminantCodeId: row.contaminantCodeId,
   }
 }

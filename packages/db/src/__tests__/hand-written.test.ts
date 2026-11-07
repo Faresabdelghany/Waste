@@ -13,7 +13,10 @@ import { describe, test } from "node:test"
 import { is } from "drizzle-orm"
 import { pgTable, PgTable, text, uuid } from "drizzle-orm/pg-core"
 
+import { ALLOCATION_STATUSES, LIVE_ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
+
 import { MIGRATIONS_FOLDER } from "../migrate"
+import { vehicleAllocation } from "../schema/allocations"
 import { id, isLedger, orderedWindow, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
 import { wms } from "../schema/wms"
 import { appendOnly } from "../sql/append-only"
@@ -25,6 +28,7 @@ import {
   handWrittenStatements,
   isReservation,
   missingHandWritten,
+  normalised,
   overlapConstraintShape,
   statementsOf,
   windowConstraintShape,
@@ -377,6 +381,21 @@ describe("the migrations carry every table's hand-written statements", () => {
     const text = (await migrations()).map((file) => file.text).join("\n")
     for (const name of LEDGERS) {
       assert.equal(text.includes(`"${name}_touch_updated_at"`), false, `${name} has no updated_at to touch`)
+    }
+  })
+})
+
+describe("the allocation's exclusion constraints and the statuses that reserve", () => {
+  test("each of the three leaves out exactly the statuses LIVE_ALLOCATION_STATUSES leaves out, so the API's count of live allocations and the database's overlap agree", async () => {
+    const reserving: readonly string[] = LIVE_ALLOCATION_STATUSES
+    const freed = ALLOCATION_STATUSES.filter((status) => !reserving.includes(status))
+    assert.deepEqual(freed, ["released"], "the constraints leave out one status; a second would need the helper to take a list")
+    const names = (await readdir(MIGRATIONS_FOLDER)).filter((name) => name.endsWith(".sql"))
+    const present = new Set((await Promise.all(names.map((name) => readFile(join(MIGRATIONS_FOLDER, name), "utf8")))).flatMap((file) => statementsOf(file)))
+    const live = { live: { column: vehicleAllocation.status, not: freed[0] } }
+    for (const key of [vehicleAllocation.vehicleId, vehicleAllocation.driverId, vehicleAllocation.trailerId]) {
+      const [statement] = excludeOverlappingWindow(vehicleAllocation, [key], live)
+      assert.ok(present.has(normalised(statement)), `a migration adds ${statement}`)
     }
   })
 })

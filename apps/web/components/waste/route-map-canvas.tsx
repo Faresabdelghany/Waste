@@ -11,20 +11,16 @@
 // it is invented: a stop with no place it can be drawn at is left off, and the
 // panel says so. Loaded client-only (next/dynamic).
 
-import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef } from "react"
 
-import { pointMapLibreWorkerAtRouteHandler } from "@/components/waste/map-planning/maplibre-worker"
+import { useMapLibre } from "@/components/maps/use-maplibre"
 import { useMapProjection, type ScreenPoint } from "@/components/waste/map-planning/use-map-projection"
 import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
-import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
+import type { BaseMapId } from "@/lib/map-planning/base-maps"
 import { roadOverlay, roadOverlayPath, roadPath, type RoadGeometry } from "@/lib/map-planning/road-geometry"
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
-
-// The tile worker's URL, see maplibre-worker.ts — set before the first Map.
-pointMapLibreWorkerAtRouteHandler()
 
 const INITIAL_ZOOM = 11
 const FIT_PADDING_PX = 48
@@ -53,8 +49,6 @@ const STOP_FILL: Record<RouteMapStopState, string> = {
   missed: "var(--destructive)",
 }
 
-const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
-
 /** The corners of every place and the road, as one key to refit the camera by, or "" for nothing to frame. */
 function frameKeyOf(points: readonly RouteMapPoint[], road: RoadGeometry | null): string {
   const all = [...points.map((point) => point.at), ...(road ? roadPath(road) : [])]
@@ -68,78 +62,27 @@ function frameKeyOf(points: readonly RouteMapPoint[], road: RoadGeometry | null)
 
 export function RouteMapCanvas({ points, road, baseMap, label }: RouteMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
-  const loadedRef = useRef(false)
-  const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
+  const { map: mapInstance, styleLoaded, baseMapFailed } = useMapLibre(containerRef, {
+    baseMap,
+    name: "route-map",
+    camera: { center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat], zoom: INITIAL_ZOOM },
+  })
   // Before the framing effect below, so the first fit's move is heard.
   const project = useMapProjection(mapInstance)
-  const [baseMapFailed, setBaseMapFailed] = useState(false)
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || mapRef.current) return
-    const map = new MapLibreMap({
-      container,
-      style: styleOf(baseMap),
-      center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat],
-      zoom: INITIAL_ZOOM,
-      attributionControl: { compact: true },
-      // North-up and flat: the road overlay is one translate-and-scale transform.
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-    })
-    map.touchZoomRotate.disableRotation()
-    map.keyboard.disableRotation()
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right")
-    const onStyleLoaded = () => {
-      loadedRef.current = true
-      setBaseMapFailed(false)
-    }
-    map.on("load", onStyleLoaded)
-    map.on("style.load", onStyleLoaded)
-    map.on("error", (event) => {
-      console.warn("[route-map]", event.error?.message ?? event)
-      if (!loadedRef.current) setBaseMapFailed(true)
-    })
-    mapRef.current = map
-    setMapInstance(map)
-    return () => {
-      map.remove()
-      mapRef.current = null
-      setMapInstance(null)
-      loadedRef.current = false
-    }
-    // The map is created once; a base map change restyles it below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const firstStyleRef = useRef(true)
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    if (firstStyleRef.current) {
-      firstStyleRef.current = false
-      return
-    }
-    loadedRef.current = false
-    map.setStyle(styleOf(baseMap))
-  }, [baseMap])
 
   // Frame the route whenever what it draws moves; the key keeps a render that rebuilds the same places from refitting.
   const frameKey = frameKeyOf(points, road)
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || frameKey === "") return
+    if (!mapInstance || frameKey === "") return
     const [west, south, east, north] = frameKey.split(",").map(Number)
-    map.fitBounds(
+    mapInstance.fitBounds(
       [
         [west, south],
         [east, north],
       ],
-      { padding: FIT_PADDING_PX, duration: loadedRef.current ? 500 : 0, maxZoom: FIT_MAX_ZOOM },
+      { padding: FIT_PADDING_PX, duration: styleLoaded.current ? 500 : 0, maxZoom: FIT_MAX_ZOOM },
     )
-  }, [frameKey, mapInstance])
+  }, [frameKey, mapInstance, styleLoaded])
 
   // The road's path is built once, in world pixels; per frame only the group transform changes.
   const roadData = useMemo(() => (road && road.legs.length > 0 ? roadOverlayPath(roadPath(road)) : null), [road])

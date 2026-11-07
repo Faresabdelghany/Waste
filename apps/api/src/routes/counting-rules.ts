@@ -36,7 +36,10 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { countingRule, team, ticket } from "@waste/db/schema/resolution"
 import type { Action } from "@waste/domain/access/modules"
 import { periodsOver, SIMULATION_TICKETS_SHOWN, wholePeriods } from "@waste/domain/resolution/counting-rules"
-import type { CountingPeriod, CountingRuleStatus, TeamStatus } from "@waste/domain/resolution/vocabulary"
+import { ACTIVE_TEAM_STATUSES, ACTIVE_TICKET_TYPE_STATUSES, type TeamStatus } from "@waste/domain/resolution/vocabulary"
+import { retiredTeam } from "@waste/domain/resolution/teams"
+import { retiredTicketType } from "@waste/domain/resolution/ticket-types"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -51,7 +54,6 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NOT_A_TEAM, requireContainerType, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import { refuseRetiredTeam, refuseRetiredTicketType } from "./statuses"
 import { findNamedType } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
@@ -86,7 +88,7 @@ const noSuchRule = (id: string) => problem(404, { detail: `No counting rule ${id
 
 const scope = (principal: Principal) => eq(countingRule.companyId, principal.companyId)
 
-const ruleOf = (row: Row): CountingRule => ({ ...row, status: row.status as CountingRuleStatus, period: row.period as CountingPeriod, ...stampsOf(row) })
+const ruleOf = (row: Row): CountingRule => ({ ...row, status: row.status, period: row.period, ...stampsOf(row) })
 
 async function findRule(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
@@ -105,7 +107,7 @@ async function findNamedTeam(tx: Tx, companyId: string, id: string): Promise<{ n
     .where(and(eq(team.companyId, companyId), eq(team.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "teamId", message: NOT_A_TEAM }])
-  return { name: found.name, status: found.status as TeamStatus }
+  return { name: found.name, status: found.status }
 }
 
 /** The references a body names afresh, each the company's (400), then the type and the team active (409): a status gates a new reference, never one the rule already makes. */
@@ -114,8 +116,8 @@ async function requireReferences(tx: Tx, companyId: string, named: Partial<Pick<
   await requireContainerType(tx, companyId, named.containerTypeId)
   const type = named.ticketTypeId === undefined ? undefined : await findNamedType(tx, companyId, named.ticketTypeId)
   const waitsWith = named.teamId === undefined ? undefined : await findNamedTeam(tx, companyId, named.teamId)
-  if (type !== undefined) refuseRetiredTicketType(type.status, type.name)
-  if (waitsWith !== undefined) refuseRetiredTeam(waitsWith.status, waitsWith.name)
+  if (type !== undefined) refuseUnless(type.status, ACTIVE_TICKET_TYPE_STATUSES, retiredTicketType(type.name))
+  if (waitsWith !== undefined) refuseUnless(waitsWith.status, ACTIVE_TEAM_STATUSES, retiredTeam(waitsWith.name))
 }
 
 /** The fields of a patch whose value differs from the rule's: what it names afresh. */

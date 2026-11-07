@@ -79,7 +79,7 @@ import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
-import type { ExecutionSource, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { ExecutionSource, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 
 import type { FixtureDriver, FleetFixtures } from "./scheme-fixtures"
@@ -167,7 +167,7 @@ export type ProofSeed = {
   /** The litres a tank was emptied of, on a `volume` proof (M11 of #293). */
   volumeLitres?: number | null
   objectKey?: string | null
-  outcome?: PickupStatus | null
+  outcome?: PickupOutcome | null
 }
 
 export type RouteSeed = {
@@ -389,7 +389,7 @@ export async function seedExecution(pool: Database, tenant: Tenant, fleet: Fleet
   const cairo = tenant.projects.cairo.id
 
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    const schemeRow = (projectId: string, fixture: SchemeFixture, name: string) => ({
+    const schemeRow = (projectId: string, fixture: SchemeFixture, name: string): typeof routeScheme.$inferInsert => ({
       id: fixture.id,
       companyId,
       projectId,
@@ -414,14 +414,14 @@ export async function seedExecution(pool: Database, tenant: Tenant, fleet: Fleet
     // The company's station takes residual waste: what `assign`'s happy path names.
     await tx.insert(unloadingStationFraction).values({ id: testId(), companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: ground.fractions.residual.id })
     await tx.insert(containerType).values({ id: ground.containerTypes.bin.id, companyId, name: "240 L bin", volumeLitres: 240 })
-    const home = (id: string, projectId: string, name: string, address: string) => ({ id, companyId, projectId, name, address, kind: "residential", location: TOWN_HALL, status: "active" })
+    const home = (id: string, projectId: string, name: string, address: string): typeof property.$inferInsert => ({ id, companyId, projectId, name, address, kind: "residential", location: TOWN_HALL, status: "active" })
     await tx.insert(property).values([
       home(ground.properties.parkvej.id, copenhagen, "Parkvej 18", "Parkvej 18, 2100 København Ø"),
       home(ground.properties.havnegade.id, copenhagen, "Havnegade 3", "Havnegade 3, 1058 København K"),
       home(ground.properties.norrebrogade.id, copenhagen, "Nørrebrogade 40", "Nørrebrogade 40, 2200 København N"),
       home(ground.properties.harbor.id, harbor, "Amerika Plads 1", "Amerika Plads 1, 2100 København Ø"),
     ])
-    const bin = (row: { id: string; label: string }, projectId: string) => ({ id: row.id, companyId, projectId, label: row.label, containerTypeId: ground.containerTypes.bin.id, ownership: "company" })
+    const bin = (row: { id: string; label: string }, projectId: string): typeof container.$inferInsert => ({ id: row.id, companyId, projectId, label: row.label, containerTypeId: ground.containerTypes.bin.id, ownership: "company" })
     await tx.insert(container).values([bin(ground.containers.bin1, copenhagen), bin(ground.containers.bin2, copenhagen), bin(ground.containers.bin3, copenhagen), bin(ground.containers.harborBin, harbor)])
     // Mads's login: an account on the custom role with no project of its own — the driver's scope is the assignment, not Project Access (#104 §3) — bound to his driver profile.
     const { mads } = ground.logins
@@ -566,7 +566,7 @@ export async function seedDriverFixtures(pool: Database, tenant: Tenant, fleet: 
     })
     await tx.insert(wasteFraction).values({ id: fixtures.residual.id, companyId, key: "residual", name: "Residual waste" })
     await tx.insert(containerType).values({ id: fixtures.binType.id, companyId, name: "240 L bin", volumeLitres: 240 })
-    await tx.insert(container).values(fixtures.containers.map((bin) => ({ id: bin.id, ...scoped, label: bin.label, containerTypeId: fixtures.binType.id, ownership: "company" })))
+    await tx.insert(container).values(fixtures.containers.map((bin): typeof container.$inferInsert => ({ id: bin.id, ...scoped, label: bin.label, containerTypeId: fixtures.binType.id, ownership: "company" })))
     await tx.insert(property).values({ id: fixtures.property.id, ...scoped, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", kind: "residential", status: "active" })
     await tx.insert(routeScheme).values({
       id: fixtures.scheme.id,

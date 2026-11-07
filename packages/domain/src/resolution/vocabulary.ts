@@ -73,7 +73,7 @@
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `RESOLUTION_VOCABULARIES`
 // names them all for the test that walks them.
-import { without } from "../lists"
+import { mapped, without } from "../lists"
 import { PROPERTY_PARTY_ROLES } from "../registry/vocabulary"
 
 /** Where a Ticket stands: the prototype's seven less `Created`, which is `created_at`. */
@@ -109,7 +109,7 @@ export const TICKET_FIELD_REQUIREMENTS = ["optional", "to-open", "to-complete"] 
 /** What moves a ticket: the office's six commands. `assign` moves the assignee and not the status, and a comment moves nothing, so neither is here. */
 export const TICKET_COMMANDS = ["start", "wait", "hold", "complete", "reject", "reopen"] as const
 /** When a Ticket Type's actions run (#546 of #544): a ticket of it opened, or reaching one of the statuses a command leads to — every status, `open` named for the event. */
-export const TICKET_ACTION_TRIGGERS: readonly ("opened" | Exclude<TicketStatus, "open">)[] = TICKET_STATUSES.map((status) => (status === "open" ? "opened" : status))
+export const TICKET_ACTION_TRIGGERS = mapped(TICKET_STATUSES, (status): "opened" | Exclude<TicketStatus, "open"> => (status === "open" ? "opened" : status))
 /** What one of a type's actions does: hands the ticket to a team or a person, sets its priority, moves its status, sends a message from a template, or opens a follow-up ticket. */
 export const TICKET_ACTION_KINDS = ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up", "plan-in-route"] as const
 /** The status commands an action may give: every one but reopening, which undoes a close an automation should not second-guess. */
@@ -169,6 +169,12 @@ export const BILLABLE_RESOLUTIONS = ["recollected", "serviced"] as const satisfi
 
 /** Whether a completed ticket's resolution is one the office may charge for: the list's membership, never a table's keys, so a stray string finds nothing. */
 export const isBillableResolution = (resolution: TicketResolution): boolean => (BILLABLE_RESOLUTIONS as readonly string[]).includes(resolution)
+
+/** The statuses a Team takes a new ticket in, as a ticket's, a rule's or a project's default team (`@waste/domain/status-gates`); a ticket it holds stays with it. */
+export const ACTIVE_TEAM_STATUSES = ["active"] as const satisfies readonly TeamStatus[]
+
+/** The statuses a Ticket Type is offered to a new ticket in (`@waste/domain/status-gates`); the type a ticket already is of is kept. */
+export const ACTIVE_TICKET_TYPE_STATUSES = ["active"] as const satisfies readonly TicketTypeStatus[]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOLUTION_VOCABULARIES = {

@@ -79,9 +79,9 @@ export const decommissionReason = wms.table(
     code: text().notNull(),
     /** What a person reads; unique per company. */
     name: text().notNull(),
-    status: text().notNull().default("active"),
+    status: text({ enum: DECOMMISSION_REASON_STATUSES }).notNull().default("active"),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status, DECOMMISSION_REASON_STATUSES)],
+  (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status)],
 )
 
 export const decommissionReasonPolicies = policies(decommissionReason, { audited: {} })
@@ -93,11 +93,11 @@ export const stockMovement = wms.table(
     ...projectScoped,
     ...recorded,
     containerId: uuid().notNull(),
-    kind: text().notNull(),
-    fromKind: text().notNull(),
+    kind: text({ enum: STOCK_MOVEMENT_KINDS }).notNull(),
+    fromKind: text({ enum: STOCK_PLACE_KINDS }).notNull(),
     /** Where it left from, when that is a warehouse or maintenance at one. */
     fromWarehouseId: uuid(),
-    toKind: text().notNull(),
+    toKind: text({ enum: STOCK_PLACE_KINDS }).notNull(),
     /** Where it arrived, when that is a warehouse or maintenance at one. */
     toWarehouseId: uuid(),
     /** The placement an issue opens or a return or decommission closes. */
@@ -128,9 +128,9 @@ export const stockMovement = wms.table(
     // The ledger's own key, for the pointer at the row an adjustment corrects: the same table on both sides.
     tenantReference(t, [t.correctsMovementId], t),
     tenantKey(t),
-    oneOf(t.kind, STOCK_MOVEMENT_KINDS),
-    oneOf(t.fromKind, STOCK_PLACE_KINDS),
-    oneOf(t.toKind, STOCK_PLACE_KINDS),
+    oneOf(t.kind),
+    oneOf(t.fromKind),
+    oneOf(t.toKind),
     // A warehouse is named exactly when the side is a warehouse or maintenance at one; a placement exactly when a side is service.
     check(tableObjectName(t.id.table, "from_shape", "stockMovement"), sql`(${t.fromKind} in ('warehouse', 'maintenance')) = (${t.fromWarehouseId} is not null)`),
     check(tableObjectName(t.id.table, "to_shape", "stockMovement"), sql`(${t.toKind} in ('warehouse', 'maintenance')) = (${t.toWarehouseId} is not null)`),

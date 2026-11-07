@@ -28,7 +28,6 @@ import { DropOffPointCreate, DropOffPointExceptionsSet, DropOffPointFractionsSet
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import type { ServiceDay } from "@waste/contracts/planning"
-import type { DropOffPointKind, DropOffPointStatus } from "@waste/contracts/resources"
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
@@ -101,13 +100,13 @@ function pointOf(row: Row, sets: Sets): DropOffPoint {
     projectId: row.projectId,
     code: row.code,
     name: row.name,
-    kind: row.kind as DropOffPointKind,
+    kind: row.kind,
     address: row.address,
     location: row.location as FlatPoint,
     openAlways: row.openAlways,
     closedOnHolidays: row.closedOnHolidays,
     publicNote: row.publicNote,
-    status: row.status as DropOffPointStatus,
+    status: row.status,
     notes: row.notes,
     ...sets,
     ...stampsOf(row),

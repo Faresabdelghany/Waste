@@ -48,9 +48,9 @@ export const contaminantCode = wms.table(
     /** The stable slug a report and an integration quote: `plastic-in-organic`. */
     code: text().notNull(),
     name: text().notNull(),
-    status: text().notNull().default("active"),
+    status: text({ enum: CONTAMINANT_CODE_STATUSES }).notNull().default("active"),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status, CONTAMINANT_CODE_STATUSES)],
+  (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status)],
 )
 
 export const contaminantCodePolicies = policies(contaminantCode, { audited: {} })
@@ -84,9 +84,9 @@ export const pickupExceptionRule = wms.table(
     ...timestamps,
     ...validity,
     /** The outcome governed: `failed`, `skipped`, or `completed` for a tagged collection. */
-    outcome: text().notNull(),
+    outcome: text({ enum: PICKUP_OUTCOMES }).notNull(),
     /** The reason narrowed to; null for any of the customer's reasons, and always null on a tagged collection's rule. */
-    reason: text(),
+    reason: text({ enum: PICKUP_EXCEPTION_REASONS }),
     /** The code narrowed to; null for any code, or none. */
     contaminantCodeId: uuid(),
     /** How many matching exceptions in the window cost nothing: 0 charges the first. */
@@ -104,8 +104,8 @@ export const pickupExceptionRule = wms.table(
     tenantReference(t, [t.contaminantCodeId], contaminantCode),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.outcome, PICKUP_OUTCOMES),
-    oneOf(t.reason, PICKUP_EXCEPTION_REASONS),
+    oneOf(t.outcome),
+    oneOf(t.reason),
     // A tagged collection has no reason; a code tags the wrong waste, so it narrows contamination, any reason, or a tagged collection.
     check(tableObjectName(t.id.table, "reason_shape", "pickupExceptionRule"), sql`${t.outcome} <> 'completed' or ${t.reason} is null`),
     check(tableObjectName(t.id.table, "code_shape", "pickupExceptionRule"), sql`${t.contaminantCodeId} is null or ${t.reason} is null or ${t.reason} = 'contamination'`),

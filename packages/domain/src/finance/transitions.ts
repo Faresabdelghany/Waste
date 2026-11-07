@@ -116,7 +116,7 @@ export const correctedUnload = (correctionUnloadId: string): string => `This unl
  * id is what the sentence names, so the caller hands it in where the status
  * is `corrected`; it is unread otherwise.
  */
-export function weightReviewTransition(status: WeightReviewStatus, decision: WeightReviewDecision, correctionUnloadId: string | null): Transition<WeightReviewStatus> {
+export function weightReviewTransition(status: WeightReviewStatus, decision: WeightReviewDecision, correctionUnloadId: string | null): Transition<WeightReviewDecision> {
   if (status === "corrected") return { kind: "refuse", sentence: correctedUnload(correctionUnloadId ?? "unknown") }
   if (status === decision) return { kind: "stay" }
   return { kind: "move", to: decision }

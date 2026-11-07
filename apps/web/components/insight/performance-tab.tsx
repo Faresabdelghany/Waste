@@ -13,6 +13,7 @@
 // what a CSV is written from, is only ever the current window's own answer.
 
 import { DownloadSimple } from "@phosphor-icons/react/dist/ssr"
+import type { ModuleKey } from "@waste/domain/access/modules"
 
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -46,7 +47,7 @@ export type TabProps = {
   /** The period before, "Oct 11 – Oct 17": what a change is told against. */
   against: string
   /** The modules the role views. */
-  viewed: ReadonlySet<string>
+  viewed: ReadonlySet<ModuleKey>
   projectName: (id: string) => string
   /** The file names' stem: the project and the window. */
   fileStem: string

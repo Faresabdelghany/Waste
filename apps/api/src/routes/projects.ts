@@ -23,9 +23,8 @@
 // own route, `PUT /projects/:id/branding`, under `configure.portals`:
 // Settings › Portals & branding is that module's surface.
 import type { PaymentReferenceScheme } from "@waste/contracts/finance"
-import { Project, ProjectBranding, ProjectBrandingReplace, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
+import { Project, ProjectBranding, ProjectBrandingReplace, ProjectCreate, ProjectPatch } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import type { ServiceDay } from "@waste/contracts/planning"
 import type { Tx } from "@waste/db/client"
 import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt } from "drizzle-orm"
@@ -79,12 +78,12 @@ function projectOf(row: Row): Project {
     language: row.language,
     currency: row.currency,
     timezone: row.timezone,
-    status: row.status as ProjectStatus,
-    weekend: row.weekend as ServiceDay[],
+    status: row.status,
+    weekend: row.weekend,
     holidayList: row.holidayList,
     publicSlug: row.publicSlug,
     paymentTermsDays: row.paymentTermsDays,
-    paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
+    paymentReferenceScheme: row.paymentReferenceScheme,
     weightTolerancePercent: row.weightTolerancePercent,
     holdForReview: row.holdForReview,
     branding: brandingOf(row),

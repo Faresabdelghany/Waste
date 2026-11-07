@@ -50,14 +50,14 @@ export const vehicleMaintenancePlan = wms.table(
     lastDoneOn: date().notNull(),
     lastDoneKm: integer(),
     lastDoneHours: integer(),
-    status: text().notNull(),
+    status: text({ enum: MAINTENANCE_PLAN_STATUSES }).notNull(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.vehicleId], vehicle),
     projectKey(t, t.vehicleId),
-    oneOf(t.status, MAINTENANCE_PLAN_STATUSES),
+    oneOf(t.status),
     check(
       tableObjectName(t.id.table, "intervals_range", "vehicleMaintenancePlan"),
       sql`(${t.intervalDays} is null or ${t.intervalDays} between 1 and ${sql.raw(String(MAINTENANCE_INTERVAL_MAX.days))}) and (${t.intervalKm} is null or ${t.intervalKm} between 1 and ${sql.raw(String(MAINTENANCE_INTERVAL_MAX.km))}) and (${t.intervalHours} is null or ${t.intervalHours} between 1 and ${sql.raw(String(MAINTENANCE_INTERVAL_MAX.hours))}) and (${t.lastDoneKm} is null or ${t.lastDoneKm} >= 0) and (${t.lastDoneHours} is null or ${t.lastDoneHours} >= 0)`,
@@ -83,7 +83,7 @@ export const maintenanceOrder = wms.table(
     /** The plan it serves, of the same vehicle; null for a one-off. */
     planId: uuid(),
     title: text().notNull(),
-    status: text().notNull(),
+    status: text({ enum: MAINTENANCE_ORDER_STATUSES }).notNull(),
     dueOn: date(),
     note: text(),
     completedOn: date(),
@@ -101,7 +101,7 @@ export const maintenanceOrder = wms.table(
     // A plan of the vehicle the order is on: the key carries the vehicle on both sides.
     projectReference(t, [t.vehicleId, t.planId], vehicleMaintenancePlan, [vehicleMaintenancePlan.vehicleId, vehicleMaintenancePlan.id]),
     tenantReference(t, [t.closedBy], userAccount),
-    oneOf(t.status, MAINTENANCE_ORDER_STATUSES),
+    oneOf(t.status),
     check(tableObjectName(t.id.table, "readings_range", "maintenanceOrder"), sql`(${t.odometerKm} is null or ${t.odometerKm} >= 0) and (${t.engineHours} is null or ${t.engineHours} >= 0)`),
     // An open order is not closed; a completed one has its day; only a completed one carries readings.
     check(

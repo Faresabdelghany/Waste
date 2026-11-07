@@ -32,7 +32,7 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { isSuperseded } from "@waste/domain/routing/plans"
-import { SUPERSEDED, type PlanSolver } from "@waste/domain/routing/vocabulary"
+import { SUPERSEDED } from "@waste/domain/routing/vocabulary"
 import { distinctConsecutive } from "@waste/domain/geo"
 import { asc, eq } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
@@ -57,7 +57,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   // The route is the Plan's parent by key; one that is gone went with a tenant sweep.
   if (!ends) return { kind: "done", status: "without its route" }
   // A measurement of an order nobody reads any more makes no call (#132 §4).
-  if (isSuperseded({ solver: found.solver as PlanSolver, planId, activePlanId: ends.activePlanId })) return { kind: "refused", sentence: SUPERSEDED }
+  if (isSuperseded({ solver: found.solver, planId, activePlanId: ends.activePlanId })) return { kind: "refused", sentence: SUPERSEDED }
   // The Plan's stops in its order: its pickups at their places and its unload visits on the way at their station (O15 of #290).
   const visitStation = alias(unloadingStation, "visit_station")
   const stops = await tx

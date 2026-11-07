@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { MoveOutcome } from "@waste/contracts/moves"
+import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import type { Grants } from "@/lib/api/grants"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -21,7 +22,7 @@ const typed: MoveTyped = { on: "2026-11-01", outgoing: "customer-ida", incoming:
 
 describe("moveOffered", () => {
   test("asks edit on the properties and on the agreements, since a move writes both", () => {
-    const grants = (keys: Record<string, string[]>): Grants => Object.entries(keys).map(([moduleKey, actions]) => ({ moduleKey, actions }))
+    const grants = (keys: Partial<Record<ModuleKey, Action[]>>): Grants => (Object.entries(keys) as [ModuleKey, Action[]][]).map(([moduleKey, actions]) => ({ moduleKey, actions }))
     assert.equal(moveOffered(grants({ "customers.properties": ["view", "edit"], "customers.agreements": ["view", "edit"] })), true)
     assert.equal(moveOffered(grants({ "customers.properties": ["view", "edit"], "customers.agreements": ["view"] })), false)
     assert.equal(moveOffered(undefined), false)

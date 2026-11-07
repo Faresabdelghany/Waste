@@ -33,6 +33,7 @@ import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organ
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { withCompany } from "@waste/db/tenant"
+import type { LicenceClass, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq } from "drizzle-orm"
 
 import { testId, type Tenant } from "./tenant"
@@ -193,7 +194,7 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
   }
   const { depots, stations, vehicles, drivers } = fixtures
   const typeId = planning.vehicleTypes.rearLoader.id
-  const truck = (row: FixtureVehicle, registration: string, requiredLicenceClass: string, projectId = copenhagen, status = "active") => ({
+  const truck = (row: FixtureVehicle, registration: string, requiredLicenceClass: LicenceClass, projectId = copenhagen, status: VehicleStatus = "active"): typeof vehicle.$inferInsert => ({
     id: row.id,
     companyId,
     projectId,
@@ -206,7 +207,7 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
     requiredLicenceClass,
     homeDepotId: projectId === copenhagen ? depots.nordhavn.id : depots.harbor.id,
   })
-  const person = (row: FixtureDriver, licenceClass: string | null, licenceExpiry: string | null, projectId = copenhagen) => ({
+  const person = (row: FixtureDriver, licenceClass: LicenceClass | null, licenceExpiry: string | null, projectId = copenhagen): typeof driver.$inferInsert => ({
     id: row.id,
     companyId,
     projectId,

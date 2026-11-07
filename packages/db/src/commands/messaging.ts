@@ -37,8 +37,10 @@
 // for. The event and the recipient key it once, so a redelivered event
 // writes nothing and sends nothing the second time.
 import { renderTemplate, unfilledPlaceholders, unfilledSentence, type MessageValues } from "@waste/domain/messaging/template"
-import type { MessageChannel, MessagePurpose } from "@waste/domain/messaging/vocabulary"
+import { ACTIVE_TEMPLATE_STATUSES, type MessageChannel, type MessagePurpose } from "@waste/domain/messaging/vocabulary"
 import { Refused, type Refusal } from "@waste/domain/refusal"
+import { ACTIVE_CONTACT_STATUSES } from "@waste/domain/registry/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 import { and, eq, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -89,7 +91,7 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
       .from(message)
       .where(and(eq(message.companyId, draft.companyId), eq(message.sourceEventId, draft.sourceEventId), eq(message.customerId, draft.customerId)))
       .limit(1)
-    if (already !== undefined) return { kind: "queued", message: { ...already, channel: already.channel as MessageChannel, purpose: already.purpose as MessagePurpose } }
+    if (already !== undefined) return { kind: "queued", message: { ...already, channel: already.channel, purpose: already.purpose } }
   }
   const [template] = await tx
     .select({ projectId: messageTemplate.projectId, name: messageTemplate.name, purpose: messageTemplate.purpose, channel: messageTemplate.channel, subject: messageTemplate.subject, body: messageTemplate.body, status: messageTemplate.status })
@@ -97,8 +99,8 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
     .where(and(eq(messageTemplate.companyId, draft.companyId), eq(messageTemplate.id, draft.templateId)))
     .limit(1)
   if (template === undefined) return refusedAs({ reason: "invalid", input: "templateId", sentence: "Pick a template the company has" })
-  if (template.status !== "active") return refusedAs({ reason: "conflict", sentence: templateInactive(template.name) })
-  const channel = template.channel as MessageChannel
+  if (!takesReference(template.status, ACTIVE_TEMPLATE_STATUSES)) return refusedAs({ reason: "conflict", sentence: templateInactive(template.name) })
+  const channel = template.channel
 
   const [holder] = await tx
     .select({ name: customer.name, email: customer.email, phone: customer.phone })
@@ -115,7 +117,7 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
       .where(and(eq(customerContact.companyId, draft.companyId), eq(customerContact.id, draft.contactId)))
       .limit(1)
     if (contact === undefined || contact.customerId !== draft.customerId) return refusedAs({ reason: "invalid", input: "contactId", sentence: CONTACT_NOT_THE_CUSTOMERS })
-    if (contact.status !== "active") return refusedAs({ reason: "conflict", sentence: contactInactive(contact.name) })
+    if (!takesReference(contact.status, ACTIVE_CONTACT_STATUSES)) return refusedAs({ reason: "conflict", sentence: contactInactive(contact.name) })
     to = contact
   }
   const recipient = channel === "email" ? to.email : to.phone
@@ -142,7 +144,7 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
   })
   const data: SendMessageData = { companyId: draft.companyId, messageId: draft.id }
   await sendInTransaction(send, tx, SEND_MESSAGE_QUEUE, data)
-  return { kind: "queued", message: { id: draft.id, projectId: template.projectId, channel, purpose: template.purpose as MessagePurpose, recipient } }
+  return { kind: "queued", message: { id: draft.id, projectId: template.projectId, channel, purpose: template.purpose, recipient } }
 }
 
 /** A staff notice: the text the domain rendered, to one of the company's user accounts, for the event that raised it. */

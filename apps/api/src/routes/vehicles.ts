@@ -51,7 +51,7 @@
 // today names, whatever the scheme's status; the patch is refused (409)
 // counting them, since the rows in the way are not in the body and have to
 // be released, or reassigned, first (the `refuseStranded` shape of
-// routes/periods.ts, the pieces spelled once in routes/statuses.ts and
+// routes/periods.ts, the pieces spelled once in @waste/domain/status-gates and
 // routes/scheme-groups.ts, since a driver is taken out of service the same
 // way). An allocation names a vehicle as its vehicle or as its trailer, and a
 // trailer is a vehicle of this table, so both columns are counted. The counts
@@ -76,9 +76,9 @@ import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
-import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, poweredVehicleHasACompartment } from "@waste/domain/resources/fleet"
+import { liveAllocationsName } from "@waste/domain/resources/allocations"
+import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, groupsName, poweredVehicleHasACompartment } from "@waste/domain/resources/fleet"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
-import type { FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -95,7 +95,7 @@ import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
 import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireProviderShape, stamp } from "./shared"
-import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
+import { liveAllocationsNaming } from "./vehicle-allocations"
 
 const MODULE = "fleet.vehicles"
 const VehiclePage = Page(Vehicle)
@@ -129,15 +129,15 @@ function vehicleOf(row: Row, compartments: VehicleCompartment[]): Vehicle {
     projectId: row.projectId,
     registration: row.registration,
     callsign: row.callsign,
-    kind: row.kind as VehicleKind,
+    kind: row.kind,
     vehicleTypeId: row.vehicleTypeId,
-    ownership: row.ownership as VehicleOwnership,
+    ownership: row.ownership,
     serviceProviderId: row.serviceProviderId,
-    status: row.status as VehicleStatus,
+    status: row.status,
     capacityKg: row.capacityKg,
-    requiredLicenceClass: row.requiredLicenceClass as LicenceClass,
+    requiredLicenceClass: row.requiredLicenceClass,
     homeDepotId: row.homeDepotId,
-    fuel: row.fuel as FuelType | null,
+    fuel: row.fuel,
     telematicsDeviceId: row.telematicsDeviceId,
     notes: row.notes,
     compartments,
@@ -314,7 +314,7 @@ const noSuchVehicle = (id: string) => problem(404, { detail: `No vehicle ${id} i
 const liveAllocationsNameThis = liveAllocationsName("vehicle")
 const groupsNameThis = groupsName("vehicle")
 
-/** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (routes/statuses.ts spells the rest). */
+/** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (@waste/domain/status-gates spells the rest). */
 const liveAllocations = (companyId: string, vehicleId: string) =>
   liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)))
 

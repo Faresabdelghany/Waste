@@ -80,9 +80,8 @@ import { chargedByWeight, stopsCarried, tonnageShares } from "@waste/domain/fina
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/days"
 import { dayInTimezone } from "@waste/domain/clock"
-import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import { settingFor } from "@waste/domain/resolution/ticket-types"
-import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
+import type { TicketKind, TicketResolution, TicketStatus } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
 import type { SiteVisit } from "@waste/contracts/site-visits"
 import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, liveWeightEventsOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
@@ -175,8 +174,8 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
   if (row === undefined) return undefined
   const { movedFromPickupId, ...stop } = row
   // A moved stop is read as the stop it stands for (O23 of #290): a scheduled collection moved to another route is billed, and judged for its exceptions, as the collection it is.
-  const origin = movedFromPickupId === null ? (row.origin as PickupOrigin) : await originStoodFor(tx, companyId, movedFromPickupId)
-  return { ...stop, origin, service: row.service as PickupService }
+  const origin = movedFromPickupId === null ? row.origin : await originStoodFor(tx, companyId, movedFromPickupId)
+  return { ...stop, origin, service: row.service }
 }
 
 /**
@@ -197,7 +196,7 @@ async function originStoodFor(tx: Tx, companyId: string, movedFromPickupId: stri
       .where(and(eq(pickup.companyId, companyId), eq(pickup.id, id)))
       .limit(1)
     if (from === undefined) break
-    if (from.movedFromPickupId === null) return from.origin as PickupOrigin
+    if (from.movedFromPickupId === null) return from.origin
     id = from.movedFromPickupId
   }
   // The key holds every stop named to a stop of the company, and each stop is moved from once, so the chain ends at a stop no move made.
@@ -231,8 +230,8 @@ export async function placementOn(tx: Tx, companyId: string, projectId: string, 
   if (row === undefined) return undefined
   return {
     subscriptionId: row.subscriptionId,
-    agreement: { id: row.agreementId, status: row.agreementStatus as AgreementStatus, customerKind: row.customerKind as CustomerKind, customerId: row.customerId },
-    product: { id: row.productId, unit: row.unit as ProductUnit, vatPercent: row.vatPercent },
+    agreement: { id: row.agreementId, status: row.agreementStatus, customerKind: row.customerKind, customerId: row.customerId },
+    product: { id: row.productId, unit: row.unit, vatPercent: row.vatPercent },
     priceListId: row.priceListId,
   }
 }
@@ -309,7 +308,7 @@ async function exceptionFacts(tx: Tx, companyId: string, found: PickupRow, picku
     judgement,
     evidenceProofId,
     charge: {
-      product: { id: judgement.productId, unit: named.unit as ProductUnit, vatPercent: named.vatPercent },
+      product: { id: judgement.productId, unit: named.unit, vatPercent: named.vatPercent },
       priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, judgement.productId, found.serviceDate) },
     },
   }
@@ -379,7 +378,7 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
   if (booked === undefined) throw new Error(`bulky booking ${found.bulkyBookingId} of a stop not there`)
   // A cancelled booking is charged nothing, whatever a stop of it says: the API refuses its stop a correction to completed, and this is the second stop.
   if (booked.cancelledAt !== null) return null
-  const bulkyProduct = { id: booked.id, status: booked.status as ProductStatus, unit: booked.unit as ProductUnit, vatPercent: booked.vatPercent }
+  const bulkyProduct = { id: booked.id, status: booked.status, unit: booked.unit, vatPercent: booked.vatPercent }
   // Its lines, which a product sold by the item is charged by (#449).
   const items = await tx
     .select({ quantity: bulkyBookingItem.quantity })
@@ -399,10 +398,10 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
 /** A ticket as the consumer read it: its project and kind, what it ended in, when it closed, the agreement and pickup it names, and the product its completion named. */
 export type TicketRow = {
   projectId: string
-  kind: string
+  kind: TicketKind
   ticketTypeId: string
-  status: string
-  resolution: string | null
+  status: TicketStatus
+  resolution: TicketResolution | null
   closedAt: Date | null
   agreementId: string | null
   routeId: string | null
@@ -451,7 +450,7 @@ export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, f
   const timezone = await projectTimezone(tx, companyId, found.projectId)
   const closedOn = found.closedAt === null ? null : dayInTimezone(found.closedAt, timezone)
   const charge = reached === null || closedOn === null ? null : await chargeFacts(tx, { companyId, projectId: found.projectId }, found, reached.id, closedOn)
-  return { kind: "ticket-completed", ticketId, resolution: found.resolution as TicketResolution | null, agreement: reached, closedOn, charge }
+  return { kind: "ticket-completed", ticketId, resolution: found.resolution, agreement: reached, closedOn, charge }
 }
 
 /**
@@ -477,8 +476,8 @@ async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string
         ),
       )
     const mapped = settingFor(
-      charges.map((row) => ({ ...row, kind: row.kind as TicketKind | null })),
-      { kind: found.kind as TicketKind, ticketTypeId: found.ticketTypeId },
+      charges.map((row) => ({ ...row, kind: row.kind })),
+      { kind: found.kind, ticketTypeId: found.ticketTypeId },
     )
     if (mapped === undefined) return null
     source = mapped.ticketTypeId === null ? "kind" : "type"
@@ -495,7 +494,7 @@ async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string
   const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, closedOn)
   return {
     source,
-    product: { id: productId, status: named.status as ProductStatus, unit: named.unit as ProductUnit, vatPercent: named.vatPercent },
+    product: { id: productId, status: named.status, unit: named.unit, vatPercent: named.vatPercent },
     agreement: { status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, scope.companyId, list.id, productId, closedOn) },
   }

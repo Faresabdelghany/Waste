@@ -10,7 +10,7 @@
 // never one sold by the month, which is a recurring charge and not a ticket's
 // work (400), and offered (409, the #79 gate) — on a new or a changed charge
 // alone, since a status gates a new reference and never an existing one
-// (routes/statuses.ts): a set restated with a product retired since is no new
+// (@waste/domain/status-gates): a set restated with a product retired since is no new
 // reference to it. `complete` holds the product its body names to the same
 // three rules (`requireTicketWorkProduct`), and `reprice` a ticket's event's.
 import { TicketCharges, TicketChargesQuery, TicketChargesSet, type TicketCharge } from "@waste/contracts/tickets"
@@ -22,6 +22,7 @@ import type { Action } from "@waste/domain/access/modules"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -34,7 +35,6 @@ import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, validate } from "../problem"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { describeJson } from "./shared"
-import { refuseUnofferedProduct } from "./statuses"
 import { requireSetTypes } from "./ticket-type-rules"
 
 const MODULE = "commercial.products"
@@ -55,7 +55,7 @@ export async function requireTicketWorkProduct(tx: Tx, scope: Scope, id: string,
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_PRODUCT }])
   if (found.unit === "month" || found.unit === "day") throw invalidRequest("body", [{ path, message: MONTH_PRODUCT_IS_NOT_TICKET_WORK }])
-  return found.status as ProductStatus
+  return found.status
 }
 
 /** A project's charge rows, with their ids. */
@@ -64,7 +64,7 @@ async function chargeRowsOf(tx: Tx, scope: Scope): Promise<(TicketCharge & { id:
     .select({ id: ticketKindProduct.id, kind: ticketKindProduct.ticketKind, ticketTypeId: ticketKindProduct.ticketTypeId, productId: ticketKindProduct.productId })
     .from(ticketKindProduct)
     .where(and(eq(ticketKindProduct.companyId, scope.companyId), eq(ticketKindProduct.projectId, scope.projectId)))
-  return rows.map((row) => ({ ...row, kind: row.kind as TicketKind | null }))
+  return rows.map((row) => ({ ...row, kind: row.kind }))
 }
 
 /** A project's charges, in the kinds' order, then the types' by id. */
