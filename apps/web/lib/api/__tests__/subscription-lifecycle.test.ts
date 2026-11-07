@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 
 import type { Agreement, AgreementTerminated, Subscription, SubscriptionPause, SubscriptionPaused } from "@waste/contracts/agreements"
 
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import {
   agreementAdapter,
   agreementsModule,
@@ -38,8 +38,8 @@ const agreement: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...ST
 const subscription: Subscription = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: agreement.projectId, agreementId: agreement.id, productId: PRODUCT, propertyId: "01a0d2a4-a280-700c-8000-000000000001", sharedCollectionPointId: null, quantity: 1, validFrom: "2026-01-01", validTo: null }
 const pause: SubscriptionPause = { id: PAUSE_ID, ...STAMPS, projectId: agreement.projectId, subscriptionId: subscription.id, validFrom: "2026-11-02", validTo: "2026-11-16" }
 
-const agreementRecord = agreementAdapter.toRecord(agreement, context)
-const subscriptionRecord = subscriptionAdapter.toRecord(subscription, context)
+const agreementRecord = recordFrom(agreementAdapter, agreement, context)
+const subscriptionRecord = recordFrom(subscriptionAdapter, subscription, context)
 const current = loaded({ records: [agreementRecord, subscriptionRecord], serverIds: new Map([[agreementRecord.id, agreement.id], [subscriptionRecord.id, subscription.id]]) }, 1)
 const state: ServerRecordsState = new Map([["customers.agreements", current]])
 

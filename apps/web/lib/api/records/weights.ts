@@ -36,7 +36,7 @@ import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } fro
 import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { NO_PRESENTATION, said, stampFacts, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
@@ -127,12 +127,9 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
     const correction = unload.weightReview.correctionUnloadId
     const { refusal, load } = unload
     return {
-      id: webIdOf(UNLOAD_PREFIX, unload.id),
       name: unload.weighbridgeTicket === null ? `${fraction} at ${station}` : `${unload.weighbridgeTicket} · ${fraction}`,
       context: `${route} · ${station}`,
       status: REVIEW_LABELS[unload.weightReview.status],
-      ...NO_PRESENTATION,
-      ...stampFacts(unload, context.now),
       value: kilograms(unload.netKg),
       description: refusal === null ? `${fraction} unloaded at ${station} off ${route}.` : `${fraction} refused at ${station} off ${route}: ${REFUSAL_LABELS[refusal.reason].toLowerCase()}.`,
       facts: {
@@ -208,9 +205,7 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
     const { routeId, body } = posted as { routeId: string; body: unknown }
     return create<Unload>(client, `/routes/${routeId}/unloads`, body).then((created) => stamped(created.body))
   },
-  toPatchBody: () => refusal("status", "An unload is reviewed, never edited: approve it, reject it, or correct it"),
-  // Never reached: every patch is refused above, since the wire has no patch route for an unload.
-  update: () => Promise.reject(new Error("An unload has no patch route")),
+  kept: { path: "status", message: "An unload is reviewed, never edited: approve it, reject it, or correct it" },
   commands: {
     approve: {
       toBody: (input) => {

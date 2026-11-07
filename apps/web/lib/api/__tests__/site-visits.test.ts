@@ -16,12 +16,13 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 import { type BusinessRecord } from "../../data/business-modules"
 import { mintedRecord } from "../../data/containers"
 import { CREDENTIAL_KIND_KEY, CREDENTIAL_VALUE_KEY, SITE_ACCESS_MODULE, SITE_VISITS_MODULE } from "../../data/site-visits"
-import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
-import { ACCESS_CREDENTIAL_COMMANDS, accessCredentialAdapter, BLOCK_CREDENTIAL, CREDENTIAL_LAST_DAY_KEY, CREDENTIAL_RECORD_KIND, toAccessCredentialCreateBody, toAccessCredentialPatchBody, toAccessCredentialRecord } from "../records/site-access"
-import { LEDGER_KEPT, SITE_VISIT_COMMANDS, siteVisitAdapter, siteVisitsWindowFrom, toSiteVisitRecord, VOID_VISIT } from "../records/site-visits"
+import { ACCESS_CREDENTIAL_COMMANDS, accessCredentialAdapter, BLOCK_CREDENTIAL, CREDENTIAL_LAST_DAY_KEY, CREDENTIAL_RECORD_KIND, toAccessCredentialCreateBody, toAccessCredentialPatchBody } from "../records/site-access"
+import { LEDGER_KEPT, SITE_VISIT_COMMANDS, siteVisitAdapter, siteVisitsWindowFrom, VOID_VISIT } from "../records/site-visits"
 import { checkInVisit, readFrequentVisitors, readVisitSites, searchVisitAddresses } from "../site-visits"
 import { clientOver, json, scripted } from "./scripted-fetch"
+import { keptRefusal } from "../records/server-records"
 
 const NOW = new Date("2027-03-04T12:00:00Z")
 const STAMPS = { createdAt: "2027-03-01T09:00:00.000Z", updatedAt: "2027-03-01T09:30:00.000Z" }
@@ -56,7 +57,7 @@ const businessPlate: AccessCredential = { ...householdCard, id: id(4), kind: "pl
 describe("an access credential as a record", () => {
   test("is the register's on the API, `credential-<uuid>`, by its number and label, its status on its project's day", () => {
     assert.ok(isServerBacked(SITE_ACCESS_MODULE.workspaceId, SITE_ACCESS_MODULE.moduleId))
-    const record = toAccessCredentialRecord(householdCard, context)
+    const record = recordFrom(accessCredentialAdapter, householdCard, context)
     assert.equal(record.id, `credential-${householdCard.id}`)
     assert.deepEqual([record.name, record.status, record.value], ["H100 · Garden card", "In force", "2027-01-01 to 2027-12-31"])
     assert.equal(record.facts?.Property, `property-${id(3)}`)
@@ -64,11 +65,11 @@ describe("an access credential as a record", () => {
     assert.ok(accessCredentialAdapter.owns(record))
     assert.ok(accessCredentialAdapter.owns({ ...record, id: "site-access-credential-1793088183182" }), "a row the dialog has just made, by its recordKind")
 
-    const business = toAccessCredentialRecord(businessPlate, context)
+    const business = recordFrom(accessCredentialAdapter, businessPlate, context)
     assert.deepEqual([business.facts?.Customer, business.facts?.Agreement], [`customer-${id(5)}`, `agreement-${id(6)}`])
-    assert.equal(toAccessCredentialRecord({ ...businessPlate, blockedAt: "2027-03-02T10:00:00.000Z", blockedReason: "Card reported lost" }, context).status, "Blocked")
-    assert.equal(toAccessCredentialRecord({ ...businessPlate, validTo: "2027-03-04" }, context).status, "Ended", "the first day out is today")
-    assert.equal(toAccessCredentialRecord({ ...businessPlate, validFrom: "2027-04-01" }, context).status, "Upcoming")
+    assert.equal(recordFrom(accessCredentialAdapter, { ...businessPlate, blockedAt: "2027-03-02T10:00:00.000Z", blockedReason: "Card reported lost" }, context).status, "Blocked")
+    assert.equal(recordFrom(accessCredentialAdapter, { ...businessPlate, validTo: "2027-03-04" }, context).status, "Ended", "the first day out is today")
+    assert.equal(recordFrom(accessCredentialAdapter, { ...businessPlate, validFrom: "2027-04-01" }, context).status, "Upcoming")
 
     const surface = COMMAND_SURFACES["customers.site-access"]
     assert.ok(typeof surface.primary === "function" && surface.rowActions !== undefined, "its own dialog, blocked and edited in its details")
@@ -92,7 +93,7 @@ describe("an access credential as a record", () => {
   })
 
   test("a patch moves the label and the end alone; the kind, the number and the holder are what it is", () => {
-    const before = toAccessCredentialRecord(householdCard, context)
+    const before = recordFrom(accessCredentialAdapter, householdCard, context)
     const moved = (values: Record<string, string>) => ({ ...before, submittedValues: { ...before.submittedValues, ...values } })
     const ended = toAccessCredentialPatchBody(before, moved({ label: "", [CREDENTIAL_LAST_DAY_KEY]: "2027-06-30" }))
     assert.deepEqual(ended, { label: null, validTo: "2027-07-01" })
@@ -104,7 +105,7 @@ describe("an access credential as a record", () => {
   })
 
   test("Block says why before the API sees it; Unblock sends nothing", async () => {
-    const record = toAccessCredentialRecord(householdCard, context)
+    const record = recordFrom(accessCredentialAdapter, householdCard, context)
     const block = ACCESS_CREDENTIAL_COMMANDS[BLOCK_CREDENTIAL]
     assert.ok(isLocalRefusal(block.toBody?.({ reason: " " }, record, context)))
     assert.deepEqual(block.toBody?.({ reason: "Card reported lost" }, record, context), { reason: "Card reported lost" })
@@ -152,7 +153,7 @@ describe("a site visit as a record", () => {
   })
 
   test("names its site, its visitor, its fractions and what it was charged at; a refused one is charged nothing, a voided one says so", () => {
-    const record = toSiteVisitRecord(admitted, context)
+    const record = recordFrom(siteVisitAdapter, admitted, context)
     assert.equal(record.id, `site-visit-${admitted.id}`)
     assert.equal(record.status, "Admitted")
     assert.equal(record.value, `3rd visit this year: product-${id(17)}`)
@@ -161,17 +162,17 @@ describe("a site visit as a record", () => {
     assert.equal(record.facts?.Site, `drop-off-${id(11)}`)
     assert.equal(record.context, `drop-off-${id(11)} · AB12345`)
 
-    const refused = toSiteVisitRecord({ ...admitted, outcome: "refused", refusalReason: "credential-blocked", charge: null, wasteFractionIds: [] }, context)
+    const refused = recordFrom(siteVisitAdapter, { ...admitted, outcome: "refused", refusalReason: "credential-blocked", charge: null, wasteFractionIds: [] }, context)
     assert.deepEqual([refused.status, refused.value, refused.facts?.["Refused because"], refused.facts?.Brought], ["Refused", "Not charged", "Blocked", "Nothing recorded"])
-    const voided = toSiteVisitRecord({ ...admitted, voidedAt: "2027-03-04T11:00:00.000Z", voidedBy: id(14), voidReason: "Wrong plate" }, context)
+    const voided = recordFrom(siteVisitAdapter, { ...admitted, voidedAt: "2027-03-04T11:00:00.000Z", voidedBy: id(14), voidReason: "Wrong plate" }, context)
     assert.deepEqual([voided.status, voided.facts?.["Voided because"]], ["Voided", "Wrong plate"])
-    const byAddress = toSiteVisitRecord({ ...admitted, identification: "property", identifierValue: null, credentialId: null }, context)
+    const byAddress = recordFrom(siteVisitAdapter, { ...admitted, identification: "property", identifierValue: null, credentialId: null }, context)
     assert.equal(byAddress.context, `drop-off-${id(11)} · property-${id(3)}`)
   })
 
   test("takes no patch, and Void says why", async () => {
-    const record = toSiteVisitRecord(admitted, context)
-    const patch = siteVisitAdapter.toPatchBody(record, { ...record, name: "Another" }, context)
+    const record = recordFrom(siteVisitAdapter, admitted, context)
+    const patch = keptRefusal(siteVisitAdapter, record, { ...record, name: "Another" })
     assert.ok(isLocalRefusal(patch) && patch.message === LEDGER_KEPT)
     assert.equal(siteVisitAdapter.toCreateBody, undefined, "the check-in writes the ledger, never a form")
     const voidVisit = SITE_VISIT_COMMANDS[VOID_VISIT]

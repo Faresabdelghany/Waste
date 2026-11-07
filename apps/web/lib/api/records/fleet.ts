@@ -55,7 +55,7 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-da
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, ofKind, patchOf, statusLabel, typed, typedFlag, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { VEHICLE_MAINTENANCE_ACTIONS } from "./maintenance"
 import { userAdapter } from "./organisation"
@@ -232,7 +232,7 @@ type VehicleWrite = {
   compartments?: CompartmentBody[]
 }
 
-export const vehicleAdapter: ResourceAdapter<Vehicle> = {
+export const vehicleAdapter: ResourceAdapter<Vehicle, unknown, VehicleWrite> = {
   prefix: "vehicle",
   auditTable: "vehicle",
   // A fixture trailer's id carries `trailer-`; a server row is `vehicle-<uuid>` whatever its kind, its kind on the typed `resourceKind`.
@@ -268,12 +268,9 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
       ...(project.name === undefined ? {} : { Project: project.name }),
     }
     return {
-      id: webIdOf("vehicle", vehicle.id),
       name: vehicle.callsign === null ? vehicle.registration : `${vehicle.callsign} · ${vehicle.registration}`,
       context: [`${typeName}${capacity === undefined ? "" : ` ${capacity}`}`, depot?.name].filter(Boolean).join(" · "),
       status: statusLabel(vehicle.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(vehicle, context.now),
       owner: provider?.name ?? "",
       description: vehicle.notes ?? "",
       facts,
@@ -415,8 +412,7 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
   // The vehicle first, then the whole list through its own route; the answer
   // is the vehicle as it now stands. Two requests are two, as the vehicle
   // types' update says.
-  update: async (client, serverId, body) => {
-    const write = body as VehicleWrite
+  update: async (client, serverId, write) => {
     let vehicle: Vehicle | undefined
     if (write.vehicle !== undefined) vehicle = await patch<Vehicle>(client, `/vehicles/${serverId}`, write.vehicle)
     if (write.compartments !== undefined) vehicle = await put<Vehicle>(client, `/vehicles/${serverId}/compartments`, { compartments: write.compartments })
@@ -494,12 +490,9 @@ export const driverAdapter: ResourceAdapter<Driver> = {
       ...(project.name === undefined ? {} : { Project: project.name }),
     }
     return {
-      id: webIdOf("driver", driver.id),
       name: driver.name,
       context: `${employer} · ${statusLabel(driver.employment).toLowerCase()}`,
       status: statusLabel(driver.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(driver, context.now),
       owner: provider?.name ?? "",
       description: driver.notes ?? "",
       facts,

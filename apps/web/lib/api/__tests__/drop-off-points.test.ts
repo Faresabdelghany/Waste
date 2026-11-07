@@ -12,7 +12,7 @@ import { DropOffPointCreate, DropOffPointExceptionsSet, DropOffPointHoursSet, Dr
 import type { Project } from "@waste/contracts/organisation"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { DROP_OFF_EXCEPTIONS_KEY, DROP_OFF_FRACTIONS_KEY, DROP_OFF_HOURS_KEY, dropOffPointAdapter, dropOffPointsModule } from "../records/drop-off-points"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
@@ -29,8 +29,8 @@ const glass: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000005", ...ST
 const metal: WasteFraction = { ...glass, id: "01a0d2a4-a280-7005-8000-000000000007", key: "metal", name: "Metal" }
 
 const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
-const fractionRecords = [glass, metal].map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve))
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, noResolve)
+const fractionRecords = [glass, metal].map((fraction) => recordFrom(wasteFractionAdapter, fraction, noResolve))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["configure.master", loaded({ records: fractionRecords, serverIds: new Map(fractionRecords.map((record, index) => [record.id, [glass, metal][index]!.id])) }, 1)],
@@ -62,7 +62,7 @@ const amager: DropOffPoint = {
   exceptions: [{ date: "2026-12-24", opensAt: "09:00", closesAt: "12:00", note: "Juleaften" }],
 }
 
-const recordOf = (point: DropOffPoint) => dropOffPointAdapter.toRecord(point, context)
+const recordOf = (point: DropOffPoint) => recordFrom(dropOffPointAdapter, point, context)
 const withValues = (record: BusinessRecord, values: Record<string, string | boolean>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 
 describe("the Drop-off Points module", () => {
@@ -126,52 +126,53 @@ describe("a drop-off point", () => {
 
   test("an exception the point held is dropped once its day has passed; text retyped to the same hours writes nothing", () => {
     const held = recordOf({ ...amager, exceptions: [{ date: "2026-10-01", opensAt: null, closesAt: null, note: "Inventory" }, ...amager.exceptions] })
-    const added = dropOffPointAdapter.toPatchBody(held, withValues(held, { [DROP_OFF_EXCEPTIONS_KEY]: `${held.submittedValues?.[DROP_OFF_EXCEPTIONS_KEY]}\n2026-12-31 closed` }), context) as { exceptions: { date: string }[] }
+    const added = dropOffPointAdapter.toPatchBody?.(held, withValues(held, { [DROP_OFF_EXCEPTIONS_KEY]: `${held.submittedValues?.[DROP_OFF_EXCEPTIONS_KEY]}\n2026-12-31 closed` }), context) as { exceptions: { date: string }[] }
     assert.deepEqual(
       added.exceptions.map((exception) => exception.date),
       ["2026-12-24", "2026-12-31"],
       "the held 1 October dropped as history, not refused",
     )
     const record = recordOf(amager)
-    assert.equal(dropOffPointAdapter.toPatchBody(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Sat 9:00-12:00\nMonday-Wednesday 10:00-18:00" }), context), null)
+    assert.equal(dropOffPointAdapter.toPatchBody?.(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Sat 9:00-12:00\nMonday-Wednesday 10:00-18:00" }), context), null)
   })
 
   test("is refused here, naming the field, for hours or exceptions the domain refuses, a kind it does not know, or no location", () => {
     const record = recordOf(amager)
-    assert.deepEqual(dropOffPointAdapter.toPatchBody(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Mon 18:00–10:00" }), context), {
+    assert.deepEqual(dropOffPointAdapter.toPatchBody?.(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Mon 18:00–10:00" }), context), {
       path: DROP_OFF_HOURS_KEY,
       message: "Monday: a window must open before it closes (18:00–10:00)",
     })
-    assert.deepEqual(dropOffPointAdapter.toPatchBody(record, withValues(record, { [DROP_OFF_EXCEPTIONS_KEY]: "24 December closed" }), context), {
+    assert.deepEqual(dropOffPointAdapter.toPatchBody?.(record, withValues(record, { [DROP_OFF_EXCEPTIONS_KEY]: "24 December closed" }), context), {
       path: DROP_OFF_EXCEPTIONS_KEY,
       message: "Line 1: begin with the date, such as 2026-12-24, then closed or the hours",
     })
-    assert.equal((dropOffPointAdapter.toPatchBody(record, withValues(record, { kind: "depot" }), context) as { path: string }).path, "kind")
-    assert.equal((dropOffPointAdapter.toPatchBody(record, withValues(record, { latitude: "" , longitude: "" }), context) as { path: string }).path, "latitude")
-    assert.equal((dropOffPointAdapter.toPatchBody(record, withValues(record, { code: "GS-OTHER" }), context) as { path: string }).path, "code")
+    assert.equal((dropOffPointAdapter.toPatchBody?.(record, withValues(record, { kind: "depot" }), context) as { path: string }).path, "kind")
+    assert.equal((dropOffPointAdapter.toPatchBody?.(record, withValues(record, { latitude: "" , longitude: "" }), context) as { path: string }).path, "latitude")
+    assert.equal((dropOffPointAdapter.toPatchBody?.(record, withValues(record, { code: "GS-OTHER" }), context) as { path: string }).path, "code")
   })
 
   test("a save writes the point's own fields and each set that changed, never a set the form left as it was", () => {
     const record = recordOf(amager)
-    assert.equal(dropOffPointAdapter.toPatchBody(record, record, context), null, "read and saved unchanged writes nothing")
-    const renamed = dropOffPointAdapter.toPatchBody(record, withValues({ ...record, name: "GS Amager" }, { name: "GS Amager" }), context) as Record<string, unknown>
+    assert.equal(dropOffPointAdapter.toPatchBody?.(record, record, context), null, "read and saved unchanged writes nothing")
+    const renamed = dropOffPointAdapter.toPatchBody?.(record, withValues({ ...record, name: "GS Amager" }, { name: "GS Amager" }), context) as Record<string, unknown>
     assert.deepEqual(Object.keys(renamed), ["point"])
     DropOffPointPatch.parse(renamed.point)
-    const rehoured = dropOffPointAdapter.toPatchBody(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Mon–Fri 10:00–17:00" }), context) as Record<string, unknown>
+    const rehoured = dropOffPointAdapter.toPatchBody?.(record, withValues(record, { [DROP_OFF_HOURS_KEY]: "Mon–Fri 10:00–17:00" }), context) as Record<string, unknown>
     assert.deepEqual(Object.keys(rehoured), ["hours"])
     DropOffPointHoursSet.parse({ hours: rehoured.hours })
-    const excepted = dropOffPointAdapter.toPatchBody(record, withValues(record, { [DROP_OFF_EXCEPTIONS_KEY]: "2026-12-24 09:00–12:00 Juleaften\n2026-12-31 closed" }), context) as Record<string, unknown>
+    const excepted = dropOffPointAdapter.toPatchBody?.(record, withValues(record, { [DROP_OFF_EXCEPTIONS_KEY]: "2026-12-24 09:00–12:00 Juleaften\n2026-12-31 closed" }), context) as Record<string, unknown>
     assert.deepEqual(Object.keys(excepted), ["exceptions"])
     DropOffPointExceptionsSet.parse({ exceptions: excepted.exceptions })
   })
 
   test("the update patches the point, then puts each set it was handed through its own route, and answers the point as it now stands", async () => {
     const record = recordOf(amager)
-    const write = dropOffPointAdapter.toPatchBody(record, withValues({ ...record, name: "GS Amager" }, { name: "GS Amager", [DROP_OFF_HOURS_KEY]: "Mon–Fri 10:00–17:00" }), context)
+    const write = dropOffPointAdapter.toPatchBody?.(record, withValues({ ...record, name: "GS Amager" }, { name: "GS Amager", [DROP_OFF_HOURS_KEY]: "Mon–Fri 10:00–17:00" }), context)
     const renamed = { ...amager, name: "GS Amager" }
     const rehoured = { ...renamed, hours: (["monday", "tuesday", "wednesday", "thursday", "friday"] as const).map((weekday) => ({ weekday, opensAt: "10:00", closesAt: "17:00" })) }
     const { fetch, calls } = scripted([() => json(renamed), () => json(rehoured)])
-    const answer = await dropOffPointAdapter.update(clientOver(fetch), amager.id, write)
+    assert.ok(write != null && !isLocalRefusal(write))
+    const answer = await dropOffPointAdapter.update!(clientOver(fetch), amager.id, write)
     assert.deepEqual(
       calls.map((call) => `${call.init.method} ${call.url}`),
       [`PATCH http://api.test/drop-off-points/${amager.id}`, `PUT http://api.test/drop-off-points/${amager.id}/hours`],
@@ -179,7 +180,7 @@ describe("a drop-off point", () => {
     assert.deepEqual(bodyOf(calls[0]), { name: "GS Amager" })
     assert.equal(answer.hours.length, 5)
     const setOnly = scripted([() => json(amager)])
-    await dropOffPointAdapter.update(clientOver(setOnly.fetch), amager.id, { exceptions: [] })
+    await dropOffPointAdapter.update!(clientOver(setOnly.fetch), amager.id, { exceptions: [] })
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/drop-off-points/${amager.id}/exceptions`])
   })
 })

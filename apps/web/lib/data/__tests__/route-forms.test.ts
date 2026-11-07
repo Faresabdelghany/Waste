@@ -11,7 +11,7 @@ import { RouteAssign, RouteCancel, RouteReschedule, type Route } from "@waste/co
 import { A_WORK_ORDER_OF_A_CONTAINER } from "@waste/domain/execution/office-stops"
 import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
-import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { driverAdapter } from "../../api/records/fleet"
 import { CORRECT_PICKUP, pickupAdapter, REMOVE_PICKUP } from "../../api/records/pickups"
 import { CONTAINERS_MODULE } from "../../api/records/containers"
@@ -56,10 +56,10 @@ const route: Route = {
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
 const freja: Driver = { id: "01a0d2a4-a280-7014-8000-000000000002", ...STAMPS, projectId: route.projectId, name: "Freja Nielsen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: null, status: "active", notes: null, shift: null }
-const frejaRecord = driverAdapter.toRecord(freja, { resolve: NOTHING_RESOLVED, now: NOW })
+const frejaRecord = recordFrom(driverAdapter, freja, { resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([["fleet.drivers", loaded({ records: [frejaRecord], serverIds: new Map([[frejaRecord.id, freja.id]]) }, 1)]])
 const context: MappingContext = { resolve: resolverOver(state), now: NOW }
-const record = routeAdapter.toRecord(route, context)
+const record = recordFrom(routeAdapter, route, context)
 
 const fieldIdsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))
 const requiredOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.filter((field) => field.required).map((field) => field.id))
@@ -256,7 +256,7 @@ describe("the routes a route's stops may join (O23 of #290)", () => {
 
 describe("the stop's dialogs", () => {
   const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, fill: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
-  const stop = pickupAdapter.toRecord(pickup, context)
+  const stop = recordFrom(pickupAdapter, pickup, context)
 
   test("remove asks why", () => {
     const form = PICKUP_COMMAND_FORMS[REMOVE_PICKUP]

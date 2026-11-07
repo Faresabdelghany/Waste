@@ -24,8 +24,7 @@ import {
   FIXTURE_SERVICE_PROVIDER_IDS,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"

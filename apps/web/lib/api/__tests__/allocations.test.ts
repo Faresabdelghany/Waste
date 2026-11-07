@@ -15,7 +15,7 @@ import { allocationConflictSourceFromValues } from "@/lib/prototype/route-scheme
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { allocationAdapter, allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, vehiclePlanningModule } from "../records/allocations"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
@@ -54,8 +54,8 @@ const planned: VehicleAllocation = {
 // What the store has loaded when allocations load: the organisation, master
 // data, and the fleet as 5a's modules answer it (a vehicle and a driver by
 // their web ids); the depot is not loaded, so it stays an id chip.
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
-const residualRecord = wasteFractionAdapter.toRecord(residual, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const residualRecord = recordFrom(wasteFractionAdapter, residual, { resolve: NOTHING_RESOLVED, now: NOW })
 const fleetRecord = (id: string, name: string): BusinessRecord => ({ ...projectRecord, id, name, recordKind: undefined, submittedValues: {} })
 const wh24Record = fleetRecord("vehicle-wh24", "WH-24")
 const wh31Record = fleetRecord("vehicle-wh31", "WH-31")
@@ -96,7 +96,7 @@ describe("the vehicle planning module", () => {
 })
 
 describe("an allocation", () => {
-  const record = allocationAdapter.toRecord(planned, context())
+  const record = recordFrom(allocationAdapter, planned, context())
 
   test("is its day and its vehicle, its driver and window on the project's clock, and the wire's status", () => {
     assert.equal(record.name, "1 Oct · WH-24")
@@ -175,13 +175,13 @@ describe("an allocation", () => {
 
   test("an edit is the change command: what moved, and the reason, which is the event's", () => {
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, vehicleId: "vehicle-wh31", driverId: "", plannedEnd: "2026-10-01T17:00", changeReason: "WH-24 to the workshop" } }
-    const body = allocationAdapter.toPatchBody(record, edited, context())
+    const body = allocationAdapter.toPatchBody?.(record, edited, context())
     assert.deepEqual(body, { vehicleId: wh31, driverId: null, plannedTo: "2026-10-01T15:00:00.000Z", reason: "WH-24 to the workshop" })
     assert.ok(VehicleAllocationChange.safeParse(body).success)
-    assert.deepEqual(allocationAdapter.toPatchBody(record, { ...edited, submittedValues: { ...edited.submittedValues, changeReason: "" } }, context()), { path: "changeReason", message: "Say why it changes" })
-    assert.equal(allocationAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, changeReason: "Nothing" } }, context()), null, "a reason alone changes nothing")
+    assert.deepEqual(allocationAdapter.toPatchBody?.(record, { ...edited, submittedValues: { ...edited.submittedValues, changeReason: "" } }, context()), { path: "changeReason", message: "Say why it changes" })
+    assert.equal(allocationAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, changeReason: "Nothing" } }, context()), null, "a reason alone changes nothing")
     const moved: BusinessRecord = { ...record, projectIds: ["project-harbor"], submittedValues: { ...record.submittedValues, projectId: "project-harbor", changeReason: "x" } }
-    assert.deepEqual(allocationAdapter.toPatchBody(record, moved, context()), { path: "projectId", message: "An allocation stays in its project" })
+    assert.deepEqual(allocationAdapter.toPatchBody?.(record, moved, context()), { path: "projectId", message: "An allocation stays in its project" })
   })
 
   test("a change posts to its command path and the answer replaces the row", async () => {
@@ -207,7 +207,7 @@ describe("an allocation", () => {
 })
 
 describe("the allocation's commands", () => {
-  const record = allocationAdapter.toRecord(planned, context())
+  const record = recordFrom(allocationAdapter, planned, context())
   const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
 
   test("confirm posts an empty body and the row is confirmed", async () => {

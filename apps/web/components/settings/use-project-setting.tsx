@@ -15,8 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
-import { problemSentence, type Problem } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, problemSentence, type Problem } from "@/lib/api/problem"
 import { projectShown } from "@/lib/data/settings-panes"
 
 type MeProject = Me["projects"][number]

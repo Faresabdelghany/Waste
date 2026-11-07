@@ -9,9 +9,9 @@ import { WeighbridgeTicketDismiss, WeighbridgeTicketMatch, type WeighbridgeTicke
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { UNMATCHED_LABELS, WEIGHBRIDGE_MODULE } from "../../data/weighbridge"
-import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
-import { loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
+import { keptRefusal, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { DISMISS_TICKET, MATCH_TICKET, ticketCommandsOffered, weighbridgeTicketAdapter } from "../records/weighbridge"
 import { clientOver, json, scripted } from "./scripted-fetch"
 
@@ -60,7 +60,7 @@ describe("Route Studio › Weighbridge", () => {
   })
 
   test("an unmatched ticket says what it waits for, offers Match and Dismiss, and has no project where its plate is nobody's", () => {
-    const record = weighbridgeTicketAdapter.toRecord(ticket, context)
+    const record = recordFrom(weighbridgeTicketAdapter, ticket, context)
     assert.equal(record.id, `weighbridge-ticket-${ticket.id}`)
     assert.equal(record.name, "WB-2026-3901 · ZZ 99 999")
     assert.equal(record.status, "Unmatched")
@@ -72,7 +72,7 @@ describe("Route Studio › Weighbridge", () => {
   })
 
   test("a matched ticket names its route and unload and offers nothing", () => {
-    const record = weighbridgeTicketAdapter.toRecord({ ...ticket, status: "matched", routeId: ROUTE, unloadId: UNLOAD, projectId: null }, context)
+    const record = recordFrom(weighbridgeTicketAdapter, { ...ticket, status: "matched", routeId: ROUTE, unloadId: UNLOAD, projectId: null }, context)
     assert.equal(record.status, "Matched")
     assert.equal(record.facts.Route, "RC-1042 · 2026-10-05")
     assert.equal(record.facts.Unload, `unload-${UNLOAD}`)
@@ -80,7 +80,7 @@ describe("Route Studio › Weighbridge", () => {
   })
 
   test("Match sends the route and the fraction by their server ids, refusing either the API does not hold; Dismiss sends why", () => {
-    const record = weighbridgeTicketAdapter.toRecord(ticket, context)
+    const record = recordFrom(weighbridgeTicketAdapter, ticket, context)
     const match = weighbridgeTicketAdapter.commands?.[MATCH_TICKET]
     const body = match?.toBody?.({ routeId: `route-${ROUTE}`, wasteFractionId: `fraction-${RESIDUAL}` }, record, context)
     assert.deepEqual(body, { routeId: ROUTE, wasteFractionId: RESIDUAL })
@@ -95,8 +95,8 @@ describe("Route Studio › Weighbridge", () => {
   })
 
   test("is never patched, and Match posts to the ticket's own path", async () => {
-    const record = weighbridgeTicketAdapter.toRecord(ticket, context)
-    assert.ok(isLocalRefusal(weighbridgeTicketAdapter.toPatchBody(record, { ...record, name: "x" }, context)))
+    const record = recordFrom(weighbridgeTicketAdapter, ticket, context)
+    assert.ok(isLocalRefusal(keptRefusal(weighbridgeTicketAdapter, record, { ...record, name: "x" })))
     const { fetch, calls } = scripted([() => json({ ...ticket, status: "matched", routeId: ROUTE, unloadId: UNLOAD, projectId: null })])
     const answered = await weighbridgeTicketAdapter.commands?.[MATCH_TICKET].run(clientOver(fetch), ticket.id, { routeId: ROUTE, wasteFractionId: RESIDUAL })
     assert.equal(calls[0].url, `http://api.test/weighbridge-tickets/${ticket.id}/match`)

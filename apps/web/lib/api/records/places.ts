@@ -42,11 +42,9 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-da
 import { create, get, listAll, patch, put } from "../client"
 import {
   hasPrefix,
-  NO_PRESENTATION,
   isLocalRefusal,
   ofKind,
   patchOf,
-  stampFacts,
   statusLabel,
   statusToken,
   typed,
@@ -55,7 +53,6 @@ import {
   type Client,
   type LocalRefusal,
   type MappingContext,
-  type RecordAction,
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
@@ -261,12 +258,9 @@ export const depotAdapter: ResourceAdapter<Depot> = {
     if (depot.vehicleCapacity !== null) facts["Vehicle capacity"] = String(depot.vehicleCapacity)
     if (project.name !== undefined) facts.Project = project.name
     return {
-      id: webIdOf("depot", depot.id),
       name: depot.name,
       context: `Depot · ${project.name ?? "Project"}`,
       status: statusLabel(depot.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(depot, context.now),
       value: hours,
       description: depot.notes ?? "",
       facts,
@@ -375,7 +369,7 @@ type StationWrite = {
 
 const FRACTIONS_KEY = "acceptedFractionIds"
 
-export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
+export const unloadingStationAdapter: ResourceAdapter<UnloadingStation, unknown, StationWrite> = {
   prefix: "station",
   auditTable: "unloading_station",
   owns: (record) => hasPrefix("station")(record) || (record.recordKind === LOCATION_KIND && isStationRecord(record)),
@@ -398,12 +392,9 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
     if (station.transfer) facts["Transfer station"] = "Yes"
     if (fractions.length > 0) facts.Fractions = fractions.map((fraction) => fraction.name ?? fraction.webId).join(" · ")
     return {
-      id: webIdOf("station", station.id),
       name: station.name,
       context: `Unloading station · ${statusLabel(station.ownership).toLowerCase()}`,
       status: statusLabel(station.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(station, context.now),
       value: hours,
       description: station.notes ?? "",
       facts,
@@ -510,8 +501,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
   // The station first, then the whole set through its own route; the answer
   // is the station as it now stands. Two requests are two, as the vehicle
   // types' update says.
-  update: async (client, serverId, body) => {
-    const write = body as StationWrite
+  update: async (client, serverId, write) => {
     let station: UnloadingStation | undefined
     if (write.station !== undefined) station = await patch<UnloadingStation>(client, `/unloading-stations/${serverId}`, write.station)
     if (write.wasteFractionIds !== undefined) station = await put<UnloadingStation>(client, `/unloading-stations/${serverId}/fractions`, { wasteFractionIds: write.wasteFractionIds })
@@ -539,12 +529,9 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
     if (depot !== undefined) facts["Colocated depot"] = depot.name ?? depot.webId
     if (project.name !== undefined) facts.Project = project.name
     return {
-      id: webIdOf("warehouse", warehouse.id),
       name: warehouse.name,
       context: `${project.name ?? "Project"} · ${warehouse.address}`,
       status: statusLabel(warehouse.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(warehouse, context.now),
       description: warehouse.notes ?? "",
       facts,
       projectIds: [project.webId],
@@ -609,7 +596,7 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
   create: (client, body) => create<Warehouse>(client, "/warehouses", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Warehouse>(client, `/warehouses/${serverId}`, body),
   // Its Stock Minimums (O30 of #290), replaced whole: the answer is the set, so an action (records/stock.ts).
-  actions: { [SET_STOCK_MINIMUMS]: SET_STOCK_MINIMUMS_ACTION as RecordAction<unknown> },
+  actions: { [SET_STOCK_MINIMUMS]: SET_STOCK_MINIMUMS_ACTION },
 }
 
 // ---------------------------------------------------------------------------

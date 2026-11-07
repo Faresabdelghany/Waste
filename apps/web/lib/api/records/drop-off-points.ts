@@ -24,7 +24,7 @@ import { DROP_OFF_KIND_OPTIONS, exceptionsOf, exceptionsText, exceptionsToSave, 
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, patchOf, statusLabel, typed, typedFlag, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, todayIn } from "./clock"
 import {
   coordinatesFact,
@@ -88,7 +88,7 @@ const sameExceptions = (a: readonly OpeningException[], b: readonly OpeningExcep
 /** What a save sends: the point's own fields, and each set that changed. */
 type DropOffWrite = { point?: object; wasteFractionIds?: string[]; hours?: WeeklyWindow[]; exceptions?: OpeningException[] }
 
-export const dropOffPointAdapter: ResourceAdapter<DropOffPoint> = {
+export const dropOffPointAdapter: ResourceAdapter<DropOffPoint, unknown, DropOffWrite> = {
   prefix: PREFIX,
   auditTable: "drop_off_point",
   owns: hasPrefix(PREFIX),
@@ -112,12 +112,9 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint> = {
     if (point.publicNote !== null) facts["Public note"] = point.publicNote
     if (project.name !== undefined) facts.Project = project.name
     return {
-      id: webIdOf(PREFIX, point.id),
       name: point.name,
       context: `${KIND_LABELS[point.kind]} · ${project.name ?? "Project"}`,
       status: statusLabel(point.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(point, context.now),
       value: point.openAlways ? "Open always" : (hours.split("\n")[0] ?? ""),
       description: point.notes ?? "",
       facts,
@@ -232,8 +229,7 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint> = {
   },
   create: (client, body) => create<DropOffPoint>(client, "/drop-off-points", body).then((created) => created.body),
   // The point first, then each set through its own route; the answer is the point as it now stands.
-  update: async (client, serverId, body) => {
-    const write = body as DropOffWrite
+  update: async (client, serverId, write) => {
     let point: DropOffPoint | undefined
     if (write.point !== undefined) point = await patch<DropOffPoint>(client, `/drop-off-points/${serverId}`, write.point)
     if (write.wasteFractionIds !== undefined) point = await put<DropOffPoint>(client, `/drop-off-points/${serverId}/fractions`, { wasteFractionIds: write.wasteFractionIds })

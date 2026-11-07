@@ -36,16 +36,13 @@ import { paymentTermsLabel } from "@/lib/data/finance-settings"
 import { create, listAll, patch } from "../client"
 import {
   isLocalRefusal,
-  NO_PRESENTATION,
   patchOf,
-  stampFacts,
   statusLabel,
   statusToken,
   typed,
   typedFlag,
   webIdOf,
   type LocalRefusal,
-  type RecordAction,
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
@@ -102,7 +99,7 @@ export const customerAdapter: ResourceAdapter<Customer> = {
   owns: (record) => customerKindOf(record) !== undefined,
   statuses: CUSTOMER_STATUSES,
   list: (client) => listAll<Customer>(client, "/customers"),
-  toRecord: (customer, context) => {
+  toRecord: (customer) => {
     const prefix = CUSTOMER_PREFIXES[customer.kind]
     const facts: Record<string, string> = { Kind: customer.kind === "person" ? "Person" : "Organisation" }
     const fact = (label: string, value: string | null) => {
@@ -120,8 +117,6 @@ export const customerAdapter: ResourceAdapter<Customer> = {
       name: customer.name,
       context: customer.kind === "person" ? "Person · customer" : "Customer organisation",
       status: statusLabel(customer.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(customer, context.now),
       facts,
       // A Customer is the company's (Issue #78), so it carries no project and shows in every scope.
       recordKind: "Contact or Customer Organization",
@@ -163,9 +158,9 @@ export const customerAdapter: ResourceAdapter<Customer> = {
   update: (client, serverId, body) => patch<Customer>(client, `/customers/${serverId}`, body),
   // Its Contact Persons (#291 C14), one at a time, and a message sent to it or to one of them (#291 C15): each answers another resource, so actions (records/customer-contacts.ts, records/messages.ts).
   actions: {
-    [ADD_CONTACT]: ADD_CONTACT_ACTION as RecordAction<unknown>,
-    [EDIT_CONTACT]: EDIT_CONTACT_ACTION as RecordAction<unknown>,
-    [SEND_MESSAGE]: SEND_MESSAGE_ACTION as RecordAction<unknown>,
+    [ADD_CONTACT]: ADD_CONTACT_ACTION,
+    [EDIT_CONTACT]: EDIT_CONTACT_ACTION,
+    [SEND_MESSAGE]: SEND_MESSAGE_ACTION,
   },
 }
 

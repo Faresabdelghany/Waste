@@ -79,8 +79,7 @@ import { BATCH_MAX, carriesLocation } from "@waste/domain/execution/command-batc
 import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
 
 import type { ApiClient } from "../api/client"
-import { problemSentence, type Problem } from "../api/problem"
-import { problemOfError } from "../api/records/server-records"
+import { problemOfError, problemSentence, type Problem } from "../api/problem"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
 import { EMPTY_SNAPSHOT, kept, type ReadSnapshot, type ReadSnapshotStore } from "./read-snapshot"

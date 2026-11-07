@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 import type { CustomerContact } from "@waste/contracts/customers"
 import { MessageCreate } from "@waste/contracts/messaging"
 
-import { NOTHING_RESOLVED } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
 import { messageBody, messageDraftOf, messageLine, recipientOptions, SEND_MESSAGE, TO_CUSTOMER } from "../records/messages"
 import { customerAdapter, customersModule } from "../records/registry"
 import { actOnRecord, loaded, type ServerRecordsState } from "../records/server-records"
@@ -20,7 +20,7 @@ const CONTACT_ID = "01a0d2a4-a280-7004-8000-000000000201"
 const TEMPLATE_ID = "01a0d2a4-a280-7099-8000-000000000001"
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 
-const organisation = customerAdapter.toRecord(
+const organisation = recordFrom(customerAdapter, 
   { id: CUSTOMER_ID, ...STAMPS, kind: "organisation", name: "Østerbro Boligforening", registrationNumber: null, email: "kontor@osterbro.example", phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active", paymentTermsDays: null },
   { resolve: NOTHING_RESOLVED, now: NOW },
 )

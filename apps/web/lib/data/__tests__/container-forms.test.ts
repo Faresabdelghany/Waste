@@ -10,7 +10,7 @@ import { ContainerCreate, ContainerServicePlacementCreate, type Container } from
 import type { Project } from "@waste/contracts/organisation"
 import { Adjust, Decommission, Receive, Return, Transfer } from "@waste/contracts/stock"
 
-import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { containerAdapter, type ContainerCommand } from "../../api/records/containers"
 import { containerTypeAdapter, decommissionReasonAdapter, wasteFractionAdapter } from "../../api/records/master-data"
 import { projectAdapter } from "../../api/records/organisation"
@@ -26,12 +26,12 @@ const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...S
 const warehouseId = "01a0d2a4-a280-7021-8000-000000000001"
 const subscriptionId = "01a0d2a4-a280-7013-8000-000000000001"
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const masterContext: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const organicRecord = wasteFractionAdapter.toRecord(organic, masterContext)
-const bin240Record = containerTypeAdapter.toRecord(bin240, masterContext)
+const organicRecord = recordFrom(wasteFractionAdapter, organic, masterContext)
+const bin240Record = recordFrom(containerTypeAdapter, bin240, masterContext)
 const wornOutId = "01a0d2a4-a280-702e-8000-000000000001"
-const wornOutRecord = decommissionReasonAdapter.toRecord({ id: wornOutId, ...STAMPS, code: "worn-out", name: "Worn out", status: "active" }, masterContext)
+const wornOutRecord = recordFrom(decommissionReasonAdapter, { id: wornOutId, ...STAMPS, code: "worn-out", name: "Worn out", status: "active" }, masterContext)
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
   ["configure.master", loaded({ records: [organicRecord, bin240Record, wornOutRecord], serverIds: new Map([[organicRecord.id, organic.id], [bin240Record.id, bin240.id], [wornOutRecord.id, wornOutId]]) }, 1)],
@@ -60,18 +60,18 @@ describe("the container form on the Pilot", () => {
   })
 
   test("the edit keeps the project, and offers the placement's corrections only where there is a placement", () => {
-    const unplaced = containerAdapter.toRecord({ ...bin91007, placements: [] }, context)
+    const unplaced = recordFrom(containerAdapter, { ...bin91007, placements: [] }, context)
     const unplacedForm = containerEditForm(unplaced)
     assert.ok(unplacedForm.sections.flatMap((section) => section.fields).find((field) => field.id === "projectId")?.readOnly)
     assert.ok(!fieldIdsOf(unplacedForm).includes("wasteFraction"))
-    const placed = containerAdapter.toRecord({ ...bin91007, placements: [{ id: "01a0d2a4-a280-7015-8000-000000000007", ...STAMPS, projectId: copenhagen.id, containerId: bin91007.id, subscriptionId, sharedCollectionPointId: null, wasteFractionId: organic.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom: "2026-01-01", validTo: "2026-09-01" }] }, context)
+    const placed = recordFrom(containerAdapter, { ...bin91007, placements: [{ id: "01a0d2a4-a280-7015-8000-000000000007", ...STAMPS, projectId: copenhagen.id, containerId: bin91007.id, subscriptionId, sharedCollectionPointId: null, wasteFractionId: organic.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom: "2026-01-01", validTo: "2026-09-01" }] }, context)
     assert.deepEqual(fieldIdsOf(containerEditForm(placed)).slice(-3), ["wasteFraction", "serviceFrequencyId", "placementTo"])
     const values = containerFormValues(placed)
     assert.equal(values.containerId, "BIN-91007")
     assert.equal(values.placementTo, "2026-08-31")
     const edited = updateContainerRecord(placed, { ...values, rfid: "E2091007", placementTo: "2026-08-30" })
     assert.equal(edited.id, placed.id)
-    assert.deepEqual(containerAdapter.toPatchBody(placed, edited, context), {
+    assert.deepEqual(containerAdapter.toPatchBody?.(placed, edited, context), {
       container: { rfid: "E2091007" },
       placement: { id: "01a0d2a4-a280-7015-8000-000000000007", patch: { validTo: "2026-08-31" } },
     })
@@ -79,7 +79,7 @@ describe("the container form on the Pilot", () => {
 })
 
 describe("the container's command dialogs", () => {
-  const record = containerAdapter.toRecord({ ...bin91007, placements: [] }, context)
+  const record = recordFrom(containerAdapter, { ...bin91007, placements: [] }, context)
   const warehouse = `warehouse-${warehouseId}`
   /** What a person fills in, by the dialog's field ids. */
   const filled: Record<ContainerCommand, BusinessFormValues> = {

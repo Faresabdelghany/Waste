@@ -18,10 +18,10 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 import { type BusinessRecord } from "../../data/business-modules"
 import { activityCommandsOffered, activityCorrectable, activityOpenForm, closeBodyOf, createActivityRecord, kindsOpenedBy, REASON_NEEDED, rejectBodyOf } from "../../data/provider-activities"
 import { commandOffered } from "../../data/provider-workspace"
-import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { activityAdapter, toActivityCreateBody, toActivityPatchBody, toActivityRecord } from "../records/provider-activities"
+import { activityAdapter, toActivityCreateBody, toActivityPatchBody } from "../records/provider-activities"
 import { loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 
 const NOW = new Date("2026-08-13T12:00:00Z")
@@ -78,7 +78,7 @@ const followUp: ServiceProviderActivity = {
   effectiveFrom: null,
 }
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 /** A route of the scheme's group, as the routes module maps one: its project by web id, its scheme and group by their chips, which a provider's reader holds. */
 const route: BusinessRecord = { ...projectRecord, id: "route-rc-1048", name: "RC-1048", recordKind: "Route", submittedValues: { projectId: projectRecord.id, schemeId: `scheme-${SCHEME}`, collectionGroupId: `group-${GROUP}` } }
 /** An award, as the service areas module maps one: its project by web id. */
@@ -96,7 +96,7 @@ describe("an Activity as a record", () => {
     const keys = SERVER_MODULES.map((module) => `${module.workspaceId}.${module.moduleId}`)
     assert.ok(keys.indexOf("service-providers.activities") > keys.indexOf("route-studio.routes"), "read after the routes a proposal is opened on")
     assert.ok(COMMAND_SURFACES["service-providers.activities"]?.rowActions)
-    const record = toActivityRecord(ActivitySchema.parse(proposal), context)
+    const record = recordFrom(activityAdapter, ActivitySchema.parse(proposal), context)
     assert.equal(record.id, `provider-activity-${proposal.id}`)
     assert.equal(record.name, "ACT-88 · Organic route to Wednesday")
     assert.equal(record.status, "Pending approval")
@@ -109,12 +109,12 @@ describe("an Activity as a record", () => {
   })
 
   test("reads an open follow-up overdue on its project's day", () => {
-    assert.equal(toActivityRecord(followUp, context).facts.Reading, "Open · overdue")
-    assert.equal(toActivityRecord({ ...followUp, dueOn: "2026-08-13" }, context).facts.Reading, "Open")
+    assert.equal(recordFrom(activityAdapter, followUp, context).facts.Reading, "Open · overdue")
+    assert.equal(recordFrom(activityAdapter, { ...followUp, dueOn: "2026-08-13" }, context).facts.Reading, "Open")
   })
 
   test("names the version an approval wrote", () => {
-    const approved = toActivityRecord({ ...proposal, status: "approved", successorSchemeId: SUCCESSOR, closedBy: LARS, closedAt: "2026-08-14T08:00:00.000Z" }, context)
+    const approved = recordFrom(activityAdapter, { ...proposal, status: "approved", successorSchemeId: SUCCESSOR, closedBy: LARS, closedAt: "2026-08-14T08:00:00.000Z" }, context)
     assert.equal(approved.facts["New version"], `scheme-${SUCCESSOR}`)
     assert.equal(approved.facts.Closed, "2026-08-14")
   })
@@ -178,7 +178,7 @@ describe("a vehicle change (#474, part 2)", () => {
   })
 
   test("reads its crew, and is decided by the office as a route-day change is", () => {
-    const change = toActivityRecord({ ...proposal, kind: "vehicle-change", serviceDays: null, vehicleId: TRUCK, driverId: DRIVER }, context)
+    const change = recordFrom(activityAdapter, { ...proposal, kind: "vehicle-change", serviceDays: null, vehicleId: TRUCK, driverId: DRIVER }, context)
     assert.equal(change.facts["New vehicle"], `vehicle-${TRUCK}`)
     assert.equal(change.facts["New driver"], `driver-${DRIVER}`)
     assert.equal(change.value, "Vehicle change")
@@ -211,7 +211,7 @@ describe("a stop-set change (#474, part 3)", () => {
   })
 
   test("reads its stops in order, and is corrected by its list, replaced whole", () => {
-    const change = toActivityRecord({ ...proposal, kind: "stop-set-change", serviceDays: null, containerIds: [BIN3, BIN1] }, context)
+    const change = recordFrom(activityAdapter, { ...proposal, kind: "stop-set-change", serviceDays: null, containerIds: [BIN3, BIN1] }, context)
     assert.equal(change.facts["New stops"], `asset-${BIN3} → asset-${BIN1}`)
     assert.equal(change.value, "Stop-set change")
     assert.deepEqual(activityCommandsOffered(change, "office").map((offer) => offer.command), ["approve", "reject", "withdraw"])
@@ -240,7 +240,7 @@ describe("a waste-fraction change (#474, part 4)", () => {
   })
 
   test("reads its fractions and is decided by the office", () => {
-    const change = toActivityRecord({ ...proposal, kind: "waste-fraction-change", serviceDays: null, wasteFractionIds: [GLASS] }, context)
+    const change = recordFrom(activityAdapter, { ...proposal, kind: "waste-fraction-change", serviceDays: null, wasteFractionIds: [GLASS] }, context)
     assert.equal(change.facts["New fractions"], `fraction-${GLASS}`)
     assert.equal(change.value, "Waste-fraction change")
     assert.deepEqual(activityCommandsOffered(change, "provider").map((offer) => offer.command), ["withdraw"])
@@ -249,7 +249,7 @@ describe("a waste-fraction change (#474, part 4)", () => {
 
 describe("a correction", () => {
   test("sends what moved, a proposal's days among them", () => {
-    const before = toActivityRecord(proposal, context)
+    const before = recordFrom(activityAdapter, proposal, context)
     const after = { ...before, submittedValues: { ...before.submittedValues, serviceDays: "thursday", subject: "Organic route to Thursday" } }
     assert.deepEqual(ServiceProviderActivityPatch.parse(toActivityPatchBody(before, after, context)), { subject: "Organic route to Thursday", serviceDays: ["thursday"] })
     assert.equal(toActivityPatchBody(before, before, context), null)
@@ -257,7 +257,7 @@ describe("a correction", () => {
 })
 
 describe("what each side is offered", () => {
-  const record = (activity: ServiceProviderActivity) => toActivityRecord(activity, context)
+  const record = (activity: ServiceProviderActivity) => recordFrom(activityAdapter, activity, context)
 
   test("the office decides a pending proposal; its provider withdraws it", () => {
     assert.deepEqual(activityCommandsOffered(record(proposal), "office").map((offer) => offer.command), ["approve", "reject", "withdraw"])

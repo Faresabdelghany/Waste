@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react"
 import { useApiSession, useApiClient } from "@/components/waste/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import type { Problem } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError } from "@/lib/api/problem"
 
 export type ReportRead<Report> = {
   /** The current key's answer, or null while it is on its way or when it failed. */

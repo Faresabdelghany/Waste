@@ -32,7 +32,7 @@ import {
   typePermissionsOf,
   updatedTicketTypeRecord,
 } from "../../data/ticket-types"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { ticketTeamsModule } from "../records/ticket-teams"
@@ -44,7 +44,7 @@ const NOW = new Date("2026-11-05T10:00:00Z")
 const STAMPS = { createdAt: "2026-11-05T08:00:00.000Z", updatedAt: "2026-11-05T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const handlerId = "01a0d2a4-a280-7004-8000-000000000001"
 const bulkyId = "01a0d2a4-a280-7043-8000-000000000001"
@@ -72,7 +72,7 @@ const bulky: TicketType = {
   permissions: [{ command: "complete", roleIds: [handlerId] }],
   actions: [],
 }
-const bulkyRecord = ticketTypeAdapter.toRecord(bulky, context)
+const bulkyRecord = recordFrom(ticketTypeAdapter, bulky, context)
 const typesState = loaded({ records: [bulkyRecord], serverIds: new Map([[bulkyRecord.id, bulkyId]]) }, 1)
 const state: ServerRecordsState = new Map([...baseState, ["configure.templates", typesState]])
 const withTypes: MappingContext = { ...context, resolve: resolverOver(state) }
@@ -154,7 +154,7 @@ describe("a ticket type's automation (#546 of #544)", () => {
     { ...NONE, trigger: "opened", kind: "plan-in-route", vehicleId, daysAhead: 2 },
     { ...NONE, trigger: "completed", kind: "open-follow-up", followUpTypeId: bulkyId },
   ]
-  const automated = ticketTypeAdapter.toRecord({ ...bulky, actions: wire }, context)
+  const automated = recordFrom(ticketTypeAdapter, { ...bulky, actions: wire }, context)
 
   test("a type carries its actions with every team, follow-up type and vehicle by its web id, and counts them", () => {
     assert.deepEqual(
@@ -230,7 +230,7 @@ describe("a ticket of a type", () => {
 
   test("the details' edit of the fields clears a blank one, keeps a value no field of the type holds, and the patch sends what moved with null for a clear", () => {
     const ticket = { id: "01a0d2a4-a280-7040-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "container-request", ticketTypeId: bulkyId, fieldValues: { "requested-date": "2026-11-12", bags: 2, legacy: "kept" }, status: "open", priority: "none", source: "office", subject: "A sofa", description: "Collect it", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, teamId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null, countedBy: null } satisfies Ticket
-    const record = ticketAdapter.toRecord(ticket, withTypes)
+    const record = recordFrom(ticketAdapter, ticket, withTypes)
     assert.equal(record.facts.Type, "Bulky waste collection")
     assert.equal(record.submittedValues?.ticketTypeId, bulkyRecord.id)
     const form = editFieldsForm(bulkyRecord)
@@ -247,7 +247,7 @@ describe("a ticket of a type", () => {
   test("a role that reads no types still patches a ticket: its type is named by the id its web id carries, as a team's is", () => {
     const ticket = { id: "01a0d2a4-a280-7040-8000-000000000002", ...STAMPS, projectId: copenhagen.id, number: 1002, label: "T-1002", kind: "container-request", ticketTypeId: bulkyId, fieldValues: {}, status: "open", priority: "none", source: "office", subject: "A sofa", description: "Collect it", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, teamId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null, countedBy: null } satisfies Ticket
     // The types' module never read: the store holds the organisation and the accounts alone.
-    const record = ticketAdapter.toRecord(ticket, context)
+    const record = recordFrom(ticketAdapter, ticket, context)
     assert.equal(record.submittedValues?.ticketTypeId, `ticket-type-${bulkyId}`)
     assert.deepEqual(ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { priority: "high" }), context), { priority: "high" })
     const otherType = "01a0d2a4-a280-7043-8000-000000000002"

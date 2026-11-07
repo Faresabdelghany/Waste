@@ -10,7 +10,7 @@ import { AlertCreate, AlertLinkTicket, AlertResolve } from "@waste/contracts/ale
 import type { Project } from "@waste/contracts/organisation"
 import { TicketAssign, TicketComplete, TicketCreate, TicketHold, TicketReject, TicketReopen, TicketWait, type Ticket } from "@waste/contracts/tickets"
 
-import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { alertAdapter, LINK_ALERT_TICKET, RESOLVE_ALERT } from "../../api/records/alerts"
 import { projectAdapter } from "../../api/records/organisation"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
@@ -24,7 +24,7 @@ import { createTicketRecord, MINE, offersSubTicket, opennessOf, recollectionStop
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const ids = {
   user: "01a0d2a4-a280-7004-8000-000000000001",
@@ -146,7 +146,7 @@ describe("sub-tickets (7.10 of #290)", () => {
 
 describe("the ticket's command dialogs", () => {
   const ticket: Ticket = { id: ids.ticket, ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "other", ticketTypeId: null, fieldValues: {}, status: "open", priority: "none", source: "office", subject: "A task", description: "Check the gate", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, teamId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null, countedBy: null }
-  const record = ticketAdapter.toRecord(ticket, context)
+  const record = recordFrom(ticketAdapter, ticket, context)
   const filled: Record<keyof typeof TICKET_COMMAND_FORMS, [BusinessFormValues, { safeParse: (body: unknown) => { success: boolean } }]> = {
     assign: [{ assigneeUserAccountId: web("configure.access"), note: "Taking it" }, TicketAssign],
     wait: [{ note: "The gate code" }, TicketWait],
@@ -182,7 +182,7 @@ describe("the ticket's command dialogs", () => {
     const edited = updateTicketRecord(record, { subject: "The gate", description: "Locked" })
     assert.equal(edited.id, record.id)
     assert.equal(edited.name, "The gate")
-    assert.deepEqual(ticketAdapter.toPatchBody(record, edited, context), { subject: "The gate", description: "Locked" })
+    assert.deepEqual(ticketAdapter.toPatchBody?.(record, edited, context), { subject: "The gate", description: "Locked" })
   })
 })
 

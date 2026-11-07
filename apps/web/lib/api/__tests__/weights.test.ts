@@ -13,7 +13,7 @@ import { BOTH_GROSS_AND_TARE, SAY_WHY_REFUSED } from "@waste/domain/execution/un
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -68,14 +68,14 @@ const context: MappingContext = { ...bare, resolve: resolverOver(state) }
 
 describe("the weighbridge in the office (O9 of #290)", () => {
   test("a refused load says why, and every unload reads its load on board against the project's tolerance, the Tolerance filter's value", () => {
-    const measured = unloadAdapter.toRecord({ ...unload, refusal: { reason: "contamination", note: "Plastic bags" }, load: { onBoardKg: 6_700, deviationPercent: 7.5, withinTolerance: false } }, context)
+    const measured = recordFrom(unloadAdapter, { ...unload, refusal: { reason: "contamination", note: "Plastic bags" }, load: { onBoardKg: 6_700, deviationPercent: 7.5, withinTolerance: false } }, context)
     assert.equal(measured.facts.Refused, "Contamination: Plastic bags")
     assert.deepEqual([measured.facts["On board"], measured.facts.Difference, measured.facts.Tolerance], ["6,700 kg", "+7.5%", "Above tolerance"])
     assert.equal(measured.submittedValues?.tolerance, "Above tolerance")
     assert.equal(measured.description, "Residual refused at ARC Amager off RC-1042 · 2026-09-29: contamination.")
-    const within = unloadAdapter.toRecord({ ...unload, refusal: { reason: "overweight", note: null }, load: { onBoardKg: 7_300, deviationPercent: -1.4, withinTolerance: true } }, context)
+    const within = recordFrom(unloadAdapter, { ...unload, refusal: { reason: "overweight", note: null }, load: { onBoardKg: 7_300, deviationPercent: -1.4, withinTolerance: true } }, context)
     assert.deepEqual([within.facts.Refused, within.facts.Difference, within.facts.Tolerance], ["Overweight", "-1.4%", "Within tolerance"])
-    const unmeasured = unloadAdapter.toRecord(unload, context)
+    const unmeasured = recordFrom(unloadAdapter, unload, context)
     assert.deepEqual([unmeasured.facts.Refused, unmeasured.facts["On board"], unmeasured.facts.Tolerance], [undefined, undefined, "Not measured"], "no stop of its fraction was weighed")
     assert.equal(differenceOf({ onBoardKg: 1, deviationPercent: 0, withinTolerance: true }), "0.0%")
   })
@@ -108,19 +108,19 @@ describe("an unload's possible duplicate (O27 of #290)", () => {
   test("names the other unload of the same load by its row's name, and says nothing where there is none", () => {
     const other = "01a0d2a4-a280-7096-8000-000000000009"
     const named = new Map([...state, ["route-studio.weights", moduleOf([plain(`unload-${other}`, "WB-2026-3902 · Residual")], [other])]])
-    const record = unloadAdapter.toRecord({ ...unload, possibleDuplicates: [other] }, { ...bare, resolve: resolverOver(named) })
+    const record = recordFrom(unloadAdapter, { ...unload, possibleDuplicates: [other] }, { ...bare, resolve: resolverOver(named) })
     assert.equal(record.facts["Possible duplicate of"], "WB-2026-3902 · Residual")
-    assert.equal(unloadAdapter.toRecord(unload, context).facts["Possible duplicate of"], undefined)
-    assert.equal(unloadAdapter.toRecord({ ...unload, source: "integration", sessionId: null }, context).facts.Source, "The weighbridge")
+    assert.equal(recordFrom(unloadAdapter, unload, context).facts["Possible duplicate of"], undefined)
+    assert.equal(recordFrom(unloadAdapter, { ...unload, source: "integration", sessionId: null }, context).facts.Source, "The weighbridge")
   })
 })
 
 describe("an unload's transfer note (O18 of #290)", () => {
   test("is offered on an unload the station took and nobody corrected, and withheld with the reason otherwise, as the API refuses it", () => {
-    assert.equal(transferNoteWithheld(unloadAdapter.toRecord(unload, context)), null)
-    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, weightReview: { status: "approved", latestReviewId: raw.id, correctionUnloadId: null } }, context)), null, "an approved or rejected weight still went")
-    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, refusal: { reason: "contamination", note: null } }, context)), TRANSFER_NOTE_WITHHELD.refused)
-    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, weightReview: { status: "corrected", latestReviewId: raw.id, correctionUnloadId: ROUTE } }, context)), TRANSFER_NOTE_WITHHELD.corrected)
+    assert.equal(transferNoteWithheld(recordFrom(unloadAdapter, unload, context)), null)
+    assert.equal(transferNoteWithheld(recordFrom(unloadAdapter, { ...unload, weightReview: { status: "approved", latestReviewId: raw.id, correctionUnloadId: null } }, context)), null, "an approved or rejected weight still went")
+    assert.equal(transferNoteWithheld(recordFrom(unloadAdapter, { ...unload, refusal: { reason: "contamination", note: null } }, context)), TRANSFER_NOTE_WITHHELD.refused)
+    assert.equal(transferNoteWithheld(recordFrom(unloadAdapter, { ...unload, weightReview: { status: "corrected", latestReviewId: raw.id, correctionUnloadId: ROUTE } }, context)), TRANSFER_NOTE_WITHHELD.corrected)
   })
 
   test("is read as the API's PDF from the unload's own path", async () => {
@@ -140,7 +140,7 @@ describe("the weights module", () => {
   })
 
   test("shows an unload by its route and station, its weights in kilograms, captured as Needs review", () => {
-    const record = unloadAdapter.toRecord(unload, context)
+    const record = recordFrom(unloadAdapter, unload, context)
     assert.equal(record.id, `unload-${unload.id}`)
     assert.equal(record.name, "WB-2026-3901 · Residual")
     assert.equal(record.context, "RC-1042 · 2026-09-29 · ARC Amager")
@@ -150,13 +150,13 @@ describe("the weights module", () => {
     assert.equal(record.facts.Tare, "11,200 kg")
     assert.equal(record.facts.Occurred, "2026-09-29 15:05")
     assert.deepEqual(REVIEW_LABELS, { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" })
-    assert.equal(unloadAdapter.toRecord({ ...unload, grossKg: null, tareKg: null, weighbridgeTicket: null }, context).name, "Residual at ARC Amager")
+    assert.equal(recordFrom(unloadAdapter, { ...unload, grossKg: null, tareKg: null, weighbridgeTicket: null }, context).name, "Residual at ARC Amager")
     assert.equal(record.description, "Residual unloaded at ARC Amager off RC-1042 · 2026-09-29.", "CONTEXT.md: an Unload, never a tip")
     assert.ok(!spellsStatus(weightsModule, record, "Approved"), "a review is a command, never a patch")
   })
 
   test("offers the reviews the machine moves an unload by, never the decision it holds, and none once it was corrected", () => {
-    const offered = (status: Unload["weightReview"]["status"]) => weightReviewsOffered(unloadAdapter.toRecord({ ...unload, weightReview: { ...unload.weightReview, status } }, context))
+    const offered = (status: Unload["weightReview"]["status"]) => weightReviewsOffered(recordFrom(unloadAdapter, { ...unload, weightReview: { ...unload.weightReview, status } }, context))
     assert.deepEqual(offered("captured"), ["approve", "reject", "correct"])
     assert.deepEqual(offered("approved"), ["reject", "correct"])
     assert.deepEqual(offered("rejected"), ["approve", "correct"])
@@ -174,7 +174,7 @@ describe("the weights module", () => {
   })
 
   test("approves, rejects with its note and corrects with the new weights, reading the unload back after each review", async () => {
-    const record = unloadAdapter.toRecord(unload, context)
+    const record = recordFrom(unloadAdapter, unload, context)
     const current = moduleOf([record], [unload.id])
     const review = (decision: WeightReview["decision"], correctionUnloadId: string | null = null): WeightReview => ({ id: "01a0d2a4-a280-7098-8000-000000000001", recordedAt: "2026-09-30T12:00:00.000Z", projectId: PROJECT, unloadId: unload.id, decision, note: null, correctionUnloadId, reviewedBy: DRIVER })
     const { fetch, calls } = scripted([

@@ -14,7 +14,7 @@ import type { Project } from "@waste/contracts/organisation"
 import type { PriceList, PriceListRow } from "@waste/contracts/price-lists"
 import type { ServiceArea } from "@waste/contracts/service-areas"
 
-import { moduleKeyOf, type ServerModule } from "../records/adapter"
+import { moduleKeyOf, recordFrom, type ServerModule } from "../records/adapter"
 import { agreementsModule } from "../records/agreements"
 import { applicationsModule } from "../records/applications"
 import { projectTimezoneOf } from "../records/clock"
@@ -59,7 +59,7 @@ const serviceArea: ServiceArea = { id: "01a0d2a4-a280-7090-8000-000000000001", .
 const EVENING = new Date("2026-10-24T21:00:00Z")
 const MORNING = Date.parse("2026-10-24T23:00:00Z")
 
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: resolverOver(new Map()), now: EVENING })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: resolverOver(new Map()), now: EVENING })
 const organisation: ServerRecordsState = new Map([["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, EVENING.getTime())]])
 
 /** The module read on the evening's clock, filed in the store as its read lands. */

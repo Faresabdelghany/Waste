@@ -18,7 +18,7 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, statusLabel, typed, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal, requiredText, tokenOf } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -40,7 +40,7 @@ function readingOf(application: Application, context: MappingContext, timezone: 
   return applicationReading(application.status, application.decision, day)
 }
 
-export function toApplicationRecord(application: Application, context: MappingContext): BusinessRecord {
+export function toApplicationRecord(application: Application, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(application.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", application.projectId)
   const timezone = project === undefined ? undefined : typed(project, "timezone")
@@ -73,12 +73,9 @@ export function toApplicationRecord(application: Application, context: MappingCo
     decision === null ? null : { id: decision.id, outcome: decision.outcome, conditions: decision.conditions, validFrom: decision.validFrom, validTo: decision.validTo, appealText: decision.appealText, decidedOn }
   const subject = (key: keyof typeof SUBJECT_KEYS) => (application[key] === null ? "" : webIdVia(context, SUBJECT_KEYS[key], application[key] as string))
   return {
-    id: webIdOf(APPLICATION_PREFIX, application.id),
     name: `Application ${application.number} · ${kindLabel(application.kind)}`,
     context: [customer, place].filter((part) => part !== undefined).join(" · "),
     status: statusLabel(application.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(application, context.now),
     value: reading,
     description: application.statement,
     facts,
@@ -189,7 +186,7 @@ export const APPLICATION_COMMANDS: Readonly<Record<string, RecordCommand<Applica
 /** An Application's Decisions, oldest first: the first and each an appeal led to. */
 export const applicationDecisions = (client: ApiClient, serverId: string): Promise<Decision[]> => get<DecisionHistory>(client, `/applications/${serverId}/decisions`).then((history) => history.items)
 
-export const applicationAdapter: ResourceAdapter<Application> = {
+export const applicationAdapter: ResourceAdapter<Application, ApplicationCreate, ApplicationPatch> = {
   prefix: APPLICATION_PREFIX,
   auditTable: "application",
   // A row the workspace has just made is `applications-application-<clock>` until the server answers: owned by its form's recordKind.

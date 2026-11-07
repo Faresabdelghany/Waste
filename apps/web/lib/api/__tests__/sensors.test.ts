@@ -11,7 +11,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { SensorCreate, SensorPairingCreate, SensorPairingPatch, SensorPatch, type Sensor } from "@waste/contracts/sensors"
 
 import { type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type CommandInput, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { CHANGE_PAIRING, PAIR_SENSOR, pairingLine, readingLine, SENSOR_COMMANDS, sensorAdapter } from "../records/sensors"
@@ -22,7 +22,7 @@ const STAMPS = { createdAt: "2026-10-20T09:00:00.000Z", updatedAt: "2026-10-21T0
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
 const BIN = "01a0d2a4-a280-7999-8000-000000000010"
 const copenhagen: Project = { id: PROJECT, ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const resolve = resolverOver(new Map([["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, PROJECT]]) }, 1)]]))
 const context: MappingContext = { resolve, now: NOW }
 
@@ -42,7 +42,7 @@ const commandBody = (name: keyof typeof SENSOR_COMMANDS, input: CommandInput, re
 
 describe("a sensor on the adapter", () => {
   test("is a record of Resources › Sensors with its pairing in force and its newest reading, the end told as the last day in force", () => {
-    const record = sensorAdapter.toRecord(sensor, context)
+    const record = recordFrom(sensorAdapter, sensor, context)
     assert.equal(record.id, `sensor-${sensor.id}`)
     assert.deepEqual([record.name, record.status, record.value, record.recordKind], ["70B3D57ED0051A2F", "Active", "62%", "Sensor"])
     assert.equal(record.facts.Network, "LoRaWAN")
@@ -50,23 +50,23 @@ describe("a sensor on the adapter", () => {
     assert.equal(record.facts.Container, `asset-${BIN} from 2026-10-01 to 2026-10-31 · full at 85% · books an emptying`)
     assert.deepEqual([record.facts["Fill level"], record.facts.Battery, record.facts.RSSI], ["62%", "91%", "-97 dBm"])
     assert.deepEqual([record.submittedValues?.pairingId, record.submittedValues?.lastDayIn, record.submittedValues?.booksEmptying], [sensor.pairing!.id, "2026-10-31", true])
-    const bare = sensorAdapter.toRecord({ ...sensor, pairing: null, lastReading: null }, context)
+    const bare = recordFrom(sensorAdapter, { ...sensor, pairing: null, lastReading: null }, context)
     assert.deepEqual([bare.facts.Container, bare.facts["Fill level"], bare.facts["Last measurement"], bare.submittedValues?.pairingId], ["Not paired today", "No reading yet", "Never", ""])
   })
 
   test("is registered from the form by project, identifier and network, active, and corrected or retired by a patch the contracts take", () => {
-    const record = sensorAdapter.toRecord({ ...sensor, pairing: null, lastReading: null }, context)
+    const record = recordFrom(sensorAdapter, { ...sensor, pairing: null, lastReading: null }, context)
     const typed = { ...record, id: "sensor-new", submittedValues: { projectId: copenhagenRecord.id, identifier: "S-401", network: "sigfox", notes: "Under the lid" } }
     const body = sensorAdapter.toCreateBody!(typed, context)
     assert.deepEqual(body, { projectId: PROJECT, identifier: "S-401", network: "sigfox", notes: "Under the lid" })
     assert.equal(SensorCreate.safeParse(body).success, true)
-    const retired = sensorAdapter.toPatchBody(record, { ...record, status: "Retired" }, context)
+    const retired = sensorAdapter.toPatchBody?.(record, { ...record, status: "Retired" }, context)
     assert.deepEqual(retired, { status: "retired" })
     assert.equal(SensorPatch.safeParse(retired).success, true)
   })
 
   test("Pair sends the container, the first day, the threshold and the booking the contracts take", () => {
-    const record = sensorAdapter.toRecord({ ...sensor, pairing: null }, context)
+    const record = recordFrom(sensorAdapter, { ...sensor, pairing: null }, context)
     const body = commandBody(PAIR_SENSOR, { containerId: `asset-${BIN}`, validFrom: "2026-11-01", fullThresholdPercent: "90", booksEmptying: true }, record)
     assert.deepEqual(body, { containerId: BIN, validFrom: "2026-11-01", fullThresholdPercent: 90, booksEmptying: true })
     assert.equal(SensorPairingCreate.safeParse(body).success, true)
@@ -75,12 +75,12 @@ describe("a sensor on the adapter", () => {
   })
 
   test("Change pairing moves the threshold, the booking or the end, the last day typed going out as the first day out, blank as open", () => {
-    const record = sensorAdapter.toRecord(sensor, context)
+    const record = recordFrom(sensorAdapter, sensor, context)
     const ended = commandBody(CHANGE_PAIRING, { fullThresholdPercent: "80", booksEmptying: false, lastDayIn: "2026-11-15" }, record) as { pairingId: string; change: object }
     assert.deepEqual(ended, { pairingId: sensor.pairing!.id, change: { fullThresholdPercent: 80, booksEmptying: false, validTo: "2026-11-16" } })
     assert.equal(SensorPairingPatch.safeParse(ended.change).success, true)
     assert.deepEqual((commandBody(CHANGE_PAIRING, { lastDayIn: "" }, record) as { change: object }).change, { validTo: null })
-    const unpaired = sensorAdapter.toRecord({ ...sensor, pairing: null }, context)
+    const unpaired = recordFrom(sensorAdapter, { ...sensor, pairing: null }, context)
     assert.deepEqual(commandBody(CHANGE_PAIRING, { lastDayIn: "" }, unpaired), { path: "", message: "70B3D57ED0051A2F measures no container today" })
   })
 

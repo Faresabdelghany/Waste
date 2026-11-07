@@ -32,7 +32,7 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import type { BusinessRecord } from "../../data/business-modules"
 import { schemeValuesOfDraft } from "../../data/route-schemes"
 import { problemSentence } from "../problem"
-import { webIdOf, type MappingContext } from "../records/adapter"
+import { recordFrom, webIdOf, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
@@ -126,20 +126,20 @@ const osterbro: RouteScheme = {
 }
 
 // The modules the schemes resolve against, as the store has them when the schemes load.
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: resolverOver(new Map()), now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: resolverOver(new Map()), now: NOW })
 const organisationState = loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)
-const providerRecord = serviceProviderAdapter.toRecord(nordren, { resolve: resolverOver(new Map()), now: NOW })
+const providerRecord = recordFrom(serviceProviderAdapter, nordren, { resolve: resolverOver(new Map()), now: NOW })
 const withOrganisation: ServerRecordsState = new Map([
   ["configure.organization", organisationState],
   ["service-providers.service-providers", loaded({ records: [providerRecord], serverIds: new Map([[providerRecord.id, nordren.id]]) }, 1)],
 ])
-const areaRecord = planningAreaAdapter.toRecord({ ...indreBy, boundaries: [indreByBoundary] }, { resolve: resolverOver(withOrganisation), now: NOW })
+const areaRecord = recordFrom(planningAreaAdapter, { ...indreBy, boundaries: [indreByBoundary] }, { resolve: resolverOver(withOrganisation), now: NOW })
 const masterContext: MappingContext = { resolve: resolverOver(new Map()), now: NOW }
 const masterRecords: Array<[BusinessRecord, string]> = [
-  [wasteFractionAdapter.toRecord(residual, masterContext), residual.id],
-  [wasteFractionAdapter.toRecord(organic, masterContext), organic.id],
-  [containerTypeAdapter.toRecord(bin240, masterContext), bin240.id],
-  [vehicleTypeAdapter.toRecord(rearLoader, masterContext), rearLoader.id],
+  [recordFrom(wasteFractionAdapter, residual, masterContext), residual.id],
+  [recordFrom(wasteFractionAdapter, organic, masterContext), organic.id],
+  [recordFrom(containerTypeAdapter, bin240, masterContext), bin240.id],
+  [recordFrom(vehicleTypeAdapter, rearLoader, masterContext), rearLoader.id],
 ]
 const state: ServerRecordsState = new Map([
   ...withOrganisation,
@@ -148,7 +148,7 @@ const state: ServerRecordsState = new Map([
 ])
 
 const context = (): MappingContext => ({ resolve: resolverOver(state), now: NOW })
-const recordOf = (scheme: RouteScheme): BusinessRecord => routeSchemeAdapter.toRecord(scheme, context())
+const recordOf = (scheme: RouteScheme): BusinessRecord => recordFrom(routeSchemeAdapter, scheme, context())
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
 /** The schemes module as the store holds it once a scheme has loaded: the row under its web id, beside its server id. */
@@ -654,8 +654,8 @@ describe("an edit of a scheme", () => {
     const shifted = new Map(state).set(
       "configure.master",
       loaded({
-        records: [...masterRecords.map(([record]) => (record.name === "Residual" ? { ...record, name: "Residual waste" } : record)), wasteFractionAdapter.toRecord(fresh, masterContext)],
-        serverIds: new Map([...masterRecords.map(([record, id]) => [record.id, id] as const), [wasteFractionAdapter.toRecord(fresh, masterContext).id, fresh.id]]),
+        records: [...masterRecords.map(([record]) => (record.name === "Residual" ? { ...record, name: "Residual waste" } : record)), recordFrom(wasteFractionAdapter, fresh, masterContext)],
+        serverIds: new Map([...masterRecords.map(([record, id]) => [record.id, id] as const), [recordFrom(wasteFractionAdapter, fresh, masterContext).id, fresh.id]]),
       }, 1),
     )
     const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"] })
@@ -756,7 +756,7 @@ describe("a scheme's lifecycle (O21 of #290)", () => {
     assert.deepEqual(bodyOf(calls[0]), { planAheadDays: 21 })
     assert.ok(RouteSchemePatch.safeParse(bodyOf(calls[0])).success)
     const { record } = schemesState(central)
-    assert.deepEqual(routeSchemeAdapter.toPatchBody(record, withValues({ [PLAN_AHEAD_DAYS_KEY]: "29" })(record), context()), { path: PLAN_AHEAD_DAYS_KEY, message: PLAN_AHEAD_DAYS_REFUSAL })
+    assert.deepEqual(routeSchemeAdapter.toPatchBody?.(record, withValues({ [PLAN_AHEAD_DAYS_KEY]: "29" })(record), context()), { path: PLAN_AHEAD_DAYS_KEY, message: PLAN_AHEAD_DAYS_REFUSAL })
   })
 
   test("a create leaves the week to the server's default and says another window where the record has one", () => {

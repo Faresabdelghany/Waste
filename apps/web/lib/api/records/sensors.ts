@@ -21,7 +21,7 @@ import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-mo
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, listPage, patch, type ApiClient } from "../client"
-import { hasPrefix, NO_PRESENTATION, isLocalRefusal, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { commandOf, hasPrefix, isLocalRefusal, patchOf, said, statusLabel, typed, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
 import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, tokenOf, withStatus } from "./places"
@@ -58,7 +58,7 @@ export function pairingLine(pairing: Pick<SensorPairing, "validFrom" | "validTo"
   return [`${container} ${period}`, `full at ${pairing.fullThresholdPercent}%`, pairing.booksEmptying ? "books an emptying" : undefined].filter(Boolean).join(" · ")
 }
 
-export function toSensorRecord(sensor: Sensor, context: MappingContext): BusinessRecord {
+export function toSensorRecord(sensor: Sensor, context: MappingContext): RecordFields {
   const project = referenced(context, "project", sensor.projectId)
   const projectRecord = context.resolve.byServerId(sensor.projectId)
   const timezone = projectRecord === undefined ? undefined : typed(projectRecord, "timezone")
@@ -75,12 +75,9 @@ export function toSensorRecord(sensor: Sensor, context: MappingContext): Busines
   if (reading?.batteryPercent != null) facts.Battery = `${reading.batteryPercent}%`
   if (reading?.rssiDbm != null) facts.RSSI = `${reading.rssiDbm} dBm`
   return {
-    id: webIdOf(SENSOR_PREFIX, sensor.id),
     name: sensor.identifier,
     context: `${NETWORK_LABELS[sensor.network]} · ${container ?? "not paired"}`,
     status: statusLabel(sensor.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(sensor, context.now),
     value: reading === null ? "No reading" : `${reading.fillPercent}%`,
     description: sensor.notes ?? "",
     related: container === undefined ? [] : [`Container ${container}`],
@@ -142,8 +139,8 @@ export const SENSOR_COMMANDS = {
     },
     refused: (record) => `${record.name} was not paired`,
   },
-  [CHANGE_PAIRING]: {
-    toBody: (input, record) => {
+  [CHANGE_PAIRING]: commandOf({
+    toBody: (input: CommandInput, record: BusinessRecord) => {
       const pairingId = typed(record, PAIRING_ID_KEY)
       if (pairingId === undefined) return refusal("", `${record.name} measures no container today`)
       const threshold = thresholdOf(said(input, "fullThresholdPercent"))
@@ -163,13 +160,12 @@ export const SENSOR_COMMANDS = {
       const change = { ...(threshold === undefined ? {} : { fullThresholdPercent: threshold }), ...(booksEmptying === undefined ? {} : { booksEmptying }), ...(validTo === undefined ? {} : { validTo }) }
       return Object.keys(change).length === 0 ? refusal("", "Change the threshold, the booking or the last day") : { pairingId, change }
     },
-    run: async (client, serverId, body) => {
-      const { pairingId, change } = body as { pairingId: string; change: object }
+    run: async (client, serverId, { pairingId, change }) => {
       await patch<SensorPairing>(client, `/sensor-pairings/${pairingId}`, change)
       return await sensorAfter(client, serverId)
     },
     refused: (record) => `${record.name}'s pairing was not changed`,
-  },
+  }),
 } satisfies Record<string, RecordCommand<Sensor>>
 
 export const sensorAdapter: ResourceAdapter<Sensor> = {

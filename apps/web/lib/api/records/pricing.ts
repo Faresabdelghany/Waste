@@ -43,7 +43,7 @@
 // asks `GET /price-lists/:id/resolve`, whose verdicts the dialog shows.
 import type { Product } from "@waste/contracts/catalogue"
 import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
-import type { PriceList, PriceListRow, PriceResolution, PriceResolveQuery } from "@waste/contracts/price-lists"
+import type { PriceList, PriceListCreate, PriceListPatch, PriceListRow, PriceResolution, PriceResolveQuery } from "@waste/contracts/price-lists"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
 import { percentLabel } from "@/lib/commercial/indexation"
@@ -71,7 +71,7 @@ import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/do
 import { SLUG_PATTERN } from "@waste/domain/text"
 
 import { create, get, listAll, patch, withQuery } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, NOTHING_RESOLVED, patchOf, stampFacts, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, NOTHING_RESOLVED, patchOf, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { planningAreaAdapter } from "./planning"
 import { dayIn, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"
@@ -263,8 +263,6 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
       name: product.name,
       context: `${kindLabel} · ${UNIT_SUFFIX[product.unit]}`,
       status: statusLabel(product.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(product, context.now),
       value: defaultPriceOf(product, id, project.webId, context),
       description: product.invoiceName === null ? "No invoice name yet: an invoice line reads the product's own name." : `Invoiced as ${product.invoiceName}${product.invoiceCode === null ? "" : ` (${product.invoiceCode})`}.`,
       facts: {
@@ -352,7 +350,7 @@ function listFields(record: BusinessRecord) {
   }
 }
 
-export const priceListAdapter: ResourceAdapter<PriceList> = {
+export const priceListAdapter: ResourceAdapter<PriceList, PriceListCreate, PriceListPatch> = {
   prefix: PRICE_LIST_PREFIX,
   auditTable: "price_list",
   owns: isPriceListRecord,
@@ -364,12 +362,9 @@ export const priceListAdapter: ResourceAdapter<PriceList> = {
     const project = referenced(context, "project", list.projectId)
     const lastDay = list.validTo === null ? undefined : lastDayIn(list.validTo)
     return {
-      id: webIdOf(PRICE_LIST_PREFIX, list.id),
       name: list.name,
       context: `${list.code} · ${list.currency}`,
       status: periodStatus(list.validFrom, list.validTo, projectDay(list.projectId, context)),
-      ...NO_PRESENTATION,
-      ...stampFacts(list, context.now),
       value: periodLabel(list.validFrom, list.validTo),
       description: list.notes ?? "",
       facts: {
@@ -464,7 +459,7 @@ function rowKeyOf(record: BusinessRecord, context: MappingContext): Record<strin
 /** The amount a person reads a price as, `18.50` being the example in any currency of two minor digits. */
 const amountRefusal = (currency: string) => refusal("amount", `An amount in ${currency}, such as ${majorOf(1850, currency)}`)
 
-export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
+export const priceRowAdapter: ResourceAdapter<PriceListRow, RowWrite> = {
   prefix: PRICE_ROW_PREFIX,
   auditTable: "price_list_row",
   owns: isPriceRowRecord,
@@ -498,12 +493,9 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
     const lastDay = row.validTo === null ? undefined : lastDayIn(row.validTo)
     const amount = majorOf(row.unitPriceMinor, currency)
     return {
-      id: webIdOf(PRICE_ROW_PREFIX, row.id),
       name,
       context: productName,
       status: periodStatus(row.validFrom, row.validTo, projectDay(row.projectId, context)),
-      ...NO_PRESENTATION,
-      ...stampFacts(row, context.now),
       value: `${formatMinor(row.unitPriceMinor, currency)}${unit === undefined ? "" : UNIT_SUFFIX[unit]}`,
       description: `Price row on ${productName} (${name}) in ${listName}.`,
       facts: {
@@ -603,8 +595,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
       return { unitPriceMinor: priceOf(record), note: typed(record, "note") ?? null, validTo: lastDay === undefined ? null : firstDayOut(lastDay) }
     })
   },
-  create: (client, body) => {
-    const write = body as RowWrite
+  create: (client, write) => {
     return create<PriceListRow>(client, `/price-lists/${write.priceListId}/rows`, write.body).then((created) => created.body)
   },
   update: (client, serverId, body) => patch<PriceListRow>(client, `/price-list-rows/${serverId}`, body),

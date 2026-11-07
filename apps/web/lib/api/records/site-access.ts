@@ -20,7 +20,7 @@ import { CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CR
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, typed, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectTimezoneOf, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
@@ -39,7 +39,7 @@ const kept = "A credential's kind, number and holder are what it is: end it and 
 const todayOf = (projectWebId: string, context: MappingContext): string =>
   todayIn(context, projectTimezoneOf({ projectIds: [projectWebId] }, context))
 
-export function toAccessCredentialRecord(credential: AccessCredential, context: MappingContext): BusinessRecord {
+export function toAccessCredentialRecord(credential: AccessCredential, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(credential.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", credential.projectId)
   const business = credential.customerId !== null
@@ -57,12 +57,9 @@ export function toAccessCredentialRecord(credential: AccessCredential, context: 
   }
   const reference = (prefix: string, serverId: string | null) => (serverId === null ? "" : webIdVia(context, prefix, serverId))
   return {
-    id: webIdOf(CREDENTIAL_PREFIX, credential.id),
     name: credential.label === null ? credential.value : `${credential.value} · ${credential.label}`,
     context: `${kind} · ${holder}`,
     status: credentialStatusOf(credential, todayOf(projectWebId, context)),
-    ...NO_PRESENTATION,
-    ...stampFacts(credential, context.now),
     value: period,
     description: business ? "A business's: its visits are charged to the agreement" : "A household's: its visits are counted against the property's year",
     facts,
@@ -154,7 +151,7 @@ export const ACCESS_CREDENTIAL_COMMANDS: Readonly<Record<string, RecordCommand<A
   },
 }
 
-export const accessCredentialAdapter: ResourceAdapter<AccessCredential> = {
+export const accessCredentialAdapter: ResourceAdapter<AccessCredential, AccessCredentialCreate, AccessCredentialPatch> = {
   prefix: CREDENTIAL_PREFIX,
   auditTable: "access_credential",
   // A row the dialog has just made is `site-access-credential-<clock>` until the server answers: owned by its recordKind.

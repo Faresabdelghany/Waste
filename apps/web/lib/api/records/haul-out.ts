@@ -26,7 +26,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { STATIONS_MODULE } from "@/lib/data/haul-out"
 
 import { get, listAll, post } from "../client"
-import type { CommandInput, LocalRefusal, MappingContext, RecordAction } from "./adapter"
+import { actionOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction } from "./adapter"
 import { instantOn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 
@@ -160,6 +160,9 @@ export function receiveLoadBody(input: CommandInput) {
   return { loadId, body: { receivingTicket, receivedNetKg: receivedNetKg!, receivedAt } }
 }
 
+/** A load command's body: the load, by its server id, and what the command says of it. */
+type LoadBody = { loadId: string; body: object }
+
 export function reasonBody(required: boolean) {
   return (input: CommandInput) => {
     const loadId = loadOf(input)
@@ -171,12 +174,9 @@ export function reasonBody(required: boolean) {
 }
 
 /** A load command: the station is the row; the load and its body ride in the action's input. */
-const loadAction = (verb: "receive" | "reconcile" | "dispute" | "cancel", toBody: RecordAction<OutboundLoad>["toBody"], refused: string): RecordAction<OutboundLoad> => ({
+const loadAction = (verb: "receive" | "reconcile" | "dispute" | "cancel", toBody: RecordAction<OutboundLoad, LoadBody>["toBody"], refused: string): RecordAction<OutboundLoad, LoadBody> => ({
   toBody,
-  run: (client, _stationId, body) => {
-    const { loadId, body: payload } = body as { loadId: string; body: unknown }
-    return post<OutboundLoad>(client, `/outbound-loads/${loadId}/${verb}`, payload).then((answer) => answer.body)
-  },
+  run: (client, _stationId, { loadId, body }) => post<OutboundLoad>(client, `/outbound-loads/${loadId}/${verb}`, body).then((answer) => answer.body),
   refused: () => refused,
 })
 
@@ -186,16 +186,16 @@ export const HAUL_OUT_ACTIONS: Readonly<Record<string, RecordAction<unknown>>> =
     run: (client, stationId, body) => post(client, `/unloading-stations/${stationId}/adjustments`, body).then((answer) => answer.body),
     refused: (record) => `The stock of ${record.name} was not adjusted`,
   },
-  [SEND_LOAD]: {
+  [SEND_LOAD]: actionOf({
     toBody: sendLoadBody,
     // The station the load leaves is the row the action is about.
-    run: (client, stationId, body) => post<OutboundLoad>(client, "/outbound-loads", { ...(body as object), fromStationId: stationId }).then((answer) => answer.body),
+    run: (client, stationId, body) => post<OutboundLoad>(client, "/outbound-loads", { ...body, fromStationId: stationId }).then((answer) => answer.body),
     refused: (record) => `No load was sent from ${record.name}`,
-  },
-  [RECEIVE_LOAD]: loadAction("receive", receiveLoadBody, "The receipt was not recorded") as RecordAction<unknown>,
-  [RECONCILE_LOAD]: loadAction("reconcile", reasonBody(false), "The load was not reconciled") as RecordAction<unknown>,
-  [DISPUTE_LOAD]: loadAction("dispute", reasonBody(true), "The load was not disputed") as RecordAction<unknown>,
-  [CANCEL_LOAD]: loadAction("cancel", reasonBody(true), "The load was not cancelled") as RecordAction<unknown>,
+  }),
+  [RECEIVE_LOAD]: loadAction("receive", receiveLoadBody, "The receipt was not recorded"),
+  [RECONCILE_LOAD]: loadAction("reconcile", reasonBody(false), "The load was not reconciled"),
+  [DISPUTE_LOAD]: loadAction("dispute", reasonBody(true), "The load was not disputed"),
+  [CANCEL_LOAD]: loadAction("cancel", reasonBody(true), "The load was not cancelled"),
 }
 
 /** Sends one of the station's actions through the store; the row stays as it is. */

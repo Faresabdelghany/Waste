@@ -22,7 +22,7 @@ import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { TICKET_TYPE_ACTIONS_KEY, TICKET_TYPE_FIELDS_KEY, TICKET_TYPE_PERMISSIONS_KEY, TICKET_TYPE_PREFIX, typeActionsOf, typeFieldsOf, typePermissionsOf } from "@/lib/data/ticket-types"
 
 import { create, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, ofKind, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter } from "./adapter"
+import { ofKind, statusLabel, statusToken, typed, type LocalRefusal, type MappingContext, type RecordFields, type Resolver, type ResourceAdapter } from "./adapter"
 import { vehicleAdapter } from "./fleet"
 import { roleAdapter, userAdapter } from "./organisation"
 import { isTicketTeamRecord } from "./ticket-teams"
@@ -62,15 +62,12 @@ function actionServerIds(record: BusinessRecord, context: MappingContext): Ticke
   return actions
 }
 
-export function toTicketTypeRecord(type: TicketType, context: MappingContext): BusinessRecord {
+export function toTicketTypeRecord(type: TicketType, context: MappingContext): RecordFields {
   const permissions = type.permissions.map((entry) => ({ command: entry.command, roleIds: entry.roleIds.map((id) => webIdVia(context, "role", id)) }))
   return {
-    id: webIdOf(TICKET_TYPE_PREFIX, type.id),
     name: type.name,
     context: type.isDefault ? `${statusLabel(type.kind)} · default` : statusLabel(type.kind),
     status: statusLabel(type.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(type, context.now),
     description: type.description ?? "A type of case the company keeps.",
     facts: {
       Kind: statusLabel(type.kind),
@@ -134,7 +131,7 @@ export function typeLetsRole(type: Pick<BusinessRecord, "submittedValues"> | und
 /** An edit's four parts: the type's own fields, the whole list of fields, the whole set of permissions, the whole automation — each where the edit changed it. */
 type TypeWrite = { type?: TicketTypePatch; fields?: TicketTypeField[]; permissions?: TicketTypePermission[]; actions?: TicketTypeActionBody[] }
 
-export const ticketTypeAdapter: ResourceAdapter<TicketType> = {
+export const ticketTypeAdapter: ResourceAdapter<TicketType, unknown, TypeWrite> = {
   prefix: TICKET_TYPE_PREFIX,
   auditTable: "ticket_type",
   owns: isTicketTypeRecord,
@@ -174,8 +171,7 @@ export const ticketTypeAdapter: ResourceAdapter<TicketType> = {
   },
   create: (client, body) => create<TicketType>(client, "/ticket-types", body).then((created) => created.body),
   // The type first, then each whole set through its own route; the answer is the type as it now stands.
-  update: async (client, serverId, body) => {
-    const write = body as TypeWrite
+  update: async (client, serverId, write) => {
     let type: TicketType | undefined
     if (write.type !== undefined) type = await patch<TicketType>(client, `/ticket-types/${serverId}`, write.type)
     if (write.fields !== undefined) type = await put<TicketType>(client, `/ticket-types/${serverId}/fields`, { fields: write.fields })

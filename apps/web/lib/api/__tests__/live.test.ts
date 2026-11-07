@@ -14,7 +14,7 @@ import { LiveRoute, type Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "../records/live"
 import { isServerBacked } from "../records/modules"
@@ -63,9 +63,9 @@ const dueToday: LiveRoute = { ...route, id: "01a0d2a4-a280-7030-8000-00000000000
 
 const noResolve = (resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve: resolver, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
-const projectRecord = projectAdapter.toRecord(copenhagen, noResolve())
-const vehicleRecords = [wh24, wh31, tr12].map((vehicle) => vehicleAdapter.toRecord(vehicle, noResolve()))
-const driverRecord = driverAdapter.toRecord(mads, noResolve())
+const projectRecord = recordFrom(projectAdapter, copenhagen, noResolve())
+const vehicleRecords = [wh24, wh31, tr12].map((vehicle) => recordFrom(vehicleAdapter, vehicle, noResolve()))
+const driverRecord = recordFrom(driverAdapter, mads, noResolve())
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
   ["fleet.vehicles", loaded({ records: vehicleRecords, serverIds: serverIdsOf(vehicleRecords, [wh24.id, wh31.id, tr12.id]) }, 1)],
@@ -119,14 +119,14 @@ describe("a live route", () => {
 
   test("an assignment names the trailer after the vehicle, the planned and the actual alike", () => {
     const hauling: LiveRoute = { ...live, planned: { ...live.planned, trailerId: tr12.id }, actual: { ...live.actual, trailerId: tr12.id }, session: { ...session, trailerId: tr12.id } }
-    const record = liveRouteAdapter.toRecord(hauling, context())
+    const record = recordFrom(liveRouteAdapter, hauling, context())
     assert.equal(record.facts["Planned assignment"], "Mads Jensen · WH-24 · TR-12")
     assert.equal(record.facts["Actual assignment"], "Mads Jensen · WH-31 · TR-12")
     assert.equal(record.context, "Mads Jensen · WH-31 · TR-12")
   })
 
   test("reads its progress, its actual assignment and where its device last was", () => {
-    const record = liveRouteAdapter.toRecord(live, context())
+    const record = recordFrom(liveRouteAdapter, live, context())
     assert.equal(record.name, "RC-1042")
     assert.equal(record.status, "Active")
     assert.equal(record.value, "33% · 1/3 stops", "the table's progress circle reads the percentage")
@@ -145,8 +145,8 @@ describe("a live route", () => {
   })
 
   test("a paused session reads Paused; a route due today that has not started has no session and no position yet", () => {
-    assert.equal(liveRouteAdapter.toRecord({ ...live, paused: true, session: { ...session, pausedAt: "2026-10-01T07:00:00.000Z" } }, context()).status, "Paused")
-    const ready = liveRouteAdapter.toRecord(dueToday, context())
+    assert.equal(recordFrom(liveRouteAdapter, { ...live, paused: true, session: { ...session, pausedAt: "2026-10-01T07:00:00.000Z" } }, context()).status, "Paused")
+    const ready = recordFrom(liveRouteAdapter, dueToday, context())
     assert.equal(ready.status, "Ready")
     assert.equal(ready.value, "0% · 0/3 stops")
     assert.equal(ready.context, "Mads Jensen · WH-24", "before a session, the Planned Assignment is what will run it")
@@ -158,7 +158,7 @@ describe("a live route", () => {
   test("is read-only: nothing is created, edited or commanded here", async () => {
     assert.equal(liveRouteAdapter.toCreateBody, undefined)
     assert.equal(liveRouteAdapter.commands, undefined)
-    const record = liveRouteAdapter.toRecord(live, context())
+    const record = recordFrom(liveRouteAdapter, live, context())
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, live.id]]) }, 1)
     assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, status: "Completed" }, { state, now: NOW })).kind, "refused")
@@ -173,17 +173,17 @@ describe("a live route", () => {
       eta: { nextPickupId: "01a0d2a4-a280-7031-8000-000000000002", nextAt: "2026-10-01T07:31:00.000Z", finishAt: "2026-10-01T09:05:00.000Z" },
     }
     assert.ok(LiveRoute.safeParse(tracked).success)
-    const record = liveRouteAdapter.toRecord(tracked, context())
+    const record = recordFrom(liveRouteAdapter, tracked, context())
     assert.equal(record.facts["Last position"], "55.70000, 12.60000", "the recorded position, not the proof's point")
     assert.equal(record.facts["Position freshness"], "2 minutes ago", "the position's age, not the device's")
     assert.equal(record.facts["Position recorded"], "2026-10-01 09:18")
     assert.equal(record.facts["Next stop expected"], "09:31")
     assert.equal(record.facts["Expected finish"], "11:05")
     assert.equal(record.submittedValues?.latitude, "55.7")
-    const done = liveRouteAdapter.toRecord({ ...tracked, eta: { nextPickupId: null, nextAt: null, finishAt: null } }, context())
+    const done = recordFrom(liveRouteAdapter, { ...tracked, eta: { nextPickupId: null, nextAt: null, finishAt: null } }, context())
     assert.equal(done.facts["Next stop expected"], "No stop to come")
     assert.equal(done.facts["Expected finish"], undefined)
-    assert.equal(liveRouteAdapter.toRecord(live, context()).facts["Next stop expected"], undefined, "a route without an active Plan says nothing of it")
+    assert.equal(recordFrom(liveRouteAdapter, live, context()).facts["Next stop expected"], undefined, "a route without an active Plan says nothing of it")
   })
 
   test("a route's track and its estimates are read from the route, one row each", async () => {

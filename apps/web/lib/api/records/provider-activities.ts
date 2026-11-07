@@ -27,7 +27,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 
 import { command, create, get, listAll, patch } from "../client"
-import { isLocalRefusal, moduleKeyOf, ofKind, stampFacts, statusLabel, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, ofKind, statusLabel, typed, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, todayIn } from "./clock"
 import { refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -46,7 +46,7 @@ const FRACTION_PREFIX = "fraction"
 const SCHEMES_KEY = "route-studio.schemes"
 const ROUTES_KEY = "route-studio.routes"
 
-export function toActivityRecord(activity: ServiceProviderActivity, context: MappingContext): BusinessRecord {
+export function toActivityRecord(activity: ServiceProviderActivity, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(activity.projectId)
   const projectWebId = project?.id ?? webIdVia(context, PROJECT_PREFIX, activity.projectId)
   const timezone = project === undefined ? undefined : typed(project, "timezone")
@@ -72,7 +72,6 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
     ...(project?.name === undefined ? {} : { Project: project.name }),
   }
   return {
-    id: webIdOf(ACTIVITY_PREFIX, activity.id),
     name: `${label} · ${activity.subject}`,
     context: [provider, facts["Service area"]].filter((part) => part !== undefined).join(" · "),
     status: statusLabel(activity.status),
@@ -80,7 +79,6 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
     value: kindLabel(activity.kind),
     description: activity.body ?? "",
     related: [],
-    ...stampFacts(activity, context.now),
     facts: { ...facts, Reading: reading },
     projectIds: [projectWebId],
     recordKind: ACTIVITY_RECORD_KIND,
@@ -287,7 +285,7 @@ export const ACTIVITY_COMMANDS: Readonly<Record<string, RecordCommand<ServicePro
   [CANCEL_ACTIVITY]: closing(CANCEL_ACTIVITY, "was not cancelled"),
 }
 
-export const activityAdapter: ResourceAdapter<ServiceProviderActivity> = {
+export const activityAdapter: ResourceAdapter<ServiceProviderActivity, ServiceProviderActivityCreate, ServiceProviderActivityPatch> = {
   prefix: ACTIVITY_PREFIX,
   auditTable: "service_provider_activity",
   // A row the workspace has just made is `activities-provider-activity-<clock>` until the server answers: owned by its recordKind.

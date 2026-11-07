@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import type { Vehicle } from "@waste/contracts/fleet"
 
 import { ALL_PROJECTS, isInProjectScope, type ProjectRecordId } from "../../data/project-scope"
-import { NOTHING_RESOLVED, webIdOf } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf } from "../records/adapter"
 import { ME_PROJECTS, projectScopeOfMe, withMeProjects } from "../records/me-projects"
 import { fleetVehiclesModule, vehicleAdapter } from "../records/fleet"
 import { loadModule, resolverOver, type ServerRecordsState } from "../records/server-records"
@@ -44,7 +44,7 @@ describe("the person's projects from /me, where the role does not view the organ
     assert.deepEqual(records[0].projectIds, [copenhagenId])
     assert.equal(records[0].facts.Project, "Copenhagen Central")
     assert.ok(isInProjectScope(records[0], copenhagenId))
-    const unresolved = vehicleAdapter.toRecord(wh24, { resolve: NOTHING_RESOLVED })
+    const unresolved = recordFrom(vehicleAdapter, wh24, { resolve: NOTHING_RESOLVED })
     assert.equal(unresolved.facts.Project, undefined, "without them, the row names no project")
   })
 

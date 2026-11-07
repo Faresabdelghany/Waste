@@ -9,14 +9,14 @@ import { describe, test, type TestContext } from "node:test"
 import type { Property } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { watchReads, type BusinessRecordStores } from "@/components/waste/business-record-store"
-
 import { createExternalStore } from "../../external-store"
 import type { ApiClient } from "../client"
 import { projectAdapter } from "../records/organisation"
 import { propertiesModule } from "../records/properties"
+import { watchReads, type RecordStoreContext } from "../records/record-store"
 import { loaded, readModuleInto, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, problem } from "./scripted-fetch"
+import { recordFrom } from "../records/adapter"
 
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -26,7 +26,7 @@ const NOON = Date.parse("2026-10-24T10:00:00Z")
 
 /** The organisation holding the project under `name`. */
 const organisation = (name: string) => {
-  const record = projectAdapter.toRecord({ ...copenhagen, name }, { resolve: resolverOver(new Map()) })
+  const record = recordFrom(projectAdapter, { ...copenhagen, name }, { resolve: resolverOver(new Map()) })
   return loaded({ records: [record], serverIds: new Map([[record.id, copenhagen.id]]) }, NOON)
 }
 
@@ -41,12 +41,10 @@ function propertiesApi() {
 }
 
 /** The store as a session holds it once its load has read the organisation and the properties, the watcher's to watch. */
-async function storesAfterTheLoad(client: ApiClient): Promise<BusinessRecordStores> {
+async function storesAfterTheLoad(client: ApiClient): Promise<RecordStoreContext> {
   const server = createExternalStore<ServerRecordsState>(new Map([["configure.organization", organisation("Copenhagen Central")]]))
   await readModuleInto(server, client, propertiesModule, { alive: () => true })
   return {
-    records: createExternalStore({}),
-    hydrated: createExternalStore(true),
     server,
     client: createExternalStore<ApiClient | null>(client),
     pendingWrites: new Map(),
@@ -54,6 +52,7 @@ async function storesAfterTheLoad(client: ApiClient): Promise<BusinessRecordStor
     generation: createExternalStore(0),
     sessionSignal: createExternalStore<AbortSignal | null>(new AbortController().signal),
     loading: createExternalStore(false),
+    notices: { refused: () => {}, landed: () => {}, landedCommand: () => {}, unsent: () => {} },
   }
 }
 
@@ -62,7 +61,7 @@ const settled = async () => {
   for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve))
 }
 
-const renamed = (stores: BusinessRecordStores, name: string) => stores.server.set((state) => new Map(state).set("configure.organization", organisation(name)))
+const renamed = (stores: RecordStoreContext, name: string) => stores.server.set((state) => new Map(state).set("configure.organization", organisation(name)))
 
 async function watching(t: TestContext, options: Parameters<typeof watchReads>[1] = {}) {
   const { api, client } = propertiesApi()
@@ -120,6 +119,28 @@ describe("the store's watcher", () => {
     await settled()
     assert.equal(api.asked, 2, "half a minute on, asked again")
     assert.equal(stores.server.getSnapshot().get(PROPERTIES)?.problem, null)
+  })
+
+  test("arms nothing once stopped: a read again still out when the watcher stops is not asked for again half a minute on", async (t) => {
+    const { client } = propertiesApi()
+    const stores = await storesAfterTheLoad(client)
+    const answers: ((response: Response) => void)[] = []
+    stores.client.set(clientOver((async () => new Promise<Response>((resolve) => answers.push(resolve))) as typeof fetch))
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: NOON })
+    const stop = watchReads(stores, { onReturn: () => () => {} })
+    renamed(stores, "Copenhagen Centre")
+    t.mock.timers.tick(1_000)
+    await settled()
+    assert.equal(answers.length, 1, "the read again is out")
+    stop()
+    answers[0](problem(400, "Not now"))
+    await settled()
+    assert.ok(stores.server.getSnapshot().get(PROPERTIES)?.problem, "the read again failed")
+    for (const step of [30_000, 1_000, 1_000]) {
+      t.mock.timers.tick(step)
+      await settled()
+    }
+    assert.equal(answers.length, 1, "never asked for again")
   })
 
   test("tells a development build of a module read again and again for what it read, once", async (t) => {

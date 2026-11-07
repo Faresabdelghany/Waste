@@ -9,7 +9,7 @@
 import type { TicketType } from "@waste/contracts/ticket-types"
 import { useReport } from "@/components/insight/use-report"
 import { listAll } from "@/lib/api/client"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError } from "@/lib/api/problem"
 import type { TypeChoice, TypeChoices } from "@/lib/data/ticket-scope"
 
 /** The company's ticket types, every status and each kind's default marked, by name: null until read, none where the role reads none (a 403), `failed` where the read did otherwise. */

@@ -13,7 +13,7 @@ import { SettlementCreate, SettlementReopen } from "@waste/contracts/settlements
 import { UnloadCreate } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject } from "@waste/contracts/weight-control"
 
-import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { wasteFractionAdapter } from "../../api/records/master-data"
 import { projectAdapter } from "../../api/records/organisation"
 import { productAdapter } from "../../api/records/pricing"
@@ -64,9 +64,9 @@ const SETTLEMENT = "01a0d2a4-a280-7093-8000-000000000001"
 
 const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
-const projectRecord = projectAdapter.toRecord(copenhagen, bare)
-const fractionRecord = wasteFractionAdapter.toRecord(organic, bare)
-const productRecord = productAdapter.toRecord(residual, bare)
+const projectRecord = recordFrom(projectAdapter, copenhagen, bare)
+const fractionRecord = recordFrom(wasteFractionAdapter, organic, bare)
+const productRecord = recordFrom(productAdapter, residual, bare)
 const plain = (id: string, name: string, recordKind: string, submittedValues: BusinessFormValues = {}): BusinessRecord => ({ ...projectRecord, id, name, recordKind, projectIds: [projectRecord.id], submittedValues })
 const planningArea = plain(`area-${OSTERBRO}`, "Østerbro Zone 2", "Planning area")
 const provider = plain(`service-provider-${NORDREN}`, "NordRen ApS", "Service provider")
@@ -139,7 +139,7 @@ describe("the provider-money chain's Pilot forms", () => {
     const edit = serviceAreaEditForm(areaRecord)
     assert.deepEqual(editableOf(edit), ["areaName", "boundary", "notes", "validFrom", "validTo", "wasteFractionIds", "zoneIds"])
     assert.ok(!fieldsOf(edit).includes("serviceProviderId"), "who holds it is its assignments'")
-    const write = body(serviceAreaAdapter.toPatchBody(areaRecord, updateServiceAreaRecord(areaRecord, { areaName: "Østerbro organic and paper", wasteFractionIds: "" }), context))
+    const write = body(serviceAreaAdapter.toPatchBody?.(areaRecord, updateServiceAreaRecord(areaRecord, { areaName: "Østerbro organic and paper", wasteFractionIds: "" }), context))
     assert.deepEqual(write, { patch: { name: "Østerbro organic and paper" }, wasteFractionIds: { ids: [] } })
   })
 
@@ -150,7 +150,7 @@ describe("the provider-money chain's Pilot forms", () => {
     assert.equal(write.serviceAreaId, AREA)
     assert.ok(ServiceAreaAssignmentCreate.safeParse(write.body).success)
     assert.deepEqual(editableOf(assignmentEndForm(assignmentRecord)), ["notes", "validTo"])
-    const patch = assignmentAdapter.toPatchBody(assignmentRecord, { ...assignmentRecord, submittedValues: { ...assignmentRecord.submittedValues, validTo: "2026-12-31" } }, context)
+    const patch = assignmentAdapter.toPatchBody?.(assignmentRecord, { ...assignmentRecord, submittedValues: { ...assignmentRecord.submittedValues, validTo: "2026-12-31" } }, context)
     assert.ok(ServiceAreaAssignmentPatch.safeParse(patch).success)
   })
 

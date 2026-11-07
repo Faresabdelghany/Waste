@@ -16,7 +16,7 @@ import { DEPOT_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/voca
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
@@ -51,11 +51,11 @@ const nordhavnWarehouse: Warehouse = { ...west, id: "01a0d2a4-a280-7011-8000-000
 
 // The modules loaded before the places: the organisation, the providers, the master data.
 const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
-const harborRecord = projectAdapter.toRecord(harbor, noResolve)
-const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve)
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, noResolve)
+const harborRecord = recordFrom(projectAdapter, harbor, noResolve)
+const nordrenRecord = recordFrom(serviceProviderAdapter, nordren, noResolve)
 const fractions = [residual, glass, mixed]
-const fractionRecords = fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve))
+const fractionRecords = fractions.map((fraction) => recordFrom(wasteFractionAdapter, fraction, noResolve))
 const copenhagenWebId = webIdOf("project", copenhagen.id)
 const harborWebId = webIdOf("project", harbor.id)
 const nordrenWebId = webIdOf("service-provider", nordren.id)
@@ -112,7 +112,7 @@ describe("the places modules", () => {
 })
 
 describe("a depot", () => {
-  const record = depotAdapter.toRecord(nordhavnDepot, context())
+  const record = recordFrom(depotAdapter, nordhavnDepot, context())
 
   test("is a record in its project with its hours as the fixture spells them, the wire's four statuses, and typed values under the form's own field ids", () => {
     assert.equal(record.id, `depot-${nordhavnDepot.id}`)
@@ -150,7 +150,7 @@ describe("a depot", () => {
   })
 
   test("a provider's depot names it by the web id the store knows it under, and shows in the provider's scope", () => {
-    const provided = depotAdapter.toRecord({ ...nordhavnDepot, ownership: "service-provider", serviceProviderId: nordren.id, vehicleCapacity: 12, opensAt: null, closesAt: null }, context())
+    const provided = recordFrom(depotAdapter, { ...nordhavnDepot, ownership: "service-provider", serviceProviderId: nordren.id, vehicleCapacity: 12, opensAt: null, closesAt: null }, context())
     assert.equal(provided.serviceProviderId, nordrenWebId)
     assert.equal(provided.facts.Ownership, "NordRen ApS")
     assert.equal(provided.facts.Hours, undefined)
@@ -233,20 +233,20 @@ describe("a depot", () => {
 
   test("a patch says what moved — a rename, hours cleared as two nulls, a new owner by server id, a status the lifecycle moved — and the contract accepts it", () => {
     const renamed: BusinessRecord = { ...record, name: "Nordhavn Base", submittedValues: { ...record.submittedValues, name: "Nordhavn Base", operatingHours: "" } }
-    const body = depotAdapter.toPatchBody(record, renamed, context())
+    const body = depotAdapter.toPatchBody?.(record, renamed, context())
     assert.deepEqual(body, { name: "Nordhavn Base", opensAt: null, closesAt: null })
     assert.ok(DepotPatch.safeParse(body).success)
     const handedOver: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, ownership: "service-provider", serviceProviderId: nordrenWebId } }
-    assert.deepEqual(depotAdapter.toPatchBody(record, handedOver, context()), { ownership: "service-provider", serviceProviderId: nordren.id })
+    assert.deepEqual(depotAdapter.toPatchBody?.(record, handedOver, context()), { ownership: "service-provider", serviceProviderId: nordren.id })
     const seasonal: BusinessRecord = { ...record, status: "Seasonal" }
-    assert.deepEqual(depotAdapter.toPatchBody(record, seasonal, context()), { status: "seasonal" })
+    assert.deepEqual(depotAdapter.toPatchBody?.(record, seasonal, context()), { status: "seasonal" })
     const moved: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, latitude: "55.71", longitude: "12.6", vehicleCapacity: "10" } }
-    assert.deepEqual(depotAdapter.toPatchBody(record, moved, context()), { location: at(12.6, 55.71), vehicleCapacity: 10 })
-    assert.equal(depotAdapter.toPatchBody(record, record, context()), null)
+    assert.deepEqual(depotAdapter.toPatchBody?.(record, moved, context()), { location: at(12.6, 55.71), vehicleCapacity: 10 })
+    assert.equal(depotAdapter.toPatchBody?.(record, record, context()), null)
   })
 
   test("what is set once does not move: the code, the project, the kind of location; and a depot keeps a location", () => {
-    const patch = (over: Record<string, string>) => depotAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
+    const patch = (over: Record<string, string>) => depotAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ code: "DEP-NORD" }), { path: "code", message: "The code is set once: a depot that needs another code is another depot" })
     assert.deepEqual(patch({ projectId: harborWebId }), { path: "projectId", message: "A depot stays in its project" })
     assert.deepEqual(patch({ locationType: "unloading" }), { path: "locationType", message: "A location keeps its kind: a depot does not become an unloading station" })
@@ -276,7 +276,7 @@ describe("a depot", () => {
 })
 
 describe("an unloading station", () => {
-  const record = unloadingStationAdapter.toRecord(arc, context())
+  const record = recordFrom(unloadingStationAdapter, arc, context())
 
   test("is the company's record — no project, every scope — with its fractions named by the master module's rows and the form's typed values", () => {
     assert.equal(record.id, `station-${arc.id}`)
@@ -355,39 +355,39 @@ describe("an unloading station", () => {
 
   test("an edit is a patch of the station, the whole set of fractions, or both; the same set in another order is no change", () => {
     const weighed: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, weighbridgeAvailable: false, acceptedFractionIds: `${fractionWebId(glass)},${fractionWebId(residual)}` } }
-    const body = unloadingStationAdapter.toPatchBody(record, weighed, context()) as { station?: unknown; wasteFractionIds?: string[] }
+    const body = unloadingStationAdapter.toPatchBody?.(record, weighed, context()) as { station?: unknown; wasteFractionIds?: string[] }
     assert.deepEqual(body, { station: { weighbridge: false }, wasteFractionIds: [glass.id, residual.id] })
     assert.ok(UnloadingStationPatch.safeParse(body.station).success)
     assert.ok(UnloadingStationFractionsSet.safeParse({ wasteFractionIds: body.wasteFractionIds }).success)
     const reordered: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, acceptedFractionIds: `${fractionWebId(mixed)},${fractionWebId(residual)}` } }
-    assert.equal(unloadingStationAdapter.toPatchBody(record, reordered, context()), null)
+    assert.equal(unloadingStationAdapter.toPatchBody?.(record, reordered, context()), null)
     const emptied: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, acceptedFractionIds: "" } }
-    assert.deepEqual(unloadingStationAdapter.toPatchBody(record, emptied, context()), { wasteFractionIds: [] }, "a station that takes nothing yet is a set of none")
+    assert.deepEqual(unloadingStationAdapter.toPatchBody?.(record, emptied, context()), { wasteFractionIds: [] }, "a station that takes nothing yet is a set of none")
     const recoded: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, code: "ARC" } }
-    assert.deepEqual(unloadingStationAdapter.toPatchBody(record, recoded, context()), { path: "code", message: "The code is set once: an unloading station that needs another code is another unloading station" })
+    assert.deepEqual(unloadingStationAdapter.toPatchBody?.(record, recoded, context()), { path: "code", message: "The code is set once: an unloading station that needs another code is another unloading station" })
     const rekinded: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, locationType: "depot" } }
-    assert.deepEqual(unloadingStationAdapter.toPatchBody(record, rekinded, context()), { path: "locationType", message: "A location keeps its kind: an unloading station does not become a depot" })
+    assert.deepEqual(unloadingStationAdapter.toPatchBody?.(record, rekinded, context()), { path: "locationType", message: "A location keeps its kind: an unloading station does not become a depot" })
   })
 
   test("the update patches the station, then puts the whole set through its own route, and answers the station as it now stands", async () => {
     const patched = { ...arc, weighbridge: false }
     const reset = { ...patched, wasteFractionIds: [glass.id] }
     const { fetch, calls } = scripted([() => json(patched), () => json(reset)])
-    const answer = await unloadingStationAdapter.update(clientOver(fetch), arc.id, { station: { weighbridge: false }, wasteFractionIds: [glass.id] })
+    const answer = await unloadingStationAdapter.update!(clientOver(fetch), arc.id, { station: { weighbridge: false }, wasteFractionIds: [glass.id] })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/unloading-stations/${arc.id}`, `PUT http://api.test/unloading-stations/${arc.id}/fractions`])
     assert.deepEqual(bodyOf(calls[1]), { wasteFractionIds: [glass.id] })
     assert.deepEqual(answer.wasteFractionIds, [glass.id])
     const setOnly = scripted([() => json(reset)])
-    await unloadingStationAdapter.update(clientOver(setOnly.fetch), arc.id, { wasteFractionIds: [glass.id] })
+    await unloadingStationAdapter.update!(clientOver(setOnly.fetch), arc.id, { wasteFractionIds: [glass.id] })
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/unloading-stations/${arc.id}/fractions`])
   })
 })
 
 describe("a warehouse", () => {
-  const depotRecord = depotAdapter.toRecord(nordhavnDepot, context())
+  const depotRecord = recordFrom(depotAdapter, nordhavnDepot, context())
   const withDepots: ServerRecordsState = new Map([...state, ["resources.depots", loaded({ records: [depotRecord], serverIds: new Map([[depotRecord.id, nordhavnDepot.id]]) }, 1)]])
   const resolveDepots = resolverOver(withDepots)
-  const record = warehouseAdapter.toRecord(nordhavnWarehouse, context(resolveDepots))
+  const record = recordFrom(warehouseAdapter, nordhavnWarehouse, context(resolveDepots))
 
   test("is a record in its project naming the depot it shares a yard with by the web id the store knows it under", () => {
     assert.equal(record.id, `warehouse-${nordhavnWarehouse.id}`)
@@ -408,7 +408,7 @@ describe("a warehouse", () => {
       colocatedDepotId: `depot-${nordhavnDepot.id}`,
     })
     assert.deepEqual(warehouseAdapter.statuses, WAREHOUSE_STATUSES)
-    const alone = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(resolveDepots))
+    const alone = recordFrom(warehouseAdapter, { ...west, location: at(12.5, 55.66) }, context(resolveDepots))
     assert.equal(alone.facts["Colocated depot"], undefined)
     assert.equal(alone.facts.Coordinates, "55.66, 12.5")
     assert.equal(alone.submittedValues?.colocatedDepotId, "")
@@ -446,16 +446,16 @@ describe("a warehouse", () => {
 
   test("a patch says what moved, the yard shared no longer as null, and holds the code and the project still", () => {
     const parted: BusinessRecord = { ...record, name: "Nordhavn Stock", status: "Restricted", submittedValues: { ...record.submittedValues, name: "Nordhavn Stock", colocatedDepotId: "", latitude: "55.7091", longitude: "12.5958" } }
-    const body = warehouseAdapter.toPatchBody(record, parted, context(resolveDepots))
+    const body = warehouseAdapter.toPatchBody?.(record, parted, context(resolveDepots))
     assert.deepEqual(body, { name: "Nordhavn Stock", location: at(12.5958, 55.7091), depotId: null, status: "restricted" })
     assert.ok(WarehousePatch.safeParse(body).success)
-    assert.equal(warehouseAdapter.toPatchBody(record, record, context(resolveDepots)), null)
+    assert.equal(warehouseAdapter.toPatchBody?.(record, record, context(resolveDepots)), null)
     // A location cleared on a geocoded warehouse is null on the wire, which the contract takes.
-    const located = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(resolveDepots))
-    const ungeocoded = warehouseAdapter.toPatchBody(located, { ...located, submittedValues: { ...located.submittedValues, latitude: "", longitude: "" } }, context(resolveDepots))
+    const located = recordFrom(warehouseAdapter, { ...west, location: at(12.5, 55.66) }, context(resolveDepots))
+    const ungeocoded = warehouseAdapter.toPatchBody?.(located, { ...located, submittedValues: { ...located.submittedValues, latitude: "", longitude: "" } }, context(resolveDepots))
     assert.deepEqual(ungeocoded, { location: null })
     assert.ok(WarehousePatch.safeParse(ungeocoded).success)
-    const patch = (over: Record<string, string>) => warehouseAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(resolveDepots))
+    const patch = (over: Record<string, string>) => warehouseAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(resolveDepots))
     assert.deepEqual(patch({ code: "WH-NORD" }), { path: "code", message: "The code is set once: a warehouse that needs another code is another warehouse" })
     assert.deepEqual(patch({ projectId: harborWebId }), { path: "projectId", message: "A warehouse stays in its project" })
   })
@@ -464,7 +464,7 @@ describe("a warehouse", () => {
     assert.equal(warehousesModule.workspaceId, "resources")
     assert.equal(warehousesModule.moduleId, "warehouses")
     const { fetch, calls } = scripted([() => json({ ...west, name: "West Stock" })])
-    const answer = await warehouseAdapter.update(clientOver(fetch), west.id, { name: "West Stock" })
+    const answer = await warehouseAdapter.update!(clientOver(fetch), west.id, { name: "West Stock" })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/warehouses/${west.id}`])
     assert.equal(answer.name, "West Stock")
   })

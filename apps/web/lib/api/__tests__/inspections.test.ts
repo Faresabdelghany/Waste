@@ -16,8 +16,8 @@ import { type BusinessRecord } from "../../data/business-modules"
 import { mintedRecord } from "../../data/containers"
 import { FILL_LABELS } from "../../data/fill-levels"
 import { INSPECTION_RECORD_KIND, INSPECTIONS_MODULE } from "../../data/inspections"
-import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { addInspectionPhoto, CLOSE_INSPECTION, inspectionAdapter, toInspectionCreateBody, toInspectionPatchBody, toInspectionRecord } from "../records/inspections"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
+import { addInspectionPhoto, CLOSE_INSPECTION, inspectionAdapter, toInspectionCreateBody, toInspectionPatchBody } from "../records/inspections"
 import { isServerBacked } from "../records/modules"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
@@ -52,13 +52,13 @@ const atTheBin: FieldInspection = {
 describe("a field inspection as a record", () => {
   test("is the module's on the API, `field-inspection-<uuid>`, by its subject and day, its verdict and findings in words", () => {
     assert.ok(isServerBacked(INSPECTIONS_MODULE.workspaceId, INSPECTIONS_MODULE.moduleId))
-    const record = toInspectionRecord(atTheBin, context)
+    const record = recordFrom(inspectionAdapter, atTheBin, context)
     assert.equal(record.id, `field-inspection-${atTheBin.id}`)
     assert.deepEqual([record.name, record.context, record.status, record.value], [`asset-${id(3)} · 2027-03-04`, "Major finding", "Open", "Contamination · Overfilled"])
     assert.deepEqual([record.facts.Container, record.facts.Photos, record.facts.Inspected], [`asset-${id(3)}`, "1", "2027-03-04 10:00"])
     assert.deepEqual(record.submittedValues, { containerId: `asset-${id(3)}`, propertyId: "", outcome: "major", findings: "contamination, overfilled", note: "", status: "open" })
     assert.ok(inspectionAdapter.owns(record))
-    const atTheHouse = toInspectionRecord({ ...atTheBin, containerId: null, propertyId: id(6), outcome: "compliant", findings: [], status: "closed", closedAt: "2027-03-04T11:00:00.000Z" }, context)
+    const atTheHouse = recordFrom(inspectionAdapter, { ...atTheBin, containerId: null, propertyId: id(6), outcome: "compliant", findings: [], status: "closed", closedAt: "2027-03-04T11:00:00.000Z" }, context)
     assert.deepEqual([atTheHouse.facts.Property, atTheHouse.value, atTheHouse.status, atTheHouse.facts.Closed], [`property-${id(6)}`, "Nothing found", "Closed", "2027-03-04 12:00"])
   })
 
@@ -66,8 +66,8 @@ describe("a field inspection as a record", () => {
     const surface = COMMAND_SURFACES["operate.inspections"]
     assert.equal(surface.primary, "form")
     assert.ok(surface.rowActions !== undefined)
-    assert.equal(genericEditOffered(surface, toInspectionRecord(atTheBin, context)), true)
-    assert.equal(genericEditOffered(surface, toInspectionRecord({ ...atTheBin, status: "closed", closedAt: NOW.toISOString() }, context)), false)
+    assert.equal(genericEditOffered(surface, recordFrom(inspectionAdapter, atTheBin, context)), true)
+    assert.equal(genericEditOffered(surface, recordFrom(inspectionAdapter, { ...atTheBin, status: "closed", closedAt: NOW.toISOString() }, context)), false)
     assert.ok(inspectionAdapter.commands?.[CLOSE_INSPECTION] !== undefined)
   })
 })
@@ -90,7 +90,7 @@ describe("the form's row as the wire's", () => {
   })
 
   test("a patch moves the verdict, the findings and the note, never the subject", () => {
-    const before = toInspectionRecord(atTheBin, context)
+    const before = recordFrom(inspectionAdapter, atTheBin, context)
     const after = { ...before, submittedValues: { ...before.submittedValues, outcome: "minor", findings: "overfilled", note: "Garden waste" } }
     assert.deepEqual(FieldInspectionPatch.parse(toInspectionPatchBody(before, after)), { outcome: "minor", findings: ["overfilled"], note: "Garden waste" })
     assert.equal(toInspectionPatchBody(before, before), null)

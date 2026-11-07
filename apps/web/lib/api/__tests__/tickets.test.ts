@@ -15,7 +15,7 @@ import { defaultFactColumns } from "../../data/business-view-kinds"
 import { NO_ONE } from "../../data/properties"
 import { replyWithEvidenceForm, ticketStopOptions } from "../../data/tickets"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { actOnRecord, commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -44,7 +44,7 @@ const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
 const routeId = "01a0d2a4-a280-7030-8000-000000000001"
@@ -112,7 +112,7 @@ const missed: Ticket = {
   bookedPickupId: null, countedBy: null,
 }
 
-const record = ticketAdapter.toRecord(missed, context())
+const record = recordFrom(ticketAdapter, missed, context())
 const current = loaded({ records: [record], serverIds: new Map([[record.id, missed.id]]) }, 1)
 
 describe("the tickets module", () => {
@@ -142,7 +142,7 @@ describe("a ticket", () => {
   })
 
   test("its SLA is what its due date reads as at the list's clock: overdue, on track, met, breached or none (O4 of #290)", () => {
-    const sla = (values: Partial<Ticket>) => ticketAdapter.toRecord({ ...missed, ...values }, context()).facts[TICKET_SLA_FACT]
+    const sla = (values: Partial<Ticket>) => recordFrom(ticketAdapter, { ...missed, ...values }, context()).facts[TICKET_SLA_FACT]
     assert.equal(sla({}), "On track", "open, due at noon, read at ten")
     assert.equal(sla({ dueAt: "2026-10-01T09:59:00.000Z" }), "Overdue")
     assert.equal(sla({ status: "completed", resolution: "serviced", closedAt: "2026-10-01T11:00:00.000Z" }), "Met")
@@ -211,13 +211,13 @@ describe("a ticket", () => {
   })
 
   test("says under Customer · property whom and where it is about, each once: never its number, the route, the stop, the container or the driver (#253)", () => {
-    const reported = ticketAdapter.toRecord({ ...missed, links: { ...missed.links, propertyId, driverId } }, context())
+    const reported = recordFrom(ticketAdapter, { ...missed, links: { ...missed.links, propertyId, driverId } }, context())
     assert.equal(reported.context, "Strandboulevarden 52", "the consumer names the stop's property and no customer")
     assert.equal(reported.facts.Property, "Strandboulevarden 52")
     assert.equal(reported.facts.Container, "BIN-82014", "the container under its own fact, once")
-    const named = ticketAdapter.toRecord({ ...missed, source: "office", links: { ...NO_LINKS, customerId, propertyId } }, context())
+    const named = recordFrom(ticketAdapter, { ...missed, source: "office", links: { ...NO_LINKS, customerId, propertyId } }, context())
     assert.equal(named.context, "Østerbro Housing · Strandboulevarden 52")
-    const unloaded = ticketAdapter.toRecord({ ...missed, links: { ...NO_LINKS, customerId, propertyId } }, context(NOTHING_RESOLVED))
+    const unloaded = recordFrom(ticketAdapter, { ...missed, links: { ...NO_LINKS, customerId, propertyId } }, context(NOTHING_RESOLVED))
     assert.equal(unloaded.context, `customer-${customerId} · property-${propertyId}`, "by id chip until their modules load")
   })
 
@@ -232,7 +232,7 @@ describe("a ticket", () => {
   })
 
   test("names its links and its assignee by id chip until their modules load", () => {
-    const assigned = ticketAdapter.toRecord({ ...missed, assigneeUserAccountId: oliviaId }, context(NOTHING_RESOLVED))
+    const assigned = recordFrom(ticketAdapter, { ...missed, assigneeUserAccountId: oliviaId }, context(NOTHING_RESOLVED))
     assert.equal(assigned.facts.Route, `route-${routeId}`)
     assert.equal(assigned.facts.Container, `asset-${containerId}`)
     assert.equal(assigned.owner, `user-${oliviaId}`)
@@ -242,7 +242,7 @@ describe("a ticket", () => {
   })
 
   test("says what it ended in: the resolution, the re-collection's route and when it closed", () => {
-    const completed = ticketAdapter.toRecord({ ...missed, status: "completed", resolution: "recollected", recollectionRouteId: routeId, closedAt: "2026-10-01T09:00:00.000Z", assigneeUserAccountId: oliviaId }, context())
+    const completed = recordFrom(ticketAdapter, { ...missed, status: "completed", resolution: "recollected", recollectionRouteId: routeId, closedAt: "2026-10-01T09:00:00.000Z", assigneeUserAccountId: oliviaId }, context())
     assert.equal(completed.status, "Completed")
     assert.equal(completed.owner, "Olivia Larsen")
     assert.equal(completed.facts.Resolution, "Recollected")
@@ -250,7 +250,7 @@ describe("a ticket", () => {
     assert.equal(completed.facts.Closed, "2026-10-01 11:00")
     assert.equal(completed.submittedValues?.recollectionRouteId, rc1042.id)
     // The stop the office added for it, where the completion named one (#111): by its id chip until the stops load.
-    const onItsStop = ticketAdapter.toRecord({ ...missed, status: "completed", resolution: "recollected", recollectionRouteId: routeId, recollectionPickupId: pickupId, closedAt: "2026-10-01T09:00:00.000Z" }, context())
+    const onItsStop = recordFrom(ticketAdapter, { ...missed, status: "completed", resolution: "recollected", recollectionRouteId: routeId, recollectionPickupId: pickupId, closedAt: "2026-10-01T09:00:00.000Z" }, context())
     assert.equal(onItsStop.facts["Re-collection stop"], `pickup-${pickupId}`)
     assert.equal(onItsStop.submittedValues?.recollectionPickupId, `pickup-${pickupId}`)
     assert.equal(completed.facts["Re-collection stop"], undefined)
@@ -260,11 +260,11 @@ describe("a ticket", () => {
     const { fetch, calls } = scripted([() => json({ ...missed, kind: "overflow", bookedRouteId: routeId, bookedPickupId: pickupId, events: [] })])
     const read = await ticketAdapter.read?.(clientOver(fetch), missed.id)
     assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}`)
-    assert.equal(ticketAdapter.toRecord(read as typeof missed, context()).facts["Booked stop"], `pickup-${pickupId}`)
+    assert.equal(recordFrom(ticketAdapter, read as typeof missed, context()).facts["Booked stop"], `pickup-${pickupId}`)
   })
 
   test("says which stop the office booked to answer it, its route by name and the stop by its id chip until the stops load (O3c of #290)", () => {
-    const booked = ticketAdapter.toRecord({ ...missed, kind: "overflow", bookedRouteId: routeId, bookedPickupId: pickupId }, context())
+    const booked = recordFrom(ticketAdapter, { ...missed, kind: "overflow", bookedRouteId: routeId, bookedPickupId: pickupId }, context())
     assert.deepEqual([booked.facts["Booked route"], booked.facts["Booked stop"]], ["RC-1042", `pickup-${pickupId}`])
     assert.deepEqual([booked.submittedValues?.bookedRouteId, booked.submittedValues?.bookedPickupId], [rc1042.id, `pickup-${pickupId}`])
     assert.equal(record.facts["Booked stop"], undefined, "a ticket no stop answers says nothing of one")
@@ -272,7 +272,7 @@ describe("a ticket", () => {
 
   test("reads each status as the list and the details spell it", () => {
     const words = { open: "Open", "in-progress": "In progress", pending: "Pending", "on-hold": "On hold", completed: "Completed", rejected: "Rejected" } as const
-    for (const [token, word] of Object.entries(words)) assert.equal(ticketAdapter.toRecord({ ...missed, status: token as Ticket["status"] }, context()).status, word)
+    for (const [token, word] of Object.entries(words)) assert.equal(recordFrom(ticketAdapter, { ...missed, status: token as Ticket["status"] }, context()).status, word)
   })
 })
 
@@ -364,20 +364,20 @@ describe("the patch of a case's own fields", () => {
   const edited = (values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 
   test("sends what moved of the subject, the description, the kind, the priority and the due, as the contracts' TicketPatch", () => {
-    const body = ticketAdapter.toPatchBody(record, edited({ priority: "critical", kind: "access-issue" }), context())
+    const body = ticketAdapter.toPatchBody?.(record, edited({ priority: "critical", kind: "access-issue" }), context())
     assert.deepEqual(body, { kind: "access-issue", priority: "critical" })
     assert.ok(TicketPatch.safeParse(body).success)
-    const due = ticketAdapter.toPatchBody(record, edited({ dueAt: "2026-10-02T09:00" }), context())
+    const due = ticketAdapter.toPatchBody?.(record, edited({ dueAt: "2026-10-02T09:00" }), context())
     assert.deepEqual(due, { dueAt: "2026-10-02T07:00:00.000Z" })
     assert.ok(TicketPatch.safeParse(due).success)
-    const cleared = ticketAdapter.toPatchBody(record, edited({ dueAt: "" }), context())
+    const cleared = ticketAdapter.toPatchBody?.(record, edited({ dueAt: "" }), context())
     assert.deepEqual(cleared, { dueAt: null }, "a cleared due is cleared")
     assert.ok(TicketPatch.safeParse(cleared).success)
-    assert.equal(ticketAdapter.toPatchBody(record, edited({}), context()), null, "nothing moved, nothing sent")
+    assert.equal(ticketAdapter.toPatchBody?.(record, edited({}), context()), null, "nothing moved, nothing sent")
   })
 
   test("never carries the status, the assignee, the source or the links", () => {
-    assert.equal(ticketAdapter.toPatchBody(record, edited({ source: "email", routeId: "", assigneeUserAccountId: olivia.id, status: "completed" }), context()), null)
+    assert.equal(ticketAdapter.toPatchBody?.(record, edited({ source: "email", routeId: "", assigneeUserAccountId: olivia.id, status: "completed" }), context()), null)
   })
 
   test("a status move is refused before the API sees it: the status moves by command", async () => {

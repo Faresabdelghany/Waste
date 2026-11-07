@@ -82,7 +82,7 @@ import {
 } from "@/lib/data/properties"
 
 import { create, get, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, PartialWrite, patchOf, statusLabel, typed, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { todayIn } from "./clock"
@@ -223,7 +223,7 @@ function partiesOf(record: BusinessRecord, context: MappingContext): PropertyPar
 
 const propertyKind = (record: BusinessRecord) => tokenOf(record, "propertyType", PROPERTY_KINDS, "kind", "a property")
 
-export const propertyAdapter: ResourceAdapter<Property> = {
+export const propertyAdapter: ResourceAdapter<Property, unknown, PropertyWrite> = {
   prefix: PROPERTY_PREFIX,
   auditTable: "property",
   owns: isPropertyRecord,
@@ -239,12 +239,9 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     const owners = holders("owner").join(", ")
     const payers = holders("payer").join(", ")
     return {
-      id: webIdOf(PROPERTY_PREFIX, property.id),
       name: property.name,
       context: `${owners || "No owner"} · ${payers ? `Payer ${payers}` : "No payer"}`,
       status: statusLabel(property.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(property, context.now),
       description: property.notes ?? "",
       facts: {
         "Property type": PROPERTY_KIND_LABELS[property.kind],
@@ -354,8 +351,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
   },
   create: (client, body) => create<Property>(client, "/properties", body).then((created) => created.body),
   // The property first, then the whole set through its own route.
-  update: (client, serverId, body) => {
-    const write = body as PropertyWrite
+  update: (client, serverId, write) => {
     return patchThenReplace<Property>(client, `/properties/${serverId}`, write.property, `/properties/${serverId}/parties`, write.parties === undefined ? undefined : { parties: write.parties })
   },
 }
@@ -426,7 +422,7 @@ type GroupWrite = { group?: object; members?: PropertyGroupMember[] }
 const GROUP_NOUN = "a property group"
 const GROUP_MEMBER = "a group member"
 
-export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
+export const propertyGroupAdapter: ResourceAdapter<PropertyGroup, unknown, GroupWrite> = {
   prefix: GROUP_PREFIX,
   auditTable: "property_group",
   owns: isPropertyGroupRecord,
@@ -438,12 +434,9 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
     const members = entriesOf(group.members.map((member) => ({ id: member.propertyId, role: member.role })), PROPERTY_PREFIX, context)
     const purpose = GROUP_PURPOSE_LABELS[group.purpose]
     return {
-      id: webIdOf(GROUP_PREFIX, group.id),
       name: group.name,
       context: responsible === undefined ? purpose : `${purpose} · ${responsible.name ?? responsible.webId}`,
       status: statusLabel(group.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(group, context.now),
       value: countLabel(members.length, "property", "properties"),
       facts: {
         Purpose: purpose,
@@ -517,8 +510,7 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
   },
   create: (client, body) => create<PropertyGroup>(client, "/property-groups", body).then((created) => created.body),
   // The group first, then the whole membership through its own route.
-  update: (client, serverId, body) => {
-    const write = body as GroupWrite
+  update: (client, serverId, write) => {
     return patchThenReplace<PropertyGroup>(client, `/property-groups/${serverId}`, write.group, `/property-groups/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }
@@ -537,7 +529,7 @@ const POINT_MEMBER = "a point member"
 const pointToken = (record: BusinessRecord, key: string, tokens: readonly string[], what: string) =>
   tokenOf(record, key, tokens, what, POINT_NOUN) ?? refusal(key, `A shared collection point needs ${/^[aeiou]/.test(what) ? "an" : "a"} ${what}`)
 
-export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
+export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint, unknown, PointWrite> = {
   prefix: SHARED_POINT_PREFIX,
   auditTable: "shared_collection_point",
   owns: isSharedPointRecord,
@@ -548,12 +540,9 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
     const responsible = point.responsibleCustomerId === null ? undefined : referenced(context, CUSTOMER_CHIP, point.responsibleCustomerId)
     const members = entriesOf(point.members.map((member) => ({ id: member.propertyId, role: member.role })), PROPERTY_PREFIX, context)
     return {
-      id: webIdOf(SHARED_POINT_PREFIX, point.id),
       name: point.name,
       context: `${OPERATING_MODEL_LABELS[point.operatingModel]} · ${ACCESS_MODE_LABELS[point.accessMode]}`,
       status: statusLabel(point.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(point, context.now),
       value: countLabel(members.length, "member property", "member properties"),
       facts: {
         Type: POINT_KIND_LABELS[point.kind],
@@ -693,8 +682,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
   },
   create: (client, body) => create<SharedCollectionPoint>(client, "/shared-collection-points", body).then((created) => created.body),
   // The point first, then the whole membership through its own route.
-  update: (client, serverId, body) => {
-    const write = body as PointWrite
+  update: (client, serverId, write) => {
     return patchThenReplace<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}`, write.point, `/shared-collection-points/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }

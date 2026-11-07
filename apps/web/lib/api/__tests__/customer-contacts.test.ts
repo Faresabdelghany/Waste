@@ -10,7 +10,7 @@ import { CustomerContactCreate, CustomerContactPatch } from "@waste/contracts/cu
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
 import { ADD_CONTACT, contactBody, contactLine, draftOf, EDIT_CONTACT, NEW_CONTACT, takesContacts } from "../records/customer-contacts"
-import { NOTHING_RESOLVED } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
 import { customerAdapter, customerKindOf, customersModule } from "../records/registry"
 import { actOnRecord, loaded, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
@@ -20,7 +20,7 @@ const CUSTOMER_ID = "01a0d2a4-a280-7004-8000-000000000101"
 const CONTACT_ID = "01a0d2a4-a280-7004-8000-000000000201"
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 
-const organisation = customerAdapter.toRecord(
+const organisation = recordFrom(customerAdapter, 
   { id: CUSTOMER_ID, ...STAMPS, kind: "organisation", name: "Østerbro Boligforening", registrationNumber: null, email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active", paymentTermsDays: null },
   { resolve: NOTHING_RESOLVED, now: NOW },
 )
