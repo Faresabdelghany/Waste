@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
+import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"
 
 import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../business-modules"
 import {

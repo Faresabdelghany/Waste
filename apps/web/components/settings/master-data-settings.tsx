@@ -68,7 +68,7 @@ import {
   type MasterDataKind,
   type MasterDataLookups,
 } from "@/lib/data/master-data"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 const ACTOR_NAME = "Olivia Larsen"
 /** Where the project records live — what a service frequency names. */

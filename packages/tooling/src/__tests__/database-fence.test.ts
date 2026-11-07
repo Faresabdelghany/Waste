@@ -4,8 +4,9 @@
 // @waste/db, drizzle-orm or postgres, a type-only import included, is reported
 // as an error that names the ADR and points at the API; the same source under
 // apps/api passes, since the API is the one place those packages belong; and
-// the packages the web app does use pass under apps/web. The specimens are
-// text handed to ESLint with a path, never files on disk, so `eslint .`
+// the packages the web app does use pass under apps/web. The demo tenant,
+// @waste/fixtures, is fenced the other way: refused everywhere but the web
+// and packages/db's seed. The specimens are text handed to ESLint with a path, never files on disk, so `eslint .`
 // cannot trip over them, and each ESLint instance runs from the package
 // directory its `pnpm lint` runs from. It lives here, with the purity gate,
 // because it drives a tool's API against the whole repository's configuration
@@ -56,8 +57,8 @@ describe("the database fence around apps/web", () => {
     const source = [
       'import { HealthResponse } from "@waste/contracts/health"',
       'import { count } from "@waste/domain/text"',
-      'import { containerPoints } from "@waste/domain/map-planning/statistics"',
-      "export const specimen = [HealthResponse, count, containerPoints]",
+      'import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"',
+      "export const specimen = [HealthResponse, count, FIXTURE_GAZETTEER]",
       "",
     ].join("\n")
     assert.deepEqual(await fenceMessages(linters.web, "apps/web/lib/data/specimen.ts", source), [])
@@ -90,5 +91,31 @@ describe("the routing fence around apps/web (#169)", () => {
   test("fences apps/web only: the API and the worker call the provider", async () => {
     const source = `${ROUTING_FENCED.join("\n")}\nexport const specimen = [providerFromEnv, FakeProvider, routing]\n`
     assert.deepEqual(await fenceMessages(linters.api, "apps/api/src/specimen.ts", source), [])
+  })
+})
+
+describe("the demo tenant's fence: @waste/fixtures is development-only", () => {
+  const source = 'import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"\nexport const specimen = FIXTURE_GAZETTEER\n'
+  const db = new ESLint({ cwd: path.join(repo, "packages/db") })
+
+  test("reports it in the API, the worker, the domain, and the database package outside its seed", async () => {
+    const places: [ESLint, string][] = [
+      [linters.api, "apps/api/src/specimen.ts"],
+      [new ESLint({ cwd: path.join(repo, "apps/worker") }), "apps/worker/src/specimen.ts"],
+      [new ESLint({ cwd: path.join(repo, "packages/domain") }), "packages/domain/src/specimen.ts"],
+      [db, "packages/db/src/commands/specimen.ts"],
+    ]
+    for (const [linter, file] of places) {
+      const messages = await fenceMessages(linter, file, source)
+      assert.equal(messages.length, 1, `${file}: ${JSON.stringify(messages)}`)
+      assert.equal(messages[0].severity, 2, "an error, so `pnpm lint` fails")
+      assert.match(messages[0].message, /development-only/)
+    }
+  })
+
+  test("lets the seed, its tests and the web read it", async () => {
+    assert.deepEqual(await fenceMessages(db, "packages/db/src/seed/specimen.ts", source), [])
+    assert.deepEqual(await fenceMessages(db, "packages/db/src/__tests__/specimen.test.ts", source), [])
+    assert.deepEqual(await fenceMessages(linters.web, "apps/web/lib/data/specimen.ts", source), [])
   })
 })

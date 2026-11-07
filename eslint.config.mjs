@@ -86,6 +86,26 @@ export default defineConfig([
     },
   },
 
+  // The demo tenant is development-only: the web shows it and the seed writes
+  // it, and the API's and the worker's images install without it (--prod).
+  {
+    files: ["packages/**/*.ts", "apps/api/**/*.ts", "apps/worker/**/*.ts", "apps/pilot/**/*.ts"],
+    ignores: ["packages/fixtures/**", "packages/db/src/seed/**", "packages/db/src/__tests__/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waste/fixtures", "@waste/fixtures/*"],
+              message: "@waste/fixtures is the demo tenant, development-only: the web and packages/db's seed read it, never a runtime module of the API, the worker, the domain or the contracts.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Shared packages (domain, contracts, api, worker, pilot, ...): stricter than the app.
   // Package lint scripts should run `eslint . --max-warnings 0`.
   {

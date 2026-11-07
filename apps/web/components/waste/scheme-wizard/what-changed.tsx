@@ -16,8 +16,8 @@ import { count } from "@waste/domain/text"
 import {
   schemeDraftChanges,
   type SchemeDraftNames,
-} from "@waste/domain/route-schemes/changes"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+} from "@/lib/prototype/route-schemes/changes"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
 import type { WizardRecords } from "./use-wizard-records"

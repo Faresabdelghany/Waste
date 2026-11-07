@@ -381,6 +381,9 @@ importers:
       '@waste/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@waste/fixtures':
+        specifier: workspace:*
+        version: link:../../packages/fixtures
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.20(postcss@8.5.0)
@@ -586,6 +589,9 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
+      '@waste/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       '@waste/tooling':
         specifier: workspace:*
         version: link:../tooling
@@ -619,6 +625,28 @@ importers:
         version: '@typescript/typescript6@6.0.2'
 
   packages/domain:
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.0.0
+      '@typescript/native':
+        specifier: npm:typescript@^7.0.2
+        version: typescript@7.0.2
+      '@waste/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
+
+  packages/fixtures:
+    dependencies:
+      '@waste/domain':
+        specifier: workspace:*
+        version: link:../domain
     devDependencies:
       '@types/node':
         specifier: ^22

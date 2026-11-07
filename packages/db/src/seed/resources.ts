@@ -4,9 +4,9 @@
 // workspace) under registry.ts's discipline — literal copies, fixed ids keyed
 // by the prototype's record ids, and every reading stated here.
 //
-//   Vehicle types. Rebuilt from the domain's canonical compatibility table
-//   (`CONTAINER_VEHICLE_COMPATIBILITY`, @waste/domain/route-schemes/matching)
-//   rather than copied, so a change to the table reaches the seed by itself:
+//   Vehicle types. Rebuilt from the demo tenant's compatibility table
+//   (`CONTAINER_VEHICLE_COMPATIBILITY`, @waste/fixtures/taxonomy) rather than
+//   copied, so a change to the table reaches the seed by itself:
 //   its five vehicle types become rows keyed by their name as a slug (`Rear
 //   loader` → `rear-loader`), and every (container type, vehicle type) it
 //   allows a `container_type_vehicle_type` row, the container type found by
@@ -77,7 +77,7 @@
 //   types' weights are a store the browser keeps alone.
 import type { Point } from "@waste/contracts/geojson"
 import type { EmploymentType, FuelType, LicenceClass, UnloadingStationOwnership, VehicleKind, VehicleOwnership } from "@waste/domain/resources/vocabulary"
-import { CONTAINER_VEHICLE_COMPATIBILITY, STOP_MATCH_VEHICLE_TYPES } from "@waste/domain/route-schemes/matching"
+import { CONTAINER_VEHICLE_COMPATIBILITY, STOP_MATCH_VEHICLE_TYPES } from "@waste/fixtures/taxonomy"
 
 import type { Tx } from "../client"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
@@ -99,7 +99,7 @@ const TRAILER_TYPE = "Closed trailer"
 
 const VEHICLE_TYPE_NAMES: readonly string[] = [...STOP_MATCH_VEHICLE_TYPES, TRAILER_TYPE]
 
-/** The container type a name of the domain's table is, among the Registry's: its key and its id. */
+/** The container type a name of the table is, among the Registry's: its key and its id. */
 function containerTypeNamed(name: string): { key: string; id: string } {
   const key = CONTAINER_TYPE_KEYS[name]
   if (!key) throw new Error(`resources seed: the compatibility table names ${name}, which is no container type of the Registry's`)

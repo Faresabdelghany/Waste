@@ -1,0 +1,27 @@
+{
+  "name": "@waste/fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The demo tenant, Kystbyen Renovation, as the web prototype shows it and `pnpm db:seed` writes it: the generated half of its registry (seeded-registry: the fifty seeded properties and the hundred seeded containers), the streets they stand on (gazetteer) and how an address is placed on them (positions), its container types and vehicle types with which vehicle type empties which container type (taxonomy), and its service frequency catalogue (service-frequencies). Development-only beside @waste/tooling: a dependency of apps/web, which shows the demo, and a devDependency of packages/db, whose seed writes it; never a dependency of the API or the worker, whose images leave it out. Pure like the domain it reads (src/__tests__/purity.test.ts): no React, Next, browser or Node globals. Ships TypeScript source by subpath.",
+  "exports": {
+    "./package.json": "./package.json",
+    "./__tests__/*": null,
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@waste/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "@waste/tooling": "workspace:*",
+    "tsx": "^4.23.12",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

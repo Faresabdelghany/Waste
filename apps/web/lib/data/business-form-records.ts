@@ -12,7 +12,7 @@
  * live option labels, where a relation target actually lives.
  */
 
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 
 import type {
   BusinessFormField,

@@ -62,7 +62,7 @@
 //   `touches`, and once it is done the store reads the module again through
 //   the read the load makes (`readModuleInto`, `rereadsOf`), keeping the
 //   rows it has while the read is out (Issue #198).
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 

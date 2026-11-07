@@ -7,13 +7,12 @@
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
 import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
-import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditApplication, type SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
-import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@waste/domain/route-schemes/groups"
-import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
+import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditApplication, type SchemeEditQuestion } from "@/lib/prototype/route-schemes/edit"
+import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@/lib/prototype/route-schemes/groups"
+import { schemeGenerationRecorded } from "@/lib/prototype/route-schemes/lifecycle"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { isIsoDate } from "@waste/domain/days"
-import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
+import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 import { count } from "@waste/domain/text"
 
 import { typed } from "@/lib/api/records/adapter"
@@ -22,6 +21,7 @@ import type { ModuleState } from "@/lib/api/records/server-records"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import { serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
 
@@ -332,7 +332,7 @@ export function schemeOneOffOnApi(before: BusinessRecord, after: BusinessRecord,
 
 /**
  * What a scheme edit does on the Pilot (#179), the edit policy's question
- * (@waste/domain/route-schemes/edit) over the routes the API holds — `routes`,
+ * (lib/prototype/route-schemes/edit) over the routes the API holds — `routes`,
  * or null while they are not read. An edit of a scheme that is not running
  * (a Draft, never generated) or that shapes no collection saves. Otherwise
  * the policy decides — the answer given, else the one stored before the edit,

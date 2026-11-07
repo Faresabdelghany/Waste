@@ -8,7 +8,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { calendarHrefOf } from "@/lib/public/collection-days"
 import { dropOffHrefOf } from "@/lib/public/drop-off-points"
 import { isPublicSlug, PUBLIC_SLUG_LENGTH } from "@waste/domain/access/public-slug"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 /** One public page of a published project. */
 export type PublicPage = { label: string; href: string }

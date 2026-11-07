@@ -7,7 +7,7 @@
 //
 // A scheme is one resource with its collection groups on it, and the record
 // is the prototype's scheme: the scheme's fields under the form's ids, and
-// the groups in the prototype's one group shape (@waste/domain/route-schemes/
+// the groups in the prototype's one group shape (lib/prototype/route-schemes/
 // groups) — the legacy single-assignment keys when one group runs every
 // service day, the explicit JSON under `group-<uuid>` ids otherwise, which is
 // what `collectionGroupsToValues` writes for the same groups on the browser's
@@ -72,15 +72,14 @@ import type {
   RouteSchemeSuccessorCreate,
   StopMatchingRule,
 } from "@waste/contracts/route-schemes"
-import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
-import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
-import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
-import { parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@/lib/prototype/route-schemes/container-drift"
+import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@/lib/prototype/route-schemes/groups"
+import { SCHEME_API_WARNINGS_KEY } from "@/lib/prototype/route-schemes/lifecycle"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
-import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
-import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
+import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
@@ -104,6 +103,7 @@ import {
   type ServerModule,
 } from "./adapter"
 import type { ActionOutcome, SendAction } from "./server-records"
+import { parseServiceDays, SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** Where a scheme keeps its groups' server ids: JSON, the web's group id to the server's. */
 export const SERVER_GROUP_IDS_KEY = "serverGroupIds"

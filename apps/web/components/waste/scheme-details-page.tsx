@@ -30,7 +30,7 @@ import {
   removeBusinessFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
-} from "@waste/domain/business-filters"
+} from "@/lib/prototype/business-filters"
 import type {
   BusinessRecord,
   ModuleDefinition,
@@ -40,31 +40,31 @@ import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
   containerDriftMovement,
   type CollectionGroupContainerDrift,
-} from "@waste/domain/route-schemes/container-drift"
+} from "@/lib/prototype/route-schemes/container-drift"
 import {
   attentionWarnings,
   schemeCanGenerateRoutes,
   schemeFuturePlanningStopped,
   schemeLiveAssessment,
   type SchemeRelatedRecords,
-} from "@waste/domain/route-schemes/lifecycle"
-import { schemeGroupPlans } from "@waste/domain/route-schemes/groups"
-import { schemeHolidayPolicy, schemeProjectId } from "@waste/domain/route-schemes/holidays"
-import { holidayListCountry } from "@waste/domain/route-schemes/holiday-list-records"
+} from "@/lib/prototype/route-schemes/lifecycle"
+import { schemeGroupPlans } from "@/lib/prototype/route-schemes/groups"
+import { schemeHolidayPolicy, schemeProjectId } from "@/lib/prototype/route-schemes/holidays"
+import { holidayListCountry } from "@/lib/prototype/route-schemes/holiday-list-records"
 import {
   NO_HOLIDAY_LIST_LABEL,
   resolveProjectCalendar,
   weekendLabel,
   type ProjectCalendar,
-} from "@waste/domain/route-schemes/project-calendar"
+} from "@/lib/prototype/route-schemes/project-calendar"
 import { settingsHref } from "@/lib/data/settings-panes"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
-import { schemeEditPolicy } from "@waste/domain/route-schemes/edit"
-import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
-import { stopRuleSummary } from "@waste/domain/route-schemes/matching"
-import { isPlanAheadEnabled, setPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
-import { schemeAreaName } from "@waste/domain/route-schemes/scheme-list"
+import { SCHEME_EDIT_POLICY_LABELS } from "@/lib/prototype/route-schemes/creation"
+import { schemeEditPolicy } from "@/lib/prototype/route-schemes/edit"
+import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/planning/occurrences"
+import { stopRuleSummary } from "@/lib/prototype/route-schemes/matching"
+import { isPlanAheadEnabled, setPlanAhead } from "@/lib/prototype/route-schemes/plan-ahead"
+import { schemeAreaName } from "@/lib/prototype/route-schemes/scheme-list"
 import {
   SCHEME_ROUTE_FILTER_READERS,
   SCHEME_STOP_FILTER_READERS,
@@ -78,10 +78,10 @@ import {
   schemeStopContainerType,
   withRouteWasteFractions,
   withStopServiceDate,
-} from "@waste/domain/route-schemes/scheme-tabs"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/route-schemes/scheme-tabs"
+import { recurrenceSentence, todayIso } from "@waste/domain/planning/recurrence"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
-import { stringValue } from "@waste/domain/route-schemes/validation"
+import { stringValue } from "@/lib/prototype/route-schemes/validation"
 import { recordCountLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -132,6 +132,7 @@ import {
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { readableKey } from "@/lib/data/record-key"
+import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** The date a generated route operates on (D17). */
 function routeOperatingDate(route: BusinessRecord): string | undefined {

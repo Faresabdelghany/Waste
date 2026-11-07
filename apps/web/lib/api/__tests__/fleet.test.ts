@@ -16,7 +16,7 @@ import type { VehicleType } from "@waste/contracts/vehicle-types"
 import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DRIVER_STATUSES, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
-import { driverProfile, vehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
+import { driverProfile, vehicleProfile } from "@/lib/prototype/route-schemes/fleet-profiles"
 
 import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"

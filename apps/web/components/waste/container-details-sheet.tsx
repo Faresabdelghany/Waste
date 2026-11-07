@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { DotsThree, Printer, Ticket, Trash, Wrench } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { serviceFrequencyOfRecord } from "@waste/domain/service-frequencies"
+import { serviceFrequencyOfRecord } from "@/lib/prototype/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

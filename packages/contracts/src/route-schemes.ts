@@ -52,7 +52,7 @@
 // succeeded, and each rule group's two latest match stamps — the set it
 // matched as of a run's first day and the rule it matched under — which is
 // what a client's drift reading compares (`containerDriftBetween`,
-// @waste/domain/route-schemes/container-drift). It is read from
+// apps/web/lib/prototype/route-schemes/container-drift). It is read from
 // `generation_run` and `generation_match` whenever the scheme is, never kept
 // on the scheme's row and never written by a body, so the one place it is
 // stored is the runs'.
@@ -92,7 +92,7 @@ import {
 } from "@waste/domain/planning/schemes"
 import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
 import { changesSomething, eachOnce } from "@waste/domain/requests"
-import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
+import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/planning/seasons"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"

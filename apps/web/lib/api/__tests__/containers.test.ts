@@ -13,7 +13,7 @@ import { ContainerCreate, ContainerPatch, ContainerServicePlacementCreate, Conta
 import type { Project } from "@waste/contracts/organisation"
 import { Adjust, Decommission, Receive, Return, Transfer, type DecommissionReason, type StockMovement } from "@waste/contracts/stock"
 import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
-import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@waste/domain/service-frequencies"
+import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@/lib/prototype/service-frequencies"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"

@@ -20,11 +20,10 @@
 // later, and its last day in force for a scheme that has ended. Every cadence
 // the scheme runs at in a year is judged against that promise — its own, and
 // each of its seasons' (O17 of #290), named — so a winter that breaks it warns
-// in May, when it is written. The interval
-// is turned into collections per week by
-// @waste/domain/service-frequencies `intervalCollectionsPerWeek` and the
-// sentences are @waste/domain/route-schemes/validation's, the ones the
-// browser's preview prints, so a warning reads the same wherever it is told.
+// in May, when it is written. The interval is turned into collections per
+// week and the sentences written by @waste/domain/planning/frequency-reconciliation,
+// which the browser's preview prints too, so a warning reads the same
+// wherever it is told.
 //
 // A page costs one statement for the projects' timezones and one per day the
 // page's schemes are judged on (today, for a page of schemes in force).
@@ -37,10 +36,9 @@ import { subscription } from "@waste/db/schema/agreements"
 import { product, serviceFrequency } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { project } from "@waste/db/schema/organisation"
+import { intervalCollectionsPerWeek, schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
-import { schemeSeasonsOf } from "@waste/domain/route-schemes/scheme-seasons"
-import { schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/route-schemes/validation"
-import { intervalCollectionsPerWeek } from "@waste/domain/service-frequencies"
+import { schemeSeasonsOf } from "@waste/domain/planning/scheme-seasons"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 /** What the reconciliation reads of one scheme: its row's recurrence and period, its groups, and what its runs matched. */

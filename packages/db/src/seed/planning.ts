@@ -11,7 +11,7 @@
 //   `route-planning` area, as its context ("Planning area · …") reads.
 //
 //   Boundaries. Derived, not authored: the outline the prototype's map draws
-//   around an area (`planningAreaOutline`, @waste/domain/map-planning/areas,
+//   around an area (`planningAreaOutline`, @waste/domain/map-planning/geo,
 //   the helper the map itself calls — the convex hull pushed 80 m out, or a
 //   box 120 m past one or two spots) over the same containers — every one
 //   the fixtures file under the area and the map places (in storage, in
@@ -62,9 +62,9 @@
 //   its fixture does not: its stops are picked.
 //
 //   Groups. Each scheme's implicit `default` group of the prototype
-//   (`collectionGroupsOf`, @waste/domain/route-schemes/groups) is made an
-//   explicit row, since the server keeps every group as one: named as its
-//   scheme, first, running every service day. RS-Central's matches by rule —
+//   (`collectionGroupsOf`, apps/web/lib/prototype/route-schemes/groups) is
+//   made an explicit row, since the server keeps every group as one: named as
+//   its scheme, first, running every service day. RS-Central's matches by rule —
 //   Residual, on the rear-loader vehicle type, whose compatible container
 //   types resources.ts writes — with WH-24 and Mads Jensen, its fixture's;
 //   it names no provider, its hauler being Kystbyen itself. RS-Østerbro's
@@ -86,10 +86,8 @@
 //   counts, and the prototype's `lastGeneratedAt` stamp on RS-Central, which
 //   on the server is a generation run's own record.
 import type { Polygon, Position } from "@waste/contracts/geojson"
-import { planningAreaOutline } from "@waste/domain/map-planning/areas"
-import type { LngLat } from "@waste/domain/map-planning/geo"
+import { planningAreaOutline, type LngLat } from "@waste/domain/map-planning/geo"
 import type { PlanningAreaPurpose, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
-import { IMPLICIT_GROUP_ID } from "@waste/domain/route-schemes/groups"
 import { firstDayOut } from "@waste/domain/periods"
 
 import type { Tx } from "../client"
@@ -245,7 +243,7 @@ const SCHEMES: readonly SchemeSpec[] = [
 ]
 
 /** A scheme's implicit group, keyed as the prototype keys it: `scheme-central-a:default`. */
-const groupKeyOf = (scheme: SchemeSpec): string => `${scheme.key}:${IMPLICIT_GROUP_ID}`
+const groupKeyOf = (scheme: SchemeSpec): string => `${scheme.key}:default`
 
 /* --------------------------------- rows ----------------------------------- */
 

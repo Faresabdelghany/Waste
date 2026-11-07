@@ -27,7 +27,7 @@ import { webIdOf } from "@/lib/api/records/adapter"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TICKET_TEAM_PREFIX, TICKET_TEAMS_MODULE, type TeamDefaultRow } from "@/lib/data/ticket-teams"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs.

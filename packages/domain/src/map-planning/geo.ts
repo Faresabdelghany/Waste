@@ -166,6 +166,30 @@ export function expandPolygon(polygon: readonly LngLat[], metres: number): LngLa
   })
 }
 
+/** Metres the hull grows so the outermost markers sit inside the line. */
+const HULL_MARGIN_METRES = 80
+/** Half-width of the box drawn around one or two containers. */
+const POINT_BOX_METRES = 120
+
+/**
+ * The outline of an area around its located containers' spots, an open ring:
+ * three or more distinct spots are their convex hull pushed 80 m out, one or
+ * two a box 120 m past them, none no outline at all. The web's map draws it
+ * for an area that carries no boundary of its own, and `pnpm db:seed` stores
+ * it as each demo area's boundary (Issue #156), so the two are one
+ * derivation.
+ */
+export function planningAreaOutline(spots: readonly LngLat[]): LngLat[] {
+  const hull = convexHull(spots)
+  if (hull.length >= 3) return expandPolygon(hull, HULL_MARGIN_METRES)
+  if (hull.length === 0) return []
+  const corners = hull.flatMap((spot) => [
+    offsetMetres(spot, -POINT_BOX_METRES, -POINT_BOX_METRES),
+    offsetMetres(spot, POINT_BOX_METRES, POINT_BOX_METRES),
+  ])
+  return boundsPolygon(boundsFromPolygon(corners))
+}
+
 /** Perpendicular distance in metres from `point` to the segment `a`–`b`. */
 function distanceToSegmentMetres(point: LngLat, a: LngLat, b: LngLat): number {
   const origin = localMetres(a, a.lat)

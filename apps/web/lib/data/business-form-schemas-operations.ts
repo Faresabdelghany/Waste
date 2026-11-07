@@ -1,11 +1,11 @@
+import { SCHEME_EDIT_POLICIES } from "@waste/domain/planning/vocabulary"
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
-  SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
-} from "@waste/domain/route-schemes/creation"
-import { LICENCE_CLASSES } from "@waste/domain/route-schemes/fleet-profiles"
-import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
-import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
+} from "@/lib/prototype/route-schemes/creation"
+import { LICENCE_CLASSES } from "@/lib/prototype/route-schemes/fleet-profiles"
+import { CONTAINER_TYPE_VOCABULARY } from "@/lib/prototype/route-schemes/matching"
+import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@/lib/prototype/route-schemes/scope"
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
 import { INSPECTION_FORM } from "@/lib/data/inspections"
@@ -1157,7 +1157,7 @@ export const operationsBusinessFormSchemas = [
           },
           {
             // Step 1's service type (issue #43): the container types a
-            // scheme may collect follow from it (@waste/domain/route-schemes/
+            // scheme may collect follow from it (lib/prototype/route-schemes/
             // scope) — the group editor offers only those and
             // checkCollectionGroups refuses a group outside them — so the
             // form gates on it as Guided Setup does.
@@ -1168,7 +1168,7 @@ export const operationsBusinessFormSchemas = [
             options: SCHEME_SERVICE_TYPES.map(labelOption),
           },
           // No Collection calendar field: holidays follow the project (holiday
-          // model 2026-09-16, @waste/domain/route-schemes/holidays).
+          // model 2026-09-16, lib/prototype/route-schemes/holidays).
           {
             id: "effectiveFrom",
             label: "Effective from",
@@ -1279,7 +1279,7 @@ export const operationsBusinessFormSchemas = [
             // Guided Setup's step 5 choice (issue #38): how an edit of the
             // running scheme applies — asked each time, to every future
             // collection, or to the next collection only. The edit-save
-            // planner (@waste/domain/route-schemes/edit) reads it off the
+            // planner (lib/prototype/route-schemes/edit) reads it off the
             // stored record, and the edit dialog changes it here too.
             id: "editPolicy",
             label: "Changes to a running scheme",

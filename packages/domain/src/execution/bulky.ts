@@ -20,8 +20,8 @@
 // A booking's status is read off its cancel stamp and the stop that names it:
 // a planned stop routes it, a completed one collected it, and a stop skipped
 // or failed leaves it booked again, the office's to move and route anew.
-import { generateOccurrences, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
-import type { WeekRotation } from "../route-schemes/recurrence"
+import { generateOccurrences, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../planning/occurrences"
+import type { WeekRotation } from "../planning/recurrence"
 import { addDays, type ServiceDay } from "../days"
 import { lastDayIn } from "../periods"
 import type { RecurrenceFrequency } from "../planning/vocabulary"

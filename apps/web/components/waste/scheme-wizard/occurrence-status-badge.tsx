@@ -6,7 +6,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { shiftedNote, type Occurrence } from "@waste/domain/route-schemes/occurrences"
+import { shiftedNote, type Occurrence } from "@waste/domain/planning/occurrences"
 
 export function OccurrenceStatusBadge({ row }: { row: Occurrence }) {
   if (row.status === "planned") return <Badge variant="secondary">Planned</Badge>

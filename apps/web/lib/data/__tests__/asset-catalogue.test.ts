@@ -7,13 +7,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { placeLocation } from "@waste/domain/map-planning/positions"
-import { FALLBACK_CONTAINER_KG, FALLBACK_FRACTION_FACTOR } from "@waste/domain/route-schemes/estimates"
+import { placeLocation } from "@/lib/prototype/map-planning/positions"
+import { FALLBACK_CONTAINER_KG, FALLBACK_FRACTION_FACTOR } from "@/lib/prototype/route-schemes/estimates"
 
 import { FIXTURE_CONTAINER_TYPES } from "../asset-catalogue"
 import { getBusinessFormSchema } from "../business-form-schemas"
 import type { BusinessRecord } from "../business-modules"
-import { FIXTURE_GAZETTEER } from "../street-gazetteer"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 
 describe("the fixture asset catalogue", () => {
   test("every weight says where it came from, and a derived one is the residual weight by the fallback table's density factor", () => {

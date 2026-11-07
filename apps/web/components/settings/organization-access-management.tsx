@@ -84,7 +84,7 @@ import {
   updateTicketTeamRecord,
 } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import {
   type BusinessRecord,
 } from "@/lib/data/business-modules"

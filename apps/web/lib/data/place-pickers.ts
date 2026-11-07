@@ -5,7 +5,7 @@
 // the API's 409 says why one is refused (#79) — so a row not Active shows its
 // status beside its name. A subscription is named with the place it is
 // delivered at, since a container put into service under it serves there.
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 
 import { isSubscriptionRecord } from "./agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "./business-form-types"

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { emptyBusinessFilters } from "@waste/domain/business-filters"
+import { emptyBusinessFilters } from "@/lib/prototype/business-filters"
 import {
   addSavedSelection,
   parseSavedSelections,

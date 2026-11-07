@@ -1,14 +1,12 @@
 // The Resources vocabulary, held to the shape every vocabulary module keeps
 // (src/__tests__/vocabulary.ts), and to three things of its own: the glossary's
 // six movement kinds and four asset states verbatim, the licence classes
-// lowest first as route-schemes/fleet-profiles.ts orders its display tuple
-// (which the adapter maps onto these), and an unloading station's statuses
+// lowest first, and an unloading station's statuses
 // being a depot's under a second name — twenty-six names over twenty-five lists.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
-import { LICENCE_CLASSES as DISPLAY_LICENCE_CLASSES } from "../../route-schemes/fleet-profiles"
 import * as vocabulary from "../vocabulary"
 
 defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 26, ["STOCK_PLACES", "ADJUSTMENT_TARGETS", "PLANNABLE_VEHICLE_STATUSES", "ACTIVE_VEHICLE_STATUSES", "ACTIVE_DRIVER_STATUSES", "STOCKING_WAREHOUSE_STATUSES", "LIVE_ALLOCATION_STATUSES", "ACTIVE_DECOMMISSION_REASON_STATUSES", "ACTIVE_SENSOR_STATUSES", "ACTIVE_MAINTENANCE_PLAN_STATUSES"])
@@ -28,8 +26,8 @@ describe("the Resources vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.ASSET_STATUSES], ["in-warehouse", "in-service", "in-maintenance", "retired"])
   })
 
-  test("the licence classes are the lowercase tokens of the prototype's display tuple, lowest first, same order", () => {
-    assert.deepEqual([...vocabulary.LICENCE_CLASSES], DISPLAY_LICENCE_CLASSES.map((licenceClass) => licenceClass.toLowerCase()))
+  test("the licence classes are lowest first", () => {
+    assert.deepEqual([...vocabulary.LICENCE_CLASSES], ["b", "c", "ce"])
   })
 
   test("an unloading station's statuses are a depot's: the same tuple, not a copy", () => {

@@ -23,7 +23,7 @@
 // the first, in the domain's sentence, thrown as `Refused`.
 import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
 import { holidayListOf } from "@waste/domain/planning/generation"
-import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
 import { inForceOn } from "@waste/domain/periods"
 import { Refused } from "@waste/domain/refusal"

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { SchemeCalendar } from "../../route-schemes/occurrences"
+import type { SchemeCalendar } from "../../planning/occurrences"
 import { confirmNonWorkingDay, nonWorkingDay, operatingDayReading, type OperatingDayScheme } from "../operating-day"
 
 // Copenhagen rests on Saturday and Sunday; Christmas Day 2026 is a Friday.

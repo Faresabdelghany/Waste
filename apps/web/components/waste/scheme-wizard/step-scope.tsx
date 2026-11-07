@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { recordsForProject } from "@/lib/data/project-scope"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 
 import type { WizardRecords } from "./use-wizard-records"
 import { Field, SimpleSelect } from "./wizard-fields"

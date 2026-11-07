@@ -5,7 +5,7 @@
 // Map Planning). A calendar carries no holidays (2026-11-05): a project's are
 // the days of the company's Holiday List it names (Settings › Holiday lists).
 // Every table cell derives from the record's typed values at render time
-// (@waste/domain/route-schemes/calendar-list) — never from stored display
+// (lib/prototype/route-schemes/calendar-list) — never from stored display
 // copies. Create and edit go through the shared form
 // dialog with the module's own schema; the record shape is owned by
 // lib/data/collection-calendars.ts.
@@ -64,10 +64,10 @@ import {
   type CollectionCalendarLookups,
 } from "@/lib/data/collection-calendars"
 import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS } from "@waste/domain/days"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { isHolidayListRecord } from "@waste/domain/route-schemes/holiday-list-records"
-import { calendarRowSummary } from "@waste/domain/route-schemes/calendar-list"
-import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { isHolidayListRecord } from "@/lib/prototype/route-schemes/holiday-list-records"
+import { calendarRowSummary } from "@/lib/prototype/route-schemes/calendar-list"
+import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
 
 const ACTOR_NAME = "Olivia Larsen"
 

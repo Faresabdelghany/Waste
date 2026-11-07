@@ -135,7 +135,7 @@ import {
   type StopGroup,
 } from "@waste/domain/planning/generation"
 import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
-import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
+import { SHIFT_SEARCH_DAYS } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm"
 

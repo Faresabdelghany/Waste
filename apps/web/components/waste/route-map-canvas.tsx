@@ -20,7 +20,7 @@ import { RoutingAttribution } from "@/components/waste/routing/routing-attributi
 import type { BaseMapId } from "@/lib/map-planning/base-maps"
 import { roadOverlay, roadOverlayPath, roadPath, type RoadGeometry } from "@/lib/map-planning/road-geometry"
 import type { LngLat } from "@waste/domain/map-planning/geo"
-import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
+import { COPENHAGEN_CENTER } from "@waste/fixtures/positions"
 
 const INITIAL_ZOOM = 11
 const FIT_PADDING_PX = 48

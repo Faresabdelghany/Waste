@@ -7,7 +7,7 @@
 // half-open (ADR-0005), and a container stands for one tank at a time.
 //
 // An installation's emptying falls due its interval in months after the last
-// one (the domain's due-from-last cadence, route-schemes/due-from-last.ts):
+// one (the domain's due-from-last cadence, planning/due-from-last.ts):
 // the read answers the last emptying — its container's latest completed stop,
 // with the litres the driver recorded there — and the day the next is due,
 // reckoned from that stop or, before there is one, from `lastEmptiedOn`, the

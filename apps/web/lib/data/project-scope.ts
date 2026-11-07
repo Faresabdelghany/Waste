@@ -4,7 +4,7 @@
 // Operations, round 3) scopes its calendars, planning areas and schemes like
 // any other. The header offers no switcher (removed 2026-09-03); the default
 // scope is pinned by the workspace and a restricted shell pins its own.
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"

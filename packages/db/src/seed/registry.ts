@@ -6,7 +6,7 @@
 //
 // The explicit rows are literals here. The two generated sets — the fifty
 // seeded properties and the hundred seeded containers — are
-// `@waste/domain/fixtures/seeded-registry`'s (issue #99), its tables and
+// `@waste/fixtures/seeded-registry`'s (issue #99), its tables and
 // arithmetic.
 // `__tests__/seed-registry-generator.test.ts` holds these rows to it.
 // REGISTRY_IDS keys every row by the prototype's record id (`asset-82014`,
@@ -79,7 +79,7 @@
 //   one whose cadence differs carries its own.
 //
 //   Points. A property on a gazetteer street is located where the map places
-//   it: `knownAddressLocation` from @waste/domain over its FIXTURE_GAZETTEER,
+//   it: `knownAddressLocation` from @waste/fixtures over its FIXTURE_GAZETTEER,
 //   the table the web's map places through, rounded to six decimals (about a
 //   decimetre), so the stored point is the derived one. Dock 4's own service
 //   address is not on a gazetteer street; it is placed as its container
@@ -121,17 +121,6 @@
 // `requiredSpec`, so a key misspelled here is this file's own sentence and
 // not a 23502 from the database or a TypeError from a Map.
 import type { Point } from "@waste/contracts/geojson"
-import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
-import {
-  SEEDED_CONTAINER_COUNT,
-  SEEDED_PROPERTY_COUNT,
-  seededContainer,
-  seededProperty,
-  type SeededOwnership,
-  type SeededPropertyStatus,
-  type SeededPropertyType,
-} from "@waste/domain/fixtures/seeded-registry"
-import { knownAddressLocation } from "@waste/domain/map-planning/positions"
 import type {
   AgreementStatus,
   ContainerOwnership,
@@ -143,6 +132,19 @@ import type {
   PropertyPartyRole,
   PropertyStatus,
 } from "@waste/domain/registry/vocabulary"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
+import { knownAddressLocation } from "@waste/fixtures/positions"
+import {
+  SEEDED_CONTAINER_COUNT,
+  SEEDED_PROPERTY_COUNT,
+  seededContainer,
+  seededProperty,
+  type SeededOwnership,
+  type SeededPropertyStatus,
+  type SeededPropertyType,
+} from "@waste/fixtures/seeded-registry"
+import { SERVICE_FREQUENCIES, type ServiceFrequencyId } from "@waste/fixtures/service-frequencies"
+import type { FixtureContainerType } from "@waste/fixtures/taxonomy"
 
 import type { Tx } from "../client"
 import { agreement, subscription } from "../schema/agreements"
@@ -200,9 +202,9 @@ const WASTE_FRACTIONS = [
 ] as const
 type WasteFractionKey = (typeof WASTE_FRACTIONS)[number][0]
 
-// The domain's CONTAINER_VEHICLE_COMPATIBILITY keys, the one container type
-// vocabulary, with the volume read off the name. The key follows the
-// container form's enum ids (`two-wheel-240`, `four-wheel-660`,
+// The demo tenant's container types (`FIXTURE_CONTAINER_TYPES`,
+// @waste/fixtures/taxonomy), with the volume read off the name. The key
+// follows the container form's enum ids (`two-wheel-240`, `four-wheel-660`,
 // `four-wheel-1100`, `wastewater-3000`) and spells the rest the same way.
 // And the seconds an emptying takes at the kerb (O10 of #290): typical figures — a bin wheeled
 // to the lift, a crane over an igloo or an underground container, a tank pumped — which the
@@ -215,29 +217,11 @@ const CONTAINER_TYPES = [
   ["igloo-2500", "Igloo · 2,500 L", 2500, 180],
   ["underground-5000", "Underground · 5,000 L", 5000, 300],
   ["wastewater-3000", "Wastewater tank · 3,000 L", 3000, 900],
-] as const
+] as const satisfies readonly (readonly [string, FixtureContainerType, number, number])[]
 type ContainerTypeKey = (typeof CONTAINER_TYPES)[number][0]
 
-/** A container type's key by the name the domain's tables spell it in: `Two-wheel bin · 240 L` is `two-wheel-240`. */
+/** A container type's key by the name the taxonomy spells it in: `Two-wheel bin · 240 L` is `two-wheel-240`. */
 export const CONTAINER_TYPE_KEYS: Readonly<Record<string, ContainerTypeKey>> = Object.fromEntries(CONTAINER_TYPES.map(([key, name]) => [name, key]))
-
-// @waste/domain/service-frequencies SERVICE_FREQUENCIES, one row per project
-// the definition names (both). The shape satisfies `service_frequency_shape`:
-// a rate with one interval or none, or no rate and no interval.
-const SERVICE_FREQUENCIES = [
-  ["freq-weekly", "Every week", "One collection per week on the serviced weekday.", 1, 1, null],
-  ["freq-every-2-weeks", "Every 2 weeks", "One collection every second week (14-day service).", 1, 2, null],
-  [
-    "freq-monthly",
-    "Once a month",
-    "The first serviced weekday of each month. No faithful weeks-between value exists — the real model is strictly week-based.",
-    1,
-    null,
-    null,
-  ],
-  ["freq-on-demand", "On demand", "No standing cadence — collections are ordered per occasion.", null, null, null],
-] as const
-type ServiceFrequencyKey = (typeof SERVICE_FREQUENCIES)[number][0]
 
 // The seven `commercial.products` fixtures, one row per project. Container
 // types are read from the fixture's own label: "240L bin" is the 240 L
@@ -253,7 +237,7 @@ type ProductSpec = {
   unit: ProductUnit
   containerType: ContainerTypeKey | null
   wasteFraction: WasteFractionKey | null
-  serviceFrequency: ServiceFrequencyKey | null
+  serviceFrequency: ServiceFrequencyId | null
   invoiceName: string
   invoiceCode: string
   vatPercent: number
@@ -671,7 +655,7 @@ type StandsSpec = {
   property: string
   agreement: string
   fraction: WasteFractionKey
-  frequency: ServiceFrequencyKey | null
+  frequency: ServiceFrequencyId | null
   /** The prototype's Future: installed for a placement that starts later. */
   future?: boolean
 }
@@ -910,7 +894,7 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   }
   const serviceFrequencyIds = perProject(
     "serviceFrequency",
-    SERVICE_FREQUENCIES.map(([key]) => key),
+    SERVICE_FREQUENCIES.map((definition) => definition.id),
   )
   const productIds = perProject(
     "product",
@@ -939,9 +923,11 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   const rows: RegistryRows = {
     wasteFractions: WASTE_FRACTIONS.map(([key, name, wasteCode, treatment, densityKgPerCubicMetre]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name, wasteCode, treatment, densityKgPerCubicMetre })),
     containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres, serviceSeconds]) => ({ id: containerTypeId(key), companyId: COMPANY_ID, name, volumeLitres, serviceSeconds })),
+    // The catalogue's definitions, one row per project the definition names (both). Each shape
+    // satisfies `service_frequency_shape`: a rate with one interval or none, or no rate and no interval.
     serviceFrequencies: REGISTRY_PROJECTS.flatMap((project) =>
-      SERVICE_FREQUENCIES.map(([key, name, description, collectionsPerWeek, weeksBetween, daysBetween]) => ({
-        id: serviceFrequencyId(project, key),
+      SERVICE_FREQUENCIES.map(({ id, name, description, collectionsPerWeek, weeksBetween, daysBetween }) => ({
+        id: serviceFrequencyId(project, id),
         companyId: COMPANY_ID,
         projectId: projectIdOf(project),
         name,
