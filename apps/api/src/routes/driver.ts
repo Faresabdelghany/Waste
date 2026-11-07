@@ -184,6 +184,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
+import { replayed } from "@waste/db/commands/shared"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -221,7 +222,7 @@ import {
 } from "./execution-shapes"
 import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
-import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
+import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { tellOfficeNotTaken } from "./unload-writes"
 import { stopOutcomeChanged } from "./stop-outcomes"
@@ -1051,7 +1052,7 @@ async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelop
   await lockRow(tx, route, { companyId, id: envelope.routeId })
   const routeRow = await findRouteInCompany(tx, companyId, envelope.routeId)
 
-  // The fourth door as this one uses it (routes/shared.ts, `replayed`): the write; or, the key met, the caller's own first answer; or, the key held by no receipt of the caller's, the rejection an id another device minted earns — never a replay, and recorded nowhere, since the receipt's key is that id, so the log has it.
+  // The replay door as this one uses it (`replayed`, @waste/db/commands/shared): the write; or, the key met, the caller's own first answer; or, the key held by no receipt of the caller's, the rejection an id another device minted earns — never a replay, and recorded nowhere, since the receipt's key is that id, so the log has it.
   const replaying = () => findReceipt(tx, companyId, profile, envelope.id).then((found) => (found === undefined ? undefined : replayOf(tx, applier, found, envelope)))
   const taken = async (): Promise<CommandOutcomeRow> => {
     applier.log({ commandId: envelope.id, kind: envelope.kind, routeId: envelope.routeId, driverId: profile.id, userId: user.id, detail: ANOTHER_DEVICES_COMMAND })

@@ -24,7 +24,7 @@
 import type { StopToRemove } from "@waste/contracts/agreements"
 import { routeLabel } from "@waste/contracts/execution"
 import type { Tx } from "@waste/db/client"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import type { JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
@@ -33,7 +33,7 @@ import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } fr
 import type { Principal } from "../auth/principal"
 import { allows } from "../auth/require"
 import { projectToday } from "./fleet-lookups"
-import { askGeneration } from "./generation"
+import { askGenerationBestEffort } from "./generation"
 import type { Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE } from "./scheme-groups"
 
@@ -165,11 +165,7 @@ export async function askRuns(tx: Tx, principal: Principal, jobs: JobSender, sco
     const capped = addDays(from, WALK_CAP_DAYS)
     const to = run.to > capped ? capped : run.to
     if (to < from) continue
-    try {
-      await askGeneration(tx, principal, jobs.send, scheme, { from, to })
-    } catch (error) {
-      if (!(error instanceof QueueMissing)) throw error
-      return
-    }
+    // No queue for one scheme is no queue for any: the rest are not asked.
+    if ((await askGenerationBestEffort(tx, principal, jobs.send, scheme, { from, to })) === undefined) return
   }
 }

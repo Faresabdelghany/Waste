@@ -114,6 +114,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
@@ -152,7 +153,7 @@ import {
   writeGroupSets,
   type ClockOptions,
 } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stamp, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)

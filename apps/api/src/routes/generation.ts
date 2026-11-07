@@ -29,9 +29,11 @@
 // its retry. A refused send with no held run to show for it — the sweep's
 // transaction not yet committed, a run removed by hand — is a 409 that says
 // to ask again; and a database no worker has started on has no queue to
-// send to, which is a 503 in so many words (`QueueMissing`), since the
-// worker makes the queue at its boot and the deployment's order is what
-// stands in the way, not the request.
+// send to, which is a 503 in so many words (`QueueMissing`, answered by the
+// error handler), since the worker makes the queue at its boot and the
+// deployment's order is what stands in the way, not the request. A command
+// that asks a run on the side — a hand-back, a successor, a service ending —
+// goes on without it there (`askGenerationBestEffort`).
 // Sending first also keeps the request clear of the scheme's row lock:
 // generation holds it `for update` for its whole transaction, and the
 // run's key on the scheme would make an insert wait for it — here an insert
@@ -71,7 +73,7 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { inProjects } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
 import { describeJson, IdParam, instantOf, stampsOf } from "./shared"
 
@@ -82,9 +84,6 @@ export const DRAFT_GENERATES_NOTHING = "A draft scheme generates nothing; valida
 
 /** What a send pg-boss refused is told when no held run shows for it: a job of the scheme is queued or active that this transaction cannot see the run of. */
 export const GENERATION_ALREADY_QUEUED = "A generation of this scheme is already queued or running; ask again in a moment"
-
-/** What a database no worker has started on is told: the queue is the worker's to make, so the deployment's order is what stands in the way. */
-export const WORKER_QUEUE_MISSING = "The worker has not started on this database yet, so its queue is not there; start it and ask again"
 
 const noSuchRun = (id: string) => problem(404, { detail: `No generation run ${id} in the projects this account works in` })
 
@@ -162,6 +161,21 @@ export async function askGeneration(tx: Tx, principal: Principal, send: Send, sc
   return inFlight === undefined ? { kind: "refused" } : { kind: "held", run: runOf(inFlight) }
 }
 
+/**
+ * `askGeneration` for a command that asks a run on the side and stands
+ * without it: undefined where no worker has made the queue yet, which wrote
+ * nothing in the transaction, so the command goes on and the next run brings
+ * its routes along.
+ */
+export async function askGenerationBestEffort(tx: Tx, principal: Principal, send: Send, scheme: { id: string; projectId: string }, window: { from: string; to: string }): Promise<AskedRun | undefined> {
+  try {
+    return await askGeneration(tx, principal, send, scheme, window)
+  } catch (error) {
+    if (error instanceof QueueMissing) return undefined
+    throw error
+  }
+}
+
 export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: GenerationOptions) {
   return new Hono<AuthEnv>()
     .post(
@@ -199,13 +213,7 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
         requireNotArchived(scheme)
         if (scheme.status !== "validated") throw problem(409, { detail: DRAFT_GENERATES_NOTHING })
 
-        let asked: AskedRun
-        try {
-          asked = await askGeneration(tx, principal, jobs.send, scheme, window)
-        } catch (error) {
-          if (error instanceof QueueMissing) throw problem(503, { detail: WORKER_QUEUE_MISSING })
-          throw error
-        }
+        const asked = await askGeneration(tx, principal, jobs.send, scheme, window)
         if (asked.kind === "refused") throw problem(409, { detail: GENERATION_ALREADY_QUEUED })
         return c.json(asked.run, asked.kind === "started" ? 202 : 200)
       },

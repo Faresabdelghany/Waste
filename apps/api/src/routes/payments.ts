@@ -65,6 +65,7 @@ import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, sum, type SQL } f
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -76,7 +77,7 @@ import { noSuchCustomer } from "./customer-writes"
 import { projectToday } from "./fleet-lookups"
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseDuplicate } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows } from "./shared"
 
 const MODULE = "commercial.payments"
 

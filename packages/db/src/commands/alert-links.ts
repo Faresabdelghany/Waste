@@ -7,9 +7,9 @@
 // the API's routes/alerts.ts), and this is the one function both run, so an
 // alert is held to the same three rules whichever door it came through:
 //
-//   it is an alert of the project     — refused as a 400 at the field the
-//                                       body carried it in (`NOT_AN_ALERT`,
-//                                       `alertId` on the ticket create); the
+//   it is an alert of the project     — refused as an invalid `alertId`
+//                                       (`NOT_AN_ALERT`), which the ticket
+//                                       create answers at that field; the
 //                                       link command's own 404 has answered
 //                                       before it gets here, so the check
 //                                       passes there;
@@ -29,11 +29,11 @@
 //                                       the first link is a decision the second
 //                                       does not silently undo.
 //
-// The refusals are `Refused` (commands/shared.ts) and not the API's problem:
-// the statement runs in the API's request and in the worker's job alike, and
-// the API's middleware maps a `Refused` to the problem of its status, the
-// 400 carrying its field. The same ticket again is nothing to do and writes
-// nothing, so a repeated link answers as it stands (the `confirm` precedent),
+// The refusals are the domain's `Refused` and not the API's problem: the
+// statement runs in the API's request and in the worker's job alike, and the
+// API's error handler maps a `Refused` to its problem. The same ticket again
+// is nothing to do and writes nothing, so a repeated link answers as it
+// stands (the `confirm` precedent),
 // and the row comes back either way — as found, or as the update returned it
 // — so a caller answers it without a read of its own. The write runs under
 // the alert's row lock, taken here before the read, so two links of one
@@ -42,13 +42,14 @@
 // not held here — the ticket create has just written it, and the link
 // command holds it to the project before it calls.
 import { ticketLabel } from "@waste/contracts/resolution"
+import { Refused } from "@waste/domain/refusal"
 import { ALERT_DOES_NOT_CHANGE } from "@waste/domain/resolution/transitions"
 import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { alert, ticket } from "../schema/resolution"
 import { alertColumns, type AlertRow } from "./resolution-rows"
-import { lockRow, refused, RefusedField } from "./shared"
+import { lockRow } from "./shared"
 
 /** The tenant and the project a statement is bounded by: what `openTicket` and the link command both know. */
 export type Scope = { companyId: string; projectId: string }
@@ -72,17 +73,15 @@ export async function findAlert(tx: Tx, scope: Scope, alertId: string): Promise<
 /**
  * Sets `alert.ticket_id` to the ticket, under the three rules above, or
  * writes nothing when the alert already names it, and answers the alert as
- * it now stands — the row the update returned, or the one found. `path` is
- * where the body carried the alert's id, for the 400 when it is not the
- * project's.
+ * it now stands — the row the update returned, or the one found.
  */
-export async function linkAlert(tx: Tx, scope: Scope, alertId: string, ticketId: string, path = "alertId"): Promise<AlertRow> {
+export async function linkAlert(tx: Tx, scope: Scope, alertId: string, ticketId: string): Promise<AlertRow> {
   await lockRow(tx, alert, { companyId: scope.companyId, id: alertId })
   const found = await findAlert(tx, scope, alertId)
-  if (found === undefined) throw new RefusedField(path, NOT_AN_ALERT)
-  if (found.status === "resolved") throw refused(409, ALERT_DOES_NOT_CHANGE)
+  if (found === undefined) throw Refused.invalid("alertId", NOT_AN_ALERT)
+  if (found.status === "resolved") throw Refused.conflict(ALERT_DOES_NOT_CHANGE)
   if (found.ticketId === ticketId) return found
-  if (found.ticketId !== null) throw refused(409, linkedToAnother(await labelOf(tx, scope.companyId, found.ticketId)))
+  if (found.ticketId !== null) throw Refused.conflict(linkedToAnother(await labelOf(tx, scope.companyId, found.ticketId)))
   const [linked] = await tx
     .update(alert)
     .set({ ticketId })

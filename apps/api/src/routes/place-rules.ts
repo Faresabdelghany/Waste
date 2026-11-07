@@ -29,7 +29,7 @@
 // 400 and never a 500 with a constraint name in the log.
 //
 // The point goes in and comes back as GeoJSON through the column type, the
-// way a property's does, and `refuseCheck` (routes/shared.ts) stands behind
+// way a property's does, and `refuseCheck` (@waste/db/commands/shared) stands behind
 // `<table>_location_valid` as it stands behind a planning area's polygon:
 // SQLSTATE 23514 on that constraint is a 400 on `location`, "Not a valid
 // point". For a point the door is a backstop and not a path a body can reach:
@@ -42,10 +42,11 @@
 import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
+import type { CheckRefusal } from "@waste/db/commands/shared"
 
 import { invalidRequest } from "../problem"
 import { serviceProviderIssue } from "./references"
-import { providerShapeIssue, timeOf, type Refusal } from "./shared"
+import { providerShapeIssue, timeOf } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
 export type PlaceShape = {
@@ -114,9 +115,9 @@ export type PlaceShapeTable = "depot" | "unloading_station"
  * backstop behind `requirePlaceShape`, so a row the pre-check let through and
  * the table refuses is the same 400 and not a 500.
  */
-export const placeShapeInvalid = (table: PlaceShapeTable): Record<string, Refusal> => ({
-  [`${table}_provider_shape`]: { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP },
-  [`${table}_hours_shape`]: { path: "closesAt", message: BOTH_HOURS_OR_NEITHER },
+export const placeShapeInvalid = (table: PlaceShapeTable): Record<string, CheckRefusal> => ({
+  [`${table}_provider_shape`]: { input: "serviceProviderId", sentence: PROVIDER_WITH_PROVIDER_OWNERSHIP },
+  [`${table}_hours_shape`]: { input: "closesAt", sentence: BOTH_HOURS_OR_NEITHER },
 })
 
 /** A nullable `time` column as the wire spells it: `HH:MM`, or null where no hour was recorded. */
@@ -126,6 +127,6 @@ export const hourOf = (value: string | null): string | null => (value === null ?
 export const NOT_A_VALID_POINT = "Not a valid point"
 
 /** The `refuseCheck` door for a place's `<table>_location_valid`, at the field the body carries the point in. */
-export const pointInvalid = (constraint: string, path = "location"): Record<string, Refusal> => ({
-  [constraint]: { path, message: NOT_A_VALID_POINT },
+export const pointInvalid = (constraint: string, path = "location"): Record<string, CheckRefusal> => ({
+  [constraint]: { input: path, sentence: NOT_A_VALID_POINT },
 })

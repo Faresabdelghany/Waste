@@ -43,6 +43,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -60,7 +61,7 @@ import {
   type Parent,
 } from "./members"
 import { requireCustomer } from "./references"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stampsOf } from "./shared"
 
 const MODULE = "customers.groups"
 const PropertyGroupPage = Page(PropertyGroup)

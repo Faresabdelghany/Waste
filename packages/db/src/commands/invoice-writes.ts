@@ -24,7 +24,7 @@
 // answer as a 500. The one constraint a door foresees is the partial unique
 // index behind the run's selection, an event on one line of one invoice: two
 // runs racing over one event is what the project's lock prevents, and the
-// refusal here is its backstop — a `Refused` 409 the API's error handler
+// refusal here is its backstop — a `Refused` conflict the API's error handler
 // answers as such.
 import type { InvoiceDetail } from "@waste/contracts/invoices"
 import type { InvoiceParties } from "@waste/domain/finance/invoice-document"

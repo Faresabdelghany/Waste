@@ -17,9 +17,9 @@
 // run that overlaps another, or a day's later runs, queue nothing twice
 // (`message_source_event_id_customer_id_idx`). The sweep for the projects
 // reads across companies as `wms_worker`; each project's reminders are read
-// and queued as `wms_api` under `withCompany`, each customer in a savepoint.
+// and queued as `wms_api` under `withCompany`, a customer `queueMessage`
+// refuses counted, its refusal having written nothing.
 import { queueMessage } from "@waste/db/commands/messaging"
-import { Refused } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { remindersDue } from "@waste/db/query/stop-customers"
 import { withCompany } from "@waste/db/tenant"
@@ -31,7 +31,7 @@ import { defineJob, type JobContext } from "./definition"
 
 export const COLLECTION_REMINDERS_QUEUE = "messaging.collection-reminders"
 
-/** The customers one transaction queues, each a savepoint: below the 64 subtransactions Postgres caches per transaction. */
+/** The customers one transaction queues. */
 export const REMINDER_CHUNK = 50
 
 export type CollectionRemindersData = {
@@ -75,17 +75,13 @@ export async function remindProject(
       const { due, beyondCap } = await remindersDue(tx, project, day, { channel: project.channel, cap: bounds.cap, batch: size })
       outcome.beyondCap = Math.max(outcome.beyondCap, beyondCap)
       for (const { customerId, sourceEventId } of due) {
-        try {
-          // In a savepoint, so a refusal leaves the transaction whole.
-          await tx.transaction((savepoint) =>
-            queueMessage(savepoint, send, { id: newId(), companyId: project.companyId, templateId: project.templateId, customerId, contactId: null, sourceEventId, values: { collectionDate: day } }),
-          )
+        const queued = await queueMessage(tx, send, { id: newId(), companyId: project.companyId, templateId: project.templateId, customerId, contactId: null, sourceEventId, values: { collectionDate: day } })
+        if (queued.kind === "queued") {
           outcome.queued += 1
-        } catch (error) {
-          if (!(error instanceof Refused)) throw error
-          outcome.refused += 1
-          log(`collection-reminders: project ${project.projectId}, customer ${customerId} not reminded of ${day}: ${error.message}`)
+          continue
         }
+        outcome.refused += 1
+        log(`collection-reminders: project ${project.projectId}, customer ${customerId} not reminded of ${day}: ${queued.refusal.sentence}`)
       }
       return due.length
     })

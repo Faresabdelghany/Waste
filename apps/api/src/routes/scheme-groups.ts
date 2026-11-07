@@ -99,6 +99,7 @@ import {
   type NamedResource,
 } from "@waste/domain/planning/checks"
 import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { Refusal } from "@waste/domain/refusal"
 import { firstRunDay } from "@waste/domain/resources/availability"
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -106,7 +107,7 @@ import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
-import { invalidRequest, problem } from "../problem"
+import { invalidRequest, problem, refusalProblem } from "../problem"
 import { driverColumns, findDriver, findVehicle, vehicleColumns, vehicleLabel, type DriverRow, type Today, type VehicleRow } from "./fleet-lookups"
 import {
   requireContainer,
@@ -144,9 +145,15 @@ export const noSuchScheme = (id: string) => problem(404, { detail: `No route sch
 /** What a write to an archived scheme, or to one of its groups, is told (O21 of #290): archived is for good, and the next version of its name is a new scheme. */
 export const schemeArchived = (name: string): string => `Route scheme ${JSON.stringify(name)} is archived: it plans nothing more and is not changed; write a new scheme of its name instead`
 
+/** The archived rule's verdict as a value, for a caller that collects a proposal's refusals: the conflict a write to an archived scheme is, or undefined. */
+export function archivedRefusal(scheme: { name: string; archivedAt: Date | null }): Refusal | undefined {
+  return scheme.archivedAt === null ? undefined : { reason: "conflict", sentence: schemeArchived(scheme.name) }
+}
+
 /** Refuses a write to an archived scheme (409), after its 404. */
 export function requireNotArchived(scheme: { name: string; archivedAt: Date | null }): void {
-  if (scheme.archivedAt !== null) throw problem(409, { detail: schemeArchived(scheme.name) })
+  const refusal = archivedRefusal(scheme)
+  if (refusal !== undefined) throw refusalProblem(refusal)
 }
 
 export const noSuchGroup = (id: string) => problem(404, { detail: `No collection group ${id} in the projects this account works in` })

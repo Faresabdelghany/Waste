@@ -84,6 +84,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -94,7 +95,7 @@ import { daysThrough, refuseCrewAway } from "./availability-rules"
 import { fitsOf } from "./fleet-fit"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 import { LIVE_ALLOCATION_STATUSES, refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
 /** The grant every route here runs under: the planner's, not the fleet's. */

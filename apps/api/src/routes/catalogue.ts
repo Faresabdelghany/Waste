@@ -60,13 +60,14 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 
@@ -99,7 +100,7 @@ const fractionKeyTaken = (key: string) => `This company already has a waste frac
 const fractionNameTaken = (name: string) => `This company already has a waste fraction called ${JSON.stringify(name)}`
 
 /** `waste_fraction_hazardous_shape`: a patch telling a fraction under a starred code it is not hazardous (O18 of #290); a create's body is judged whole by the contract. */
-const FRACTION_CHECKS = { waste_fraction_hazardous_shape: { path: "hazardous", message: HAZARDOUS_CODE } }
+const FRACTION_CHECKS = { waste_fraction_hazardous_shape: { input: "hazardous", sentence: HAZARDOUS_CODE } }
 
 const noSuchFraction = (id: string) => problem(404, { detail: `No waste fraction ${id} in this company` })
 

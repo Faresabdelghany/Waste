@@ -2,14 +2,14 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PageRequest } from "@waste/contracts/pagination"
-import { refused, RefusedField } from "@waste/db/commands/shared"
+import { QueueMissing } from "@waste/db/jobs"
+import { Refused } from "@waste/domain/refusal"
 import { DrizzleQueryError } from "drizzle-orm/errors"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
 
-import { checkConstraintOf, errorHandler, exclusionConstraintOf, membersAt, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
-import { refuseCheck, refuseDuplicate, refuseOverlap } from "../routes/shared"
+import { checkConstraintOf, errorHandler, exclusionConstraintOf, membersAt, notFound, problem, ProblemError, problemResponse, refusalOf, uniqueConstraintOf, validate } from "../problem"
 import { readProblem } from "./read-problem"
 
 /** A log that remembers what it was given. */
@@ -70,10 +70,10 @@ describe("errorHandler", () => {
       throw new HTTPException(429)
     })
     hono.get("/refused", () => {
-      throw refused(409, "This alert is linked to ticket T-8831; an alert links to one ticket")
+      throw Refused.conflict("This alert is linked to ticket T-8831; an alert links to one ticket")
     })
     hono.get("/refused-field", () => {
-      throw new RefusedField("alertId", "Not an alert of this project")
+      throw Refused.invalid("alertId", "Not an alert of this project")
     })
     hono.get("/duplicate", () => {
       const cause = Object.assign(new Error('duplicate key value violates unique constraint "project_name_key"'), {
@@ -140,7 +140,7 @@ describe("errorHandler", () => {
     assert.deepEqual(entries, [], "a problem the code raised on purpose is not logged")
   })
 
-  test("answers a shared write statement's refusal (Issue #109 part B) as the problem of its status: a 409 with the sentence, a RefusedField the validator's 400 at the field", async () => {
+  test("answers a Refused (Issue #109 part B) as the problem its reason maps to: a conflict the 409 with its sentence, an invalid value the validator's 400 at its input", async () => {
     const { entries, log } = recorder()
     const conflict = await app(log).request("/refused")
     assert.equal(conflict.status, 409)
@@ -272,119 +272,6 @@ describe("the constraint a failed write names", () => {
     assert.equal(exclusionConstraintOf(failure("23503", "product_company_id_fk")), undefined)
     assert.equal(exclusionConstraintOf(failure("23P01")), undefined)
     assert.equal(exclusionConstraintOf(new Error("nothing to do with the database")), undefined)
-  })
-})
-
-describe("refuseOverlap", () => {
-  const overlap = (constraint: string) =>
-    new Error("Failed query", { cause: Object.assign(new Error("conflicting key value"), { code: "23P01", constraint_name: constraint }) })
-  const sentences = { subscription_no_overlap: "This product is already subscribed to at that place over those dates" }
-
-  test("hands back what the write answered when it succeeded", async () => {
-    assert.equal(await refuseOverlap(sentences, async () => "written"), "written")
-  })
-
-  test("turns an overlap the route foresaw into a 409 with its sentence", async () => {
-    const raised = await refuseOverlap(sentences, async () => {
-      throw overlap("subscription_no_overlap")
-    }).then(
-      () => assert.fail("the write was expected to be refused"),
-      (error: unknown) => error,
-    )
-    assert.ok(raised instanceof ProblemError)
-    assert.equal(raised.status, 409)
-    assert.equal(raised.body.detail, sentences.subscription_no_overlap)
-  })
-
-  test("leaves an overlap it did not foresee, and a duplicate, to the error handler", async () => {
-    for (const error of [overlap("container_service_placement_no_overlap"), new Error("something else")]) {
-      const raised = await refuseOverlap(sentences, async () => {
-        throw error
-      }).then(
-        () => assert.fail("the write was expected to be refused"),
-        (thrown: unknown) => thrown,
-      )
-      assert.equal(raised, error)
-    }
-  })
-
-  test("is the exclusion violation's own door: refuseDuplicate does not answer one, and neither answers the other's", async () => {
-    const duplicate = new Error("Failed query", {
-      cause: Object.assign(new Error("duplicate key"), { code: "23505", constraint_name: "subscription_no_overlap" }),
-    })
-    const left = await refuseDuplicate(sentences, async () => {
-      throw overlap("subscription_no_overlap")
-    }).then(
-      () => assert.fail("the write was expected to be refused"),
-      (thrown: unknown) => thrown,
-    )
-    assert.ok(!(left instanceof ProblemError), "an exclusion violation is not refuseDuplicate's to answer")
-    const answered = await refuseDuplicate(sentences, async () => {
-      throw duplicate
-    }).then(
-      () => assert.fail("the write was expected to be refused"),
-      (thrown: unknown) => thrown,
-    )
-    assert.ok(answered instanceof ProblemError)
-    assert.equal(answered.status, 409)
-  })
-})
-
-describe("refuseCheck", () => {
-  const check = (constraint?: string) =>
-    new Error("Failed query", { cause: Object.assign(new Error("violates check constraint"), { code: "23514", ...(constraint === undefined ? {} : { constraint_name: constraint }) }) })
-  const sentences = { planning_area_boundary_boundary_valid: { path: "boundary", message: "Not a valid polygon: the ring crosses itself" } }
-
-  test("hands back what the write answered when it succeeded", async () => {
-    assert.equal(await refuseCheck(sentences, async () => "written"), "written")
-  })
-
-  test("turns a check the route foresaw into a 400 on the field with its sentence, in the validator's own shape", async () => {
-    const raised = await refuseCheck(sentences, async () => {
-      throw check("planning_area_boundary_boundary_valid")
-    }).then(
-      () => assert.fail("the write was expected to be refused"),
-      (error: unknown) => error,
-    )
-    assert.ok(raised instanceof ProblemError)
-    assert.equal(raised.status, 400, "the value will not do: a 400, as the schema would have answered had it been able to see")
-    assert.equal(raised.body.detail, "The request body is invalid")
-    assert.deepEqual(raised.body.errors, [{ path: "boundary", message: "Not a valid polygon: the ring crosses itself" }])
-  })
-
-  test("leaves a check it did not foresee, one Postgres did not name, and another error to the error handler", async () => {
-    for (const error of [check("route_scheme_service_days_non_empty"), check(), new Error("something else")]) {
-      const raised = await refuseCheck(sentences, async () => {
-        throw error
-      }).then(
-        () => assert.fail("the write was expected to be refused"),
-        (thrown: unknown) => thrown,
-      )
-      assert.equal(raised, error)
-    }
-  })
-
-  test("is the check violation's own door: neither of the 409 doors answers one, and it answers neither of theirs", async () => {
-    const conflicts = { planning_area_boundary_boundary_valid: "not this door's sentence" }
-    for (const door of [refuseDuplicate, refuseOverlap]) {
-      const left = await door(conflicts, async () => {
-        throw check("planning_area_boundary_boundary_valid")
-      }).then(
-        () => assert.fail("the write was expected to be refused"),
-        (thrown: unknown) => thrown,
-      )
-      assert.ok(!(left instanceof ProblemError), "a check violation is not a 409 door's to answer")
-    }
-    for (const code of ["23505", "23P01"]) {
-      const error = new Error("Failed query", { cause: Object.assign(new Error("key"), { code, constraint_name: "planning_area_boundary_boundary_valid" }) })
-      const left = await refuseCheck(sentences, async () => {
-        throw error
-      }).then(
-        () => assert.fail("the write was expected to be refused"),
-        (thrown: unknown) => thrown,
-      )
-      assert.equal(left, error)
-    }
   })
 })
 
@@ -592,5 +479,27 @@ describe("membersAt", () => {
     assert.deepEqual(membersAt(z.strictObject({ byDay: z.record(z.enum(["mon", "tue"]), z.string()).optional() }), ["byDay"]), ["mon", "tue"])
     assert.equal(membersAt(z.record(z.string(), z.string()), []), undefined, "a key that is any string names no members")
     assert.equal(membersAt(Outer, ["byKey"]), undefined)
+  })
+})
+
+describe("refusalOf, the one rule a command over many rows reads: a bulk dispatch, an import, a completion's ledger work", () => {
+  test("a shared command's Refused is a row's refusal, answered as the error handler answers it: a conflict the 409 with its sentence, an invalid value the 400 at its input", () => {
+    const conflict = refusalOf(Refused.conflict("Route R-12 has no planned driver; assign one before dispatching it"))
+    assert.ok(conflict instanceof ProblemError)
+    assert.deepEqual(conflict.body, { type: "about:blank", title: "Conflict", status: 409, detail: "Route R-12 has no planned driver; assign one before dispatching it" })
+    const invalid = refusalOf(Refused.invalid("alertId", "Not an alert of this project"))
+    assert.deepEqual(invalid?.body, { type: "about:blank", title: "Bad Request", status: 400, detail: "The request body is invalid", errors: [{ path: "alertId", message: "Not an alert of this project" }] })
+  })
+
+  test("a route's own problem below 500 is a row's refusal as it stands", () => {
+    const thrown = problem(404, { detail: "No route 01 in the projects this account works in" })
+    assert.equal(refusalOf(thrown), thrown)
+  })
+
+  test("is nothing for a problem of 500 and above, a queue no worker has made, or any other error: each fails the request", () => {
+    assert.equal(refusalOf(problem(503, { detail: "Storage is not there" })), undefined)
+    assert.equal(refusalOf(new QueueMissing("generation.generate-routes")), undefined)
+    assert.equal(refusalOf(new Error("the database ate my query")), undefined)
+    assert.equal(refusalOf(Object.assign(new Error("duplicate key value"), { code: "23505" })), undefined, "a constraint no door named is the error handler's 409, not a row's")
   })
 })

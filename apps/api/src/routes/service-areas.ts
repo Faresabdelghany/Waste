@@ -89,6 +89,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
+import { refuseOverlap } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -97,10 +98,10 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet, type IdSetColumns } from "./id-sets"
-import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
+import { boundsOutside, notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { requirePlanningArea, requireServiceProvider, requireWasteFraction } from "./references"
 import { eachPresent } from "./sets"
-import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseOverlap, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, stamp, stampsOf } from "./shared"
 
 const MODULE = "service-providers.service-areas"
 const ServiceAreaPage = Page(ServiceArea)
@@ -338,9 +339,8 @@ async function requireAwardedOnce(tx: Tx, area: { companyId: string; projectId: 
   }
 }
 
-/** Whether a period moved reaches days the old one did not: the rule the one-award check is re-run for on a patch. */
-const widened = (before: Period, after: Period): boolean =>
-  after.validFrom < before.validFrom || (before.validTo !== null && (after.validTo === null || after.validTo > before.validTo))
+/** Whether a period moved reaches days the old one did not — a bound of it outside the old one — the rule the one-award check is re-run for on a patch. */
+const widened = (before: Period, after: Period): boolean => boundsOutside(before, after).length > 0
 
 /** The `where` of the assignments an area's move would strand, for `refuseStranded`. */
 const strandedAssignmentsOf = (area: { companyId: string; id: string }, period: Period) =>

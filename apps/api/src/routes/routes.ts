@@ -105,21 +105,21 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import type { JobSender } from "@waste/db/jobs"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows, requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
 import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
 import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
-import { askGeneration } from "./generation"
+import { askGenerationBestEffort } from "./generation"
 import { handBackWindow } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, nextNumber, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
@@ -404,10 +404,11 @@ async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date)
   return detail
 }
 
-/** A route's own refusal in a bulk dispatch: the status and the sentence its dispatch answers — a 404 for a route not here, a 409 for one its state refuses — or undefined for anything else, which fails the request. */
-function refusalOf(error: unknown): { status: 404 | 409; detail: string } | undefined {
-  if (!(error instanceof ProblemError)) return undefined
-  const { status, detail } = error.body
+/** A route's own refusal in a bulk dispatch, by the rule every command over many rows reads (`refusalOf`): the status and the sentence its dispatch answers — a 404 for a route not here, a 409 for one its state refuses — or undefined for anything else, which fails the request. */
+function dispatchRefusalOf(error: unknown): { status: 404 | 409; detail: string } | undefined {
+  const refused = refusalOf(error)
+  if (refused === undefined) return undefined
+  const { status, detail } = refused.body
   return (status === 404 || status === 409) && detail !== undefined ? { status, detail } : undefined
 }
 
@@ -832,7 +833,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             const detail = await tx.transaction((savepoint) => dispatchRoute(savepoint, principal, id, at))
             results.set(id, { routeId: id, outcome: "dispatched", route: routeOfDetail(detail) })
           } catch (error) {
-            const refusal = refusalOf(error)
+            const refusal = dispatchRefusalOf(error)
             if (refusal === undefined) throw error
             results.set(id, { routeId: id, outcome: "refused", ...refusal })
           }
@@ -958,13 +959,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         // ask a run of the scheme (Generate's grant), never awaited, and never a refusal of the hand-back.
         const scheme = allows(principal.grants, SCHEMES_MODULE, "edit") ? await findScheme(tx, principal, schemeId) : undefined
         if (scheme !== undefined && scheme.status === "validated") {
-          try {
-            const today = await projectToday(tx, { companyId: principal.companyId, projectId: row.projectId }, now)()
-            await askGeneration(tx, principal, jobs.send, scheme, handBackWindow({ today, schemeFrom: scheme.validFrom, serviceDate: row.serviceDate }))
-          } catch (error) {
-            // No worker has made the queue yet: the hold is cleared all the same, and the next run brings the route back.
-            if (!(error instanceof QueueMissing)) throw error
-          }
+          const today = await projectToday(tx, { companyId: principal.companyId, projectId: row.projectId }, now)()
+          await askGenerationBestEffort(tx, principal, jobs.send, scheme, handBackWindow({ today, schemeFrom: scheme.validFrom, serviceDate: row.serviceDate }))
         }
         return c.json(await detailOf(tx, principal.companyId, row))
       },

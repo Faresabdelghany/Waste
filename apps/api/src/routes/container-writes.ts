@@ -14,12 +14,13 @@ import { container } from "@waste/db/schema/containers"
 import type { AssetStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { containerScope, noSuchContainer } from "./lifecycle"
 import { requireContainerType } from "./references"
-import { refuseDuplicate, stampsOf } from "./shared"
+import { stampsOf } from "./shared"
 
 export const containerColumns = {
   id: container.id,

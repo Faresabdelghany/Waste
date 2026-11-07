@@ -58,7 +58,6 @@ import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-ty
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
 import { projectToday } from "@waste/db/commands/project-clock"
-import { Refused } from "@waste/db/commands/shared"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, product } from "@waste/db/schema/catalogue"
 import { sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -71,7 +70,7 @@ import type * as z from "zod"
 
 import type { Principal } from "../auth/principal"
 import { requireAllowed } from "../auth/require"
-import { ProblemError, refusedProblem } from "../problem"
+import { refusalOf } from "../problem"
 import { agreementStarting, createAgreement, createSubscription, patchAgreement, patchSubscription, subscriptionStarting } from "./agreements"
 import { containerTypeByName, createContainerType, createWasteFraction, patchContainerType, patchWasteFraction, wasteFractionByKey } from "./catalogue"
 import { calendarByName, createCalendar, patchCalendar } from "./collection-calendars"
@@ -205,12 +204,11 @@ function sentenceOf(errors: readonly { path: string; message: string }[], column
     .join("; ")
 }
 
-/** The refusal an error is, when it is one a request could have earned; undefined for anything else, which stays the 500 it is. */
-function refusalOf(error: unknown, columns: Columns): RowRefused | undefined {
+/** The row's refusal an error is: the import's own, or one a request could have earned (`refusalOf`), named by the columns; undefined for anything else, which stays the 500 it is. */
+function rowRefusalOf(error: unknown, columns: Columns): RowRefused | undefined {
   if (error instanceof RowRefused) return error
-  const problem = error instanceof Refused ? refusedProblem(error) : error
-  if (problem instanceof ProblemError && problem.status < 500) return new RowRefused(sentenceOf(problem.body.errors ?? [], columns, problem.body.detail ?? problem.body.title))
-  return undefined
+  const refused = refusalOf(error)
+  return refused === undefined ? undefined : new RowRefused(sentenceOf(refused.body.errors ?? [], columns, refused.body.detail ?? refused.body.title))
 }
 
 /** A family's write, its refusal named by the columns its body was read from. */
@@ -218,7 +216,7 @@ async function step<T>(columns: Columns, write: () => Promise<T>): Promise<T> {
   try {
     return await write()
   } catch (error) {
-    throw refusalOf(error, columns) ?? error
+    throw rowRefusalOf(error, columns) ?? error
   }
 }
 
@@ -1019,7 +1017,7 @@ export async function importRow(context: ImportContext, kind: ImportKind, row: I
     const written = await context.tx.transaction((savepoint) => IMPORTERS[kind]({ ...context, tx: savepoint }, cells))
     return { row: row.row, outcome: written.outcome, key, resourceId: written.resourceId, detail: null }
   } catch (error) {
-    const refusal = refusalOf(error, {})
+    const refusal = rowRefusalOf(error, {})
     if (refusal === undefined) throw error
     return { row: row.row, outcome: "refused", key, resourceId: null, detail: refusal.message }
   }

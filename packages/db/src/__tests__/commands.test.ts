@@ -1,14 +1,15 @@
 // What the shared write statements agree on, without a database (Issue #109
 // part B): the SQLSTATE readers over an error as postgres.js raises it and as
-// Drizzle wraps it, and `Refused`, the refusal a statement both processes run
-// throws in place of the API's problem — its status, its sentence, and the
-// field a 400 came in; and the strength a patch's row lock is taken at.
+// Drizzle wraps it, the doors a foreseen constraint goes through — each
+// refusing with the domain's `Refused`, or answering a replay — and the
+// strength a patch's row lock is taken at.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { Refused } from "@waste/domain/refusal"
 import { DrizzleQueryError } from "drizzle-orm/errors"
 
-import { Refused, refused, RefusedField, strengthFor } from "../commands/shared"
+import { refuseCheck, refuseDuplicate, refuseOverlap, replayed, strengthFor } from "../commands/shared"
 import { product } from "../schema/catalogue"
 import { vehicle } from "../schema/fleet"
 import { company } from "../schema/organisation"
@@ -46,18 +47,117 @@ describe("sqlstate", () => {
   })
 })
 
-describe("Refused", () => {
-  test("is an Error with the status the API answers and the sentence a person reads; a 409 names no field", () => {
-    const error = refused(409, "This alert is resolved and does not change")
-    assert.ok(error instanceof Refused)
-    assert.ok(error instanceof Error)
-    assert.deepEqual([error.name, error.status, error.message, error.path], ["Refused", 409, "This alert is resolved and does not change", undefined])
+/** What a door's write threw, for a test that expects it to throw. */
+const thrownBy = async (write: Promise<unknown>): Promise<unknown> =>
+  write.then(
+    () => assert.fail("the write was expected to be refused"),
+    (error: unknown) => error,
+  )
+
+describe("refuseDuplicate and refuseOverlap, the doors a foreseen key or period goes through", () => {
+  const sentences = { subscription_no_overlap: "This product is already subscribed to at that place over those dates" }
+
+  test("hand back what the write answered when it succeeded", async () => {
+    assert.equal(await refuseOverlap(sentences, async () => "written"), "written")
+    assert.equal(await refuseDuplicate(sentences, async () => "written"), "written")
   })
 
-  test("a RefusedField is a 400 at the field the value came in", () => {
-    const error = new RefusedField("alertId", "Not an alert of this project")
-    assert.ok(error instanceof Refused)
-    assert.deepEqual([error.name, error.status, error.message, error.path], ["RefusedField", 400, "Not an alert of this project", "alertId"])
+  test("turn an overlap the caller foresaw into a conflict with its sentence", async () => {
+    const raised = await thrownBy(refuseOverlap(sentences, async () => Promise.reject(wrapped(postgresError("23P01", "subscription_no_overlap")))))
+    assert.ok(raised instanceof Refused)
+    assert.deepEqual(raised.refusal, { reason: "conflict", sentence: sentences.subscription_no_overlap })
+  })
+
+  test("leave an overlap no one foresaw, and another error, to the caller as they came", async () => {
+    for (const error of [wrapped(postgresError("23P01", "container_service_placement_no_overlap")), new Error("something else")]) {
+      assert.equal(await thrownBy(refuseOverlap(sentences, async () => Promise.reject(error))), error)
+    }
+  })
+
+  test("each answers its own SQLSTATE alone: a unique violation is not refuseOverlap's, an exclusion violation not refuseDuplicate's", async () => {
+    const exclusion = wrapped(postgresError("23P01", "subscription_no_overlap"))
+    assert.equal(await thrownBy(refuseDuplicate(sentences, async () => Promise.reject(exclusion))), exclusion)
+    const duplicate = wrapped(postgresError("23505", "subscription_no_overlap"))
+    assert.equal(await thrownBy(refuseOverlap(sentences, async () => Promise.reject(duplicate))), duplicate)
+    const answered = await thrownBy(refuseDuplicate(sentences, async () => Promise.reject(duplicate)))
+    assert.ok(answered instanceof Refused && answered.refusal.reason === "conflict")
+  })
+})
+
+describe("refuseCheck, the door a check only the database can run goes through", () => {
+  const sentences = { planning_area_boundary_boundary_valid: { input: "boundary", sentence: "Not a valid polygon: the ring crosses itself" } }
+
+  test("hands back what the write answered when it succeeded", async () => {
+    assert.equal(await refuseCheck(sentences, async () => "written"), "written")
+  })
+
+  test("turns a check the caller foresaw into an invalid value at its input, with its sentence", async () => {
+    const raised = await thrownBy(refuseCheck(sentences, async () => Promise.reject(wrapped(postgresError("23514", "planning_area_boundary_boundary_valid")))))
+    assert.ok(raised instanceof Refused)
+    assert.deepEqual(raised.refusal, { reason: "invalid", input: "boundary", sentence: "Not a valid polygon: the ring crosses itself" })
+  })
+
+  test("leaves a check no one foresaw, one Postgres did not name, another error, and the 409 doors' states to the caller as they came", async () => {
+    for (const error of [
+      wrapped(postgresError("23514", "route_scheme_service_days_non_empty")),
+      wrapped(postgresError("23514")),
+      new Error("something else"),
+      wrapped(postgresError("23505", "planning_area_boundary_boundary_valid")),
+      wrapped(postgresError("23P01", "planning_area_boundary_boundary_valid")),
+    ]) {
+      assert.equal(await thrownBy(refuseCheck(sentences, async () => Promise.reject(error))), error)
+    }
+  })
+
+  test("is not a 409 door's to answer", async () => {
+    const check = wrapped(postgresError("23514", "planning_area_boundary_boundary_valid"))
+    for (const door of [refuseDuplicate, refuseOverlap]) {
+      assert.equal(await thrownBy(door({ planning_area_boundary_boundary_valid: "not this door's sentence" }, async () => Promise.reject(check))), check)
+    }
+  })
+})
+
+describe("replayed, the door that answers a key already taken as the first application", () => {
+  const keys = ["driver_command_pkey", "session_pkey"]
+  const uniqueViolation = (constraint: string) => wrapped(postgresError("23505", constraint))
+
+  test("answers the write's own result when the write goes through, and never reads the first", async () => {
+    let read = 0
+    const answer = await replayed(keys, async () => "applied", async () => {
+      read += 1
+      return "replayed"
+    })
+    assert.equal(answer, "applied")
+    assert.equal(read, 0)
+  })
+
+  test("answers what was recorded when the write meets one of the named keys", async () => {
+    for (const constraint of keys) {
+      assert.equal(await replayed(keys, async () => Promise.reject(uniqueViolation(constraint)), async () => "replayed"), "replayed", constraint)
+    }
+  })
+
+  test("rethrows a unique violation on any other constraint, a named key that nothing recorded, and an error that is no unique violation, since none is a replay", async () => {
+    const other = uniqueViolation("session_driver_open_idx")
+    assert.equal(await thrownBy(replayed(keys, async () => Promise.reject(other), async () => "replayed")), other)
+    const nobodys = uniqueViolation("driver_command_pkey")
+    assert.equal(await thrownBy(replayed(keys, async () => Promise.reject(nobodys), async () => undefined)), nobodys)
+    const elsewhere = new Error("the database is gone")
+    assert.equal(await thrownBy(replayed(keys, async () => Promise.reject(elsewhere), async () => "replayed")), elsewhere)
+    assert.equal(await thrownBy(replayed([], async () => Promise.reject(nobodys), async () => "replayed")), nobodys, "a caller naming no key replays nothing")
+  })
+
+  test("answers `taken` for a named key that nothing the caller can see recorded, when the caller gives one, and never for another constraint", async () => {
+    assert.equal(await replayed(keys, async () => Promise.reject(uniqueViolation("session_pkey")), async () => undefined, async () => "taken"), "taken")
+    const other = uniqueViolation("session_driver_open_idx")
+    assert.equal(await thrownBy(replayed(keys, async () => Promise.reject(other), async () => undefined, async () => "taken")), other)
+    let asked = 0
+    const recorded = await replayed(keys, async () => Promise.reject(uniqueViolation("driver_command_pkey")), async () => "replayed", async () => {
+      asked += 1
+      return "taken"
+    })
+    assert.equal(recorded, "replayed")
+    assert.equal(asked, 0, "the first answer wins where there is one")
   })
 })
 

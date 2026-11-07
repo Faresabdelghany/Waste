@@ -12,7 +12,6 @@ import { after, before, describe, test } from "node:test"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { noAddress, queueMessage, SEND_MESSAGE_QUEUE, type SendMessageData } from "@waste/db/commands/messaging"
-import { Refused } from "@waste/db/commands/shared"
 import type { Send } from "@waste/db/jobs"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
@@ -62,8 +61,13 @@ describe("messaging.send", { skip: api.skip || owner.skip }, () => {
   let billingSms: string
   let hanne: string
 
-  const queue = (templateId: string, contactId: string | null = null) =>
+  const draft = (templateId: string, contactId: string | null = null) =>
     withCompany(pool.db, tenant.companyId, (tx) => queueMessage(tx, send, { id: testId(), companyId: tenant.companyId, templateId, customerId: tenant.customerId, contactId }))
+  const queue = async (templateId: string, contactId: string | null = null) => {
+    const queued = await draft(templateId, contactId)
+    if (queued.kind === "refused") assert.fail(`the draft was expected to be queued: ${queued.refusal.sentence}`)
+    return queued.message
+  }
   const read = async (id: string) => {
     const [row] = await withCompany(pool.db, tenant.companyId, (tx) => tx.select().from(message).where(eq(message.id, id)))
     return row
@@ -112,7 +116,9 @@ describe("messaging.send", { skip: api.skip || owner.skip }, () => {
   })
 
   test("a recipient with no address on the channel is refused, and nothing is queued", async () => {
-    await assert.rejects(queue(billingSms), (error) => error instanceof Refused && error.status === 409 && error.message === noAddress("Parkvej Boligforening", "sms"))
+    const before = sent.length
+    assert.deepEqual(await draft(billingSms), { kind: "refused", refusal: { reason: "conflict", sentence: noAddress("Parkvej Boligforening", "sms") } })
+    assert.equal(sent.length, before, "no job sent for it")
   })
 
   test("the provider sends it and the log says sent, by whom and when", async () => {

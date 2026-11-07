@@ -72,8 +72,8 @@ export function periodAfter(current: Period, patch: { validFrom?: string; validT
   }
 }
 
-/** The bounds of `child` that lie outside `parent`, in the order a body spells them. */
-function boundsOutside(parent: Period, child: Period): Bound[] {
+/** The bounds of `child` that lie outside `parent`, in the order a body spells them: the rule `requireWithin` throws, as a value. */
+export function boundsOutside(parent: Period, child: Period): Bound[] {
   const outside: Bound[] = []
   if (child.validFrom < parent.validFrom) outside.push("validFrom")
   if (parent.validTo !== null && (child.validTo === null || child.validTo > parent.validTo)) outside.push("validTo")
