@@ -89,7 +89,7 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
+import { NOT_A_STATION, notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
 import { confirmNonWorkingDay, operatingDayReading, type OperatingDayReading } from "@waste/domain/execution/operating-day"
 import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
 import type { OfficeCancelReasonCode, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
@@ -124,7 +124,7 @@ import { detailOf, findReachedRoute, findRoute, noSuchRoute, routeReach, routeSc
 import { findDriver, findVehicle, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
-import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
+import { requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGenerationBestEffort } from "./generation"
 import { handBackWindow } from "./route-holds"
@@ -334,7 +334,7 @@ async function requireStationAccepting(tx: Tx, companyId: string, routeId: strin
     .from(unloadingStation)
     .where(and(eq(unloadingStation.companyId, companyId), eq(unloadingStation.id, stationId)))
     .limit(1)
-  if (station === undefined) throw invalidRequest("body", [{ path: "unloadingStationId", message: NOT_AN_UNLOADING_STATION }])
+  if (station === undefined) throw invalidRequest("body", [{ path: "unloadingStationId", message: NOT_A_STATION }])
   const fractions = await tx
     .selectDistinct({ id: pickup.wasteFractionId })
     .from(pickup)

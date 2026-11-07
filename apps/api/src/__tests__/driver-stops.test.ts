@@ -5,10 +5,9 @@ import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
 import { DriverMe } from "@waste/contracts/driver-commands"
-import { OBJECT_KEY_SHAPE } from "@waste/contracts/execution"
 import { ProofOfService } from "@waste/contracts/proofs"
 import { Route } from "@waste/contracts/routes"
-import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
+import { Unload } from "@waste/contracts/unloads"
 import { type Database } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { unloadingStationFraction } from "@waste/db/schema/places"
@@ -20,13 +19,14 @@ import {
   NOT_A_FRACTION,
   NOT_A_STATION,
   OBJECT_KEY_NAMES_ANOTHER,
-  objectKeyOf,
   OCCURRED_AT_SKEW_MS,
   RECORDED_AFTER_IT_HAPPENED,
   recordedTooLate,
 } from "@waste/domain/execution/commands"
 import { alreadyDecided, notActive } from "@waste/domain/execution/transitions"
+import { NET_IS_GROSS_LESS_TARE } from "@waste/domain/execution/unloads"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import { objectKeyOf, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import { COMMAND_BACKDATE_MS } from "../routes/shared"
@@ -185,7 +185,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       }
       assert.equal(OBJECT_KEY_NAMES_ANOTHER, "The object key names another route or another command")
       const malformed = await rejected(envelope("add-signature", route.id, { pickupId, objectKey: "photo.jpg" }, { occurredAt: at("07:10") }), 400, "The request body is invalid")
-      assert.deepEqual(malformed.errors, [{ path: "body.objectKey", message: OBJECT_KEY_SHAPE }])
+      assert.deepEqual(malformed.errors, [{ path: "body.objectKey", message: PROOF_KEY_SHAPE }])
       const signatureless = await rejected(envelope("add-signature", route.id, { objectKey: photoKey(route, id) }, { id, occurredAt: at("07:10") }), 400, "The request body is invalid")
       assert.deepEqual(signatureless.errors?.map((error) => error.path), ["body.pickupId"], "a signature is a stop's")
       // The key rule holds for a record-unload's photo too.

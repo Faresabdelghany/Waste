@@ -1,21 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { BOTH_ENDS_OF_THE_WINDOW, OVERLAPPING_WINDOW_ORDERED, WINDOW_ENDS_AFTER_IT_STARTS, windowOrdered } from "@waste/domain/resources/allocations"
 import { ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
 
-import {
-  BOTH_ENDS_OF_THE_WINDOW,
-  OVERLAPPING_WINDOW_ORDERED,
-  VehicleAllocation,
-  VehicleAllocationChange,
-  VehicleAllocationConfirm,
-  VehicleAllocationCreate,
-  VehicleAllocationEvent,
-  VehicleAllocationListQuery,
-  VehicleAllocationRelease,
-  WINDOW_ENDS_AFTER_IT_STARTS,
-  windowOrdered,
-} from "../allocations"
+import { VehicleAllocation, VehicleAllocationChange, VehicleAllocationConfirm, VehicleAllocationCreate, VehicleAllocationEvent, VehicleAllocationListQuery, VehicleAllocationRelease } from "../allocations"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

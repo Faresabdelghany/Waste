@@ -14,6 +14,43 @@ export type Position2D = [number, number]
 /** A line through two or more positions: a routed leg's geometry. */
 export type LineString = { type: "LineString"; coordinates: Position2D[] }
 
+/** The ordinates' ranges, in degrees. */
+export const LONGITUDE = { min: -180, max: 180 } as const
+export const LATITUDE = { min: -90, max: 90 } as const
+
+// A polygon's ring (RFC 7946 §3.1.6): four or more positions, the last equal
+// to the first, at least three of them distinct so it encloses an area at
+// all. Geometric validity beyond that — no self-intersection, the winding —
+// is the database's to judge.
+
+/** A position as a body gives it: two ordinates, an altitude possibly after them. */
+type Ordinates = readonly (number | undefined)[]
+
+/** The fewest positions a ring has: three corners and the first again. */
+export const RING_POSITIONS_MIN = 4
+
+/** The fewest distinct positions a ring has, besides the closing one. */
+export const RING_CORNERS_MIN = 3
+
+/** Whether a ring ends where it starts. */
+export const ringCloses = (ring: readonly Ordinates[]): boolean => {
+  const first = ring[0]
+  const last = ring[ring.length - 1]
+  return first.length === last.length && first.every((value, index) => value === last[index])
+}
+
+/** Whether a ring holds enough distinct positions, besides the closing one, to enclose an area. */
+export const ringEnclosesArea = (ring: readonly Ordinates[]): boolean => new Set(ring.slice(0, -1).map((position) => position.join(","))).size >= RING_CORNERS_MIN
+
+export const RING_TOO_SHORT = "a linear ring has at least four positions"
+export const RING_OPEN = "a linear ring ends where it starts"
+export const RING_WITHOUT_AREA = "a linear ring has at least three distinct positions"
+export const POLYGON_WITHOUT_RING = "a polygon has an outer ring"
+
+/** The fewest positions a line has. */
+export const LINE_POSITIONS_MIN = 2
+export const LINE_TOO_SHORT = "a line string has at least two positions"
+
 export const EARTH_RADIUS_METRES = 6_371_008.8
 
 const radians = (degrees: number): number => (degrees * Math.PI) / 180

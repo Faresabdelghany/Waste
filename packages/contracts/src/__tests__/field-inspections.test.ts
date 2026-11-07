@@ -3,7 +3,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, EACH_FINDING_ONCE, FieldInspection, FieldInspectionCreate, FieldInspectionPatch, InspectionPhotoUploadRequest, ONE_SUBJECT } from "../field-inspections"
+import { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, EACH_FINDING_ONCE, ONE_SUBJECT } from "@waste/domain/inspections/rules"
+
+import { FieldInspection, FieldInspectionCreate, FieldInspectionPatch, InspectionPhotoUploadRequest } from "../field-inspections"
 import { Pickup } from "../pickups"
 
 const ID = "018f7c31-a000-7000-8000-000000000001"

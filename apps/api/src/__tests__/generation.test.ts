@@ -26,13 +26,15 @@ import { after, before, describe, test } from "node:test"
 import { WasteFraction } from "@waste/contracts/catalogue"
 import { GenerationRun } from "@waste/contracts/generation"
 import { Page } from "@waste/contracts/pagination"
-import { WINDOW_AT_MOST_A_YEAR, WINDOW_ORDERED, RouteScheme } from "@waste/contracts/route-schemes"
+import { RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { QueueMissing } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { WINDOW_AT_MOST_A_YEAR } from "@waste/domain/planning/schemes"
 import { eq, inArray, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
@@ -260,7 +262,7 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
 
   test("the window is the occurrence read's: 400 at `to` for one that ends before it starts or spans more than 366 days, and a member the server decides is refused by name", async () => {
     const backwards = await refused(await generate(olivia, harbor.id, { from: "2026-10-11", to: "2026-10-05" }), 400)
-    assert.deepEqual(backwards.errors, [{ path: "to", message: WINDOW_ORDERED }])
+    assert.deepEqual(backwards.errors, [{ path: "to", message: DAY_WINDOW_ORDERED }])
     const long = await refused(await generate(olivia, harbor.id, { from: "2026-01-01", to: "2027-01-02" }), 400)
     assert.deepEqual(long.errors, [{ path: "to", message: WINDOW_AT_MOST_A_YEAR }])
     const owned = await refused(await generate(olivia, harbor.id, { ...WEEK, trigger: "cron" }), 400)

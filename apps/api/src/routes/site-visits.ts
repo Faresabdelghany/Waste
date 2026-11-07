@@ -19,7 +19,7 @@
 // consumer cancels its charge, or reverses it once invoiced. A later visit's
 // step is not re-tiered: each was judged at its own event.
 import { Page } from "@waste/contracts/pagination"
-import { FrequentVisitors, FrequentVisitorsQuery, SiteVisit, SiteVisitCheckIn, SiteVisitCheckInAnswer, SiteVisitListQuery, SiteVisitVoid, VISIT_ADDRESS_MAX, VisitAddresses, VisitAddressQuery, VisitSites, VisitSitesQuery, type VisitChargeQuoted, type VisitChargeReading } from "@waste/contracts/site-visits"
+import { FrequentVisitors, FrequentVisitorsQuery, SiteVisit, SiteVisitCheckIn, SiteVisitCheckInAnswer, SiteVisitListQuery, SiteVisitVoid, VisitAddresses, VisitAddressQuery, VisitSites, VisitSitesQuery, type VisitChargeQuoted, type VisitChargeReading } from "@waste/contracts/site-visits"
 import type { Tx } from "@waste/db/client"
 import { likelyTradesOf, NOT_A_CENTRE, priceVisitCharge, recordVisit } from "@waste/db/commands/site-visits"
 import { projectToday } from "@waste/db/commands/project-clock"
@@ -27,6 +27,8 @@ import { wasteFraction } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { siteVisit } from "@waste/db/schema/site-visits"
+import type { Action } from "@waste/domain/access/modules"
+import { VISIT_ADDRESS_MAX } from "@waste/domain/visits/charges"
 import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -77,7 +79,7 @@ async function readingOf(tx: Tx, scope: { companyId: string; projectId: string }
   }
 }
 
-const problems = (action: "view" | "edit" | "create") => ({
+const problems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

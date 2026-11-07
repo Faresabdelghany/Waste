@@ -50,11 +50,14 @@
 // The series is the company's because the legal entity's is; it arrived with
 // migration 0010.
 import { BRAND_COLOR_PATTERN, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN } from "@waste/domain/access/branding"
-import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
+import { PUBLIC_SLUG_LENGTH } from "@waste/domain/access/public-slug"
+import { COMPANY_STATUSES, PROJECT_STATUSES } from "@waste/domain/access/vocabulary"
+import { COUNTRY_PATTERN } from "@waste/domain/codes"
 import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+import { SLUG_PATTERN } from "@waste/domain/text"
 import { sql } from "drizzle-orm"
 import { boolean, check, date, integer, text, uuid } from "drizzle-orm/pg-core"
 
@@ -64,11 +67,6 @@ import { id, tenant, timestamps } from "./columns"
 import { IN_COMPANY, policies } from "./policies"
 import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
-
-/** A company's status: onboarding until its first project runs. */
-export const COMPANY_STATUSES = ["active", "onboarding"] as const
-/** A project's status: onboarding until it runs. */
-export const PROJECT_STATUSES = ["active", "onboarding"] as const
 
 export const company = wms.table(
   "company",
@@ -148,7 +146,7 @@ export const holidayList = wms.table(
     tenantUnique(t, t.country),
     tenantUnique(t, t.name),
     tenantKey(t),
-    check(tableObjectName(t.id.table, "country_shape", "holidayList"), sql`${t.country} ~ '^[A-Z]{2}$'`),
+    check(tableObjectName(t.id.table, "country_shape", "holidayList"), sql`${t.country} ~ ${sql.raw(`'${COUNTRY_PATTERN}'`)}`),
   ],
 )
 
@@ -258,12 +256,12 @@ export const project = wms.table(
     oneOf(t.paymentReferenceScheme, PAYMENT_REFERENCE_SCHEMES),
     // Due on issue at the soonest, within the domain's longest terms.
     check(tableObjectName(t.id.table, "payment_terms_range", "project"), sql`${t.paymentTermsDays} between 0 and ${sql.raw(String(PAYMENT_TERMS_MAX))}`),
-    // The slug's shape, `@waste/domain/access/public-slug`'s one spelling:
+    // The slug's shape, a key's (`@waste/domain/access/public-slug`):
     // lowercase words joined by single hyphens, within the lengths. No helper
     // spells it because no other table has it; the label names the check.
     check(
       tableObjectName(t.id.table, "public_slug_shape", "project"),
-      sql`${t.publicSlug} ~ ${sql.raw(`'${PUBLIC_SLUG_PATTERN}'`)} and char_length(${t.publicSlug}) between ${sql.raw(String(PUBLIC_SLUG_LENGTH.min))} and ${sql.raw(String(PUBLIC_SLUG_LENGTH.max))}`,
+      sql`${t.publicSlug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)} and char_length(${t.publicSlug}) between ${sql.raw(String(PUBLIC_SLUG_LENGTH.min))} and ${sql.raw(String(PUBLIC_SLUG_LENGTH.max))}`,
     ),
     check(
       tableObjectName(t.id.table, "weight_tolerance_percent_range", "project"),

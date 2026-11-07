@@ -13,10 +13,11 @@ import { after, before, describe, test } from "node:test"
 
 import { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
 import { Container } from "@waste/contracts/containers"
-import { OUTSIDE_SERVICE_DAYS, RouteScheme, type CollectionGroup } from "@waste/contracts/route-schemes"
+import { RouteScheme, type CollectionGroup } from "@waste/contracts/route-schemes"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
+import { OUTSIDE_SERVICE_DAYS } from "@waste/domain/planning/schemes"
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"

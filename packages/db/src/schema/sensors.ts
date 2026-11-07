@@ -26,6 +26,7 @@
 // paired to nothing then; the rule reads a pairing's newest reading through
 // it. A sensor and an instant are one reading (`unique`), so a vendor's batch
 // sent twice records nothing the second time.
+import { PERCENT, RSSI_DBM, THRESHOLD_PERCENT } from "@waste/domain/resources/sensors"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
 import { boolean, check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
@@ -84,7 +85,7 @@ export const sensorPairing = wms.table(
     projectReference(t, [t.containerId], container),
     projectKey(t),
     validPeriod(t),
-    check(tableObjectName(t.id.table, "threshold_range", "sensorPairing"), sql`${t.fullThresholdPercent} between 1 and 100`),
+    check(tableObjectName(t.id.table, "threshold_range", "sensorPairing"), sql`${t.fullThresholdPercent} between ${sql.raw(String(THRESHOLD_PERCENT.min))} and ${sql.raw(String(THRESHOLD_PERCENT.max))}`),
     // The container's pairings are found through the exclusion constraint's index over (company_id, container_id, the period).
   ],
 )
@@ -116,9 +117,9 @@ export const fillReading = wms.table(
     projectReference(t, [t.pairingId], sensorPairing),
     // One reading per sensor and instant: a batch sent twice is a replay. Leads with the sensor, so it is the reference's index and a sensor's history in order.
     tenantUnique(t, t.sensorId, t.measuredAt),
-    check(tableObjectName(t.id.table, "fill_range", "fillReading"), sql`${t.fillPercent} between 0 and 100`),
-    check(tableObjectName(t.id.table, "battery_range", "fillReading"), sql`${t.batteryPercent} is null or ${t.batteryPercent} between 0 and 100`),
-    check(tableObjectName(t.id.table, "rssi_range", "fillReading"), sql`${t.rssiDbm} is null or ${t.rssiDbm} between -200 and 0`),
+    check(tableObjectName(t.id.table, "fill_range", "fillReading"), sql`${t.fillPercent} between ${sql.raw(String(PERCENT.min))} and ${sql.raw(String(PERCENT.max))}`),
+    check(tableObjectName(t.id.table, "battery_range", "fillReading"), sql`${t.batteryPercent} is null or ${t.batteryPercent} between ${sql.raw(String(PERCENT.min))} and ${sql.raw(String(PERCENT.max))}`),
+    check(tableObjectName(t.id.table, "rssi_range", "fillReading"), sql`${t.rssiDbm} is null or ${t.rssiDbm} between ${sql.raw(String(RSSI_DBM.min))} and ${sql.raw(String(RSSI_DBM.max))}`),
     // A pairing's newest reading, which the alert rule asks for.
     index(tableObjectName(t.companyId.table, "pairing_id_idx", "fillReading")).on(t.companyId, t.pairingId, t.measuredAt),
     tenantIndex(t, t.projectId),

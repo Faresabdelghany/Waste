@@ -10,6 +10,7 @@
 // before the API sees it, in the API's own sentence, which a test holds
 // equal to the contracts'.
 import type { ContactRole, ContactStatus, CustomerContact, CustomerContacts } from "@waste/contracts/customers"
+import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 
@@ -22,8 +23,6 @@ export const ADD_CONTACT = "add-contact"
 /** The customer's action that changes one of its contact persons. */
 export const EDIT_CONTACT = "edit-contact"
 
-/** What a contact with no channel is told (`@waste/contracts/customers`, `REACHABLE_ON_A_CHANNEL`); the test holds the two equal. */
-export const REACHABLE_ON_A_CHANNEL = "Give an e-mail or a phone: a contact is reached on one at least"
 
 /** The wire's roles, in the order the form offers them, each with the words a person reads. */
 export const CONTACT_ROLE_LABELS: Readonly<Record<ContactRole, string>> = {

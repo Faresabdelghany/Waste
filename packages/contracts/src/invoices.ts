@@ -26,29 +26,27 @@
 // `CREDIT_LINES_MAX`; the route holds each to the line's remaining quantity.
 // A credit is by quantity, never by amount (§7.25): the amount follows from
 // the line's unit price.
-import { IsoDate } from "./dates"
-import { CreditReason, InvoiceKind, invoiceLabel, PaymentReference } from "./finance"
-import { Id } from "./ids"
-import { Currency } from "./organisation"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { InvoicePaymentStatus } from "./payments"
-import { eachOnce, eachOnceSentence, Minor, NonNegativeMinor, NonNegativeTotal, PositiveInt, recorded } from "./resource"
-import { Paragraph } from "./text"
+import { dayWindowOrdered } from "@waste/domain/days"
+import { CREDIT_LINES_MAX, EACH_LINE_ONCE, GROSS_IS_NET_PLUS_VAT, LABEL_IS_THE_NUMBER, ONE_SOURCE, oneSource, totalsAgree } from "@waste/domain/finance/invoices"
+import { invoiceLabel } from "@waste/domain/numbering"
+import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
-/** What a document whose label is not its number under its kind's prefix is told. */
-export const LABEL_IS_THE_NUMBER = "label is the number under the prefix of its kind"
+import { Currency } from "./codes"
+import { IsoDate } from "./dates"
+import { CreditReason, InvoiceKind, PaymentReference } from "./finance"
+import { Id } from "./ids"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { InvoicePaymentStatus } from "./payments"
+import { Minor, NonNegativeMinor, NonNegativeTotal, PositiveInt, recorded } from "./resource"
+import { Paragraph } from "./text"
+
 const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
 /** The label is the number's, under the kind's prefix. */
 export const labelMatches = (value: { kind: InvoiceKind; number: number; label: string }): boolean => value.label === invoiceLabel(value.kind, value.number)
 
-/** What a document whose gross is not its net and its VAT is told. */
-export const GROSS_IS_NET_PLUS_VAT = "grossMinor is netMinor and vatMinor together"
 const grossIsNetPlusVat = { message: GROSS_IS_NET_PLUS_VAT, path: ["grossMinor"] }
-
-/** The totals agree. */
-export const totalsAgree = (value: { netMinor: number; vatMinor: number; grossMinor: number }): boolean => value.grossMinor === value.netMinor + value.vatMinor
 
 /** An invoice's fields, spelled once for the two resources that carry them; each refines the two rules again, since spreading takes the fields and not them. */
 const invoiceFields = {
@@ -92,12 +90,7 @@ const invoiceFields = {
 export const Invoice = z.object(invoiceFields).refine(labelMatches, labelIsTheNumber).refine(totalsAgree, grossIsNetPlusVat)
 export type Invoice = z.infer<typeof Invoice>
 
-/** What a line charging for an event and crediting a line, or doing neither, is told. */
-export const ONE_SOURCE = "A line charges for one billable event or credits one line"
 const oneSourceAt = { message: ONE_SOURCE, path: ["billableEventId"] }
-
-/** Exactly one of the two sources. */
-export const oneSource = (line: { billableEventId: string | null; creditsLineId: string | null }): boolean => (line.billableEventId !== null) !== (line.creditsLineId !== null)
 
 export const InvoiceLine = z
   .object({
@@ -136,10 +129,6 @@ export const InvoiceDetail = z
   .refine(totalsAgree, grossIsNetPlusVat)
 export type InvoiceDetail = z.infer<typeof InvoiceDetail>
 
-/** The most lines a partial credit may name: an invoice's lines, not an import. */
-export const CREDIT_LINES_MAX = 500
-
-export const EACH_LINE_ONCE = eachOnceSentence("line", "a line is credited by one quantity in one credit note")
 const eachLineOnce = { message: EACH_LINE_ONCE, path: ["lines"] }
 
 /** One line credited by a quantity, held by the route to what remains of it. */

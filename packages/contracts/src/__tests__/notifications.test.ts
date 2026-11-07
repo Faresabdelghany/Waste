@@ -3,7 +3,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { NO_NOTIFICATIONS, NotificationPreferences, NotificationPreferencesPut, NotificationRule, NotificationRulesPut, ONE_RULE_PER_NOTICE, AREAS_ARE_A_BROADCASTS } from "../notifications"
+import { ONE_RULE_PER_NOTICE, AREAS_ARE_A_BROADCASTS } from "@waste/domain/notifications/rules"
+
+import { NO_NOTIFICATIONS, NotificationPreferences, NotificationPreferencesPut, NotificationRule, NotificationRulesPut } from "../notifications"
 import { refusal } from "./expect"
 
 describe("a staff member's notification preferences", () => {

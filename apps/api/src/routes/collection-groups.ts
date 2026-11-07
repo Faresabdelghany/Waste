@@ -61,20 +61,13 @@
 // of a project this account does not work in, is a group that does not exist
 // here. The grant is `route-studio.schemes` throughout: a group is a part of
 // its scheme and not a surface of its own.
-import { INT4_MAX } from "@waste/contracts/resource"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import {
-  CollectionGroup,
-  CollectionGroupContainersSet,
-  CollectionGroupCreate,
-  CollectionGroupPatch,
-  OUTSIDE_SERVICE_DAYS,
-  StopMatchingRuleSet,
-  withinServiceDays,
-} from "@waste/contracts/route-schemes"
+import { CollectionGroup, CollectionGroupContainersSet, CollectionGroupCreate, CollectionGroupPatch, StopMatchingRuleSet } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { alreadyPicked, containerPickedTwice, groupRuns, isParked } from "@waste/domain/planning/checks"
+import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/domain/planning/schemes"
+import { INT4_MAX } from "@waste/domain/requests"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"

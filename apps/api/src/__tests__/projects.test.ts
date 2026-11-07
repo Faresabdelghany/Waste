@@ -2,9 +2,10 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Id } from "@waste/contracts/ids"
-import { A_WORKING_DAY, Project } from "@waste/contracts/organisation"
+import { Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
+import { A_WORKING_DAY } from "@waste/domain/access/projects"
 
 import { createApp } from "../app"
 import { encodeCursor } from "../pagination"

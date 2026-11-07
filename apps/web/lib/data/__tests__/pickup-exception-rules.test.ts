@@ -6,10 +6,11 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Product } from "@waste/contracts/catalogue"
-import { PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRulePatch, REASON_AND_CODE as CONTRACTS_REASON_AND_CODE, type ContaminantCode } from "@waste/contracts/pickup-exceptions"
+import { PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRulePatch, type ContaminantCode } from "@waste/contracts/pickup-exceptions"
+import { PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EXCEPTION_WINDOW_DAYS, REASON_AND_CODE } from "@waste/domain/execution/pickup-exceptions"
 import { PICKUP_EXCEPTION_REASONS } from "@waste/domain/execution/vocabulary"
 
-import { allowanceSentence, ANY, codeOffered, FREE_COUNT_MAX, FREE_COUNT_SENTENCE, LADDER_MAX, LADDER_SENTENCE, ladderProductOptions, ladderSentence, LAST_DAY_SENTENCE, newRuleForm, REASON_AND_CODE, RULE_OUTCOME_OPTIONS, RULE_REASON_OPTIONS, ruleAccessOf, ruleCodeOptions, ruleCreateBodyOf, ruleFormOf, ruleMatchSentence, rulePatchBodyOf, rulesInOrder, START_SENTENCE, WINDOW_DAYS_MAX, WINDOW_SENTENCE, withPick, type RuleForm } from "../pickup-exception-rules"
+import { allowanceSentence, ANY, codeOffered, FREE_COUNT_SENTENCE, LADDER_SENTENCE, ladderProductOptions, ladderSentence, LAST_DAY_SENTENCE, newRuleForm, RULE_OUTCOME_OPTIONS, RULE_REASON_OPTIONS, ruleAccessOf, ruleCodeOptions, ruleCreateBodyOf, ruleFormOf, ruleMatchSentence, rulePatchBodyOf, rulesInOrder, START_SENTENCE, WINDOW_SENTENCE, withPick, type RuleForm } from "../pickup-exception-rules"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER_PROJECT = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -121,23 +122,22 @@ describe("a new rule's body", () => {
     const wire = PickupExceptionRuleCreate.safeParse({ projectId: PROJECT, outcome: "skipped", reason: "inaccessible", contaminantCodeId: CODE, freeCount: 1, windowDays: 1, ladder: [FEE], validFrom: "2026-03-01" })
     assert.equal(wire.success, false)
     assert.deepEqual(wire.error?.issues.map((issue) => [issue.path.join("."), issue.message]), [["reason", REASON_AND_CODE]])
-    assert.equal(REASON_AND_CODE, CONTRACTS_REASON_AND_CODE)
   })
 
   test("refuses each number outside the contracts' bounds at its field, as the contracts do", () => {
-    for (const typed of ["-1", "1.5", "", "x", String(FREE_COUNT_MAX + 1)]) assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ freeCount: typed })), { field: "freeCount", message: FREE_COUNT_SENTENCE }, typed)
-    for (const typed of ["0", "", String(WINDOW_DAYS_MAX + 1)]) assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ windowDays: typed })), { field: "windowDays", message: WINDOW_SENTENCE }, typed)
-    const edge = ruleCreateBodyOf(PROJECT, form({ freeCount: String(FREE_COUNT_MAX), windowDays: String(WINDOW_DAYS_MAX), ladder: Array.from({ length: LADDER_MAX }, () => FEE) }))
+    for (const typed of ["-1", "1.5", "", "x", String(PICKUP_EXCEPTION_FREE_COUNT_MAX + 1)]) assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ freeCount: typed })), { field: "freeCount", message: FREE_COUNT_SENTENCE }, typed)
+    for (const typed of ["0", "", String(PICKUP_EXCEPTION_WINDOW_DAYS.max + 1)]) assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ windowDays: typed })), { field: "windowDays", message: WINDOW_SENTENCE }, typed)
+    const edge = ruleCreateBodyOf(PROJECT, form({ freeCount: String(PICKUP_EXCEPTION_FREE_COUNT_MAX), windowDays: String(PICKUP_EXCEPTION_WINDOW_DAYS.max), ladder: Array.from({ length: PICKUP_EXCEPTION_LADDER_MAX }, () => FEE) }))
     assert.equal(PickupExceptionRuleCreate.safeParse(edge).success, true)
     const wire = (values: object) => PickupExceptionRuleCreate.safeParse({ projectId: PROJECT, outcome: "skipped", freeCount: 1, windowDays: 1, ladder: [FEE], validFrom: "2026-03-01", ...values }).success
-    assert.equal(wire({ freeCount: FREE_COUNT_MAX + 1 }), false)
-    assert.equal(wire({ windowDays: WINDOW_DAYS_MAX + 1 }), false)
-    assert.equal(wire({ ladder: Array.from({ length: LADDER_MAX + 1 }, () => FEE) }), false)
+    assert.equal(wire({ freeCount: PICKUP_EXCEPTION_FREE_COUNT_MAX + 1 }), false)
+    assert.equal(wire({ windowDays: PICKUP_EXCEPTION_WINDOW_DAYS.max + 1 }), false)
+    assert.equal(wire({ ladder: Array.from({ length: PICKUP_EXCEPTION_LADDER_MAX + 1 }, () => FEE) }), false)
   })
 
   test("refuses an empty ladder, one too long, and a step not picked, at the step", () => {
     assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ ladder: [] })), { field: "ladder", message: LADDER_SENTENCE })
-    assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ ladder: Array.from({ length: LADDER_MAX + 1 }, () => FEE) })), { field: "ladder", message: LADDER_SENTENCE })
+    assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ ladder: Array.from({ length: PICKUP_EXCEPTION_LADDER_MAX + 1 }, () => FEE) })), { field: "ladder", message: LADDER_SENTENCE })
     assert.deepEqual(ruleCreateBodyOf(PROJECT, form({ ladder: [FEE, ""] })), { field: "ladder", step: 1, message: LADDER_SENTENCE })
   })
 

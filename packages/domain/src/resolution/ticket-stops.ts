@@ -14,9 +14,9 @@
 // it has; and a stop the office corrects away from completed once it has
 // serviced its ticket leaves the ticket as it is, the reopening the office's
 // to decide (`correctedAway`).
-import type { TicketKind } from "../resolution/vocabulary"
-import { SERVICE_NOUNS } from "./services"
-import type { OfficeStopService, PickupService } from "./vocabulary"
+import type { TicketKind } from "./vocabulary"
+import { SERVICE_NOUNS } from "../execution/services"
+import type { OfficeStopService, PickupService } from "../execution/vocabulary"
 
 /** Which services answer each ticket kind a stop answers; no other kind is answered by a stop. */
 const ANSWERED_BY = {

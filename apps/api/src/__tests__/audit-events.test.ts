@@ -8,10 +8,11 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Role } from "@waste/contracts/access"
-import { AuditEvent, CHANGE_REASON_HEADER } from "@waste/contracts/audit"
+import { AuditEvent } from "@waste/contracts/audit"
 import { Customer, Property } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"

@@ -5,8 +5,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { REPORT_FILE_SEPARATORS, REPORT_WINDOW_MAX_DAYS as CONTRACTS_REPORT_WINDOW_MAX_DAYS } from "@waste/contracts/reports"
 import { MODULE_KEYS } from "@waste/domain/access/modules"
+import { CSV_SEPARATORS } from "@waste/domain/imports/vocabulary"
 
 import type { ApiClient } from "../../api/client"
 import { wasteDataFile, wasteDataKey, wasteDataReport } from "../../api/reports"
@@ -19,9 +19,7 @@ import {
   periodLabel,
   periodOf,
   periodRefusal,
-  REPORT_WINDOW_MAX_DAYS,
   SEPARATORS,
-  separatorFor,
   wasteDataFileName,
 } from "../compliance"
 import { COMPLIANCE_MODULE, DASHBOARD_TABS, tabsShown, WEIGHTS_MODULE } from "../dashboard"
@@ -63,8 +61,7 @@ describe("the filing periods", () => {
     assert.deepEqual(periodOf("last-quarter", "2026-04-01"), { from: "2026-01-01", to: "2026-03-31" })
   })
 
-  test("are asked for only with both days, in order, a year's days at most — the report's own window, held equal to the contracts'", () => {
-    assert.equal(REPORT_WINDOW_MAX_DAYS, CONTRACTS_REPORT_WINDOW_MAX_DAYS)
+  test("are asked for only with both days, in order, a year's days at most — the report's own window", () => {
     assert.equal(periodRefusal({ from: "2026-01-01", to: "2026-01-31" }), null)
     assert.equal(periodRefusal({ from: "2024-01-01", to: "2024-12-31" }), null, "a leap year's 366 days")
     assert.equal(periodRefusal({ from: "", to: "2026-01-31" }), PERIOD_INCOMPLETE)
@@ -82,18 +79,10 @@ describe("the filing periods", () => {
 })
 
 describe("the file's separator", () => {
-  test("is semicolons where the locale writes a decimal comma, commas otherwise or for a locale nobody knows", () => {
-    assert.equal(separatorFor("da-DK"), "semicolon")
-    assert.equal(separatorFor("de-DE"), "semicolon")
-    assert.equal(separatorFor("en-GB"), "comma")
-    assert.equal(separatorFor("en-US"), "comma")
-    assert.equal(separatorFor("not a locale!"), "comma")
-  })
-
-  test("offers the contract's two, each by its name", () => {
+  test("offers the domain's two, each by its name", () => {
     assert.deepEqual(
       SEPARATORS.map((option) => option.id),
-      [...REPORT_FILE_SEPARATORS],
+      [...CSV_SEPARATORS],
     )
   })
 })

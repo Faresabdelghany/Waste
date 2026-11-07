@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
+import { validityOrdered } from "@waste/domain/periods"
 import * as z from "zod"
 
-import { Validity, ValidityCreate, validityOrdered } from "../validity"
+import { Validity, ValidityCreate } from "../validity"
 import { refusal } from "./expect"
 
 // The wording is pinned here and not read off the schema: zod moves a

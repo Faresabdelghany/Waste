@@ -1,7 +1,7 @@
 // Ticket Types (#545 of #544). A Ticket Type is the company's own name for a
 // kind of case — "Bulky waste collection", "Container size change" — inside
 // exactly one kind of `TICKET_KINDS`, which keeps the behaviour the kind has
-// always had: the stop that answers it (execution/ticket-stops.ts), the event
+// always had: the stop that answers it (ticket-stops.ts), the event
 // that opens it (resolution/from-event.ts), how Finance charges it and how a
 // report counts it. Each kind has one default type, the type of a ticket
 // opened by kind alone, which every company starts with under the name below.
@@ -25,8 +25,8 @@
 // command naming none is anyone's who works tickets, as every command was
 // before (`mayGive`). The rule binds a person's command in the office: a stop
 // that services its ticket and the system's own work are not held to it.
-import type { TicketCommand } from "./transitions"
-import type { TicketFieldInput, TicketFieldRequirement, TicketKind } from "./vocabulary"
+import { eachOnceSentence } from "../requests"
+import { type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind } from "./vocabulary"
 
 /** The name each kind's default type starts with, in the kinds' order. */
 export const DEFAULT_TICKET_TYPE_NAMES: Readonly<Record<TicketKind, string>> = {
@@ -49,8 +49,32 @@ export const TICKET_FIELD_KEY = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 /** The longest key. */
 export const TICKET_FIELD_KEY_MAX = 40
 
+/** What a key of another shape is told. */
+export const TICKET_FIELD_KEY_SHAPE = `A key is lowercase words of letters and digits joined by hyphens, starting with a letter, at most ${TICKET_FIELD_KEY_MAX} characters`
+
 /** The most fields a type holds. */
 export const TICKET_TYPE_FIELDS_MAX = 30
+
+/** What a ticket's body naming more values than a type has fields is told. */
+export const AT_MOST_FIELDS = `A body names at most ${TICKET_TYPE_FIELDS_MAX} values: a type holds no more fields`
+
+/** The most a patch of a ticket's values names: as many values as a type has fields, beside as many clears. */
+export const FIELD_VALUES_PATCH_MAX = 2 * TICKET_TYPE_FIELDS_MAX
+
+/** The most roles a command's permission names: a form's list, not an import. */
+export const PERMISSION_ROLES_MAX = 50
+
+/** What a type's permissions naming a command twice are told. */
+export const EACH_COMMAND_ONCE = eachOnceSentence("command", "a command names one list of roles")
+
+/** What a command's permission naming a role twice is told. */
+export const EACH_ROLE_ONCE = eachOnceSentence("role")
+
+/** What a default type a body would retire is told. */
+export const DEFAULT_TYPE_OFFERED = "A kind's default type is offered to every ticket of the kind; make another type the default first"
+
+/** A default type is active: the table's `ticket_type_default_shape`, over a body that carries both. */
+export const defaultIsActive = (body: { status?: string; isDefault?: boolean }): boolean => body.isDefault !== true || body.status !== "inactive"
 
 /** The most choices a choice field offers. */
 export const TICKET_FIELD_CHOICES_MAX = 50
@@ -175,7 +199,7 @@ export const needsBeforeCompleting = (ticketLabel: string, missing: readonly Pic
 export function fieldSetIssue(fields: readonly TicketFieldDefinition[]): { index: number; path: "key" | "choices"; message: string } | undefined {
   const keys = new Set<string>()
   for (const [index, entry] of fields.entries()) {
-    if (!TICKET_FIELD_KEY.test(entry.key) || entry.key.length > TICKET_FIELD_KEY_MAX) return { index, path: "key", message: `A key is lowercase words of letters and digits joined by hyphens, starting with a letter, at most ${TICKET_FIELD_KEY_MAX} characters` }
+    if (!TICKET_FIELD_KEY.test(entry.key) || entry.key.length > TICKET_FIELD_KEY_MAX) return { index, path: "key", message: TICKET_FIELD_KEY_SHAPE }
     if (keys.has(entry.key)) return { index, path: "key", message: "Name each field's key once" }
     keys.add(entry.key)
     if (entry.input === "choice" && entry.choices.length === 0) return { index, path: "choices", message: "A choice field offers at least one choice" }

@@ -71,9 +71,8 @@
 // only in theory: two issues of one container serialise on the lock and the
 // second reads the first's service.
 import type { AdjustmentTarget, StockMovement, StockPlace } from "@waste/contracts/stock"
-import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { aheadOfClock, NOT_A_FRACTION, RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
-import type { Period } from "@waste/domain/periods"
+import { ENDS_AFTER_IT_STARTS, type Period } from "@waste/domain/periods"
 import { Refused } from "@waste/domain/refusal"
 import { refuseUnservedPlace, type Place as ServedPlace } from "@waste/domain/registry/served-places"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"

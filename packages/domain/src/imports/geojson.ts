@@ -9,7 +9,7 @@
 // says by lacking one. Rows are numbered from 2, the first feature row 2, so a
 // refusal names a row as a spreadsheet's would.
 
-import { columnOf, IMPORT_COLUMNS } from "./columns"
+import { BOUNDARY_COLUMN, columnOf, IMPORT_COLUMNS } from "./columns"
 import type { ImportFile, ImportRow } from "./csv"
 
 /** What a file that is not a GeoJSON FeatureCollection is told. */
@@ -45,7 +45,7 @@ export function planningAreaRows(text: string): ImportFile | { problem: string }
       for (const [key, value] of Object.entries(isObject(feature.properties) ? feature.properties : {})) {
         const column = columnOf("planning-areas", key)
         const cell = cellOf(value)
-        if (column === undefined || column.header === "boundary" || cell === undefined) continue
+        if (column === undefined || column.header === BOUNDARY_COLUMN || cell === undefined) continue
         values[column.header] = cell
         seen.add(column.header)
       }

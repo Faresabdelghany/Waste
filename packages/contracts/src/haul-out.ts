@@ -26,24 +26,24 @@
 // (`outKg`); the adjustments (`adjustedKg`); and what that leaves on hand,
 // which may read below zero. An adjustment is a ledger row: signed whole
 // kilograms, never zero, with the count's words.
-import { SAME_STATION } from "@waste/domain/execution/haul-out"
+import { ADJUSTMENT_MOVES_STOCK, NAME_THE_CARRIER, SAME_STATION } from "@waste/domain/execution/haul-out"
+import { weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
 import { OUTBOUND_LOAD_STATUSES } from "@waste/domain/execution/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, Int4, NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { Int4, NonNegativeInt, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { bothGrossAndTare, netIsGrossLessTare, weightsAddUp, weightsPaired } from "./unloads"
+import { bothGrossAndTare, netIsGrossLessTare } from "./unloads"
 
 export const OutboundLoadStatus = z.enum(OUTBOUND_LOAD_STATUSES)
 export type OutboundLoadStatus = z.infer<typeof OutboundLoadStatus>
 
 /** What a load sent back to the station it left from is told, at the receiving station. */
 export const stationsApart = { message: SAME_STATION, path: ["toStationId"] }
-/** What a load with neither our vehicle nor a plate is told, at the plate. */
-export const NAME_THE_CARRIER = "Name our vehicle or give the plate"
 
 /** The receiving site's ticket, read against our out-weighing. */
 export const OutboundLoadReceipt = z.object({
@@ -181,7 +181,7 @@ export const MaterialStockQuery = z.object({ projectId: Id.optional() })
 export type MaterialStockQuery = z.infer<typeof MaterialStockQuery>
 
 /** Signed whole kilograms of a count's correction: never zero. */
-export const DeltaKg = Int4.refine((kg) => kg !== 0, "An adjustment moves the stock: give a number of kilograms other than zero")
+export const DeltaKg = Int4.refine((kg) => kg !== 0, ADJUSTMENT_MOVES_STOCK)
 
 export const MaterialAdjustment = z.object({
   ...recorded,

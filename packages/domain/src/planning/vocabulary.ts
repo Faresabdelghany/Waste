@@ -30,8 +30,13 @@
 // is a `readonly` tuple with a type read off it; `PLANNING_VOCABULARIES`
 // names them all for the test that walks them.
 import { SERVICE_DAYS, type ServiceDay } from "../days"
+import { eachOnceSentence } from "../requests"
 
 export { SERVICE_DAYS }
+
+/** What a set of weekdays naming a day twice is told: a scheme's service days, a group's days, a project's weekend. */
+export const EACH_DAY_ONCE = eachOnceSentence("day", "a set of days holds each day at most once")
+
 /** How often a Route Scheme recurs; `every-4-weeks` is kept for stored records, the forms offer the other five. */
 export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "every-2-weeks", "every-3-weeks", "every-4-weeks", "monthly"] as const
 /**

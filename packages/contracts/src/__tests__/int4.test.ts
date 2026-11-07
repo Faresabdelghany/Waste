@@ -5,190 +5,14 @@
 // every write body of every module — a strict object, which is what a body
 // is (resource.ts) — is walked, and each whole number in it must say so.
 import assert from "node:assert/strict"
-import { readdir } from "node:fs/promises"
-import { join } from "node:path"
+import path from "node:path"
 import { describe, test } from "node:test"
 
-import * as accessModule from "../access"
-import * as addressesModule from "../addresses"
-import * as agreementsModule from "../agreements"
-import * as alertsModule from "../alerts"
-import * as allocationsModule from "../allocations"
-import * as auditModule from "../audit"
-import * as availabilityModule from "../availability"
-import * as billableEventsModule from "../billable-events"
-import * as billingModule from "../billing"
-import * as bulkyModule from "../bulky"
-import * as catalogueModule from "../catalogue"
-import * as applicationsModule from "../applications"
-import * as collectionCalendarsModule from "../collection-calendars"
-import * as containersModule from "../containers"
-import * as countingRulesModule from "../counting-rules"
-import * as customersModule from "../customers"
-import * as datesModule from "../dates"
-import * as driverCommandsModule from "../driver-commands"
-import * as dropOffPointsModule from "../drop-off-points"
-import * as executionModule from "../execution"
-import * as financeModule from "../finance"
-import * as fleetModule from "../fleet"
-import * as generationModule from "../generation"
-import * as geojsonModule from "../geojson"
-import * as haulOutModule from "../haul-out"
-import * as holidayListsModule from "../holiday-lists"
-import * as healthModule from "../health"
-import * as idsModule from "../ids"
-import * as importsModule from "../imports"
-import * as integrationsModule from "../integrations"
-import * as invoicesModule from "../invoices"
-import * as maintenanceModule from "../maintenance"
-import * as meModule from "../me"
-import * as organisationModule from "../organisation"
-import * as outboxModule from "../outbox"
-import * as paginationModule from "../pagination"
-import * as paymentsModule from "../payments"
-import * as permissionsModule from "../permissions"
-import * as pickupsModule from "../pickups"
-import * as placesModule from "../places"
-import * as planningModule from "../planning"
-import * as planningAreasModule from "../planning-areas"
-import * as plansModule from "../plans"
-import * as positionsModule from "../positions"
-import * as tanksModule from "../tanks"
-import * as priceListsModule from "../price-lists"
-import * as problemModule from "../problem"
-import * as proofObjectsModule from "../proof-objects"
-import * as proofsModule from "../proofs"
-import * as publicModule from "../public"
-import * as queriesModule from "../queries"
-import * as reportsModule from "../reports"
-import * as resolutionModule from "../resolution"
-import * as resourceModule from "../resource"
-import * as resourcesModule from "../resources"
-import * as routeSchemesModule from "../route-schemes"
-import * as routesModule from "../routes"
-import * as routingPreviewModule from "../routing-preview"
-import * as routingQuotaModule from "../routing-quota"
-import * as serviceAreasModule from "../service-areas"
-import * as serviceProviderActivitiesModule from "../service-provider-activities"
-import * as serviceProviderPricesModule from "../service-provider-prices"
-import * as movesModule from "../moves"
-import * as pickupExceptionsModule from "../pickup-exceptions"
-import * as scaleHouseModule from "../scale-house"
-import * as sensorsModule from "../sensors"
-import * as sessionsModule from "../sessions"
-import * as shiftsModule from "../shifts"
-import * as fieldInspectionsModule from "../field-inspections"
-import * as rightSizingModule from "../right-sizing"
-import * as siteVisitsModule from "../site-visits"
-import * as settlementsModule from "../settlements"
-import * as stockModule from "../stock"
-import * as textModule from "../text"
-import * as ticketSlaModule from "../ticket-sla"
-import * as ticketTeamsModule from "../ticket-teams"
-import * as ticketTypesModule from "../ticket-types"
-import * as ticketsModule from "../tickets"
-import * as unloadsModule from "../unloads"
-import * as validityModule from "../validity"
-import * as vehicleTypesModule from "../vehicle-types"
-import * as visitRulesModule from "../visit-rules"
-import * as messagingModule from "../messaging"
-import * as notificationsModule from "../notifications"
-import * as routeMessagesModule from "../route-messages"
-import * as weightControlModule from "../weight-control"
-import * as weighbridgeModule from "../weighbridge"
-import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
-import { ServiceProviderPriceIndex } from "../service-provider-prices"
+import { INT4_MAX, INT4_MIN } from "@waste/domain/requests"
+import { importShippingModules } from "@waste/tooling/program"
 
-/** Every module of the package by its file's name: imported by name, since the purity gate refuses an import it cannot read, and held to the directory below. */
-const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
-  "applications": applicationsModule,
-  "access": accessModule,
-  "addresses": addressesModule,
-  "agreements": agreementsModule,
-  "alerts": alertsModule,
-  "allocations": allocationsModule,
-  "audit": auditModule,
-  "messaging": messagingModule,
-  "notifications": notificationsModule,
-  "route-messages": routeMessagesModule,
-  "availability": availabilityModule,
-  "billable-events": billableEventsModule,
-  "billing": billingModule,
-  "bulky": bulkyModule,
-  "catalogue": catalogueModule,
-  "collection-calendars": collectionCalendarsModule,
-  "containers": containersModule,
-  "counting-rules": countingRulesModule,
-  "customers": customersModule,
-  "dates": datesModule,
-  "driver-commands": driverCommandsModule,
-  "drop-off-points": dropOffPointsModule,
-  "execution": executionModule,
-  "finance": financeModule,
-  "fleet": fleetModule,
-  "generation": generationModule,
-  "geojson": geojsonModule,
-  "haul-out": haulOutModule,
-  "holiday-lists": holidayListsModule,
-  "health": healthModule,
-  "ids": idsModule,
-  "imports": importsModule,
-  "integrations": integrationsModule,
-  "invoices": invoicesModule,
-  "maintenance": maintenanceModule,
-  "me": meModule,
-  "moves": movesModule,
-  "organisation": organisationModule,
-  "outbox": outboxModule,
-  "pagination": paginationModule,
-  "payments": paymentsModule,
-  "permissions": permissionsModule,
-  "pickup-exceptions": pickupExceptionsModule,
-  "pickups": pickupsModule,
-  "places": placesModule,
-  "planning": planningModule,
-  "planning-areas": planningAreasModule,
-  "plans": plansModule,
-  "positions": positionsModule,
-  tanks: tanksModule,
-  "price-lists": priceListsModule,
-  "problem": problemModule,
-  "proof-objects": proofObjectsModule,
-  "proofs": proofsModule,
-  "public": publicModule,
-  "queries": queriesModule,
-  "reports": reportsModule,
-  "resolution": resolutionModule,
-  "resource": resourceModule,
-  "resources": resourcesModule,
-  "route-schemes": routeSchemesModule,
-  "routes": routesModule,
-  "routing-preview": routingPreviewModule,
-  "routing-quota": routingQuotaModule,
-  "service-areas": serviceAreasModule,
-  "service-provider-activities": serviceProviderActivitiesModule,
-  "service-provider-prices": serviceProviderPricesModule,
-  "scale-house": scaleHouseModule,
-  "sensors": sensorsModule,
-  "sessions": sessionsModule,
-  "shifts": shiftsModule,
-  "site-visits": siteVisitsModule,
-  "field-inspections": fieldInspectionsModule,
-  "right-sizing": rightSizingModule,
-  "settlements": settlementsModule,
-  "stock": stockModule,
-  "text": textModule,
-  "ticket-sla": ticketSlaModule,
-  "ticket-teams": ticketTeamsModule,
-  "ticket-types": ticketTypesModule,
-  "tickets": ticketsModule,
-  "unloads": unloadsModule,
-  "validity": validityModule,
-  "vehicle-types": vehicleTypesModule,
-  "visit-rules": visitRulesModule,
-  "weight-control": weightControlModule,
-  "weighbridge": weighbridgeModule,
-}
+import { Int4, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
+import { ServiceProviderPriceIndex } from "../service-provider-prices"
 
 describe("the shared whole numbers", () => {
   test("a positive and a non-negative one stop at the integer's bound, and a refusal names the bound", () => {
@@ -271,12 +95,10 @@ function wholeNumbers(node: Node, path: string, seen = new Set<Node>()): { path:
 
 describe("every write body", () => {
   test("holds each whole number it takes to the integer's bounds, so none reaches the database as 22003", async () => {
-    // A module added to the package and not to the table is a module the walk would miss.
-    const files = (await readdir(join(import.meta.dirname, ".."))).filter((name) => name.endsWith(".ts")).map((name) => name.replace(/\.ts$/, ""))
-    assert.deepEqual(Object.keys(MODULES).sort(), files.sort())
+    const modules = await importShippingModules(path.resolve(import.meta.dirname, "../.."))
     const unbounded: string[] = []
     let bodies = 0
-    for (const [name, exported] of Object.entries(MODULES)) {
+    for (const [name, exported] of Object.entries(modules)) {
       for (const [exportName, value] of Object.entries(exported)) {
         if (!isNode(value) || !isBody(value)) continue
         bodies += 1

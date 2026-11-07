@@ -28,26 +28,23 @@
 // (`PROVIDER_NEEDS_A_DAY`); an assignment by project, area, provider, day.
 // A Service Provider's own account reads its assignments and the areas they
 // name through these, bounded by the route.
+import { validityOrdered } from "@waste/domain/periods"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { EACH_PLANNING_AREA_ONCE, PROVIDER_NEEDS_A_DAY, SERVICE_AREA_CODE_MAX, SERVICE_AREA_CODE_TOO_LONG } from "@waste/domain/service-providers/service-areas"
+import * as z from "zod"
+
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
-import * as z from "zod"
-
-/** The longest an area's code may be: what a contract spells, `CA-Ø-2`, not a slug and not a sentence. */
-export const SERVICE_AREA_CODE_MAX = 40
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** The award's code as the contract spells it. */
-const ServiceAreaCode = Label.max(SERVICE_AREA_CODE_MAX, { error: `A service area's code is at most ${SERVICE_AREA_CODE_MAX} characters` })
+const ServiceAreaCode = Label.max(SERVICE_AREA_CODE_MAX, { error: SERVICE_AREA_CODE_TOO_LONG })
 
-/** The most entries a set body may name: a form's list, not an import. */
-const SET_MAX = 200
-
-export const EACH_PLANNING_AREA_ONCE = eachOnceSentence("planning area")
 const eachPlanningAreaOnce = { message: EACH_PLANNING_AREA_ONCE, path: ["planningAreaIds"] }
-export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 const eachFractionOnce = { message: EACH_FRACTION_ONCE, path: ["wasteFractionIds"] }
 
 const IdSet = z.array(Id).max(SET_MAX)
@@ -177,8 +174,6 @@ export const ServiceAreaDetail = z
   .refine(validityOrdered, endsAfterItStarts)
 export type ServiceAreaDetail = z.infer<typeof ServiceAreaDetail>
 
-/** What a list asked for a provider's areas without a day is told. */
-export const PROVIDER_NEEDS_A_DAY = "Give validOn with serviceProviderId: a provider holds an area through an assignment valid on a day"
 const providerNeedsADay = { message: PROVIDER_NEEDS_A_DAY, path: ["validOn"] }
 
 /** A page of areas: one project's, in force on a day, naming a planning area, or held by a provider on the day. */

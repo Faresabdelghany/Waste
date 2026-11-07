@@ -33,11 +33,7 @@
 // change" — the sentence the link command reads too, since a resolved alert
 // does not change through any door.
 import type { Transition } from "../machine"
-import { isClosedTicketStatus, type AlertStatus, type ClosedTicketStatus, type TicketStatus } from "./vocabulary"
-
-/** What moves a ticket: the office's six commands. `assign` moves the assignee and not the status, and a comment moves nothing, so neither is here. */
-export const TICKET_COMMANDS = ["start", "wait", "hold", "complete", "reject", "reopen"] as const
-export type TicketCommand = (typeof TICKET_COMMANDS)[number]
+import { isClosedTicketStatus, type AlertStatus, type ClosedTicketStatus, type TicketCommand, type TicketStatus } from "./vocabulary"
 
 /** The status each command leads to; `reopen` leads back to `open`. */
 export const TICKET_COMMAND_TARGETS: Readonly<Record<TicketCommand, TicketStatus>> = {

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { OVERRIDE_WITH_A_REASON, overrideWithAReason } from "@waste/domain/finance/billable-events"
 import { BILLABLE_EVENT_STATUSES, BLOCK_REASONS } from "@waste/domain/finance/vocabulary"
 
-import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventLinks, BillableEventListQuery, BillableEventReprice, OVERRIDE_WITH_A_REASON, overrideWithAReason } from "../billable-events"
-import { DAY_WINDOW_ORDERED } from "../queries"
+import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventLinks, BillableEventListQuery, BillableEventReprice } from "../billable-events"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

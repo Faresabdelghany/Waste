@@ -15,8 +15,9 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
+import { PickupOrderSet, Route, RouteAssign, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
+import { DISPATCH_MANY_MAX } from "@waste/domain/execution/routes"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
@@ -34,7 +35,6 @@ import {
   applyBalance,
   balanceMoveLine,
   dayLoadLine,
-  DISPATCH_BATCH,
   DISPATCH_ROUTE,
   dispatchRoutes,
   previewBalance,
@@ -753,14 +753,13 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
   })
 
   test("a day of more routes than one request takes goes out in batches the contract accepts, the results in the order given; nothing to dispatch asks nothing", async () => {
-    assert.equal(DISPATCH_BATCH, DISPATCH_MANY_MAX, "the web spells the contracts' bound again")
-    const ids = Array.from({ length: DISPATCH_BATCH + 1 }, (_, index) => `01a0d2a4-a280-7030-8000-${String(index).padStart(12, "0")}`)
+    const ids = Array.from({ length: DISPATCH_MANY_MAX + 1 }, (_, index) => `01a0d2a4-a280-7030-8000-${String(index).padStart(12, "0")}`)
     const answer = (call: { url: string; init: RequestInit }) => json({ results: (bodyOf(call) as { routeIds: string[] }).routeIds.map((routeId) => ({ routeId, outcome: "refused", status: 404, detail: `No route ${routeId}` })) })
     const { fetch, calls } = scripted([answer, answer])
     const { results } = await dispatchRoutes(clientOver(fetch), ids)
     assert.deepEqual(
       calls.map((call) => (bodyOf(call) as { routeIds: string[] }).routeIds.length),
-      [DISPATCH_BATCH, 1],
+      [DISPATCH_MANY_MAX, 1],
     )
     for (const call of calls) assert.ok(RouteDispatchMany.safeParse(bodyOf(call)).success)
     assert.deepEqual(

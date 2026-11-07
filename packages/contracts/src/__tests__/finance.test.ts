@@ -23,13 +23,10 @@ import {
   BillingRunStatus,
   BlockReason,
   CancelReason,
-  CREDIT_NOTE_NUMBER_PREFIX,
   CreditReason,
   ExclusionReason,
   IndexBase,
-  INVOICE_NUMBER_PREFIX,
   InvoiceKind,
-  invoiceLabel,
   SettlementEventKind,
   SettlementStatus,
   WeightReviewDecision,
@@ -69,16 +66,6 @@ describe("the Finance enums", () => {
     assert.equal(WeightReviewStatus.safeParse("captured").success, true)
     assert.equal(IndexBase.safeParse("current fee").success, false, "the prototype's spelling; the token is current-fee")
     assert.equal(IndexBase.safeParse("current-fee").success, true)
-  })
-})
-
-describe("the invoice label", () => {
-  test("is the number under the kind's prefix: one series, two prefixes", () => {
-    assert.equal(INVOICE_NUMBER_PREFIX, "INV-")
-    assert.equal(CREDIT_NOTE_NUMBER_PREFIX, "CN-")
-    assert.equal(invoiceLabel("invoice", 26007188), "INV-26007188")
-    assert.equal(invoiceLabel("credit-note", 26007189), "CN-26007189")
-    assert.equal(invoiceLabel("invoice", 7), "INV-7")
   })
 })
 

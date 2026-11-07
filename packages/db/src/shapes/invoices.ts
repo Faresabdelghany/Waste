@@ -3,10 +3,10 @@
 // `invoice-issued`, and the office reads a document with how its payments
 // stand (#291 C6). A document's `label` is `invoiceLabel(kind, number)`, the
 // contracts' one spelling of `INV-26007188` and `CN-26007189`.
-import { invoiceLabel } from "@waste/contracts/finance"
 import type { Invoice, InvoiceDetail, InvoiceLine } from "@waste/contracts/invoices"
 import { invoicePayment, type InvoicePaymentStatus } from "@waste/domain/finance/payments"
 import type { CreditReason, InvoiceKind } from "@waste/domain/finance/vocabulary"
+import { invoiceLabel } from "@waste/domain/numbering"
 import { and, asc, eq, inArray, sum } from "drizzle-orm"
 
 import type { Tx } from "../client"

@@ -6,11 +6,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CHANGE_REASON_HEADER as CONTRACTS_CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { PAGE_LIMIT_MAX as CONTRACTS_PAGE_LIMIT_MAX } from "@waste/contracts/pagination"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
+import { PAGE_LIMIT_MAX, PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
 
-import { CHANGE_REASON_HEADER, command, create, fileNameOf, get, getFile, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
-import { ApiProblem, genericProblem, isApiProblem, PROBLEM_MEDIA_TYPE, problemOf, problemSentence } from "../problem"
+import { command, create, fileNameOf, get, getFile, listAll, listPage, patch, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
+import { ApiProblem, genericProblem, isApiProblem, problemOf, problemSentence } from "../problem"
 
 type Call = { url: string; init: RequestInit }
 
@@ -47,10 +47,6 @@ describe("withQuery", () => {
 })
 
 describe("the client", () => {
-  test("the page size is the contracts' own ceiling, re-spelled here so no zod reaches the bundle and held equal so the two cannot drift", () => {
-    assert.equal(PAGE_LIMIT_MAX, CONTRACTS_PAGE_LIMIT_MAX)
-  })
-
   test("every request carries the bearer token and asks for JSON", async () => {
     const { fetch, calls } = scripted([() => json({ id: "x" })])
     await get(clientOver(fetch), "/company")
@@ -63,8 +59,7 @@ describe("the client", () => {
     assert.equal(calls[0].init.signal, undefined, "no signal unless the client carries one")
   })
 
-  test("a client carrying a reason gives it in the change-reason header, percent-encoded, held to the contracts' name; one without gives no header (#291)", async () => {
-    assert.equal(CHANGE_REASON_HEADER, CONTRACTS_CHANGE_REASON_HEADER)
+  test("a client carrying a reason gives it in the change-reason header, percent-encoded; one without gives no header (#291)", async () => {
     const reason = "Flyttet til boligselskabet – ny betaler"
     const { fetch, calls } = scripted([() => json({ id: "x" }), () => json({ id: "x" })])
     await patch({ ...clientOver(fetch), reason }, "/customers/x", { name: "Østerbro" })

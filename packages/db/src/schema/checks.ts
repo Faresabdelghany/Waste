@@ -39,7 +39,7 @@
 // seven) or bounds the set's size: the database holds subset-ness and
 // non-emptiness, and distinctness and size are the contracts' rule
 // (`ServiceDays` in @waste/contracts/planning, `WEEKEND_MAX` in
-// @waste/contracts/organisation), since the API is the only writer — a SQL
+// @waste/domain/access/projects), since the API is the only writer — a SQL
 // function for the two would be a second spelling of a rule already held.
 //
 // `timeWindow(columns, label, [start, end])` (O14 of #290): two times of day

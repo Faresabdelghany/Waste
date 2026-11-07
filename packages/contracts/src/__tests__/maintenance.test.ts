@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AN_INTERVAL, KM_NEEDS_A_READING, MAINTENANCE_INTERVAL_MAX } from "@waste/domain/resources/maintenance"
+import { AN_INTERVAL, KM_NEEDS_A_READING, MAINTENANCE_INTERVAL_MAX, NAME_THE_ORDER } from "@waste/domain/resources/maintenance"
 
-import { MaintenanceOrder, MaintenanceOrderComplete, MaintenanceOrderCreate, MaintenancePlan, MaintenancePlanCreate, MaintenancePlanPatch, NAME_THE_ORDER } from "../maintenance"
+import { MaintenanceOrder, MaintenanceOrderComplete, MaintenanceOrderCreate, MaintenancePlan, MaintenancePlanCreate, MaintenancePlanPatch } from "../maintenance"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

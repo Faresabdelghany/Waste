@@ -7,8 +7,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BOTH_GROSS_AND_TARE as WIRE_BOTH, NET_IS_GROSS_LESS_TARE as WIRE_NET, SAY_WHY_REFUSED as WIRE_SAY_WHY, UnloadCreate, type Unload } from "@waste/contracts/unloads"
+import { UnloadCreate, type Unload } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject, type WeightReview } from "@waste/contracts/weight-control"
+import { BOTH_GROSS_AND_TARE, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
@@ -16,7 +17,7 @@ import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
-import { BOTH_GROSS_AND_TARE, differenceOf, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, SAY_WHY_REFUSED, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
+import { differenceOf, REVIEW_LABELS, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -77,7 +78,6 @@ describe("the weighbridge in the office (O9 of #290)", () => {
     const unmeasured = unloadAdapter.toRecord(unload, context)
     assert.deepEqual([unmeasured.facts.Refused, unmeasured.facts["On board"], unmeasured.facts.Tolerance], [undefined, undefined, "Not measured"], "no stop of its fraction was weighed")
     assert.equal(differenceOf({ onBoardKg: 1, deviationPercent: 0, withinTolerance: true }), "0.0%")
-    assert.equal(SAY_WHY_REFUSED, WIRE_SAY_WHY)
   })
 
   test("Record unload posts the ticket under its route, the time on the route's project's clock, with the refusal where the station turned the load away", async () => {
@@ -206,7 +206,5 @@ describe("the weights module", () => {
     if (corrected.kind === "done") assert.deepEqual(corrected.touches, ["route-studio.weights"], "the correction's new unload is read with the module")
     const halfWeighed = await commandRecord(clientOver(fetch), weightsModule, current, record, "correct", { netKg: "7100", grossKg: "18300", note: "x" }, options)
     assert.equal(halfWeighed.kind, "refused", "gross and tare come together")
-    assert.equal(BOTH_GROSS_AND_TARE, WIRE_BOTH, "the contract's sentences, spelled again since the web imports the contracts as types")
-    assert.equal(NET_IS_GROSS_LESS_TARE, WIRE_NET)
   })
 })

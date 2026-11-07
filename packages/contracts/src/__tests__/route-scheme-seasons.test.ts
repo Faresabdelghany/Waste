@@ -4,21 +4,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  AT_MOST_SEASONS,
-  DAILY_HAS_NO_SEASONS,
-  EACH_SEASON_NAME_ONCE,
-  MONTH_DAY_SHAPE,
-  Occurrence,
-  RouteSchemeCreate,
-  RouteSchemePatch,
-  SchemeSeason,
-  SchemeSeasons,
-  SEASON_PART_OF_YEAR,
-  SEASONS_KEEP_APART,
-  SEASONS_MAX,
-  WEEK_ROTATION_WITH_FORTNIGHTLY,
-} from "../route-schemes"
+import { DAILY_HAS_NO_SEASONS, WEEK_ROTATION_WITH_FORTNIGHTLY } from "@waste/domain/planning/schemes"
+import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
+
+import { Occurrence, RouteSchemeCreate, RouteSchemePatch, SchemeSeason, SchemeSeasons } from "../route-schemes"
 import { refusal } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

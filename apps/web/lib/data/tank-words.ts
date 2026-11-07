@@ -26,8 +26,6 @@ export const TANK_INSPECTION_OUTCOME_LABELS: Readonly<Record<TankInspectionOutco
   failed: "Failed",
 }
 
-/** The most months a register takes between emptyings, as the API's check. */
-export const TANK_INTERVAL_MONTHS_MAX = 120
 /** The most litres the driver may type: a slip of the finger past this, not a load. */
 export const LITRES_MAX = 999_999
 

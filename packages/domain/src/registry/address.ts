@@ -29,6 +29,25 @@ export type AddressParts = {
 /** A postcode's shape and a municipality code's, as a regular expression's source: four digits. */
 export const FOUR_DIGITS_PATTERN = "^[0-9]{4}$"
 
+/** What a postcode of another shape is told. */
+export const POSTCODE_SHAPE = "A postcode is four digits"
+
+/** What a municipality code of another shape is told. */
+export const MUNICIPALITY_CODE_SHAPE = "A municipality code is four digits"
+
+/** The fewest characters the register is asked with, and the most. */
+export const ADDRESS_QUERY_MIN = 2
+export const ADDRESS_QUERY_MAX = 200
+
+/** What a search shorter than the fewest is told. */
+export const ADDRESS_QUERY_TOO_SHORT = `Type at least ${ADDRESS_QUERY_MIN} characters of the address`
+
+/** The most addresses one search answers with. */
+export const ADDRESS_SEARCH_MAX = 10
+
+/** What the register's data is credited as, wherever a surface shows it. */
+export const ADDRESS_ATTRIBUTION = "Indeholder data fra Klimadatastyrelsen, CC BY 4.0"
+
 /** The floor as it is printed: a number takes a period (`2.`), a word stays as it is (`st`, `kl`). */
 const floorPrinted = (floor: string): string => (/^[0-9]+$/.test(floor) ? `${floor}.` : floor)
 

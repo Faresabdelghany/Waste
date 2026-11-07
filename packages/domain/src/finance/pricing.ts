@@ -129,6 +129,9 @@ export const requiresCondition = (condition: PriceCondition, required: string): 
 export const conditionDiffers = (condition: PriceCondition, required: string, provided: string): string => `${CONDITION_NAMES[condition]} is ${required}, not ${provided}`
 export const appliesFrom = (fromQuantity: number): string => `Applies from a quantity of ${fromQuantity}`
 
+/** The most of a product's unit a price is resolved at: past any tier a list holds, short of a number nobody typed. */
+export const RESOLVE_QUANTITY_MAX = 1_000_000
+
 /** A row's tier as the rule ranks it: none counts as the lowest. */
 const tierOf = (row: PriceRow): number => row.fromQuantity ?? 0
 

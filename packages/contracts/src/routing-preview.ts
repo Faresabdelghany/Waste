@@ -11,22 +11,23 @@
 // beside its prototype estimate. `provider` names whose geometry it is, for
 // the attribution a map owes it (#124 §6). The two bases are the web's
 // `RouteEstimateBasis` (@waste/domain/route-schemes/estimates).
+import { PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
+import { PREVIEW_ENDS, PREVIEW_NEEDS_TWO_POINTS, PREVIEW_POINTS_MIN, previewTakesAtMost } from "@waste/domain/routing/preview"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { LineString, Position2D } from "./geojson"
 import { NonNegativeInt } from "./resource"
-import { PICKUP_ORDER_MAX } from "./routes"
 
 /** A route's most stops (PICKUP_ORDER_MAX), its depot and its station. */
-export const ROUTING_PREVIEW_POINTS_MAX = PICKUP_ORDER_MAX + 2
+export const ROUTING_PREVIEW_POINTS_MAX = PICKUP_ORDER_MAX + PREVIEW_ENDS
 
 export const RoutingPreviewRequest = z.strictObject({
   /** `[longitude, latitude]` each, in driving order; two consecutive at one place — two bins at one address — span a zero leg. */
   points: z
     .array(Position2D)
-    .min(2, { error: "a preview needs two points or more" })
-    .max(ROUTING_PREVIEW_POINTS_MAX, { error: `a preview takes at most ${ROUTING_PREVIEW_POINTS_MAX} points: a route's ${PICKUP_ORDER_MAX} stops, its depot and its station` }),
+    .min(PREVIEW_POINTS_MIN, { error: PREVIEW_NEEDS_TWO_POINTS })
+    .max(ROUTING_PREVIEW_POINTS_MAX, { error: previewTakesAtMost(ROUTING_PREVIEW_POINTS_MAX, PICKUP_ORDER_MAX) }),
 })
 export type RoutingPreviewRequest = z.infer<typeof RoutingPreviewRequest>
 

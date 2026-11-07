@@ -23,6 +23,8 @@
 // and service-provider modules are loaded first (records/modules.ts).
 import type { Role, User } from "@waste/contracts/access"
 import type { Company, Project, ServiceProvider } from "@waste/contracts/organisation"
+import { PROJECT_STATUSES } from "@waste/domain/access/vocabulary"
+import { SERVICE_DAYS } from "@waste/domain/days"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
@@ -149,8 +151,6 @@ export const isCompanyRecord = (record: BusinessRecord): boolean => companyAdapt
 /** `Project · municipality`, the fixture's context shape, from the wire's free-text kind. */
 const projectContext = (kind: string) => `Project · ${kind.toLowerCase()}`
 
-/** The wire's project statuses (`@waste/contracts/organisation`, `ProjectStatus`); the module's lifecycle also lists Suspended and Archived, which the API has no column for. */
-const PROJECT_STATUSES: readonly Project["status"][] = ["active", "onboarding"]
 
 export const projectAdapter: ResourceAdapter<Project> = {
   prefix: "project",
@@ -284,8 +284,8 @@ export function weekendLabel(weekend: readonly string[]): string {
   return short.length === 2 && consecutive(weekend[0], weekend[1]) ? `${short[0]}–${short[1]}` : short.join(", ")
 }
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-const consecutive = (a: string, b: string) => (DAYS.indexOf(a) + 1) % 7 === DAYS.indexOf(b)
+const dayIndex = (day: string): number => (SERVICE_DAYS as readonly string[]).indexOf(day)
+const consecutive = (a: string, b: string) => (dayIndex(a) + 1) % SERVICE_DAYS.length === dayIndex(b)
 
 /**
  * The `weekend` and `holidayList` a project record says, as the wire spells
@@ -301,7 +301,7 @@ function projectCalendarBody(record: BusinessRecord): { weekend?: string[]; holi
     weekend: weekend
       .split(",")
       .map((day) => day.trim().toLowerCase())
-      .filter((day) => DAYS.includes(day)),
+      .filter((day) => dayIndex(day) >= 0),
     holidayList: typed(record, "holidayList") ?? null,
   }
 }

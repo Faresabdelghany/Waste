@@ -2,8 +2,9 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { ContainerType } from "@waste/contracts/catalogue"
-import { EACH_TYPE_ONCE, StockBalances, StockMinimums, StockMovement } from "@waste/contracts/stock"
+import { StockBalances, StockMinimums, StockMovement } from "@waste/contracts/stock"
 import { createDb, type Database } from "@waste/db/client"
+import { EACH_TYPE_ONCE } from "@waste/domain/resources/stock-balance"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"

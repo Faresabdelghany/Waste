@@ -59,13 +59,14 @@
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `EXECUTION_VOCABULARIES`
 // names them all for the test that walks them.
+import { without } from "../lists"
 
 /** Where a dated Route stands: #97 B's five, verbatim. */
 export const ROUTE_STATUSES = ["planned", "ready", "active", "completed", "cancelled"] as const
 /** Where a Pickup stands: #97 B's four, verbatim; `skipped` was not attempted, `failed` was. */
 export const PICKUP_STATUSES = ["planned", "completed", "skipped", "failed"] as const
 /** The statuses a pickup may be moved to: every one but `planned`, which nothing moves a pickup back to. What a correction gives and a correction proof carries. */
-export const PICKUP_OUTCOMES = ["completed", "skipped", "failed"] as const
+export const PICKUP_OUTCOMES = without(PICKUP_STATUSES, "planned")
 /** Why a stop was skipped or failed: the driver's six, then the four the system writes. */
 export const PICKUP_REASONS = ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other", "route-ended", "route-cancelled", "removed-by-dispatcher", "regeneration"] as const
 /** Who put a stop on its route (#111): generation, or the office by hand, whose stop a refresh never skips or moves. */
@@ -142,7 +143,7 @@ export type DriverPickupReason = (typeof DRIVER_PICKUP_REASONS)[number]
  * collection, at the booking's address with no container. Generation's stops
  * are emptyings alone. A value beside the lists, like the driver's six reasons.
  */
-export const OFFICE_STOP_SERVICES = ["empty", "deliver", "remove", "swap", "repair", "wash", "bulky"] as const satisfies readonly PickupService[]
+export const OFFICE_STOP_SERVICES = PICKUP_SERVICES
 export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
 
 /**
@@ -151,7 +152,7 @@ export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
  * booking's. A value beside the lists, like the office's services it is drawn
  * from.
  */
-export const WORK_ORDER_SERVICES = ["deliver", "remove", "swap", "repair", "wash"] as const satisfies readonly OfficeStopService[]
+export const WORK_ORDER_SERVICES = without(OFFICE_STOP_SERVICES, "empty", "bulky")
 export type WorkOrderService = (typeof WORK_ORDER_SERVICES)[number]
 
 /**
@@ -192,6 +193,9 @@ export type ClosingReason = (typeof CLOSING_REASONS)[number]
  */
 export const OUTBOUND_LOAD_STATUSES = ["departed", "received", "reconciled", "disputed", "cancelled"] as const
 export type OutboundLoadStatus = (typeof OUTBOUND_LOAD_STATUSES)[number]
+
+/** The statuses that carry the receiving site's ticket: every one the load reaches once received. A value beside the lists. */
+export const RECEIVED_LOAD_STATUSES = without(OUTBOUND_LOAD_STATUSES, "departed", "cancelled")
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const EXECUTION_VOCABULARIES = {

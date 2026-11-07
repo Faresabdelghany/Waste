@@ -8,6 +8,7 @@
 // the same body without it. Nothing is computed here: what the move does is
 // the API's answer, read into sentences. A sale is a move of the owner.
 import type { MoveCreate, MoveOutcome } from "@waste/contracts/moves"
+import { ANOTHER_CUSTOMER_MOVES_IN } from "@waste/domain/registry/moves"
 import { PROPERTY_PARTY_ROLES } from "@waste/domain/registry/vocabulary"
 import { splitList } from "@waste/domain/record-values"
 import { lastDayIn } from "@waste/domain/periods"
@@ -42,7 +43,7 @@ export function moveBodyOf(typed: MoveTyped, serverIdOf: (webId: string) => stri
   if (typed.on === "") return { path: "on", message: "Pick the day the incoming customer moves in" }
   if (typed.outgoing === "") return { path: "outgoing", message: "Pick who moves out" }
   if (typed.incoming === "") return { path: "incoming", message: "Pick who moves in" }
-  if (typed.incoming === typed.outgoing) return { path: "incoming", message: "A customer does not move into the property they move out of" }
+  if (typed.incoming === typed.outgoing) return { path: "incoming", message: ANOTHER_CUSTOMER_MOVES_IN }
   const outgoingCustomerId = serverIdOf(typed.outgoing)
   if (outgoingCustomerId === undefined) return { path: "outgoing", message: "This customer is not one the API holds yet" }
   const incomingCustomerId = serverIdOf(typed.incoming)

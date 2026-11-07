@@ -10,11 +10,12 @@
 // last point always kept, and says so.
 //
 // A `RouteEta` is each stop of the route's active Plan with the instant the
-// vehicle is expected there (@waste/domain/execution/eta): the Plan's legs
+// vehicle is expected there (@waste/domain/routing/eta): the Plan's legs
 // from the route's departure or start, each stop's kerb time, the wait for a
 // window, the unload visits on the way, and the progress so far; null for a
 // stop passed, and for every stop where nothing can be said. A stop the
 // active Plan does not name has no row.
+import { TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
 import { PLAN_STOP_KINDS } from "@waste/domain/routing/vocabulary"
 import * as z from "zod"
 
@@ -22,9 +23,6 @@ import { IsoDateTime } from "./dates"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { NonNegativeInt, PositiveInt } from "./resource"
-
-/** The most points one track answers: an eight-hour day at the Driver App's thirty seconds is under a thousand, so a track is thinned only when it is long. */
-export const TRACK_POINTS_MAX = 2000
 
 /** Where the vehicle was at one instant. */
 export const Position = z.object({

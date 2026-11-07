@@ -8,7 +8,7 @@
 // (`@waste/domain/access/branding`), judged here before the API is asked.
 // Pure.
 import type { ProjectBranding } from "@waste/contracts/organisation"
-import { AA_CONTRAST, BRAND_TEXT_COLOR, brandColorReadable, brandColorRefusal, contrastRatio, isBrandColor, isHttpsAddress } from "@waste/domain/access/branding"
+import { AA_CONTRAST, BRAND_COLOR_SHAPE, BRAND_TEXT_COLOR, brandColorReadable, brandColorRefusal, contrastRatio, HTTPS_ADDRESS_SHAPE, isBrandColor, isHttpsAddress } from "@waste/domain/access/branding"
 
 import type { BusinessRecord } from "./business-modules"
 
@@ -44,7 +44,7 @@ export const brandingFormOf = (branding: ProjectBranding): BrandingForm => ({
 export function brandColorRefusalOf(typed: string): string | null {
   const color = typed.trim()
   if (color === "") return null
-  if (!isBrandColor(color)) return "A colour is a hash and six hex digits, as #1f6f3f"
+  if (!isBrandColor(color)) return BRAND_COLOR_SHAPE
   return brandColorReadable(color) ? null : brandColorRefusal(color.toLowerCase())
 }
 
@@ -52,7 +52,7 @@ export function brandColorRefusalOf(typed: string): string | null {
 export function addressRefusalOf(typed: string): string | null {
   const address = typed.trim()
   if (address === "") return null
-  return isHttpsAddress(address) ? null : "An address is https, as https://kk.dk/logo.svg"
+  return isHttpsAddress(address) ? null : HTTPS_ADDRESS_SHAPE
 }
 
 /** White text's contrast on a typed colour, as a person reads it, or null while the colour is not one. */

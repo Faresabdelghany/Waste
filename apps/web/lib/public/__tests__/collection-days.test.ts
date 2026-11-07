@@ -2,10 +2,9 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { Id } from "@waste/contracts/ids"
-import { ADDRESS_SEARCH_MAX, ADDRESS_SEARCH_MIN, COLLECTION_WEEKS, type PublicCollectionDay } from "@waste/contracts/public"
+import type { PublicCollectionDay } from "@waste/contracts/public"
 
 import {
-  ADDRESS_SEARCH,
   addressQueryOf,
   askable,
   calendarHrefOf,
@@ -19,19 +18,11 @@ import {
   monthsOf,
   nextDatesOf,
   searchPageViewOf,
-  WEEKS,
   weeksOf,
 } from "../collection-days"
 
 const day = (date: string, fractions: string[], status: "collected" | "skipped" = "collected"): PublicCollectionDay => ({ date, serviceDate: date, fractions, status, note: null })
 const project = { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-
-describe("the calendar's bounds", () => {
-  test("are the contracts', spelled again: the web imports them as types only", () => {
-    assert.deepEqual([ADDRESS_SEARCH.min, ADDRESS_SEARCH.max], [ADDRESS_SEARCH_MIN, ADDRESS_SEARCH_MAX])
-    assert.deepEqual([WEEKS.default, WEEKS.max], [COLLECTION_WEEKS.default, COLLECTION_WEEKS.max])
-  })
-})
 
 describe("addressQueryOf, askable and weeksOf", () => {
   test("an address search is the first q, trimmed and cut to the door's length; blank is none", () => {

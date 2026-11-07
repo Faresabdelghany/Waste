@@ -17,6 +17,7 @@ import { HolidayList, HolidayListCreate, HolidayListHolidaysSet, HolidayListList
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
+import type { Action } from "@waste/domain/access/modules"
 import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -134,7 +135,7 @@ async function writeHolidays(tx: Tx, companyId: string, listId: string, holidays
 /** The body's days in the order the table reads them back, by day, so a write answers what the next read says. */
 const byDay = (holidays: readonly Holiday[]): Holiday[] => [...holidays].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
 
-const commonProblems = (action: "view" | "edit" | "create" | "delete") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

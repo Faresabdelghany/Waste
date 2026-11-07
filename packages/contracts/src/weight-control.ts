@@ -17,23 +17,20 @@
 // wrong; the new row is `captured` and may be reviewed and corrected in its
 // turn. The same decision again answers 200 without a write, and every
 // command on a corrected unload is refused with the row to review named.
+import { weightsAddUp, weightsPaired } from "@waste/domain/execution/unloads"
+import { CORRECTION_NAMES_ITS_UNLOAD, correctionShape } from "@waste/domain/finance/weight-reviews"
+import * as z from "zod"
+
 import { WeightReviewDecision, WeightReviewState } from "./finance"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { PositiveInt, recorded } from "./resource"
 import { Label, Paragraph } from "./text"
-import { bothGrossAndTare, netIsGrossLessTare, weightsAddUp, weightsPaired } from "./unloads"
-import * as z from "zod"
+import { bothGrossAndTare, netIsGrossLessTare } from "./unloads"
 
 export { WeightReviewState }
 
-/** What a review whose correction does not go with its decision is told. */
-export const CORRECTION_NAMES_ITS_UNLOAD = "A correction names the new unload it wrote, never the one reviewed, and no other decision names one"
 const correctionNamesItsUnload = { message: CORRECTION_NAMES_ITS_UNLOAD, path: ["correctionUnloadId"] }
-
-/** A correction names a new unload and not the reviewed one; an approval or a rejection names none: the table's `weight_review_correction_shape`, at the boundary. */
-export const correctionShape = (review: { decision: WeightReviewDecision; unloadId: string; correctionUnloadId: string | null }): boolean =>
-  (review.decision === "corrected") === (review.correctionUnloadId !== null) && (review.correctionUnloadId === null || review.correctionUnloadId !== review.unloadId)
 
 export const WeightReview = z
   .object({

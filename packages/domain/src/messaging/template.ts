@@ -30,6 +30,16 @@ export type MessageValues = Readonly<Record<(typeof EVERY_MESSAGE_FILLS)[number]
 /** Text messages longer than this are refused: four concatenated segments of 160 characters. */
 export const SMS_BODY_MAX = 640
 
+/** A template's body: room for an e-mail of a few paragraphs; a text message's own bound is the channel's rule. */
+export const TEMPLATE_BODY_MAX = 10_000
+
+/** What a blank body is told. */
+export const SAY_SOMETHING = "Say something other than whitespace"
+
+/** The sentence a placeholder nobody fills earns, naming the ones that are filled. */
+export const unknownPlaceholderSentence = (names: readonly string[]): string =>
+  `${names.map((name) => `{{${name}}}`).join(", ")} ${names.length === 1 ? "is" : "are"} filled by no message; use ${MESSAGE_VARIABLES.map((name) => `{{${name}}}`).join(", ")}`
+
 const PLACEHOLDER = /\{\{\s*([A-Za-z][A-Za-z0-9]*)\s*\}\}/g
 
 /** The names a text's placeholders name, each once, in the order first named. */

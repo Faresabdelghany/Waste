@@ -75,6 +75,8 @@
 // are no action of the driver's: they are not counted among the actions
 // waiting, nor is a rejection of one shown — the server keeps its receipt.
 import type { DriverIdentification, DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
+import { BATCH_MAX, carriesLocation } from "@waste/domain/execution/command-batches"
+import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
 
 import type { ApiClient } from "../api/client"
 import { problemSentence, type Problem } from "../api/problem"
@@ -82,10 +84,10 @@ import { problemOfError } from "../api/records/server-records"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
 import { EMPTY_SNAPSHOT, kept, type ReadSnapshot, type ReadSnapshotStore } from "./read-snapshot"
-import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
+import { createCommandIds, pickupIdOf, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
 import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
-import { identifyOnRoute, NO_PROOF_STORAGE_TYPE, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
+import { identifyOnRoute, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "./timers"
 
 /** How long the queue waits before trying again while anything waits. */
@@ -528,7 +530,7 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
       const problem = problemOfError(error)
       // The API's 401 waits for the session's refresh; Storage's own refuses the URL it signed, which no new token changes.
       if ((problem.status === 401 && !atStorage) || session?.who !== who) return null
-      if (outOfReach(problem.status) && problem.type !== NO_PROOF_STORAGE_TYPE) {
+      if (outOfReach(problem.status) && problem.type !== NO_PROOF_STORAGE.type) {
         store.set((state) => ({ ...state, unreachable: true }))
         return "unreachable"
       }
@@ -559,7 +561,7 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
       sendable.push(entry)
     }
     if (sendable.length === 0) return
-    const batch = sendable.slice(0, BATCH_LIMIT)
+    const batch = sendable.slice(0, BATCH_MAX)
     // A photo's or a signature's bytes reach Storage before the batch carrying its command is sent.
     let heldBack = false
     for (const [index, entry] of batch.entries()) {
@@ -724,7 +726,7 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
       if (tap.kind === "pause" || tap.kind === "end-route") recorder.close()
       const occurredAt = new Date(now()).toISOString()
       const id = nextId()
-      const located = takesLocation(tap.kind)
+      const located = carriesLocation(tap.kind)
       const object = "object" in tap ? tap.object : undefined
       // An object's key is the API's to name at the upload, which comes before the command is sent.
       const body = tap.kind === "start-route" && appVersion ? { ...tap.body, appVersion } : object === undefined ? tap.body : { ...tap.body, objectKey: "" }

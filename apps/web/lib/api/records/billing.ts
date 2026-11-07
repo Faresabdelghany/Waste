@@ -4,8 +4,7 @@
 // Billing Runs (`billing.ts`, routes billing-runs.ts) as `commercial.billing`,
 // and Invoices with their Credit Notes (`invoices.ts`, routes invoices.ts) as
 // `commercial.invoices`. The contracts are imported as types only, so no zod
-// reaches the bundle; the two sentences a body is refused in by a contract's
-// own rule are spelled again here and held equal by the test.
+// reaches the bundle; a body is refused in the domain's words, the API's own.
 //
 // An event names its agreement (customers.agreements), its product (the
 // products above it), its route (route-studio.routes) and the ticket it came
@@ -45,6 +44,8 @@
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import type { BillingRunCreate, BillingRunDetail, BillingRun, BillingRunPreview } from "@waste/contracts/billing"
 import type { Invoice, InvoiceDetail } from "@waste/contracts/invoices"
+import { OVERRIDE_WITH_A_REASON } from "@waste/domain/finance/billable-events"
+import { PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED, periodOrdered } from "@waste/domain/finance/billing-runs"
 import { BILLABLE_EVENT_STATUSES, CREDIT_REASONS, type ExclusionReason } from "@waste/domain/finance/vocabulary"
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
@@ -88,10 +89,6 @@ import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerKindOf } from "./registry"
 import { kilograms } from "./weights"
 
-/** What a body giving a price of its own without a reason, or a reason without a price, is told (`@waste/contracts/billable-events`, `OVERRIDE_WITH_A_REASON`). */
-export const OVERRIDE_WITH_A_REASON = "Give the reason with a price of your own, and neither without the other"
-/** What a period whose last day comes before its first is told (`@waste/contracts/billing`, `PERIOD_ORDERED`). */
-export const PERIOD_ORDERED = "periodTo is the last day of the period, so it comes on or after periodFrom"
 export const QUANTITY_REFUSAL = "A quantity is a whole number, 1 or more"
 /** What an edit of an event is told: it moves by its commands. */
 export const EVENT_MOVES_BY_COMMAND = "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced"
@@ -425,9 +422,6 @@ const EXCLUSION_WORDS: Readonly<Record<ExclusionReason, string>> = { "all-events
 export const exclusionWords = (exclusion: { eventCount: number; reason: ExclusionReason }): string =>
   `${exclusion.eventCount} event${exclusion.eventCount === 1 ? "" : "s"}, ${EXCLUSION_WORDS[exclusion.reason]}`
 
-/** What a run's period ending after the project's today is told (M14 of #293): the contracts' `PERIOD_ENDS_BY_TODAY`, spelled again so no zod reaches the browser, and held equal to it by a test. */
-export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"
-
 /**
  * The project and the period a run, or its preview, is asked over: the one
  * body of both requests, from the Run billing form's values, or the field the
@@ -443,7 +437,7 @@ export function billingRunBody(values: BusinessFormValues, resolve: Resolver = N
   if (periodFrom === undefined) return refusal("periodFrom", "Pick the first day of the period")
   const periodTo = typed(record, "periodTo")
   if (periodTo === undefined) return refusal("periodTo", "Pick the last day of the period")
-  if (periodTo < periodFrom) return refusal("periodTo", PERIOD_ORDERED)
+  if (!periodOrdered({ periodFrom, periodTo })) return refusal("periodTo", PERIOD_ORDERED)
   // The project's today where the caller knows it: the API refuses a period still running in the same words.
   if (today !== undefined && periodTo > today) return refusal("periodTo", PERIOD_ENDS_BY_TODAY)
   const note = typed(record, "note")

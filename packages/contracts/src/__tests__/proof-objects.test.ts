@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OBJECT_KEY_SHAPE } from "../execution"
-import { PROOF_BUCKET, ProofObjectLinks, ProofUpload, ProofUploadRequest } from "../proof-objects"
+import { PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
+
+import { ProofObjectLinks, ProofUpload, ProofUploadRequest } from "../proof-objects"
 
 const COMPANY = "01a0d2a4-a280-7000-8000-000000000001"
 const ROUTE = "01a0d2a4-a280-7031-8000-000000000001"
@@ -11,10 +12,6 @@ const PROOF = "01a0d2a4-a280-7034-8000-000000000001"
 const KEY = `${COMPANY}/${ROUTE}/${COMMAND}.jpg`
 
 describe("proof objects: the bytes of a photo or a signature, signed by the API and never carried by it (O1 of #290)", () => {
-  test("live in one private bucket", () => {
-    assert.equal(PROOF_BUCKET, "proofs")
-  })
-
   test("a device asks for the object of one of its commands, on a route, in one of the four formats", () => {
     const asked = { routeId: ROUTE, commandId: COMMAND, extension: "jpg" }
     assert.deepEqual(ProofUploadRequest.parse(asked), asked)
@@ -34,7 +31,7 @@ describe("proof objects: the bytes of a photo or a signature, signed by the API 
     assert.equal(ProofUpload.safeParse({ ...upload, uploadUrl: "not a url" }).success, false)
     assert.deepEqual(
       ProofUpload.safeParse({ ...upload, objectKey: "photo.jpg" }).error?.issues.map((issue) => issue.message),
-      [OBJECT_KEY_SHAPE],
+      [PROOF_KEY_SHAPE],
     )
   })
 

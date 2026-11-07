@@ -50,7 +50,6 @@
 // commands.
 import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventHold, BillableEventListQuery, BillableEventRelease, BillableEventReprice } from "@waste/contracts/billable-events"
 import { Page } from "@waste/contracts/pagination"
-import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
 import { hireConditionsOf, priceHire, type HireToPrice } from "@waste/db/commands/hire-charges"
 import { priceRecurringCharge, type ChargeToPrice } from "@waste/db/commands/recurring-charges"
@@ -60,11 +59,13 @@ import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { billableEvent } from "@waste/db/schema/finance"
 import { routeScheme } from "@waste/db/schema/route-schemes"
+import type { Action } from "@waste/domain/access/modules"
 import type { BillableEventLinks } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/vocabulary"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
+import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -225,7 +226,7 @@ async function lockedEvent(tx: Tx, principal: Principal, id: string): Promise<Ev
   return current
 }
 
-const commandProblems = (action: "view" | "edit" | "create") => ({
+const commandProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem("No billable event with that id in the projects this account works in."),

@@ -42,9 +42,9 @@
 //
 // Every instant is epoch milliseconds; the caller turns the project's clock —
 // the departure and the windows, times of the operating day — into instants.
-import { UNLOAD_SECONDS } from "../routing/reloads"
-import type { PlanTrip } from "../routing/vocabulary"
-import { DRIVER_PICKUP_REASONS, type PickupReason, type PickupStatus, type RouteStatus } from "./vocabulary"
+import { DRIVER_PICKUP_REASONS, type PickupReason, type PickupStatus, type RouteStatus } from "../execution/vocabulary"
+import { UNLOAD_SECONDS } from "../execution/workload"
+import type { PlanTrip } from "./vocabulary"
 
 /** A Plan stop as the estimate reads it, in the Plan's order. */
 export type EtaStop =

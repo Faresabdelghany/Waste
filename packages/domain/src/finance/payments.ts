@@ -20,6 +20,7 @@
 // by the one open invoice its text names by label; anything ambiguous stays
 // unmatched for the office. A match allocates what the invoice owes at most.
 import { csvRecords } from "../imports/csv"
+import { NUMBER_PREFIXES } from "../numbering"
 import { PAYMENT_REFERENCE_PATTERN } from "./payment"
 
 /** What an invoice reads as from its payments: a reading, never a column. */
@@ -69,6 +70,21 @@ export function amountMinorOf(text: string, currency: string): number | null {
 
 /** The columns of our bank statement file, in order. */
 export const BANK_FILE_COLUMNS = ["booked_on", "amount", "currency", "reference", "text"] as const
+
+/** What a bank's reference field holds, and what its text says about the payer: as long as a statement line carries. */
+export const BANK_REFERENCE_MAX = 140
+export const BANK_TEXT_MAX = 500
+
+/** What an allocation of nothing is told: an allocation moves money, and one is undone by its reversal. */
+export const ALLOCATION_MOVES_MONEY = "an allocation moves money: undo one by its reversal"
+
+/** What became of a bank line: matched to an invoice, unmatched, or one a statement already brought. A reading, never a column. */
+export const BANK_LINE_OUTCOMES = ["matched", "unmatched", "duplicate"] as const
+export type BankLineOutcome = (typeof BANK_LINE_OUTCOMES)[number]
+
+/** What a line of a customer's statement is: a document that raises the balance or lowers it, or a payment. A reading, never a column. */
+export const STATEMENT_LINE_KINDS = ["invoice", "credit-note", "payment"] as const
+export type StatementLineKind = (typeof STATEMENT_LINE_KINDS)[number]
 
 export type BankLine = {
   /** The file's row the line was read from, the header row 1. */
@@ -148,7 +164,11 @@ export function bankFileOf(text: string): BankFile {
 /** An invoice a line may pay: its frozen reference, its label, its currency and what it owes. */
 export type OpenInvoice = { id: string; label: string; paymentReference: string | null; currency: string; outstandingMinor: number }
 
-export type BankMatch = { invoiceId: string; amountMinor: number; by: "reference" | "label" }
+/** How a bank line found its invoice: by the payment reference it quotes, or by the one label its text names. */
+export const BANK_MATCH_BYS = ["reference", "label"] as const
+export type BankMatchBy = (typeof BANK_MATCH_BYS)[number]
+
+export type BankMatch = { invoiceId: string; amountMinor: number; by: BankMatchBy }
 
 /** The payment reference a bank's reference holds: itself, or the one inside a FI card's printed line (`+71<…+creditor<`); null for anything else. */
 export function bankLineReference(reference: string): string | null {
@@ -158,8 +178,11 @@ export function bankLineReference(reference: string): string | null {
   return card?.[1] ?? null
 }
 
+/** An invoice's or a credit note's label anywhere in a text, a word of its own. */
+const DOCUMENT_LABELS = new RegExp(`\\b(?:${NUMBER_PREFIXES.invoice}|${NUMBER_PREFIXES["credit-note"]})\\d+\\b`, "g")
+
 /** The document labels a bank's text names, each once: `INV-26007188`, `CN-26007189`. */
-export const bankLineLabels = (text: string): string[] => [...new Set(text.match(/\b(?:INV|CN)-\d+\b/g) ?? [])]
+export const bankLineLabels = (text: string): string[] => [...new Set(text.match(DOCUMENT_LABELS) ?? [])]
 
 /** The invoice a line pays and how much of it, or null where none is certain: by reference first, then by the one label its text names. */
 export function matchBankLine(line: Pick<BankLine, "amountMinor" | "currency" | "reference" | "text">, invoices: readonly OpenInvoice[]): BankMatch | null {

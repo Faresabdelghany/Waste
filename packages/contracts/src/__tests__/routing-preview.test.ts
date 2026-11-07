@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
+
 import { ROUTING_PREVIEW_POINTS_MAX, RoutingPreview, RoutingPreviewRequest } from "../routing-preview"
-import { PICKUP_ORDER_MAX } from "../routes"
 
 const depot = [12.5683, 55.6761]
 const bin = [12.575, 55.68]

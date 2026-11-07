@@ -33,6 +33,7 @@ import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
+import type { Action } from "@waste/domain/access/modules"
 import { onlyABookedBooking } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
@@ -113,7 +114,7 @@ async function placeProject(tx: Tx, principal: Principal, place: { propertyId?: 
   return found.projectId
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

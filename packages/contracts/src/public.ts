@@ -1,12 +1,14 @@
 // The public door's own shapes (Issue #293, ADR-0010): the path that names a
 // published project, and what an anonymous reader may know of it. The
 // project's ids never leave the door; its slug is its public name.
+import { ADDRESS_SEARCH, COLLECTION_DAY_STATUSES, COLLECTION_WEEKS } from "@waste/domain/planning/public-days"
 import * as z from "zod"
 
 import { IsoDate, IsoTime } from "./dates"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectBranding, PublicSlug } from "./organisation"
+import { QueryWhole } from "./query-numbers"
 import { DropOffPointKind } from "./resources"
 import { Slug } from "./text"
 
@@ -27,13 +29,8 @@ export const PublishedProject = z.object({
 })
 export type PublishedProject = z.infer<typeof PublishedProject>
 
-/** The shortest text an address search takes: a street's first letters, never a listing. */
-export const ADDRESS_SEARCH_MIN = 3
-/** The longest. */
-export const ADDRESS_SEARCH_MAX = 100
-
-/** A resident's address search: at least three characters of the address. */
-export const AddressSearch = z.object({ q: z.string().trim().min(ADDRESS_SEARCH_MIN).max(ADDRESS_SEARCH_MAX) })
+/** A resident's address search: a street's first letters, never a listing. */
+export const AddressSearch = z.object({ q: z.string().trim().min(ADDRESS_SEARCH.min).max(ADDRESS_SEARCH.max) })
 export type AddressSearch = z.infer<typeof AddressSearch>
 
 /** An address the search found: its id, to ask for its days, and the address as written. Nothing about who lives there. */
@@ -48,15 +45,9 @@ export type AddressMatches = z.infer<typeof AddressMatches>
 export const PublicAddressParam = z.object({ slug: PublicSlug, id: Id })
 export type PublicAddressParam = z.infer<typeof PublicAddressParam>
 
-/** The most weeks one read of an address's days spans, and how many when the query names none. */
-export const COLLECTION_WEEKS = { max: 26, default: 8 } as const
-
 /** How far ahead an address's days are read, in weeks from today on the project's clock. */
 export const CollectionDaysQuery = z.object({
-  weeks: z
-    .union([z.int(), z.string().regex(/^\d+$/).transform(Number)])
-    .pipe(z.int().min(1).max(COLLECTION_WEEKS.max))
-    .default(COLLECTION_WEEKS.default),
+  weeks: QueryWhole.pipe(z.int().min(1).max(COLLECTION_WEEKS.max)).default(COLLECTION_WEEKS.default),
 })
 export type CollectionDaysQuery = z.infer<typeof CollectionDaysQuery>
 
@@ -66,7 +57,7 @@ export const PublicCollectionDay = z.object({
   /** The usual day it stands for; differs from `date` where a holiday or the office moved it. */
   serviceDate: IsoDate,
   fractions: z.array(z.string()),
-  status: z.enum(["collected", "skipped"]),
+  status: z.enum(COLLECTION_DAY_STATUSES),
   /** The shift, the holiday, or the skip, in a sentence; null for a usual day. */
   note: z.string().nullable(),
 })
@@ -81,9 +72,6 @@ export const PublicCollectionDays = z.object({
   days: z.array(PublicCollectionDay),
 })
 export type PublicCollectionDays = z.infer<typeof PublicCollectionDays>
-
-/** How many days of opening a public drop-off point carries: this week, from today on the project's clock. */
-export const DROP_OFF_WEEK_DAYS = 7
 
 /** The public map's question: the fraction a resident brings, by its key; every point on the map when absent. */
 export const DropOffPointsQuery = z.object({ fraction: Slug().optional() })

@@ -44,9 +44,9 @@
 // or patch and for the subscription's own — and where a route locks two, it
 // takes them from the top down, the Agreement before the Subscription, so no
 // two requests hold half of each other's pair.
-import { ENDS_AFTER_IT_STARTS, validityOrdered } from "@waste/contracts/validity"
 import type { Tx } from "@waste/db/client"
 import type { ValidityColumns } from "@waste/db/schema/columns"
+import { ENDS_AFTER_IT_STARTS, validityOrdered } from "@waste/domain/periods"
 import { count } from "@waste/domain/text"
 import { count as countRows, sql, type SQL } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"

@@ -127,3 +127,13 @@ export const AUDITED_TABLES = {
   counting_rule: "configure.templates",
 } as const satisfies Record<string, ModuleKey>
 export type AuditedTableName = keyof typeof AUDITED_TABLES
+
+/** What a history read naming another table is told. */
+export const NOT_AN_AUDITED_TABLE = "Not an audited table"
+
+/** A table's name as the database spells it, `role_grant`, `property_party`, as a regular expression's source; an event names its table, and its parent's, so. */
+export const TABLE_NAME_PATTERN = "^[a-z][a-z_]*$"
+export const TABLE_NAME_SHAPE = "a table's name, in the database's spelling: role_grant"
+
+/** The request header a write's reason travels in, as the API reads it (header names are case-insensitive): a person's own word for a change, percent-encoded, a paragraph once decoded. */
+export const CHANGE_REASON_HEADER = "waste-change-reason"

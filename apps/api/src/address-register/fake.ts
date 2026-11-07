@@ -9,8 +9,7 @@
 // so `park 18` finds Parkvej 18. `down` scripts a register that does not
 // answer, for the routes' 503.
 import type { Address, AddressMatch } from "@waste/contracts/addresses"
-import { ADDRESS_ATTRIBUTION, ADDRESS_SEARCH_MAX } from "@waste/contracts/addresses"
-import { addressDesignation, type AddressParts } from "@waste/domain/registry/address"
+import { ADDRESS_ATTRIBUTION, ADDRESS_SEARCH_MAX, addressDesignation, type AddressParts } from "@waste/domain/registry/address"
 
 import { RegisterUnavailable, type AddressRegister } from "./register"
 

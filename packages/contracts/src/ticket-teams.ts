@@ -8,6 +8,8 @@
 // tickets grant takes one, member or not. A project's defaults name the team
 // a ticket of a kind goes to when its opener names none, one per kind,
 // replaced whole through `PUT /projects/:id/ticket-team-defaults`.
+import { changesSomething, eachOnce } from "@waste/domain/requests"
+import { EACH_KIND_ONCE, EACH_MEMBER_ONCE, TEAM_MEMBERS_MAX } from "@waste/domain/resolution/teams"
 import { KIND_OR_TYPE, kindOrTypeKey, TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TEAM_STATUSES, TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
@@ -15,20 +17,16 @@ import * as z from "zod"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { TicketKind } from "./resolution"
-import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
-
-/** The most members a set body may name: a form's list, not an import. */
-const MEMBERS_MAX = 200
 
 export const TeamStatus = z.enum(TEAM_STATUSES)
 export type TeamStatus = z.infer<typeof TeamStatus>
 
-export const EACH_MEMBER_ONCE = eachOnceSentence("account")
 const eachMemberOnce = { message: EACH_MEMBER_ONCE, path: ["memberUserAccountIds"] }
 
 const MemberIds = z.array(Id)
-const MemberIdsBody = MemberIds.max(MEMBERS_MAX)
+const MemberIdsBody = MemberIds.max(TEAM_MEMBERS_MAX)
 
 export const Team = z.object({
   ...stamped,
@@ -73,9 +71,6 @@ export type TicketTeamDefault = z.infer<typeof TicketTeamDefault>
 /** A project's defaults, in the vocabulary's order of kinds, then the types'. */
 export const TicketTeamDefaults = z.object({ projectId: Id, defaults: z.array(TicketTeamDefault) })
 export type TicketTeamDefaults = z.infer<typeof TicketTeamDefaults>
-
-/** What a set naming a kind or a type twice is told. */
-export const EACH_KIND_ONCE = eachOnceSentence("kind or ticket type", "a ticket goes to one team")
 
 /** `PUT /projects/:id/ticket-team-defaults`: the whole set, each kind or type once and each entry exactly one of the two; one left out goes to no team, or a type to its kind's. */
 export const TicketTeamDefaultsSet = z

@@ -7,12 +7,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertResolve, NAMES_A_SUBJECT as CONTRACT_NAMES_A_SUBJECT } from "@waste/contracts/alerts"
+import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertResolve } from "@waste/contracts/alerts"
 import type { Project } from "@waste/contracts/organisation"
+import { NAMES_A_SUBJECT } from "@waste/domain/resolution/alerts"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { ACKNOWLEDGE_ALERT, alertAdapter, ALERTS_MODULE, alertsModule, LINK_ALERT_TICKET, NAMES_A_SUBJECT, RESOLVE_ALERT } from "../records/alerts"
+import { ACKNOWLEDGE_ALERT, alertAdapter, ALERTS_MODULE, alertsModule, LINK_ALERT_TICKET, RESOLVE_ALERT } from "../records/alerts"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -87,9 +88,8 @@ describe("the alerts module", () => {
 })
 
 describe("an alert", () => {
-  test("the wire fixture is the contracts' shape, and the adapter's sentence is the contracts'", () => {
+  test("the wire fixture is the contracts' shape", () => {
     assert.ok(Alert.safeParse(stale).success)
-    assert.equal(NAMES_A_SUBJECT, CONTRACT_NAMES_A_SUBJECT)
   })
 
   test("is the record the queue and the details read: its title, what it is about, its severity, the ticket it is linked to", () => {

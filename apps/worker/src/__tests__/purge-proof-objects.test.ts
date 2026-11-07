@@ -14,7 +14,7 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { proofOfService } from "@waste/db/schema/execution"
 import type { ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
-import { objectKeyOf } from "@waste/domain/execution/commands"
+import { objectKeyOf } from "@waste/domain/storage-objects"
 
 import type { JobContext } from "../jobs/definition"
 import { expiredProofObjects, purgeProofObjects } from "../jobs/purge-proof-objects"

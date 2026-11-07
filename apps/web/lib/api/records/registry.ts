@@ -28,6 +28,7 @@
 // Archived, which the API has no column for, so the store refuses a move
 // there before the API sees it and the workspace offers neither.
 import type { Customer } from "@waste/contracts/customers"
+import { CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { paymentTermsLabel } from "@/lib/data/finance-settings"
@@ -93,8 +94,6 @@ function customerFields(record: BusinessRecord) {
   }
 }
 
-/** The wire's customer statuses (`@waste/contracts/customers`, `CustomerStatus`); the module's lifecycle also lists Merged and Archived, which the API has no column for. */
-const CUSTOMER_STATUSES: readonly Customer["status"][] = ["active", "inactive"]
 
 export const customerAdapter: ResourceAdapter<Customer> = {
   prefix: "customer",

@@ -15,10 +15,10 @@
 // column since 0015 (#209): the hold `assign` and `reschedule` put on a
 // planned route, which generation's refresh keeps. Since 0016 (#111) a
 // route's scheme and group are null together on an ad-hoc route.
-import { routeLabel } from "@waste/contracts/execution"
 import type { Route, RouteProgress } from "@waste/contracts/routes"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
 import type { PickupStatus, RouteCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { routeLabel } from "@waste/domain/numbering"
 import { and, count, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"

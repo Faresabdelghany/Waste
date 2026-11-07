@@ -26,18 +26,21 @@
 // inside the agreement's, or the agreement's inside its subscriptions' —
 // Postgres cannot hold that across rows without a trigger and this schema
 // cannot see the stored row, so the route holds it.
+import { validityOrdered } from "@waste/domain/periods"
+import { CHANGE_NAMES_SOMETHING, ONE_PLACE } from "@waste/domain/registry/agreements"
 import { AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
+import { Currency } from "./codes"
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** Where the Agreement stands; expiry is a reading of the period, never a status. */
 export const AgreementStatus = z.enum(AGREEMENT_STATUSES)
@@ -131,9 +134,7 @@ export const Subscription = z
   .refine(validityOrdered, endsAfterItStarts)
 export type Subscription = z.infer<typeof Subscription>
 
-const onePlace = {
-  message: "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place",
-}
+const onePlace = { message: ONE_PLACE }
 const exactlyOnePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) =>
   [body.propertyId, body.sharedCollectionPointId].filter((place) => place != null).length === 1
 
@@ -166,9 +167,6 @@ export const SubscriptionPatch = z
   .refine(changesSomething, somethingToChange)
   .refine(validityOrdered, endsAfterItStarts)
 export type SubscriptionPatch = z.infer<typeof SubscriptionPatch>
-
-/** What a change naming neither the product nor the quantity is told. */
-export const CHANGE_NAMES_SOMETHING = "Give the product or the quantity the replacement takes"
 
 /**
  * A change of service (#291, slice 10, scenario 12.4): the subscription ends

@@ -11,19 +11,16 @@
 // day twice and carries at most `HOLIDAYS_MAX` — several years of holidays,
 // not an import. The country is ISO 3166-1 alpha-2, checked by shape, once
 // per company; so is the name.
+import { HOLIDAYS_MAX, ONE_LISTED_HOLIDAY_PER_DAY } from "@waste/domain/planning/holiday-lists"
+import { changesSomething, eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
+import { Country } from "./codes"
 import { IsoDate } from "./dates"
 import { PageRequest } from "./pagination"
-import { eachOnce } from "./planning"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
-/** ISO 3166-1 alpha-2, as the company's own country is spelled. */
-const Country = z.string().regex(/^[A-Z]{2}$/, "a two-letter uppercase ISO 3166-1 alpha-2 country code, such as DK")
-
-/** The most days a body may carry: several years of holidays, not an import. */
-export const HOLIDAYS_MAX = 400
 
 /** One day of a list: the day, and what it is called where somebody said. */
 export const HolidayListHoliday = z.strictObject({
@@ -37,7 +34,6 @@ const Holidays = z.array(HolidayListHoliday)
 const HolidaysBody = Holidays.max(HOLIDAYS_MAX)
 
 /** What a set with one day twice is told, and where. */
-export const ONE_LISTED_HOLIDAY_PER_DAY = "Name each day once: a holiday list holds one holiday per day"
 const oneHolidayPerDay = { message: ONE_LISTED_HOLIDAY_PER_DAY, path: ["holidays"] }
 const noRepeatedDay = (holidays: readonly { day: string }[]): boolean => eachOnce(holidays, (holiday) => holiday.day)
 

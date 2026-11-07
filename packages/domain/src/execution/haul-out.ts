@@ -27,7 +27,7 @@
 // is within the project's weight tolerance.
 import type { Transition } from "../machine"
 import { loadReading } from "./unloads"
-import type { OutboundLoadStatus } from "./vocabulary"
+import { RECEIVED_LOAD_STATUSES, type OutboundLoadStatus } from "./vocabulary"
 
 /** What moves an Outbound Load after it departs. */
 export const OUTBOUND_LOAD_COMMANDS = ["receive", "reconcile", "dispute", "cancel"] as const
@@ -41,6 +41,10 @@ export const LOAD_NOT_RECEIVED = "The load is not received yet; record the recei
 export const LOAD_RECEIVED_NOT_CANCELLED = "The load was received; a received load is reconciled or disputed, never cancelled"
 /** A load sent to the station it left from. */
 export const SAME_STATION = "A load goes to another station than the one it leaves"
+/** What a load with neither our vehicle nor a plate is told, at the plate. */
+export const NAME_THE_CARRIER = "Name our vehicle or give the plate"
+/** What a count's correction of no kilograms is told. */
+export const ADJUSTMENT_MOVES_STOCK = "An adjustment moves the stock: give a number of kilograms other than zero"
 /** A load from a station that holds nothing. */
 export const notATransferStation = (name: string): string => `${name} is not a transfer station; only a transfer station sends material on`
 /** A dispute or a cancellation without its reason. */
@@ -64,7 +68,7 @@ export function outboundLoadTransition(status: OutboundLoadStatus, command: Outb
 }
 
 /** Whether a load in `status` carries the receiving site's ticket. */
-export const isReceived = (status: OutboundLoadStatus): boolean => status === "received" || status === "reconciled" || status === "disputed"
+export const isReceived = (status: OutboundLoadStatus): boolean => (RECEIVED_LOAD_STATUSES as readonly OutboundLoadStatus[]).includes(status)
 
 /** The receiving site's net against our out-weighing: the difference in kilograms, in percent of ours to one decimal, and whether that is within the tolerance. */
 export function receiptReading(load: { netKg: number; receivedNetKg: number }, tolerancePercent: number): { differenceKg: number; deviationPercent: number; withinTolerance: boolean } {

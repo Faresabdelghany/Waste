@@ -6,7 +6,7 @@
 // configuration, not records of a workspace module. A row the API would
 // refuse is refused here first, at the row, in the API's sentence.
 import type { TicketSla, TicketSlaSet } from "@waste/contracts/ticket-sla"
-import { duplicateSlaTarget, slaTargetKey, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
+import { duplicateSlaTarget, SLA_TARGET_ONCE, slaTargetKey, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
 import { allows, type Grants } from "../api/grants"
@@ -31,8 +31,6 @@ export const slaScopeOptions = (types: readonly TypeChoice[]): SlaOption[] => [.
 const NEW_ROW_HOURS = "24"
 
 export const HOURS_SENTENCE = `Give the hours as a whole number from 1 to ${TICKET_SLA_HOURS_MAX}`
-/** The contracts' `SLA_TARGET_ONCE`, spelled again since the web imports no zod; a test holds the two equal. */
-export const ONCE_SENTENCE = "Name each kind or ticket type and priority once: a ticket is due by one target"
 
 /** The project's targets as rows, in the API's order. */
 export const slaRowsOf = (sla: TicketSla): SlaRow[] => sla.targets.map((target) => ({ key: target.id, kind: valueOfScope(target, EVERY_KIND), priority: target.priority, hours: String(target.hours) }))
@@ -68,7 +66,7 @@ export function slaBodyOf(rows: readonly SlaRow[]): TicketSlaSet | SlaRefusal {
     targets.push({ ...scopeOfValue(row.kind, EVERY_KIND), priority: row.priority as TicketPriority, hours })
   }
   const twice = duplicateSlaTarget(targets)
-  return twice === undefined ? { targets } : { index: twice, field: "kind", message: ONCE_SENTENCE }
+  return twice === undefined ? { targets } : { index: twice, field: "kind", message: SLA_TARGET_ONCE }
 }
 
 /** What a save of a project's targets tells: how many it holds, and what tickets opened from now on take from them, or that they take nothing. */

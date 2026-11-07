@@ -28,6 +28,7 @@ import {
   type SharedCollectionPoint,
 } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
+import { SET_MAX } from "@waste/domain/requests"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecord, NO_ONE, PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE } from "../../data/properties"
@@ -36,7 +37,7 @@ import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from ".
 import { subscriptionAdapter } from "../records/agreements"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { propertiesModule, propertyAdapter, propertyGroupAdapter, propertyGroupsModule, SET_MAX, sharedPointAdapter, sharedPointsModule } from "../records/properties"
+import { propertiesModule, propertyAdapter, propertyGroupAdapter, propertyGroupsModule, sharedPointAdapter, sharedPointsModule } from "../records/properties"
 import { customerAdapter } from "../records/registry"
 import { loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"

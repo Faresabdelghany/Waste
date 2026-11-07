@@ -8,7 +8,7 @@
 // the API would refuse is refused here first, at its field, in the domain's
 // sentence (@waste/domain/messaging/template, which the contracts read too).
 import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
-import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders } from "@waste/domain/messaging/template"
+import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
 import { allows, type Grants } from "../api/grants"
 
@@ -55,10 +55,6 @@ export const templateDraftOf = (template: MessageTemplate): TemplateDraft => ({
 export type TemplateRefusal = { field: "name" | "subject" | "body"; message: string }
 
 export const isTemplateRefusal = (value: unknown): value is TemplateRefusal => typeof value === "object" && value !== null && "field" in value && "message" in value
-
-/** The sentence a placeholder no message fills earns (`@waste/contracts/messaging`, `unknownPlaceholderSentence`); the test holds the two equal. */
-export const unknownPlaceholderSentence = (names: readonly string[]) =>
-  `${names.map((name) => `{{${name}}}`).join(", ")} ${names.length === 1 ? "is" : "are"} filled by no message; use ${PLACEHOLDERS.join(", ")}`
 
 type TemplateFields = { name: string; purpose: MessageTemplatePurpose; channel: MessageChannel; subject: string | null; body: string; status: MessageTemplateStatus }
 

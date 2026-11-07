@@ -30,10 +30,10 @@
 // dispatcher's cancellation closed, whose driver is then the planned one,
 // since nobody started the route. The subject is spelled from what the worker
 // read beside the payload — "Missed collection: BIN-82014 at Parkvej 18" —
-// and cut to `TICKET_SUBJECT_MAX`, the bound the wire holds `Ticket.subject`
+// and cut to `LABEL_MAX`, the bound the wire holds `Ticket.subject`
 // to as a `Label`, so a rejection's long detail cannot make a subject the
 // API's create refuses; the description carries the sentence, the reason and
-// the note, cut the same way to `TICKET_DESCRIPTION_MAX`, the `Paragraph`
+// the note, cut the same way to `PARAGRAPH_MAX`, the `Paragraph`
 // bound `Ticket.description` is held to, since a device's note has no bound
 // of its own. What a ticket links to is what the event named: a problem on the
 // route alone names no stop, so it links no container and no place either,
@@ -44,6 +44,7 @@
 // together.
 import { CLOSING_REASONS, type ClosingReason, type PickupReason, type PickupService } from "../execution/vocabulary"
 import type { OutboxKind } from "../outbox/vocabulary"
+import { LABEL_MAX, PARAGRAPH_MAX } from "../text"
 import type { TicketKind, TicketPriority, TicketSource } from "./vocabulary"
 
 /** The kinds a ticket may come from, the queues Resolution's consumer works (#104 §6, #109 §3): a stop missed or skipped, a problem reported, a command refused. `route-cancelled` is not one (§7.10). */
@@ -134,12 +135,6 @@ const CLOSED_BY_ROUTE: Readonly<Record<ClosingReason, { priority: TicketPriority
 /** Whether a reason is one the route's end or cancellation wrote: the list's membership, never the table's keys, so a stray string finds nothing on the object's prototype. */
 const isClosingReason = (reason: PickupReason): reason is ClosingReason => (CLOSING_REASONS as readonly string[]).includes(reason)
 
-/** The longest a subject may be: the contracts' `Label` bound (`LABEL_MAX`), which `Ticket.subject` is held to on the wire. The domain cannot import it, so `packages/db`'s `ticket-text.test.ts`, which sees both, holds the two equal. */
-export const TICKET_SUBJECT_MAX = 200
-
-/** The longest a description may be: the contracts' `Paragraph` bound (`PARAGRAPH_MAX`), which `Ticket.description` is held to; the same test holds these two equal. */
-export const TICKET_DESCRIPTION_MAX = 2000
-
 /**
  * Text cut to a bound: whole where it fits, else its head to the last space
  * before the bound with an ellipsis, so a rejection's long detail reads as a
@@ -154,11 +149,11 @@ const bounded = (text: string, max: number): string => {
   return `${space > max / 2 ? head.slice(0, space) : head}…`
 }
 
-/** A subject cut to `TICKET_SUBJECT_MAX`. */
-export const boundedSubject = (subject: string): string => bounded(subject, TICKET_SUBJECT_MAX)
+/** A subject cut to `LABEL_MAX`. */
+export const boundedSubject = (subject: string): string => bounded(subject, LABEL_MAX)
 
-/** A description cut to `TICKET_DESCRIPTION_MAX` the same way: a 5000-character note from a device is a note cut short, not a ticket the API's create refuses. */
-export const boundedDescription = (description: string): string => bounded(description, TICKET_DESCRIPTION_MAX)
+/** A description cut to `PARAGRAPH_MAX` the same way: a 5000-character note from a device is a note cut short, not a ticket the API's create refuses. */
+export const boundedDescription = (description: string): string => bounded(description, PARAGRAPH_MAX)
 
 /** A work order as its subject names it. */
 const WORK_ORDER_NAMES: Readonly<Record<Exclude<PickupService, "empty">, string>> = { deliver: "Delivery", remove: "Removal", swap: "Swap", repair: "Repair", wash: "Wash", bulky: "Bulky collection" }

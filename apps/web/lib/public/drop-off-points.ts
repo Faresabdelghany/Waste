@@ -4,16 +4,14 @@
 // on the map.
 import type { PublicDropOffPoint, PublicOpeningDay } from "@waste/contracts/public"
 import { boundsFromPolygon, type LngLatBounds } from "@waste/domain/map-planning/geo"
+import { KEY_MAX, SLUG_PATTERN } from "@waste/domain/text"
 
 import { DROP_OFF_COPY as COPY } from "./drop-off-points-copy"
-
-/** The longest key a fraction has (the contracts' KEY_MAX), spelled again since the web imports the contracts as types only. */
-export const FRACTION_KEY_MAX = 50
 
 /** The fraction key the address asks for, a lowercase slug the door takes; null for none, or one no key could be, so the map shows every point. */
 export function fractionKeyOf(fraction: string | string[] | undefined): string | null {
   const first = (Array.isArray(fraction) ? fraction[0] : fraction)?.trim() ?? ""
-  return first.length <= FRACTION_KEY_MAX && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(first) ? first : null
+  return first.length <= KEY_MAX && new RegExp(SLUG_PATTERN).test(first) ? first : null
 }
 
 /** Where the map lives, asking for one fraction's points where a key is given. */

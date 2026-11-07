@@ -11,14 +11,16 @@
 //
 // The prototype's `weekStart` and `timezone` are not here: the working week is
 // the Project's (`weekend`) and so is the timezone.
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 export const CollectionCalendar = z
   .object({

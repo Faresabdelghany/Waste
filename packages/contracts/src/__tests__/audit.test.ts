@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AUDIT_ACTIONS, AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
+import { AUDIT_ACTIONS, AUDITED_TABLES, CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 
-import { AuditAction, AuditEvent, AuditEventListQuery, CHANGE_REASON_HEADER } from "../audit"
+import { AuditAction, AuditEvent, AuditEventListQuery } from "../audit"
 
 const ROW = "01a0d2a4-a280-7012-8000-000000000001"
 const event = {

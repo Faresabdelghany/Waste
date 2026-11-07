@@ -1,12 +1,13 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { BillingRun, BillingRunDetail, PERIOD_ORDERED } from "@waste/contracts/billing"
+import { BillingRun, BillingRunDetail } from "@waste/contracts/billing"
 import { Page } from "@waste/contracts/pagination"
-import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
 import { type Database, type Tx } from "@waste/db/client"
 import { billableEvent, billingRun, invoiceLine } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
+import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
+import { PERIOD_ORDERED } from "@waste/domain/finance/billing-runs"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
 
 import { newId, type IdMinter } from "@waste/db/ids"

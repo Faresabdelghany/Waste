@@ -57,11 +57,11 @@
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
-import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import type { TenantTable } from "@waste/db/commands/shared"
 import { aheadOfClock, RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import { providerShape } from "@waste/domain/resources/places"
 import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"

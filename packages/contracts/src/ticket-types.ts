@@ -20,20 +20,31 @@
 // A type's automation (#546 of #544) is its actions, each run on a trigger
 // in its place in that trigger's list (@waste/domain/resolution/automation),
 // replaced whole through `PUT /ticket-types/:id/actions` like the fields.
+import { changesSomething, eachOnce } from "@waste/domain/requests"
 import { actionIssue, TICKET_TYPE_ACTIONS_MAX } from "@waste/domain/resolution/automation"
-import { fieldSetIssue, TICKET_FIELD_CHOICES_MAX, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, TICKET_TYPE_FIELDS_MAX } from "@waste/domain/resolution/ticket-types"
-import { TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
-import { TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_MESSAGE_RECIPIENTS, TICKET_TYPE_STATUSES } from "@waste/domain/resolution/vocabulary"
+import {
+  AT_MOST_FIELDS,
+  DEFAULT_TYPE_OFFERED,
+  defaultIsActive,
+  EACH_COMMAND_ONCE,
+  EACH_ROLE_ONCE,
+  FIELD_VALUES_PATCH_MAX,
+  fieldSetIssue,
+  PERMISSION_ROLES_MAX,
+  TICKET_FIELD_CHOICES_MAX,
+  TICKET_FIELD_KEY,
+  TICKET_FIELD_KEY_MAX,
+  TICKET_FIELD_KEY_SHAPE,
+  TICKET_TYPE_FIELDS_MAX,
+} from "@waste/domain/resolution/ticket-types"
+import { TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_MESSAGE_RECIPIENTS, TICKET_TYPE_STATUSES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { TicketKind, TicketPriority, TicketResolution } from "./resolution"
-import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, somethingToChange, stamped } from "./resource"
+import { NonNegativeInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
-
-/** The most roles a command's permission names: a form's list, not an import. */
-const ROLES_MAX = 50
 
 export const TicketTypeStatus = z.enum(TICKET_TYPE_STATUSES)
 export type TicketTypeStatus = z.infer<typeof TicketTypeStatus>
@@ -62,9 +73,6 @@ export type TicketMessageRecipient = z.infer<typeof TicketMessageRecipient>
 export const TicketCommand = z.enum(TICKET_COMMANDS)
 export type TicketCommand = z.infer<typeof TicketCommand>
 
-/** What a key of another shape is told. */
-export const TICKET_FIELD_KEY_SHAPE = `A key is lowercase words of letters and digits joined by hyphens, starting with a letter, at most ${TICKET_FIELD_KEY_MAX} characters`
-
 /** A field's key: `requested-date`. */
 export const TicketFieldKey = z.string().max(TICKET_FIELD_KEY_MAX, TICKET_FIELD_KEY_SHAPE).regex(TICKET_FIELD_KEY, TICKET_FIELD_KEY_SHAPE)
 
@@ -76,15 +84,13 @@ export type TicketFieldValue = z.infer<typeof TicketFieldValue>
 export const TicketFieldValues = z.record(TicketFieldKey, TicketFieldValue)
 export type TicketFieldValues = z.infer<typeof TicketFieldValues>
 
-/** What a body naming more values than a type has fields is told. */
-export const AT_MOST_FIELDS = `A body names at most ${TICKET_TYPE_FIELDS_MAX} values: a type holds no more fields`
 const atMostFields = (values: object): boolean => Object.keys(values).length <= TICKET_TYPE_FIELDS_MAX
 
 /** A create's values: as many as a type has fields at most, so a body is judged in bounded time. */
 export const TicketFieldValuesBody = TicketFieldValues.refine(atMostFields, AT_MOST_FIELDS)
 
 /** A patch's values, merged into the stored ones: a value replaces one, null clears it, a key not named stays; as many as a type has fields at most, beside as many clears. */
-export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable()).refine((values) => Object.keys(values).length <= 2 * TICKET_TYPE_FIELDS_MAX, AT_MOST_FIELDS)
+export const TicketFieldValuesPatch = z.record(TicketFieldKey, TicketFieldValue.nullable()).refine((values) => Object.keys(values).length <= FIELD_VALUES_PATCH_MAX, AT_MOST_FIELDS)
 export type TicketFieldValuesPatch = z.infer<typeof TicketFieldValuesPatch>
 
 /** One custom field of a type, in its place in the type's list. */
@@ -144,11 +150,7 @@ export const TicketType = z.object({
 })
 export type TicketType = z.infer<typeof TicketType>
 
-/** What a default type a patch would retire is told. */
-export const DEFAULT_TYPE_OFFERED = "A kind's default type is offered to every ticket of the kind; make another type the default first"
 const defaultTypeOffered = { message: DEFAULT_TYPE_OFFERED, path: ["status"] }
-/** A default type is active: `ticket_type_default_shape`, at the boundary, over a body that carries both. */
-const defaultIsActive = (body: { status?: string; isDefault?: boolean }): boolean => body.isDefault !== true || body.status !== "inactive"
 
 /** `POST /ticket-types`: a new type of a kind. Its fields and permissions have routes of their own and start empty. */
 export const TicketTypeCreate = z
@@ -198,14 +200,9 @@ export const TicketTypeFieldsSet = z
   })
 export type TicketTypeFieldsSet = z.infer<typeof TicketTypeFieldsSet>
 
-/** What a set naming a command twice is told. */
-export const EACH_COMMAND_ONCE = eachOnceSentence("command", "a command names one list of roles")
-/** What a command naming a role twice is told. */
-export const EACH_ROLE_ONCE = eachOnceSentence("role")
-
 /** `PUT /ticket-types/:id/permissions`: the whole set, each command once with its roles each once; a command left out, or naming none, is anyone's who works tickets. */
 export const TicketTypePermissionsSet = z
-  .strictObject({ permissions: z.array(z.strictObject({ command: TicketCommand, roleIds: z.array(Id).max(ROLES_MAX) })).max(TICKET_COMMANDS.length) })
+  .strictObject({ permissions: z.array(z.strictObject({ command: TicketCommand, roleIds: z.array(Id).max(PERMISSION_ROLES_MAX) })).max(TICKET_COMMANDS.length) })
   .superRefine((body, context) => {
     const entries = body.permissions.filter((entry) => entry !== undefined)
     if (!eachOnce(entries.map((entry) => entry.command))) context.addIssue({ code: "custom", message: EACH_COMMAND_ONCE, path: ["permissions"] })

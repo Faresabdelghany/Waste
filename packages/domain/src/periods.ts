@@ -24,3 +24,17 @@ export const lastDayIn = (validTo: string): string => addDays(validTo, -1)
 
 /** The first day out of a period whose last day in force is `lastDay`: the `validTo` the wire carries. */
 export const firstDayOut = (lastDay: string): string => addDays(lastDay, 1)
+
+/** Whether a period runs forward: its end absent, null or after its start. A half-seen period is not judged, which is what a patch gives. */
+export function validityOrdered(value: { validFrom?: string | null; validTo?: string | null }): boolean {
+  const { validFrom, validTo } = value
+  if (validFrom == null || validTo == null) return true
+  return validTo > validFrom
+}
+
+/**
+ * What a backwards period is told, wherever it is caught: a body that holds
+ * both bounds at the boundary, and a patch that holds one against the stored
+ * row the other, in the route that has the row.
+ */
+export const ENDS_AFTER_IT_STARTS = "validTo is the first day out of force, so it comes after validFrom"

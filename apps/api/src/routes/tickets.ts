@@ -53,28 +53,7 @@
 // grant is `operate.tickets`, `view` to read, `create` to open a ticket and
 // to comment, `edit` for the patch and the seven commands.
 import { Page } from "@waste/contracts/pagination"
-import {
-  PICKUP_WITH_ITS_ROUTE,
-  Ticket,
-  TicketAssign,
-  TicketComment,
-  TicketComplete,
-  TicketCreate,
-  TicketDetail,
-  TicketEvent,
-  TicketEventListQuery,
-  TicketEvidence,
-  TicketHold,
-  TicketListQuery,
-  TicketPatch,
-  TicketReject,
-  TicketReopen,
-  TicketReplyWithEvidence,
-  TicketStart,
-  TicketWait,
-  type TicketLinks,
-  type TicketLinksSet,
-} from "@waste/contracts/tickets"
+import { Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEventListQuery, TicketEvidence, TicketHold, TicketListQuery, TicketPatch, TicketReject, TicketReopen, TicketReplyWithEvidence, TicketStart, TicketWait, type TicketLinks, type TicketLinksSet } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { assignTicket } from "@waste/db/commands/ticket-assignment"
 import { moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-automation"
@@ -82,9 +61,11 @@ import type { JobSender } from "@waste/db/jobs"
 import { propertyParty } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
+import type { Action } from "@waste/domain/access/modules"
 import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
-import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
-import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
+import { closedTicket, ticketTransition } from "@waste/domain/resolution/transitions"
+import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -299,7 +280,7 @@ const visibleTo = (tx: Tx, companyId: string, customerId: string, now: Date) =>
     ),
   )
 
-const commandProblems = (action: "view" | "edit" | "create") => ({
+const commandProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem(

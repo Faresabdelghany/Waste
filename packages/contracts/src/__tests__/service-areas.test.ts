@@ -1,25 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  EACH_FRACTION_ONCE,
-  EACH_PLANNING_AREA_ONCE,
-  PROVIDER_NEEDS_A_DAY,
-  SERVICE_AREA_CODE_MAX,
-  ServiceArea,
-  ServiceAreaAssignment,
-  ServiceAreaAssignmentCreate,
-  ServiceAreaAssignmentListQuery,
-  ServiceAreaAssignmentPatch,
-  ServiceAreaCreate,
-  ServiceAreaCreated,
-  ServiceAreaDetail,
-  ServiceAreaListQuery,
-  ServiceAreaPatch,
-  ServiceAreaPlanningAreasSet,
-  ServiceAreaWasteFractionsSet,
-} from "../service-areas"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { EACH_PLANNING_AREA_ONCE, PROVIDER_NEEDS_A_DAY, SERVICE_AREA_CODE_MAX } from "@waste/domain/service-providers/service-areas"
+
+import { ServiceArea, ServiceAreaAssignment, ServiceAreaAssignmentCreate, ServiceAreaAssignmentListQuery, ServiceAreaAssignmentPatch, ServiceAreaCreate, ServiceAreaCreated, ServiceAreaDetail, ServiceAreaListQuery, ServiceAreaPatch, ServiceAreaPlanningAreasSet, ServiceAreaWasteFractionsSet } from "../service-areas"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

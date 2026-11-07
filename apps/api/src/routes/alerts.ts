@@ -55,6 +55,7 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
+import type { Action } from "@waste/domain/access/modules"
 import { ALERT_DOES_NOT_CHANGE, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
@@ -121,7 +122,7 @@ async function moved(tx: Tx, principal: Principal, id: string, values: Partial<t
   return row
 }
 
-const commandProblems = (action: "view" | "edit") => ({
+const commandProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
   404: describeProblem("No alert with that id in the projects this account works in."),

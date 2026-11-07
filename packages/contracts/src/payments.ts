@@ -10,15 +10,16 @@
 // line. ISO 20022's CAMT.053 is the standard a bank's export maps onto later.
 // A customer's statement runs its invoices, credit notes and payments in a
 // currency over a window of days, from an opening balance to a closing one.
-import { INVOICE_PAYMENT_STATUSES } from "@waste/domain/finance/payments"
+import { dayWindowOrdered } from "@waste/domain/days"
+import { ALLOCATION_MOVES_MONEY, BANK_LINE_OUTCOMES, BANK_MATCH_BYS, BANK_REFERENCE_MAX, BANK_TEXT_MAX, INVOICE_PAYMENT_STATUSES, STATEMENT_LINE_KINDS } from "@waste/domain/finance/payments"
 import { PAYMENT_SOURCES } from "@waste/domain/finance/vocabulary"
 import { IMPORT_BATCH_MAX } from "@waste/domain/imports/vocabulary"
 import * as z from "zod"
 
+import { Currency } from "./codes"
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
 import { Minor, NonNegativeInt, NonNegativeTotal, PositiveInt, recorded } from "./resource"
 import { Paragraph } from "./text"
 
@@ -32,16 +33,12 @@ export type InvoicePaymentStatus = z.infer<typeof InvoicePaymentStatus>
 /** Money in minor units that is more than nothing, as a `bigint` total holds it. */
 export const PositiveTotal = z.int().positive().max(Number.MAX_SAFE_INTEGER)
 
-/** What a bank's reference field holds, and what its text says about the payer: as long as a statement line carries. */
-export const BANK_REFERENCE_MAX = 140
-export const BANK_TEXT_MAX = 500
-
 export const PaymentAllocation = z.object({
   ...recorded,
   paymentId: Id,
   invoiceId: Id,
   /** Positive applies, negative undoes the allocation it reverses. */
-  amountMinor: Minor.refine((value) => value !== 0, "an allocation moves money: undo one by its reversal"),
+  amountMinor: Minor.refine((value) => value !== 0, ALLOCATION_MOVES_MONEY),
   reversesAllocationId: Id.nullable(),
   recordedBy: Id.nullable(),
 })
@@ -120,7 +117,7 @@ export const BankLines = z.strictObject({
 })
 export type BankLines = z.infer<typeof BankLines>
 
-export const BankLineOutcome = z.enum(["matched", "unmatched", "duplicate"])
+export const BankLineOutcome = z.enum(BANK_LINE_OUTCOMES)
 export type BankLineOutcome = z.infer<typeof BankLineOutcome>
 
 /** A line's answer: matched to an invoice and how much of it, unmatched, or a line a statement already brought; the payment it is, or would be. */
@@ -131,7 +128,7 @@ export const BankLineResult = z.object({
   paymentId: Id.nullable(),
   invoiceId: Id.nullable(),
   allocatedMinor: NonNegativeTotal,
-  by: z.enum(["reference", "label"]).nullable(),
+  by: z.enum(BANK_MATCH_BYS).nullable(),
 })
 export type BankLineResult = z.infer<typeof BankLineResult>
 
@@ -142,7 +139,7 @@ export const BankLinesResult = z.object({
 })
 export type BankLinesResult = z.infer<typeof BankLinesResult>
 
-export const StatementLineKind = z.enum(["invoice", "credit-note", "payment"])
+export const StatementLineKind = z.enum(STATEMENT_LINE_KINDS)
 
 /** One dated line of a statement: what it is, the document or payment it is, its amount on the balance — an invoice raises it, a credit note and a payment lower it — and the balance after it. */
 export const StatementLine = z.object({

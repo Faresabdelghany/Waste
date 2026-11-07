@@ -11,7 +11,7 @@
 // service done, which moves the plan's last service on the API; the worker's
 // `maintenance-due` rule clears its alert on its next tick.
 import type { MaintenanceDueState, MaintenanceOrder, MaintenancePlan } from "@waste/contracts/maintenance"
-import { nextDueLine, planIssue } from "@waste/domain/resources/maintenance"
+import { NAME_THE_ORDER, nextDueLine, planIssue } from "@waste/domain/resources/maintenance"
 import { isIsoDate } from "@waste/domain/days"
 
 import { command, create, listAll, patch } from "../client"
@@ -79,9 +79,6 @@ export function planBody(input: CommandInput): Record<string, string | number> |
 
 /** What the open form hands the action: the plan's server id or none, a title, the day it is planned for, and a note. */
 export type OrderInput = { planId: string; title: string; dueOn: string; note: string }
-
-/** What an order of no plan without a title is told; the contracts' `NAME_THE_ORDER`, spelled again, since the web imports them as types. */
-export const NAME_THE_ORDER = "Say what the order is for, or name the plan it serves"
 
 export function orderBody(input: CommandInput): Record<string, string> | LocalRefusal {
   const planId = said(input, "planId")

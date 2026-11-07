@@ -17,6 +17,7 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { product } from "@waste/db/schema/catalogue"
+import type { Action } from "@waste/domain/access/modules"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, isBulkyProductUnit } from "@waste/domain/execution/bulky"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, gt, gte, isNull } from "drizzle-orm"
@@ -111,7 +112,7 @@ async function requireBulkyProduct(tx: Tx, scope: Scope, id: string, kept?: stri
   if (status !== "active" && id !== kept) throw problem(409, { detail: unofferedBulkyProduct(status) })
 }
 
-const commonProblems = (action: "view" | "edit" | "create") => ({
+const commonProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })

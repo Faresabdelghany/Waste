@@ -99,8 +99,7 @@
 //   judged: nothing says it was to tip.
 // Each is about its load, or its route, and our vehicle and driver where there
 // are any (@waste/domain/resolution/alert-rules).
-import { routeLabel } from "@waste/contracts/execution"
-import { ticketLabel } from "@waste/contracts/resolution"
+import { routeLabel, ticketLabel } from "@waste/domain/numbering"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"

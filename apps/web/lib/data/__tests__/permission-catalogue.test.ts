@@ -14,7 +14,6 @@ import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 import {
   defaultAccessForRole,
   rolePermissionSections,
-  ROLE_PERMISSION_ACTIONS,
 } from "../role-permissions"
 
 const webKeys = rolePermissionSections.flatMap((section) => section.items.map((item) => item.key))
@@ -37,9 +36,6 @@ describe("the permission catalogue", () => {
     assert.equal(webKeys.length, MODULE_KEYS.length)
   })
 
-  test("the actions are the vocabulary's, in the same order", () => {
-    assert.deepEqual([...ROLE_PERMISSION_ACTIONS], [...ACTIONS])
-  })
 })
 
 describe("the seeded defaults the matrix starts from", () => {
@@ -58,7 +54,7 @@ describe("the seeded defaults the matrix starts from", () => {
   test("the Company Administrator starts with every row of the matrix granted", () => {
     const access = defaultAccessForRole("role-company-administrator")
     assert.deepEqual(Object.keys(access).sort(), [...webKeys].sort())
-    for (const key of webKeys) assert.deepEqual(access[key], [...ROLE_PERMISSION_ACTIONS], key)
+    for (const key of webKeys) assert.deepEqual(access[key], [...ACTIONS], key)
   })
 
   test("a custom role, or an id no seeded role carries, starts with nothing; the map handed back is the caller's own", () => {

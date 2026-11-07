@@ -49,13 +49,14 @@
 //
 // The grant is `fleet.drivers` throughout: `view` to read, `create` to add,
 // `edit` to change.
-import { Driver, DriverCreate, DriverListQuery, DriverPatch, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/contracts/fleet"
+import { Driver, DriverCreate, DriverListQuery, DriverPatch } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { shiftColumns, shiftOf } from "@waste/db/commands/stop-timing"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
+import { PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
 import type { DriverStatus, EmploymentType, LicenceClass } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"

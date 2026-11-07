@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
-import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import { createDb } from "@waste/db/client"
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import { REFUSED_URL } from "@waste/tooling/unreachable"
 import { generateSecret, SignJWT } from "jose"
 

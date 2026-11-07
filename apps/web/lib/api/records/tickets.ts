@@ -39,8 +39,8 @@
 // list's "Mine" compares with is `/me`'s account, a server id.
 import type { EvidenceProof, StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
 import { slaStateOf, type SlaState } from "@waste/domain/resolution/sla"
-import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
-import { isBillableResolution, OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { ticketTransition } from "@waste/domain/resolution/transitions"
+import { isBillableResolution, OFFICE_TICKET_SOURCES, OPEN_TICKET_STATUSES, TICKET_COMMANDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_VISIBILITIES, type TicketCommand, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
@@ -103,9 +103,6 @@ export const COMMENT_ON_TICKET = "comment"
 
 /** The reply quoting the stop's record, a command: with `complete` it closes the case `answered`. */
 export const REPLY_WITH_EVIDENCE = "reply-with-evidence"
-
-/** The sources an office opens a ticket from: every one but the consumer's two, a Service Provider's, which the API writes, and a counting rule's, the worker's (`TicketCreate.source`). */
-export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch" && source !== "service-provider" && source !== "counting-rule")
 
 /** Whether a loaded row is a ticket: its id, or — a row made this session, under its minted id — its kind. */
 export const isTicketRecord = ofKind(TICKET_PREFIX, ["Ticket"])

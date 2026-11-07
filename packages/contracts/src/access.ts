@@ -8,7 +8,8 @@
 // `deactivated_at` is set, `invited` while no login is bound, else `active`.
 // Deactivated wins over invited, so an account that was switched off never
 // looks like a pending invitation. The rule itself is the API's (one
-// function, one test); here it is only the vocabulary the wire uses.
+// function, one test); the vocabulary is the domain's
+// (@waste/domain/access/vocabulary).
 //
 // What an account reaches is exactly one of three things, which is why
 // `UserInvite` and the access half of `UserPatch` are a one-of and not three
@@ -26,19 +27,22 @@
 // `delete` imply `view`), so a body that ticks one box and not the other is
 // stored the same as one that ticks both. A seeded role's `key` and its
 // `system` flag are its for life: neither write body names them.
+import { AT_MOST_ONE_WAY, EXACTLY_ONE_WAY } from "@waste/domain/access/accounts"
+import { USER_STATUSES } from "@waste/domain/access/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { Grant } from "./permissions"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
 /**
  * A user's status, derived from the row: `invited` until a login is bound,
  * `deactivated` while the account is switched off (which wins), else `active`.
  */
-export const UserStatus = z.enum(["invited", "active", "deactivated"])
+export const UserStatus = z.enum(USER_STATUSES)
 export type UserStatus = z.infer<typeof UserStatus>
 
 /** The three ways an account reaches something, as a write body spells them. */
@@ -55,12 +59,8 @@ type Access = { allProjects?: true; projectIds?: string[]; serviceProviderId?: s
 const waysGiven = (body: Access) =>
   [body.allProjects, body.projectIds, body.serviceProviderId].filter((given) => given !== undefined).length
 
-const exactlyOneWay = {
-  message: "Give exactly one of allProjects: true, projectIds or serviceProviderId",
-}
-const atMostOneWay = {
-  message: "Give at most one of allProjects: true, projectIds or serviceProviderId",
-}
+const exactlyOneWay = { message: EXACTLY_ONE_WAY }
+const atMostOneWay = { message: AT_MOST_ONE_WAY }
 
 export const User = z.object({
   ...stamped,

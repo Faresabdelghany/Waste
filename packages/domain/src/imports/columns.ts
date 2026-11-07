@@ -41,6 +41,9 @@ export type ImportColumn = {
 const column = (header: string, required: boolean, description: string, example: string): ImportColumn => ({ header, required, description, example })
 
 /** The columns of each kind, in the template's order. */
+/** The one column whose cell is longer than a paragraph: a planning area's boundary, its polygon's GeoJSON (O30 of #290). */
+export const BOUNDARY_COLUMN = "boundary"
+
 export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]>> = {
   customers: [
     column("kind", true, "person or organisation", "organisation"),
@@ -142,7 +145,7 @@ export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]
     column("code", true, "The area's code, unique in the project and set once; an area is matched on it", "CPH-N"),
     column("name", true, "The area's name, unique in the project", "Copenhagen North"),
     column("purpose", true, "route-planning, service-operations or notification", "route-planning"),
-    column("boundary", false, "The area's outline as a GeoJSON Polygon, read from a GeoJSON file's feature", '{"type":"Polygon","coordinates":[[[12.5,55.7],[12.6,55.7],[12.6,55.8],[12.5,55.7]]]}'),
+    column(BOUNDARY_COLUMN, false, "The area's outline as a GeoJSON Polygon, read from a GeoJSON file's feature", '{"type":"Polygon","coordinates":[[[12.5,55.7],[12.6,55.7],[12.6,55.8],[12.5,55.7]]]}'),
     column("valid from", false, "The boundary's first day, YYYY-MM-DD; given with the boundary", "2027-01-01"),
     column("valid to", false, "The first day the boundary is no longer in force, YYYY-MM-DD; open when empty", ""),
   ],

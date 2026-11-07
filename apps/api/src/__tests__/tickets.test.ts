@@ -5,8 +5,9 @@
 import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
-import { PICKUP_WITH_ITS_ROUTE, Ticket } from "@waste/contracts/tickets"
+import { Ticket } from "@waste/contracts/tickets"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
 
 import { createApp } from "../app"
 import { type Call } from "./calls"

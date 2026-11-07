@@ -16,7 +16,7 @@
 // closed ticket's actions write to someone or open a follow-up.
 //
 // Planning a ticket in a route books the stop its kind is answered by
-// (@waste/domain/execution/ticket-stops) on the next route of a chosen
+// (./ticket-stops) on the next route of a chosen
 // vehicle that has not started, a given number of days after the project's
 // today as the action runs at the earliest: an overflow's emptying or a defect's repair, at the ticket's
 // container (`plannedService`). A delivery or a swap names a subscription,
@@ -32,7 +32,7 @@
 // it stops too, so rules opening several follow-ups each end before their
 // tickets multiply. The type's roles and required fields bind people, never
 // these.
-import { servicesAnswering } from "../execution/ticket-stops"
+import { servicesAnswering } from "./ticket-stops"
 import type { OfficeStopService } from "../execution/vocabulary"
 import { isLedgerService } from "../execution/work-orders"
 import { TICKET_COMMAND_TARGETS } from "./transitions"

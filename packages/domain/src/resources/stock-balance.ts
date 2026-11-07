@@ -8,6 +8,7 @@
 //
 // Pure: the API counts the containers and reads the minimums, and this joins
 // the two, so a type with a minimum and nothing in stock still reads, as zero.
+import { eachOnceSentence } from "../requests"
 
 /** A warehouse's containers of one type, by where they stand in it. */
 export type StockCount = { projectId: string; warehouseId: string; containerTypeId: string; inWarehouse: number; inMaintenance: number }
@@ -20,6 +21,9 @@ export type StockBalance = StockCount & { minimum: number | null; belowMinimum: 
 
 /** The most minimums one warehouse holds: one per container type, bounded so a set replaced whole stays a small body. */
 export const STOCK_MINIMUMS_MAX = 200
+
+/** What a set naming a container type twice is told. */
+export const EACH_TYPE_ONCE = eachOnceSentence("container type", "a warehouse has one minimum per type")
 
 /** Whether the containers in stock are fewer than the minimum; no minimum is never below. */
 export const belowMinimum = (inWarehouse: number, minimum: number | null): boolean => minimum !== null && inWarehouse < minimum

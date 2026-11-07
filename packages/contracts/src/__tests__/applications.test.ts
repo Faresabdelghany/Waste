@@ -4,11 +4,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { APPEAL_TEXT_NEEDED, GRANT_STARTS, REFUSAL_HAS_NO_PERIOD } from "@waste/domain/registry/applications"
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
+import { APPEAL_TEXT_NEEDED, GRANT_STARTS, ONE_PLACE, REFUSAL_HAS_NO_PERIOD } from "@waste/domain/registry/applications"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES } from "@waste/domain/registry/vocabulary"
 
-import { Application, ApplicationChannel, ApplicationCreate, ApplicationDecide, ApplicationKind, ApplicationListQuery, ApplicationPatch, ApplicationStatus, DecisionOutcome, ONE_PLACE } from "../applications"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
+import { Application, ApplicationChannel, ApplicationCreate, ApplicationDecide, ApplicationKind, ApplicationListQuery, ApplicationPatch, ApplicationStatus, DecisionOutcome } from "../applications"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"

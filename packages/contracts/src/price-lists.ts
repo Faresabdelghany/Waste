@@ -28,16 +28,21 @@
 // eligible or not, why not, what it matched, its score, whether it won — so
 // the office sees why a row lost, beside the winner's price, the product's
 // VAT rate and the list's currency.
+import { RESOLVE_QUANTITY_MAX } from "@waste/domain/finance/pricing"
+
+import { Currency } from "./codes"
 import { CustomerKind } from "./customers"
 import { IsoDate } from "./dates"
 import { indexBody } from "./finance"
 import { Id } from "./ids"
-import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, Minor, NonNegativeMinor, PositiveInt, somethingToChange, stamped } from "./resource"
+import { QueryDecimal } from "./query-numbers"
+import { Minor, NonNegativeMinor, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 /** The stable code a person quotes, `PL-CPH-2026` spelled as a slug: `pl-cph-2026`. The one key shape of text.ts. */
@@ -183,7 +188,7 @@ export const PriceResolveQuery = z.object({
   wasteFractionId: Id.optional(),
   customerId: Id.optional(),
   /** How many of the product's unit, which a quantity tier is judged against (M16b of #293); a decimal, 2.34 tonnes. */
-  quantity: z.coerce.number().positive().max(1_000_000).optional(),
+  quantity: QueryDecimal.pipe(z.number().positive().max(RESOLVE_QUANTITY_MAX)).optional(),
 })
 export type PriceResolveQuery = z.infer<typeof PriceResolveQuery>
 

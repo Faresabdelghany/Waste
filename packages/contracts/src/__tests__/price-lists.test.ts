@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
+
 import {
   PriceList,
   PriceListCreate,
@@ -16,7 +18,6 @@ import {
   RowVerdict,
 } from "../price-lists"
 import { IndexResult } from "../finance"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -166,6 +167,14 @@ describe("the resolve read", () => {
     assert.equal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", limit: "10" }).success, true, "an unknown parameter is dropped, not refused: a query string is not a body")
     assert.equal(PriceResolveQuery.parse({ productId: OTHER, on: "2026-08-20", quantity: "2.34" }).quantity, 2.34, "a tier's quantity is a decimal of the product's unit (M16b of #293)")
     assert.deepEqual(refusal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", quantity: "0" })).map((issue) => issue.path), ["quantity"])
+  })
+
+  test("a quantity is a decimal as typed and nothing looser: no hex, no exponent, no padding, no flag", () => {
+    for (const quantity of ["0x10", "1e3", " 2 ", "true", "", "2.", ".5", "+2", "Infinity"]) {
+      assert.deepEqual(refusal(PriceResolveQuery.safeParse({ productId: OTHER, on: "2026-08-20", quantity })).map((issue) => issue.path), ["quantity"], quantity)
+    }
+    assert.equal(PriceResolveQuery.parse({ productId: OTHER, on: "2026-08-20", quantity: "16" }).quantity, 16)
+    assert.equal(PriceResolveQuery.parse({ productId: OTHER, on: "2026-08-20", quantity: 2.34 }).quantity, 2.34, "a query built in code carries the number itself")
   })
 
   test("PriceResolution answers every verdict, the winner, its price, the rate and the currency", () => {

@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 16, ["OPEN_SETTLEMENT_STATUSES"])
+defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 16, ["OPEN_SETTLEMENT_STATUSES", "OFFICE_CANCEL_REASONS"])
 
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {
@@ -22,6 +22,7 @@ describe("the Finance vocabulary's own rules", () => {
     assert.equal((vocabulary.BLOCK_REASONS as readonly string[]).includes("missing-payer"), false, "a payer is NOT NULL on the agreement")
     assert.deepEqual([...vocabulary.CANCEL_REASONS], ["pickup-corrected", "visit-voided", "weight-revised", "scale-ticket-voided", "duplicate", "not-delivered", "other"])
     assert.equal(vocabulary.CANCEL_REASONS[0], "pickup-corrected", "the consumer's three reasons come first; the office's three follow")
+    assert.deepEqual([...vocabulary.OFFICE_CANCEL_REASONS], ["duplicate", "not-delivered", "other"], "the office cancels with its own three")
   })
 
   test("a run stands in three statuses and excludes a payer for one reason; a document is an invoice or a credit note, credited for one of the prototype's five reasons", () => {

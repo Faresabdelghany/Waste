@@ -35,7 +35,8 @@
 // integration` (O27 of #290, weighbridge.ts); where the driver recorded the
 // same load too, each reads the other in `possibleDuplicates` until the desk
 // rejects or corrects one.
-import { refusalIssue, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
+import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, refusalIssue, SAY_WHY_REFUSED, weightsAddUp, weightsPaired, type Weights } from "@waste/domain/execution/unloads"
 import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
@@ -46,23 +47,15 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { PositiveInt, recorded } from "./resource"
-import { OCCURRED_WINDOW_ORDERED } from "./stock"
 import { Label, Paragraph } from "./text"
 
-/** What a body giving one of gross and tare without the other is told, at the tare. */
-export const BOTH_GROSS_AND_TARE = "Give grossKg and tareKg together or neither"
 export const bothGrossAndTare = { message: BOTH_GROSS_AND_TARE, path: ["tareKg"] }
 
-/** What a body whose net is not gross less tare is told, at the net. */
-export const NET_IS_GROSS_LESS_TARE = "netKg is grossKg less tareKg where both are given"
 export const netIsGrossLessTare = { message: NET_IS_GROSS_LESS_TARE, path: ["netKg"] }
 
 /** Why the station refused a load (O9 of #290). */
 export const UnloadRefusalReason = z.enum(UNLOAD_REFUSAL_REASONS)
 export type UnloadRefusalReason = z.infer<typeof UnloadRefusalReason>
-
-/** What a refusal for another reason is told without its words, at the note: `refusalIssue`'s sentence. */
-export { SAY_WHY_REFUSED }
 
 /** A refusal as a body gives it: the reason, and the note, which `other` needs. */
 export const UnloadRefusal = z
@@ -78,16 +71,7 @@ export const LoadReading = z.object({
 })
 export type LoadReading = z.infer<typeof LoadReading>
 
-/** The weights as any body or row carries them: net always, gross and tare together or not at all. */
-export type Weights = { netKg: number; grossKg?: number | null; tareKg?: number | null }
-
-/** Gross and tare come together or not at all. */
-export const weightsPaired = (weights: Weights): boolean => (weights.grossKg == null) === (weights.tareKg == null)
-
-/** Where both are given, net is gross less tare; a half-given pair is judged by `weightsPaired` and not here. */
-export const weightsAddUp = (weights: Weights): boolean => weights.grossKg == null || weights.tareKg == null || weights.netKg === weights.grossKg - weights.tareKg
-
-/** The two rules together, for a body or a row. */
+/** The two weighing rules together (@waste/domain/execution/unloads), for a body or a row. */
 export const unloadWeights = (weights: Weights): boolean => weightsPaired(weights) && weightsAddUp(weights)
 
 export const Unload = z

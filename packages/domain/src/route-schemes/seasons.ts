@@ -26,6 +26,15 @@ import type { SeasonFrequency, WeekRotation } from "../planning/vocabulary"
 
 /** The most seasons a scheme may have: a form's list, and more than a year's quarters and halves need. The contracts bound a body by it. */
 export const SEASONS_MAX = 6
+export const AT_MOST_SEASONS = `A scheme has at most ${SEASONS_MAX} seasons`
+
+/** What a season that ends where it starts is told: that is the whole year, the scheme's own cadence. */
+export const SEASON_PART_OF_YEAR = "A season ends on another day than it starts; a season of the whole year is the scheme's own cadence"
+
+export const EACH_SEASON_NAME_ONCE = "A season name is used once in a scheme"
+
+/** What a season sharing a day of the year with an earlier one is told, at the later. */
+export const SEASONS_KEEP_APART = "Seasons share no day: this one overlaps an earlier season"
 
 /** `mm-dd`: a day of the calendar year, never 02-29. */
 export type MonthDay = string
@@ -52,6 +61,9 @@ const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
  */
 export const MONTH_DAY_SOURCE = "^((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))$"
 const MONTH_DAY_PATTERN = new RegExp(MONTH_DAY_SOURCE)
+
+/** What a month-day that is not a day every year has is told. */
+export const MONTH_DAY_SHAPE = "A day of the year, mm-dd, that every year has (29 February is not one)"
 
 /** A day every calendar year has, spelt `mm-dd`. */
 export function isMonthDay(value: string): boolean {

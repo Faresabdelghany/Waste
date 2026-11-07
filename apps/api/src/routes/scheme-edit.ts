@@ -42,13 +42,13 @@
 // vehicle, driver or provider, and a running group the list parks, release
 // the holds on that group's routes; one that takes a day away, those on it
 // (#209, #226, `groupsReleasing`).
-import { INT4_MAX } from "@waste/contracts/resource"
 import type { CollectionGroup, CollectionGroupEntry } from "@waste/contracts/route-schemes"
-import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/contracts/route-schemes"
-import { LABEL_MAX } from "@waste/contracts/text"
 import type { Tx } from "@waste/db/client"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { groupRuns, isParked } from "@waste/domain/planning/checks"
+import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/domain/planning/schemes"
+import { INT4_MAX } from "@waste/domain/requests"
+import { LABEL_MAX } from "@waste/domain/text"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"

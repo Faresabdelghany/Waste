@@ -9,7 +9,7 @@
 // words are lib/data/applications.ts'; the routes are
 // apps/api/src/routes/applications.ts.
 import type { Application, ApplicationCreate, ApplicationPatch, Decision, DecisionHistory } from "@waste/contracts/applications"
-import { applicationReading } from "@waste/domain/registry/applications"
+import { applicationReading, ONE_PLACE } from "@waste/domain/registry/applications"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS } from "@waste/domain/registry/vocabulary"
 
 import { APPLICATION_SERVER_ID_KEY, APPLICATION_STATUS_KEY, APPLICATIONS_MODULE, channelLabel, dayOf, DECISION_KEY, decideBodyOf, kindLabel, outcomeLabel, periodText, type RecordedDecision } from "@/lib/data/applications"
@@ -31,7 +31,6 @@ const CUSTOMER_PREFIX = "customer"
 /** The form's keys for the subject, each a web id. */
 const SUBJECT_KEYS = { customerId: CUSTOMER_PREFIX, propertyId: PROPERTY_PREFIX, sharedCollectionPointId: SHARED_POINT_PREFIX, subscriptionId: SUBSCRIPTION_PREFIX } as const
 
-export const ONE_PLACE = "An application names a property or a shared collection point, not both"
 const customerKept = "An application stays with its customer: record another application for another customer"
 const projectKept = "An application stays in its project: record another application in the other project"
 

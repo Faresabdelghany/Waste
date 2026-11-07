@@ -26,7 +26,7 @@ import { customer } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { answeredAlready, bookedFor, correctedAway, notAnsweredBy, onlyAnOpenTicket, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/execution/ticket-stops"
+import { answeredAlready, bookedFor, correctedAway, notAnsweredBy, onlyAnOpenTicket, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/resolution/ticket-stops"
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"

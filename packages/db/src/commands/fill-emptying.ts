@@ -14,7 +14,7 @@
 // A refusal — the route started meanwhile, the container placed nowhere that
 // day, the vehicle unable to take it — books nothing and is the alert's
 // words, never the job's failure.
-import { routeLabel } from "@waste/contracts/execution"
+import { routeLabel } from "@waste/domain/numbering"
 import { fillEmptyingRoute, type EmptyingRoute, type FillEmptyingOutcome } from "@waste/domain/execution/fill-emptying"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"

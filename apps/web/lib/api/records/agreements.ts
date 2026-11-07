@@ -57,24 +57,10 @@ import type {
   SubscriptionPaused,
   SubscriptionPausePatch,
 } from "@waste/contracts/agreements"
+import { ONE_PLACE } from "@waste/domain/registry/agreements"
 import { AGREEMENT_STATUSES as WIRE_AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
 
-import {
-  AGREEMENT_PREFIX,
-  AGREEMENT_RECORD_KIND,
-  AGREEMENTS_MODULE,
-  isAgreementRecord,
-  isSubscriptionRecord,
-  ONE_PLACE,
-  PRICE_LIST_PREFIX,
-  PRODUCT_PREFIX,
-  PROJECT_DEFAULT_LIST,
-  PROPERTY_PREFIX,
-  referencedId,
-  SHARED_POINT_PREFIX,
-  SUBSCRIPTION_PREFIX,
-  SUBSCRIPTION_RECORD_KIND,
-} from "@/lib/data/agreements"
+import { AGREEMENT_PREFIX, AGREEMENT_RECORD_KIND, AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, PRICE_LIST_PREFIX, PRODUCT_PREFIX, PROJECT_DEFAULT_LIST, PROPERTY_PREFIX, referencedId, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX, SUBSCRIPTION_RECORD_KIND } from "@/lib/data/agreements"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "../unloads"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "@waste/domain/execution/unloads"
+
 import { WeighbridgeIngest, WeighbridgeTicket, WeighbridgeTicketBatch, WeighbridgeTicketDismiss, WeighbridgeTicketIn, WeighbridgeTicketListQuery, WeighbridgeTicketMatch } from "../weighbridge"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 

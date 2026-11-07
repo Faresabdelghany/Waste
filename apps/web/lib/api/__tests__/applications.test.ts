@@ -9,17 +9,17 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Application as ApplicationSchema, ApplicationCreate, ApplicationDecide, ApplicationPatch, ONE_PLACE as WIRE_ONE_PLACE, type Application, type Decision } from "@waste/contracts/applications"
+import { Application as ApplicationSchema, ApplicationCreate, ApplicationDecide, ApplicationPatch, type Application, type Decision } from "@waste/contracts/applications"
 import type { Customer } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
-import { APPEAL_TEXT_NEEDED, GRANT_STARTS } from "@waste/domain/registry/applications"
+import { APPEAL_TEXT_NEEDED, GRANT_STARTS, ONE_PLACE } from "@waste/domain/registry/applications"
 
 import { COMMAND_SURFACES, genericEditOffered } from "@/components/waste/commands/command-surfaces"
 
 import { applicationCommandsOffered, decideBodyOf, decisionLetterHref, decisionLetterOf, LAST_DAY_SENTENCE, letterOffered, NOT_A_DAY, recordedDecisionOf } from "../../data/applications"
 import { type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
-import { applicationAdapter, ONE_PLACE, toApplicationCreateBody, toApplicationPatchBody, toApplicationRecord } from "../records/applications"
+import { applicationAdapter, toApplicationCreateBody, toApplicationPatchBody, toApplicationRecord } from "../records/applications"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { customerAdapter } from "../records/registry"
@@ -133,7 +133,6 @@ describe("the bodies", () => {
   test("a create names one place at most and a customer", () => {
     const twoPlaces = toApplicationCreateBody(withValues(record, { propertyId: "property-01a0d2a4-a280-700c-8000-000000000001", sharedCollectionPointId: "shared-point-01a0d2a4-a280-7010-8000-000000000001" }), context)
     assert.deepEqual(twoPlaces, { path: "sharedCollectionPointId", message: ONE_PLACE })
-    assert.equal(ONE_PLACE, WIRE_ONE_PLACE, "spelled again, since the web imports the contracts as types only")
     assert.deepEqual(toApplicationCreateBody(withValues(record, { customerId: "" }), context), { path: "customerId", message: "Pick the customer who applies" })
   })
 

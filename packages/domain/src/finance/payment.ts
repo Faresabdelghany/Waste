@@ -39,15 +39,19 @@ export const dueOn = (issuedOn: string, termsDays: number): string => addDays(is
 
 /** A VAT registration: its country's two letters, then its number. */
 export const VAT_NUMBER_PATTERN = "^[A-Z]{2}[0-9A-Z]{2,13}$"
+export const VAT_NUMBER_SHAPE = "a VAT registration: its country's two letters, then its number, such as DK12345678"
 
 /** An IBAN: the country, the two check digits, then the account, 15 to 34 characters in all. */
 export const IBAN_PATTERN = "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+export const IBAN_SHAPE = "an IBAN without spaces, such as DK5000400440116243"
 
 /** A BIC: the bank, the country, the location, and an optional branch. */
 export const BIC_PATTERN = "^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$"
+export const BIC_SHAPE = "a BIC of eight or eleven characters, such as DABADKKK"
 
 /** A FIK creditor number: eight digits. */
 export const FIK_CREDITOR_PATTERN = "^[0-9]{8}$"
+export const FIK_CREDITOR_SHAPE = "a FIK creditor number: eight digits"
 
 /** A frozen payment reference: FIK 71's fifteen digits or FIK 75's sixteen. */
 export const PAYMENT_REFERENCE_PATTERN = "^[0-9]{15,16}$"

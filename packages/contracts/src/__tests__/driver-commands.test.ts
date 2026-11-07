@@ -1,32 +1,15 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { BATCH_MAX, carriesLocation, EACH_COMMAND_ONCE, PROBLEM_WITH_A_REJECTION } from "@waste/domain/execution/command-batches"
+import { FIXES_IN_ORDER } from "@waste/domain/execution/positions"
+import { LABEL_IS_THE_NUMBER } from "@waste/domain/execution/routes"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "@waste/domain/execution/unloads"
 import { DRIVER_COMMAND_KINDS, type DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import { INT4_MAX } from "@waste/domain/requests"
+import { PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 
-import {
-  BATCH_MAX,
-  COMMAND_BODIES,
-  CommandOutcomeRow,
-  DriverCommand,
-  DriverCommandBatch,
-  DriverCommandBatchOutcome,
-  DriverCommandEnvelope,
-  DriverCommandReceipt,
-  DriverIdentification,
-  DriverIdentifyQuery,
-  DriverMe,
-  DriverPickup,
-  DriverRouteDetail,
-  EACH_COMMAND_ONCE,
-  FIXES_IN_ORDER,
-  OBJECT_KEY_SHAPE,
-  POSITIONS_MAX,
-  PROBLEM_WITH_A_REJECTION,
-  WireOutcome,
-} from "../driver-commands"
-import { INT4_MAX } from "../resource"
-import { LABEL_IS_THE_NUMBER } from "../routes"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "../unloads"
+import { COMMAND_BODIES, CommandOutcomeRow, DriverCommand, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandEnvelope, DriverCommandReceipt, DriverIdentification, DriverIdentifyQuery, DriverMe, DriverPickup, DriverRouteDetail, POSITIONS_MAX, WireOutcome } from "../driver-commands"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -64,6 +47,10 @@ const bodies: Record<DriverCommandKind, object> = {
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
+  test("a body takes the device's position exactly where the domain says its kind carries one", () => {
+    for (const kind of DRIVER_COMMAND_KINDS) assert.equal("location" in COMMAND_BODIES[kind].shape, carriesLocation(kind), kind)
+  })
+
   test("is the discriminated union over the seventeen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
@@ -131,8 +118,8 @@ describe("DriverCommand", () => {
     assert.deepEqual(refusal(DriverCommand.safeParse(command("skip-pickup", { pickupId: THIRD, reason: "route-ended" }))).map((issue) => issue.path), ["body.reason"])
     assert.deepEqual(refusal(DriverCommand.safeParse(command("report-problem", { reason: "regeneration", note: "x" }))).map((issue) => issue.path), ["body.reason"])
     // The object key's shape; which ids it names is the applier's rule.
-    assert.deepEqual(refusal(DriverCommand.safeParse(command("add-photo", { objectKey: "photo.jpg" }))), [{ path: "body.objectKey", message: OBJECT_KEY_SHAPE }])
-    assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { ...bodies["record-unload"], objectKey: "ticket.png" }))), [{ path: "body.objectKey", message: OBJECT_KEY_SHAPE }])
+    assert.deepEqual(refusal(DriverCommand.safeParse(command("add-photo", { objectKey: "photo.jpg" }))), [{ path: "body.objectKey", message: PROOF_KEY_SHAPE }])
+    assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { ...bodies["record-unload"], objectKey: "ticket.png" }))), [{ path: "body.objectKey", message: PROOF_KEY_SHAPE }])
     // The unload's weights.
     assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200, grossKg: 12_400 }))), [{ path: "body.tareKg", message: BOTH_GROSS_AND_TARE }])
     assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_000, grossKg: 12_400, tareKg: 8_200 }))), [{ path: "body.netKg", message: NET_IS_GROSS_LESS_TARE }])

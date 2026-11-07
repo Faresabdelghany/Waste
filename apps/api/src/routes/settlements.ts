@@ -84,7 +84,6 @@
 // finds no row — the family's 404, not a 403, since which settlements exist
 // outside its reach is not its to learn.
 import { Page } from "@waste/contracts/pagination"
-import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen } from "@waste/contracts/settlements"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
@@ -94,6 +93,7 @@ import { routeScheme } from "@waste/db/schema/route-schemes"
 import { tonnesAt } from "@waste/domain/finance/tonnage"
 import { settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
+import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"

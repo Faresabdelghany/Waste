@@ -30,6 +30,7 @@ import { move, type ContainerRef } from "@waste/db/commands/stock-ledger"
 import { container } from "@waste/db/schema/containers"
 import { stockMovement } from "@waste/db/schema/stock"
 import { stockMovementColumns, stockMovementOf } from "@waste/db/shapes/stock-movements"
+import type { Action } from "@waste/domain/access/modules"
 import { and, asc, eq, gt, gte, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -65,7 +66,7 @@ async function findContainerRef(tx: Tx, principal: Principal, id: string): Promi
 const scope = (principal: Principal) => and(eq(stockMovement.companyId, principal.companyId), inProjects(stockMovement.projectId, principal))
 
 /** What every command describes the same way: no usable token, no grant, no such container. */
-const commandProblems = (action: "create" | "edit") => ({
+const commandProblems = (action: Action) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`resources.containers\`.`),
   404: describeProblem("No container with that id in the projects this account works in."),

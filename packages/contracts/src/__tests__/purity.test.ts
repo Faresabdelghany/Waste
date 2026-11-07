@@ -1,103 +1,15 @@
 // The wire primitives bundle into the browser and run on the server alike, so
 // they pass the same gate as packages/domain (see @waste/tooling/purity): zod
-// is the one runtime dependency, tests may add Node built-ins and the tooling.
+// is one runtime dependency, tests may add Node built-ins and the tooling.
 //
-// The domain is the other allowed import, by exact subpath: permissions.ts
-// turns @waste/domain/access/modules into the enums the API boundary checks
-// (Issue #70), the Registry's modules turn @waste/domain/registry/vocabulary
-// into theirs (Issue #78), planning.ts turns
-// @waste/domain/planning/vocabulary into Planning's (Issue #97),
-// resources.ts and stock.ts turn @waste/domain/resources/vocabulary into
-// Resources' (Issue #101), and execution.ts turns
-// @waste/domain/execution/vocabulary into Execution's (Issue #104) while
-// proofs.ts runs @waste/domain/execution/proof-shapes as its refine — the one
-// reach beyond a vocabulary, since the table of what each proof kind carries
-// is a rule the client must hold too and a second spelling here would drift —
-// and resolution.ts turns @waste/domain/resolution/vocabulary into
-// Resolution's (Issue #109) while tickets.ts runs
-// @waste/domain/resolution/event-shapes as its refine for the same reason,
-// and finance.ts turns @waste/domain/finance/vocabulary into Finance &
-// Contracting's (Issue #112), the sixth `vocabulary` subpath and the ninth
-// domain line of the allowlist, and reports.ts turns
-// @waste/domain/insight/vocabulary into the reports' interval (#292), and
-// imports.ts @waste/domain/imports/vocabulary into the import's kinds and
-// outcomes (#291 slice 12). The
-// direction is sound — the innermost ring
-// depends on nothing — and listing the subpath,
-// not the package, keeps every further reach into the domain a deliberate
-// line here. Issue #293 added two: organisation.ts reads the public slug's
-// shape from @waste/domain/access/public-slug, and drop-off-points.ts
-// runs @waste/domain/resources/drop-off-points's opening rules as its refines
-// (M3), so a form and the public map judge hours alike. O4 of #290
-// added @waste/domain/resolution/sla: ticket-sla.ts reads the longest target
-// and the rule a set names a kind and a priority once by. #291 C4 added one:
-// finance.ts reads the invoice identity's shapes and the payment terms' range
-// from @waste/domain/finance/payment, the patterns the database's checks read
-// too. M7 of #293 added
-// @waste/domain/registry/applications: applications.ts holds a Decision's
-// period and appeal text to the domain's rules in the domain's sentences.
-// #291 C6 added @waste/domain/finance/payments: payments.ts reads the
-// invoice's payment statuses from it, the reading the API answers. M14
-// of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
-// free days by its cap and holds them to its unit, which the database reads.
-// O11 of #290 added
-// @waste/domain/execution/bulky: bulky.ts bounds a booking's items and an
-// availability window by the domain's caps. M4 of #293 added
-// @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
-// site-visits.ts reads the visits' lists and normalises a plate or a card
-// as the API stores and matches it. O14 of #290 added
-// @waste/domain/execution/shift: shifts.ts holds a window and a shift to the
-// domain's rules in the domain's sentences, with the break's bounds.
-// O17 of #290 added
-// @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
-// pattern the database's checks read, and the overlap rule of a scheme's
-// seasons. M23 of #293 added @waste/domain/inspections/vocabulary and
-// @waste/domain/inspections/rules: field-inspections.ts reads an
-// inspection's lists, holds its verdict to its findings and a photo to the
-// bucket's formats, and right-sizing.ts reads a proposal's directions and
-// statuses. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
-// reads the Plan Ahead window's bounds the database's check reads. O8 of
-// #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
-// `record-positions` by the batch the Driver App closes, one spelling. C13
-// of #291 added @waste/domain/registry/address: addresses.ts checks a
-// postcode and a municipality code by the shape the domain spells. #474
-// added @waste/domain/service-providers/vocabulary: service-provider-activities.ts
-// reads an Activity's kinds and statuses. O30 of #290 added
-// @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
-// Stock Minimums by the domain's cap. C15 of #291 added
-// @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
-// messaging.ts reads the channels, purposes and statuses, and refuses a
-// template naming a placeholder no message fills, or out of its channel's
-// shape, in the domain's sentences. O20 of #290 added
-// @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
-// interval rule and bounds, and reads its due states. M22 of #293 added
-// @waste/domain/access/branding: organisation.ts holds a project's branding to
-// its shapes and its colour to WCAG 2.1 AA's contrast.
-// O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
-// ingest's batch by the domain's cap and defaults a pairing's threshold to the
-// domain's. O16 of #290 (part b) added @waste/domain/notifications/vocabulary:
-// notifications.ts reads the customer notices a project's rules map to
-// templates.
-// M16a of #293 added @waste/domain/scale-house/vocabulary and
-// @waste/domain/scale-house/rules: scale-house.ts reads a ticket's and a
-// tare's lists and bounds a ticket's lines by the domain's cap.
-// M17 of #293 added @waste/domain/execution/haul-out: haul-out.ts
-// tells a load sent back to the station it left the domain's sentence.
-// #545 of #544 added @waste/domain/resolution/ticket-types and
-// @waste/domain/resolution/transitions: ticket-types.ts holds a field's key,
-// its value and a type's set of fields to the domain's rules in the domain's
-// sentences, and names the status commands a type's permissions are for.
-// #546 of #544 added @waste/domain/resolution/automation: ticket-types.ts
-// holds an action to the parameters its kind takes, in the domain's
-// sentences, and a type's actions to the domain's cap.
-// #547 of #544 added @waste/domain/resolution/counting-rules: counting-rules.ts
-// holds a rule's limit to the domain's cap and a simulation's window to the
-// domain's rule, in its sentence.
-// The domain's base layer (F2 of #574) added @waste/domain/days: bulky.ts,
-// reports.ts and route-schemes.ts count a window's days through the domain's
-// daysBetween and daysInclusive. The typed outbox (F2 of #574) added
-// @waste/domain/outbox/vocabulary: outbox.ts reads the kinds, the aggregates
-// and which aggregates each kind is about, which its payload table is keyed by.
+// The domain is the other, by direction: every value the wire states — a
+// closed list, a shape, a bound, a sentence — is the domain's, and this
+// package wraps it in zod, so any module of the domain may be read here. The
+// domain is gated pure itself, and the direction is sound: the innermost ring
+// depends on nothing. What may not be reached is the fixture-mode prototype
+// the domain still carries for the web — its record model, the map planning
+// and the demo tenant's fixtures — judged through everything a module pulls
+// in, so a module that drags the prototype record in is refused with it.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -105,61 +17,7 @@ import { definePurityTests } from "@waste/tooling/purity"
 
 definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
-  allowedImports: [
-    "@waste/domain/access/modules",
-    "@waste/domain/access/branding",
-    "@waste/domain/access/public-slug",
-    "@waste/domain/audit/vocabulary",
-    "@waste/domain/days",
-    "@waste/domain/execution/bulky",
-    "@waste/domain/execution/haul-out",
-    "@waste/domain/execution/positions",
-    "@waste/domain/execution/proof-shapes",
-    "@waste/domain/execution/shift",
-    "@waste/domain/execution/unloads",
-    "@waste/domain/execution/vocabulary",
-    "@waste/domain/execution/weighbridge",
-    "@waste/domain/execution/work-orders",
-    "@waste/domain/execution/workload",
-    "@waste/domain/finance/hire",
-    "@waste/domain/finance/payment",
-    "@waste/domain/finance/payments",
-    "@waste/domain/finance/vocabulary",
-    "@waste/domain/imports/vocabulary",
-    "@waste/domain/inspections/rules",
-    "@waste/domain/inspections/vocabulary",
-    "@waste/domain/insight/vocabulary",
-    "@waste/domain/messaging/template",
-    "@waste/domain/messaging/vocabulary",
-    "@waste/domain/notifications/vocabulary",
-    "@waste/domain/outbox/vocabulary",
-    "@waste/domain/planning/lifecycle",
-    "@waste/domain/planning/vocabulary",
-    "@waste/domain/registry/address",
-    "@waste/domain/registry/applications",
-    "@waste/domain/registry/vocabulary",
-    "@waste/domain/registry/waste-code",
-    "@waste/domain/resolution/automation",
-    "@waste/domain/resolution/counting-rules",
-    "@waste/domain/resolution/event-shapes",
-    "@waste/domain/resolution/sla",
-    "@waste/domain/resolution/ticket-types",
-    "@waste/domain/resolution/transitions",
-    "@waste/domain/resolution/vocabulary",
-    "@waste/domain/resources/drop-off-points",
-    "@waste/domain/resources/maintenance",
-    "@waste/domain/resources/sensors",
-    "@waste/domain/resources/stock-balance",
-    "@waste/domain/resources/vocabulary",
-    "@waste/domain/route-schemes/seasons",
-    "@waste/domain/scale-house/rules",
-    "@waste/domain/scale-house/vocabulary",
-    "@waste/domain/routing/balance",
-    "@waste/domain/routing/vocabulary",
-    "@waste/domain/service-providers/vocabulary",
-    "@waste/domain/visits/charges",
-    "@waste/domain/visits/vocabulary",
-    "zod",
-  ],
-  allowedTestImports: ["@waste/tooling/purity"],
+  allowedImports: ["@waste/domain/*", "zod"],
+  deniedImports: ["@waste/domain/fixtures/*", "@waste/domain/map-planning/*", "@waste/domain/prototype-record"],
+  allowedTestImports: ["@waste/tooling/program", "@waste/tooling/purity", "@waste/tooling/wire-values"],
 })

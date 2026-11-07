@@ -6,8 +6,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DEFAULT_TICKET_TYPE_NAMES, fieldKeyOf, fieldRequiredToOpen, fieldSetIssue, fieldValueIssue, fieldValuesIssues, KIND_OR_TYPE, kindOrTypeKey, mayGive, mergedFieldValues, missingFields, needsBeforeCompleting, onlyRolesMay, settingFor, TICKET_COMMAND_VERBS, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, TICKET_TYPE_FIELDS_MAX, type TicketFieldDefinition, typeOfAnotherKind } from "../ticket-types"
-import { TICKET_COMMANDS } from "../transitions"
-import { TICKET_KINDS } from "../vocabulary"
+import { TICKET_COMMANDS, TICKET_KINDS } from "../vocabulary"
 
 const field = (key: string, overrides: Partial<TicketFieldDefinition> = {}): TicketFieldDefinition => ({ key, label: key, input: "text", choices: [], requirement: "optional", ...overrides })
 

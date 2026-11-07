@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DECIMAL_SHAPE } from "@waste/domain/requests"
+
 import {
   PlanningArea,
   PlanningAreaBoundary,
@@ -178,5 +180,14 @@ describe("the address → zone read's queries (O29 of #290, row 1.13)", () => {
     }
     assert.deepEqual(refusal(PlanningAreasContainingQuery.safeParse({ projectId: ID, lng: "12.58", lat: "91" })).map((issue) => issue.path), ["lat"])
     assert.equal(PlanningAreasContainingQuery.safeParse({ lng: "12.58", lat: "55.7" }).success, false, "the project is named")
+  })
+
+  test("a point's decimal is told in its own words, a missing one is told it is missing, and a query built in code may carry the number itself", () => {
+    const refusedLng = (lng: unknown) => refusal(PlanningAreasContainingQuery.safeParse({ projectId: ID, lng, lat: "55.7" }))
+    for (const lng of ["1e1", "0x1", "", " 12", "12,5", "Infinity"]) assert.deepEqual(refusedLng(lng), [{ path: "lng", message: DECIMAL_SHAPE }], lng)
+    assert.deepEqual(refusedLng(undefined), [{ path: "lng", message: "Invalid input: expected string, received undefined" }])
+    assert.deepEqual(refusedLng(true), [{ path: "lng", message: "Invalid input: expected string, received boolean" }])
+    assert.deepEqual(PlanningAreasContainingQuery.parse({ projectId: ID, lng: 12.58, lat: -33 }), { projectId: ID, lng: 12.58, lat: -33, purpose: "notification" })
+    assert.deepEqual(refusedLng(Number.NaN), [{ path: "lng", message: DECIMAL_SHAPE }])
   })
 })

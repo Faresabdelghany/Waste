@@ -10,13 +10,10 @@
 // same rule as a visitor's and needs neither the browser's `/waste-api`
 // rewrite nor a public API origin.
 import type { AddressMatch, AddressMatches, PublicCollectionDay, PublishedProject } from "@waste/contracts/public"
+import { ADDRESS_SEARCH, COLLECTION_WEEKS } from "@waste/domain/planning/public-days"
 
 import type { DoorAnswer } from "./door"
 import { searchQueryOf } from "./search-query"
-
-/** The address search's bounds and the weeks read (the contracts' ADDRESS_SEARCH_MIN/MAX and COLLECTION_WEEKS), spelled again since the web imports the contracts as types only. */
-export const ADDRESS_SEARCH = { min: 3, max: 100 } as const
-export const WEEKS = { default: 8, max: 26 } as const
 
 /** The spans a visitor picks between, in weeks. */
 export const WEEK_CHOICES = [4, 8, 13, 26] as const
@@ -31,7 +28,7 @@ export const addressQueryOf = (q: string | string[] | undefined): string | null 
 export function weeksOf(weeks: string | string[] | undefined): number {
   const first = Array.isArray(weeks) ? weeks[0] : weeks
   const n = Number(first)
-  return Number.isInteger(n) && n >= 1 ? Math.min(n, WEEKS.max) : WEEKS.default
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, COLLECTION_WEEKS.max) : COLLECTION_WEEKS.default
 }
 
 /** The contracts' `Id`, a UUIDv7, spelled again. */
@@ -129,7 +126,7 @@ export function calendarHrefOf(slug: string, { embed = false, addressId, query, 
   const path = [`/p/${encodeURIComponent(slug)}/calendar`, embed ? "embed" : null, addressId === undefined ? null : encodeURIComponent(addressId)].filter((part) => part !== null).join("/")
   const search = new URLSearchParams()
   if (query !== undefined) search.set("q", query)
-  if (weeks !== undefined && weeks !== WEEKS.default) search.set("weeks", String(weeks))
+  if (weeks !== undefined && weeks !== COLLECTION_WEEKS.default) search.set("weeks", String(weeks))
   const asked = search.toString()
   return asked === "" ? path : `${path}?${asked}`
 }
@@ -144,7 +141,7 @@ export function feedUrlsOf(origin: string, path: string): { https: string; webca
 }
 
 /** The weeks the feed reads: as far ahead as the door goes, since a subscription is read again on the app's own schedule. */
-export const FEED_WEEKS = WEEKS.max
+export const FEED_WEEKS = COLLECTION_WEEKS.max
 
 /** What the feed answers a calendar app for each of the door's answers: the feed, or a status the app retries by. */
 export function feedResponseOf(answer: DoorAnswer<string>): Response {

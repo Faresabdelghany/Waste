@@ -11,14 +11,13 @@ import {
   PICKUP_EVENT_KINDS,
   rejectedCommandSubject,
   reportedProblemSubject,
-  TICKET_DESCRIPTION_MAX,
-  TICKET_SUBJECT_MAX,
   ticketFor,
   type CommandRejectedFacts,
   type EventFacts,
   type PickupEventFacts,
   type PickupEventKind,
 } from "../from-event"
+import { LABEL_MAX, PARAGRAPH_MAX } from "../../text"
 
 const ROUTE = "route"
 const PICKUP = "pickup"
@@ -193,38 +192,34 @@ describe("ticketFor", () => {
   })
 
   test("a subject is cut to the wire's Label bound — at the last space with an ellipsis where a word would otherwise be cut in half — and a short one is left alone", () => {
-    // The contracts' LABEL_MAX, which this package cannot import; packages/db's ticket-text.test.ts holds the two equal.
-    assert.equal(TICKET_SUBJECT_MAX, 200)
     const words = Array.from({ length: 100 }, (_, i) => `word${i}`).join(" ")
     assert.equal(words.length > 500, true)
     const cut = rejectedCommandSubject(words)
-    assert.equal(cut.length <= TICKET_SUBJECT_MAX, true)
+    assert.equal(cut.length <= LABEL_MAX, true)
     assert.equal(cut.endsWith("…"), true)
     assert.match(cut, /^Rejected command: word0 word1 .*\S…$/, "cut at a space, so the ellipsis follows a whole word")
     assert.equal(words.startsWith(cut.slice("Rejected command: ".length, -1)), true, "what stands before the ellipsis is the detail's own head")
     // A detail that is one long token: the only space is the prefix's, in the head's first half, so the head is kept to a character before the bound rather than cut back to "Rejected command:".
     const token = rejectedCommandSubject("x".repeat(500))
-    assert.equal(token, `Rejected command: ${"x".repeat(TICKET_SUBJECT_MAX - 1 - "Rejected command: ".length)}…`)
-    assert.equal(token.length, TICKET_SUBJECT_MAX)
+    assert.equal(token, `Rejected command: ${"x".repeat(LABEL_MAX - 1 - "Rejected command: ".length)}…`)
+    assert.equal(token.length, LABEL_MAX)
     // Exactly the bound is whole; one over is cut.
-    assert.equal(boundedSubject("z".repeat(TICKET_SUBJECT_MAX)), "z".repeat(TICKET_SUBJECT_MAX))
-    assert.equal(boundedSubject("z".repeat(TICKET_SUBJECT_MAX + 1)), `${"z".repeat(TICKET_SUBJECT_MAX - 1)}…`)
+    assert.equal(boundedSubject("z".repeat(LABEL_MAX)), "z".repeat(LABEL_MAX))
+    assert.equal(boundedSubject("z".repeat(LABEL_MAX + 1)), `${"z".repeat(LABEL_MAX - 1)}…`)
     // Every door is bounded: the three builders and the draft.
-    assert.equal(missedCollectionSubject("B".repeat(300), "Parkvej 18").length, TICKET_SUBJECT_MAX)
-    assert.equal(reportedProblemSubject("other", null, "A".repeat(300)).length, TICKET_SUBJECT_MAX)
+    assert.equal(missedCollectionSubject("B".repeat(300), "Parkvej 18").length, LABEL_MAX)
+    assert.equal(reportedProblemSubject("other", null, "A".repeat(300)).length, LABEL_MAX)
     assert.equal(ticketFor(rejection({ detail: words }))?.subject, cut)
     assert.equal(ticketFor(rejection({ detail: words }))?.description, `The driver's device sent a command the server refused. Note: ${words}`, "the description keeps a detail that fits its own bound")
   })
 
   test("a description is cut to the wire's Paragraph bound the same way, and a short one is left alone", () => {
-    // The contracts' PARAGRAPH_MAX, which this package cannot import; packages/db's ticket-text.test.ts holds the two equal.
-    assert.equal(TICKET_DESCRIPTION_MAX, 2000)
-    assert.equal(boundedDescription("z".repeat(TICKET_DESCRIPTION_MAX)), "z".repeat(TICKET_DESCRIPTION_MAX))
-    assert.equal(boundedDescription("z".repeat(TICKET_DESCRIPTION_MAX + 1)), `${"z".repeat(TICKET_DESCRIPTION_MAX - 1)}…`)
+    assert.equal(boundedDescription("z".repeat(PARAGRAPH_MAX)), "z".repeat(PARAGRAPH_MAX))
+    assert.equal(boundedDescription("z".repeat(PARAGRAPH_MAX + 1)), `${"z".repeat(PARAGRAPH_MAX - 1)}…`)
     const words = Array.from({ length: 800 }, (_, i) => `word${i}`).join(" ")
     assert.equal(words.length > 5000, true)
     const cut = ticketFor(rejection({ detail: words }))?.description ?? ""
-    assert.equal(cut.length <= TICKET_DESCRIPTION_MAX, true)
+    assert.equal(cut.length <= PARAGRAPH_MAX, true)
     assert.match(cut, /^The driver's device sent a command the server refused\. Note: word0 word1 .*\S…$/, "cut at a space, so the ellipsis follows a whole word")
     assert.equal(ticketFor(rejection({ detail: "Pickup 12 is already completed" }))?.description, "The driver's device sent a command the server refused. Note: Pickup 12 is already completed")
   })

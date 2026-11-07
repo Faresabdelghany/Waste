@@ -18,13 +18,12 @@
 //
 // `ServiceFrequency` carries the rule its table carries
 // (`service_frequency_shape`): an interval needs a rate to belong to, and the
-// two intervals are two ways of saying the same thing. It is spelled once as
-// `serviceFrequencyShape` and applied three times, because a body refused at
-// the boundary is a 400 naming the rule where the same body refused by the
-// check constraint is a 500 naming nothing. The sentence it is refused with
-// is exported too (`ONE_CADENCE`): a patch carries only a part of the
-// picture, so the route holds it against the stored row, and one rule that
-// two places can refuse should not have two ways of saying so.
+// two intervals are two ways of saying the same thing. The rule and its
+// sentence are the domain's (@waste/domain/registry/catalogue), applied here
+// three times, because a body refused at the boundary is a 400 naming the
+// rule where the same body refused by the check constraint is a 500 naming
+// nothing; a patch carries only a part of the picture, so the route holds it
+// against the stored row in the same words.
 //
 // A Product's container type, waste fraction and frequency are all optional:
 // only a container collection has a container and a fraction, and the
@@ -37,13 +36,15 @@
 // priced at — zero being exempt, and a product without one blocking its
 // events with `no-vat-rate`, which is the actionable reason.
 import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
-import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
+import { FREE_DAYS_ARE_A_HIRES, FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
+import { ONE_CADENCE, serviceFrequencyShape, VAT_PERCENT, type ServiceFrequencyShape } from "@waste/domain/registry/catalogue"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { HAZARDOUS_CODE, hazardousAgrees, WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { Id } from "./ids"
-import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 
 /** What a Product delivers. */
@@ -147,36 +148,6 @@ export const ContainerTypePatch = z
   .refine(changesSomething, somethingToChange)
 export type ContainerTypePatch = z.infer<typeof ContainerTypePatch>
 
-/** The three numbers the shape rule is about, as a resource, a create body or a patch gives them. */
-export type ServiceFrequencyShape = {
-  collectionsPerWeek?: number | null
-  weeksBetween?: number | null
-  daysBetween?: number | null
-}
-
-/**
- * What a body that breaks the rule below is told, wherever it is caught. The
- * schemas here refuse a create body, which carries the whole picture; a patch
- * carries a part of it, so the route that has the stored row holds the two
- * together and refuses in these same words (apps/api/src/routes/catalogue.ts).
- * One rule, one sentence.
- */
-export const ONE_CADENCE = "Give collectionsPerWeek with at most one of weeksBetween and daysBetween, or none of the three (on demand)"
-
-/**
- * The definition's own rule, the one the database's `service_frequency_shape`
- * check holds: an interval needs a rate to belong to, and `weeksBetween` and
- * `daysBetween` are two ways of saying the same thing. A rate that was not
- * given at all is not judged — that is a patch leaving it alone, and only the
- * route, which has the stored row, can hold the rule against the two together.
- */
-export function serviceFrequencyShape(value: ServiceFrequencyShape): boolean {
-  const { collectionsPerWeek, weeksBetween, daysBetween } = value
-  if (weeksBetween != null && daysBetween != null) return false
-  if (collectionsPerWeek === undefined) return true
-  return collectionsPerWeek !== null || (weeksBetween == null && daysBetween == null)
-}
-
 /** A create body says on demand by leaving the rate out, so an absent field reads as the null the row will hold. */
 const asStored = (body: ServiceFrequencyShape): ServiceFrequencyShape => ({
   collectionsPerWeek: body.collectionsPerWeek ?? null,
@@ -227,14 +198,11 @@ export const ServiceFrequencyPatch = z
   .refine(serviceFrequencyShape, oneCadence)
 export type ServiceFrequencyPatch = z.infer<typeof ServiceFrequencyPatch>
 
-/** A VAT rate in whole percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). */
-const VatPercent = z.int().min(0).max(100)
+/** A VAT rate in whole percent (Issue #112, @waste/domain/registry/catalogue). */
+const VatPercent = z.int().min(VAT_PERCENT.min).max(VAT_PERCENT.max)
 
 /** A hire product's free days (M14 of #293): each placement's first days, charged nothing; none to a year. */
 const FreeDays = z.int().min(0).max(FREE_DAYS_MAX)
-
-/** What a product sold by anything but the day is told of free days. */
-export const FREE_DAYS_ARE_A_HIRES = "Free days are a hire product's: sell it by the day, or give it none"
 
 export const Product = z.object({
   ...stamped,

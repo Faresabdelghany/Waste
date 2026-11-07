@@ -58,41 +58,15 @@
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
+import { SEPARATOR_CHARACTERS } from "@waste/domain/imports/csv"
 import { intervalOf, intervalsOver, type DayInterval } from "@waste/domain/insight/intervals"
 import { ON_TIME_GRACE_MINUTES, pickupStanding, rate, unloadStanding } from "@waste/domain/insight/readings"
+import { REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import type { ReportInterval as Interval } from "@waste/domain/insight/vocabulary"
 import { isMunicipality, wasteDataCsv, wasteDataWarningSentence, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import {
-  REPORT_FIRST_DAY,
-  REPORT_WINDOW_MAX_DAYS,
-  RevenueReport,
-  RevenueReportQuery,
-  ServiceReport,
-  ServiceReportQuery,
-  TicketReport,
-  TicketReportQuery,
-  TonnageReport,
-  TonnageReportQuery,
-  WasteDataFileQuery,
-  WasteDataReport,
-  WasteDataReportQuery,
-  type MissedReason,
-  type PickupStandings,
-  type PickupWeightRow,
-  type ReportWindow,
-  type RevenueInterval,
-  type RevenueProduct,
-  type RevenueTotals,
-  type RouteCounts,
-  type ServiceRates,
-  type ServiceScheme,
-  type TicketKindCounts,
-  type TonnageRow,
-  type WasteDataRow,
-  type WasteDataWarning,
-} from "@waste/contracts/reports"
+import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery, type MissedReason, type PickupStandings, type PickupWeightRow, type ReportWindow, type RevenueInterval, type RevenueProduct, type RevenueTotals, type RouteCounts, type ServiceRates, type ServiceScheme, type TicketKindCounts, type TonnageRow, type WasteDataRow, type WasteDataWarning } from "@waste/contracts/reports"
 import type { Tx } from "@waste/db/client"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
@@ -654,9 +628,6 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
   }
 }
 
-/** The file's separators by the query's names. */
-const SEPARATORS = { comma: ",", semicolon: ";" } as const
-
 /** A report as a request reads it: the project the query names held to the caller's, then the report read inside the request's transaction. */
 function reading<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
   return (c: Context<AuthEnv>, query: Query): Promise<Report> => {
@@ -801,7 +772,7 @@ export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       async (c) => {
         const { separator, ...query } = c.req.valid("query")
         const report = await wasteDataFor(c, query)
-        return c.body(wasteDataCsv({ from: report.window.from, to: report.window.to, rows: report.rows, warnings: report.warnings }, SEPARATORS[separator]), 200, {
+        return c.body(wasteDataCsv({ from: report.window.from, to: report.window.to, rows: report.rows, warnings: report.warnings }, SEPARATOR_CHARACTERS[separator]), 200, {
           "content-type": "text/csv; charset=utf-8",
           "content-disposition": `attachment; filename="waste-data-${query.from}-${query.to}.csv"`,
         })

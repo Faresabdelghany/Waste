@@ -11,9 +11,27 @@
 // by all three: a lorry's tare is not its tare with a skip on.
 import { plateKey } from "../execution/weighbridge"
 import { FOUR_DIGITS_PATTERN } from "../registry/address"
+import type { ScaleTicketParty, ScaleTicketVoidReason } from "./vocabulary"
 
 /** The lines one ticket may be split into. */
 export const SCALE_TICKET_LINES_MAX = 20
+
+/** An account ticket names its customer and agreement, a walk-in's neither: the ticket table's `party_shape`. */
+export const partyShaped = (ticket: { party: ScaleTicketParty; customerId?: string | null; agreementId?: string | null }): boolean =>
+  ticket.party === "account" ? ticket.customerId != null && ticket.agreementId != null : ticket.customerId == null && ticket.agreementId == null
+/** What a ticket of the other party's shape is told, at the customer. */
+export const PARTY_SHAPE = "An account ticket names its customer and the agreement it is charged under; a walk-in's names neither"
+
+/** A void for another reason says why in its note: the ticket table's `void_shape`. */
+export const voidSaysWhy = (body: { reason: ScaleTicketVoidReason; note?: string | null }): boolean => body.reason !== "other" || body.note != null
+/** What a void for another reason without a note is told, at the note. */
+export const VOID_SAYS_WHY = "Say why in the note where the reason is another"
+
+/** What a split naming a fraction and an origin twice is told, at its lines. */
+export const EACH_LINE_ONCE = "Name each fraction and origin once: one line carries all of it"
+
+/** What names a line once: its fraction and its origin. */
+export const lineKey = (line: { wasteFractionId: string; originMunicipality?: string | null }): string => `${line.wasteFractionId} ${line.originMunicipality ?? ""}`
 
 /** A ticket's net from its two weighings, null where the tare is not less than the gross. */
 export function netOf(grossKg: number, tareKg: number): number | null {
@@ -35,7 +53,7 @@ export function linesIssue(lines: readonly ScaleTicketLineDraft[], netKg: number
   const seen = new Set<string>()
   for (const [index, line] of lines.entries()) {
     if (line.originMunicipality !== null && !municipality.test(line.originMunicipality)) return { kind: "bad-origin", index }
-    const key = `${line.wasteFractionId} ${line.originMunicipality ?? ""}`
+    const key = lineKey(line)
     if (seen.has(key)) return { kind: "repeated", index }
     seen.add(key)
   }

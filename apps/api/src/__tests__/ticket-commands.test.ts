@@ -5,10 +5,11 @@
 import assert from "node:assert/strict"
 import { before, describe, test } from "node:test"
 
-import { RECOLLECTION_ROUTE_WITH_RECOLLECTED, Ticket, TicketEvent } from "@waste/contracts/tickets"
+import { Ticket, TicketEvent } from "@waste/contracts/tickets"
 import { type Database } from "@waste/db/client"
-import { TICKET_COMMAND_TARGETS, TICKET_COMMANDS } from "@waste/domain/resolution/transitions"
-import { isClosedTicketStatus, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { RECOLLECTION_ROUTE_WITH_RECOLLECTED } from "@waste/domain/resolution/tickets"
+import { TICKET_COMMAND_TARGETS } from "@waste/domain/resolution/transitions"
+import { isClosedTicketStatus, TICKET_COMMANDS, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 
 import { type Call } from "./calls"
 import { seedRoute, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"

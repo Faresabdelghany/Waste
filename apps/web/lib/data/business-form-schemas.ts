@@ -1,3 +1,5 @@
+import { DRIVER_PICKUP_REASONS, type DriverPickupReason } from "@waste/domain/execution/vocabulary"
+
 import {
   commercialImproveBusinessFormSchemas,
 } from "@/lib/data/business-form-schemas-commercial-improve"
@@ -21,6 +23,16 @@ import {
   publicWorkspaceDomains,
   settingsModuleDomains,
 } from "@/lib/data/business-domain"
+
+/** The driver's reasons in the words the fixture driver-app form gives them. */
+const DRIVER_REASON_OPTION_LABELS: Readonly<Record<DriverPickupReason, string>> = {
+  inaccessible: "Access unavailable",
+  contamination: "Contamination",
+  "not-presented": "Container not presented",
+  capacity: "Capacity or weight limit",
+  safety: "Safety issue",
+  other: "Other governed reason",
+}
 
 const actionExecutions: Record<string, BusinessFormExecution> = {
   "route-studio.routes": {
@@ -426,14 +438,7 @@ function enhanceField(
     enhanced = {
       ...enhanced,
       relation: undefined,
-      options: [
-        { value: "inaccessible", label: "Access unavailable" },
-        { value: "contamination", label: "Contamination" },
-        { value: "not-presented", label: "Container not presented" },
-        { value: "capacity", label: "Capacity or weight limit" },
-        { value: "safety", label: "Safety issue" },
-        { value: "other", label: "Other governed reason" },
-      ],
+      options: DRIVER_PICKUP_REASONS.map((value) => ({ value, label: DRIVER_REASON_OPTION_LABELS[value] })),
     }
   }
 

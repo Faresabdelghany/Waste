@@ -7,23 +7,18 @@
 // and puts the bytes straight to Storage before it sends the command; the
 // office asks `GET /pickups/:id/proof-objects` for read URLs of a stop's
 // objects, behind its project fence. A URL lapses; a key does not.
+import { IMAGE_EXTENSIONS } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
-import { OBJECT_EXTENSIONS, ObjectKey } from "./execution"
+import { ObjectKey } from "./execution"
 import { Id } from "./ids"
-
-/** The one private bucket proofs' bytes live in. */
-export const PROOF_BUCKET = "proofs"
-
-/** The largest object the bucket takes, its own refusal of anything larger: a phone's photo as the Driver App sends it, about 1600 px of JPEG, with room to spare; a signature is a few kilobytes. */
-export const PROOF_OBJECT_MAX_BYTES = 2 * 1024 * 1024
 
 /** `POST /driver/uploads`: the object of a command of the device's own, on a route assigned to the driver, in one of the bucket's formats. The API names the key. */
 export const ProofUploadRequest = z.strictObject({
   routeId: Id,
   commandId: Id,
-  extension: z.enum(OBJECT_EXTENSIONS),
+  extension: z.enum(IMAGE_EXTENSIONS),
 })
 export type ProofUploadRequest = z.infer<typeof ProofUploadRequest>
 

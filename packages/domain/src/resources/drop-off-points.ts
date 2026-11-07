@@ -20,6 +20,12 @@ import type { DropOffPointStatus } from "./vocabulary"
 /** The status a point is on the public map in; a draft is the office's alone and a closed one is kept for the record. */
 export const ON_THE_MAP: DropOffPointStatus = "active"
 
+/** The most dated exceptions a point's set may name: a year of them, one a day. */
+export const OPENING_EXCEPTIONS_MAX = 366
+
+/** How many days of opening the public map carries for a point: this week, from today on the project's clock. */
+export const DROP_OFF_WEEK_DAYS = 7
+
 /** One opening window on a day. */
 export type OpeningWindow = { opensAt: string; closesAt: string }
 

@@ -8,7 +8,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { AccessCredential, FrequentVisitors, ONE_HOLDER, SiteVisit, SiteVisitCheckInAnswer, VisitAddresses, VisitSites, type VisitIdentifier } from "@waste/contracts/site-visits"
+import { AccessCredential, FrequentVisitors, SiteVisit, SiteVisitCheckInAnswer, VisitAddresses, VisitSites, type VisitIdentifier } from "@waste/contracts/site-visits"
 import { VisitRule } from "@waste/contracts/visit-rules"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { Refused } from "@waste/domain/refusal"
@@ -22,6 +22,7 @@ import { outboxEvent } from "@waste/db/schema/execution"
 import { priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
+import { ONE_HOLDER } from "@waste/domain/visits/charges"
 import { and, asc, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"

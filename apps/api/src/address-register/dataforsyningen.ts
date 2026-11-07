@@ -16,8 +16,8 @@
 // existed when this was written (#375) — so the first call with the owner's
 // token confirms them; anything else the gateway answers is
 // `RegisterUnavailable`, never a guess.
-import { ADDRESS_ATTRIBUTION, ADDRESS_SEARCH_MAX, type Address, type AddressMatch } from "@waste/contracts/addresses"
-import { addressDesignation, type AddressParts } from "@waste/domain/registry/address"
+import { type Address, type AddressMatch } from "@waste/contracts/addresses"
+import { ADDRESS_ATTRIBUTION, ADDRESS_SEARCH_MAX, addressDesignation, type AddressParts } from "@waste/domain/registry/address"
 import * as z from "zod"
 
 import { RegisterUnavailable, type AddressRegister } from "./register"

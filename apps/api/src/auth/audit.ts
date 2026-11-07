@@ -6,10 +6,10 @@
 // reason any script), trimmed, and bounded like a paragraph — a blank one is
 // no reason, one past the bound or one that does not decode a 400 naming the
 // header, before the handler runs, so nothing is written under it.
-import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import type { Tx } from "@waste/db/client"
 import { actAs } from "@waste/db/tenant"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
+import { PARAGRAPH_MAX } from "@waste/domain/text"
 
 import { invalidRequest } from "../problem"
 import type { Principal } from "./principal"

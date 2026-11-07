@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { A_PERIOD_ENDS, PRICED_TOGETHER, pricedWhole } from "@waste/domain/finance/settlements"
 import { SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
+import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
 
-import { A_PERIOD_ENDS, PRICED_TOGETHER, pricedWhole, Settlement, SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementLine, SettlementListQuery, SettlementReopen } from "../settlements"
-import { ENDS_AFTER_IT_STARTS } from "../validity"
+import { Settlement, SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementLine, SettlementListQuery, SettlementReopen } from "../settlements"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"

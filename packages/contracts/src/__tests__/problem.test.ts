@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BLANK_PROBLEM_TYPE, NO_ACTIVE_ACCOUNT, PROBLEM_MEDIA_TYPE, Problem, ProblemFieldError } from "../problem"
+import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
+import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
+
+import { Problem, ProblemFieldError } from "../problem"
 
 describe("Problem", () => {
   test("is a type, a title and the status, with an optional detail", () => {

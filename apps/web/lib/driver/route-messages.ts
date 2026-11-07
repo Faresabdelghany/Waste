@@ -7,12 +7,10 @@
 // shown that the server has not answered: the box keeps the text until the
 // API took it.
 import type { RouteMessage } from "@waste/contracts/route-messages"
+import { routeMessageIssue } from "@waste/domain/execution/route-messages"
 import { ID_RANDOM_BYTES, mintId } from "@waste/domain/ids"
 
 import { get, post, type ApiClient } from "../api/client"
-
-/** The longest message, as the contracts bound it: spelled again, since the Driver App imports the contracts as types only, and held equal by a test. */
-export const DRIVER_MESSAGE_MAX = 1000
 
 export const readDriverRouteMessages = (client: ApiClient, routeId: string): Promise<RouteMessage[]> => get<RouteMessage[]>(client, `/driver/routes/${encodeURIComponent(routeId)}/messages`)
 
@@ -24,10 +22,7 @@ export const sendDriverRouteMessage = (client: ApiClient, routeId: string, messa
   post<RouteMessage>(client, `/driver/routes/${encodeURIComponent(routeId)}/messages`, { id: message.id, body: message.body.trim() }).then((answer) => answer.body)
 
 /** Whether the text may be sent: something, and not past the bound. */
-export const sendable = (text: string): boolean => {
-  const trimmed = text.trim()
-  return trimmed.length > 0 && trimmed.length <= DRIVER_MESSAGE_MAX
-}
+export const sendable = (text: string): boolean => routeMessageIssue(text) === null
 
 /** Who wrote a message, as the driver reads it: the office, or themselves. */
 export const authorLine = (message: Pick<RouteMessage, "author" | "senderName">): string => (message.author === "driver" ? "You" : `Office · ${message.senderName}`)

@@ -16,15 +16,18 @@
 //
 // An inspection is a ledger row: appended under the installation, by the
 // account that recorded it, never rewritten.
+import { validityOrdered } from "@waste/domain/periods"
+import { NEXT_INSPECTION_AFTER, TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import { TANK_INSPECTION_OUTCOMES, TANK_KINDS, TANK_OUTLETS } from "@waste/domain/registry/vocabulary"
+import { changesSomething } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
+import { PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, validityOrdered, Validity } from "./validity"
+import { endsAfterItStarts, Validity } from "./validity"
 
 export const TankKind = z.enum(TANK_KINDS)
 export type TankKind = z.infer<typeof TankKind>
@@ -32,9 +35,6 @@ export const TankOutlet = z.enum(TANK_OUTLETS)
 export type TankOutlet = z.infer<typeof TankOutlet>
 export const TankInspectionOutcome = z.enum(TANK_INSPECTION_OUTCOMES)
 export type TankInspectionOutcome = z.infer<typeof TankInspectionOutcome>
-
-/** The longest interval a register takes between emptyings: ten years, as the database's check. */
-export const TANK_INTERVAL_MONTHS_MAX = 120
 
 /** Whole months between emptyings: 12 for a home, 24 for a holiday home, as the regulation says. */
 export const EmptyingIntervalMonths = z.int().min(1).max(TANK_INTERVAL_MONTHS_MAX)
@@ -117,8 +117,6 @@ export const TankInspection = z.object({
   recordedBy: Id,
 })
 export type TankInspection = z.infer<typeof TankInspection>
-
-export const NEXT_INSPECTION_AFTER = "nextInspectionOn comes after inspectedOn"
 
 export const TankInspectionCreate = z
   .strictObject({

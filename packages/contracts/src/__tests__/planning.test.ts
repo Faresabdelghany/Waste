@@ -1,32 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  HOLIDAY_POLICIES,
-  PLANNING_AREA_PURPOSES,
-  RECURRENCE_FREQUENCIES,
-  ROUTE_SCHEME_STATUSES,
-  SCHEME_EDIT_POLICIES,
-  SERVICE_DAYS,
-  SERVICE_TYPES,
-  STOP_SOURCES,
-  WEEK_ROTATIONS,
-} from "@waste/domain/planning/vocabulary"
+import { eachOnce } from "@waste/domain/requests"
 
-import {
-  EACH_DAY_ONCE,
-  eachOnce,
-  HolidayPolicy,
-  PlanningAreaPurpose,
-  RecurrenceFrequency,
-  RouteSchemeStatus,
-  SchemeEditPolicy,
-  ServiceDay,
-  ServiceDays,
-  ServiceType,
-  StopSource,
-  WeekRotation,
-} from "../planning"
+import { EACH_DAY_ONCE, HOLIDAY_POLICIES, PLANNING_AREA_PURPOSES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
+
+import { HolidayPolicy, PlanningAreaPurpose, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceDays, ServiceType, StopSource, WeekRotation } from "../planning"
 import { refusal } from "./expect"
 
 describe("the planning enums", () => {

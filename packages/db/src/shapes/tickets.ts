@@ -11,7 +11,7 @@
 // Every status, kind and visibility column is text with a CHECK in the
 // database and an enum on the wire, so the row's string is asserted to the
 // vocabulary's type here and nowhere else.
-import { ticketLabel } from "@waste/contracts/resolution"
+import { ticketLabel } from "@waste/domain/numbering"
 import type { TicketFieldValues } from "@waste/contracts/ticket-types"
 import type { Ticket, TicketEvent, TicketLinks } from "@waste/contracts/tickets"
 import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"

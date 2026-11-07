@@ -11,7 +11,9 @@
 // map reads the days by, so a form and the API refuse in the same words.
 // Times are `HH:MM` on the project's clock. A point open always keeps any
 // weekly hours it had, which are not read while it is.
-import { exceptionIssues, hoursIssues } from "@waste/domain/resources/drop-off-points"
+import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
+import { changesSomething, eachOnce, SET_MAX } from "@waste/domain/requests"
+import { exceptionIssues, hoursIssues, OPENING_EXCEPTIONS_MAX } from "@waste/domain/resources/drop-off-points"
 import * as z from "zod"
 
 import { IsoDate, IsoTime } from "./dates"
@@ -19,14 +21,9 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ServiceDay } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { somethingToChange, stamped } from "./resource"
 import { DropOffPointKind, DropOffPointStatus } from "./resources"
 import { Label, Paragraph } from "./text"
-
-/** The most fractions or windows a set may name: a form's list, not an import. */
-const SET_MAX = 200
-/** The most exceptions a set may name: a year of them, one a day. */
-const EXCEPTIONS_MAX = 366
 
 /** A weekday's window on the project's clock. */
 export const WeeklyWindow = z.strictObject({ weekday: ServiceDay, opensAt: IsoTime, closesAt: IsoTime })
@@ -35,8 +32,6 @@ export type WeeklyWindow = z.infer<typeof WeeklyWindow>
 /** A dated exception: its window, or both times null for closed all day, and why. */
 export const OpeningException = z.strictObject({ date: IsoDate, opensAt: IsoTime.nullable(), closesAt: IsoTime.nullable(), note: Label.nullable() })
 export type OpeningException = z.infer<typeof OpeningException>
-
-export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 
 const WasteFractionIds = z.array(Id).max(SET_MAX).refine((ids) => eachOnce(ids), { message: EACH_FRACTION_ONCE })
 /** Whether every time of a set is `HH:MM`: its windows are judged together only once each is, so a time is refused once, at itself. */
@@ -52,7 +47,7 @@ const Hours = z
   })
 const Exceptions = z
   .array(OpeningException)
-  .max(EXCEPTIONS_MAX)
+  .max(OPENING_EXCEPTIONS_MAX)
   .superRefine((exceptions, context) => {
     if (!clocked(exceptions.flatMap((exception) => [exception.opensAt, exception.closesAt]))) return
     for (const issue of exceptionIssues(exceptions)) context.addIssue({ code: "custom", message: issue })

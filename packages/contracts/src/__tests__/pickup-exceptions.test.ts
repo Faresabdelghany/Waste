@@ -1,20 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CODE_WITH_CONTAMINATION, PickupCorrection } from "../pickups"
-import {
-  ContaminantCode,
-  ContaminantCodeCreate,
-  ContaminantCodeFractionsSet,
-  ContaminantCodePatch,
-  PICKUP_EXCEPTION_HISTORY_MAX,
-  PickupException,
-  PickupExceptionHistory,
-  PickupExceptionRule,
-  PickupExceptionRuleCreate,
-  PickupExceptionRulePatch,
-  REASON_AND_CODE,
-} from "../pickup-exceptions"
+import { CODE_WITH_CONTAMINATION } from "@waste/domain/execution/office-stops"
+import { PICKUP_EXCEPTION_HISTORY_MAX, REASON_AND_CODE } from "@waste/domain/execution/pickup-exceptions"
+
+import { PickupCorrection } from "../pickups"
+import { ContaminantCode, ContaminantCodeCreate, ContaminantCodeFractionsSet, ContaminantCodePatch, PickupException, PickupExceptionHistory, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRulePatch } from "../pickup-exceptions"
 
 const ID = "01a0d2a4-a280-7001-8000-000000000001"
 const OTHER = "01a0d2a4-a280-7001-8000-000000000002"

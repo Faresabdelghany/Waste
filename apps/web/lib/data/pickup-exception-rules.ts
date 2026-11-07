@@ -13,6 +13,7 @@
 // field, in the API's sentence.
 import type { ContaminantCode, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRulePatch } from "@waste/contracts/pickup-exceptions"
 import type { Product } from "@waste/contracts/catalogue"
+import { PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EXCEPTION_WINDOW_DAYS, REASON_AND_CODE, reasonAndCode } from "@waste/domain/execution/pickup-exceptions"
 import { PICKUP_EXCEPTION_REASONS, type PickupOutcome } from "@waste/domain/execution/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
@@ -21,11 +22,6 @@ import { statusLabel } from "../api/records/adapter"
 
 /** The reason and code pickers' value for any: the wire's null. */
 export const ANY = "any"
-
-/** The bounds the contracts hold a rule to, spelled again since the web imports no zod; a test holds them to the contracts. */
-export const FREE_COUNT_MAX = 100
-export const WINDOW_DAYS_MAX = 3660
-export const LADDER_MAX = 10
 
 export type RuleOption = { value: string; label: string }
 
@@ -38,13 +34,11 @@ export const RULE_OUTCOME_OPTIONS: readonly RuleOption[] = [
 
 export const RULE_REASON_OPTIONS: readonly RuleOption[] = [{ value: ANY, label: "Any of the customer's reasons" }, ...PICKUP_EXCEPTION_REASONS.map((reason) => ({ value: reason, label: statusLabel(reason) }))]
 
-export const FREE_COUNT_SENTENCE = `Give the free count as a whole number from 0 to ${FREE_COUNT_MAX}`
-export const WINDOW_SENTENCE = `Give the window as a whole number of days from 1 to ${WINDOW_DAYS_MAX}`
-export const LADDER_SENTENCE = `Charge between 1 and ${LADDER_MAX} products, picking one on every step`
+export const FREE_COUNT_SENTENCE = `Give the free count as a whole number from 0 to ${PICKUP_EXCEPTION_FREE_COUNT_MAX}`
+export const WINDOW_SENTENCE = `Give the window as a whole number of days from ${PICKUP_EXCEPTION_WINDOW_DAYS.min} to ${PICKUP_EXCEPTION_WINDOW_DAYS.max}`
+export const LADDER_SENTENCE = `Charge between 1 and ${PICKUP_EXCEPTION_LADDER_MAX} products, picking one on every step`
 export const START_SENTENCE = "Give the first day the rule is in force"
 export const LAST_DAY_SENTENCE = "The last day in force comes on or after the first"
-/** The contracts' `REASON_AND_CODE`, spelled again; a test holds the two equal. */
-export const REASON_AND_CODE = "A tagged collection's rule names no reason, and a code goes with contamination or any reason"
 
 /** A rule as the form holds it: the picks and the numbers as typed, the ladder's steps by product id ("" for a step not picked yet), the end as the last day in. */
 export type RuleForm = {
@@ -99,11 +93,11 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** The parts a create and an edit share: the free count, the window, the ladder and the end, or the first field the API would refuse. */
 function termsOf(form: RuleForm): { freeCount: number; windowDays: number; ladder: string[]; validTo: string | null } | RuleRefusal {
-  const freeCount = wholeIn(form.freeCount, 0, FREE_COUNT_MAX)
+  const freeCount = wholeIn(form.freeCount, 0, PICKUP_EXCEPTION_FREE_COUNT_MAX)
   if (freeCount === null) return { field: "freeCount", message: FREE_COUNT_SENTENCE }
-  const windowDays = wholeIn(form.windowDays, 1, WINDOW_DAYS_MAX)
+  const windowDays = wholeIn(form.windowDays, PICKUP_EXCEPTION_WINDOW_DAYS.min, PICKUP_EXCEPTION_WINDOW_DAYS.max)
   if (windowDays === null) return { field: "windowDays", message: WINDOW_SENTENCE }
-  if (form.ladder.length === 0 || form.ladder.length > LADDER_MAX) return { field: "ladder", message: LADDER_SENTENCE }
+  if (form.ladder.length === 0 || form.ladder.length > PICKUP_EXCEPTION_LADDER_MAX) return { field: "ladder", message: LADDER_SENTENCE }
   const unpicked = form.ladder.findIndex((id) => id === "")
   if (unpicked !== -1) return { field: "ladder", step: unpicked, message: LADDER_SENTENCE }
   const lastDay = form.lastDay.trim()
@@ -116,7 +110,7 @@ export function ruleCreateBodyOf(projectId: string, form: RuleForm): PickupExcep
   const outcome = form.outcome as PickupOutcome
   const reason = form.reason === ANY ? null : (form.reason as PickupExceptionRuleCreate["reason"])
   const contaminantCodeId = form.contaminantCodeId === ANY ? null : form.contaminantCodeId
-  if ((outcome === "completed" && reason !== null) || (contaminantCodeId !== null && reason !== null && reason !== "contamination")) return { field: "reason", message: REASON_AND_CODE }
+  if (!reasonAndCode({ outcome, reason, contaminantCodeId })) return { field: "reason", message: REASON_AND_CODE }
   if (!ISO_DAY.test(form.validFrom.trim())) return { field: "validFrom", message: START_SENTENCE }
   const terms = termsOf({ ...form, validFrom: form.validFrom.trim() })
   if (isRuleRefusal(terms)) return terms

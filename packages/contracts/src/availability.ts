@@ -8,15 +8,18 @@
 // (the database's exclusion, a 409 naming the period already there).
 // Recording one is never refused for the work planned on its days; the
 // commands that name the driver or the vehicle afresh read these.
+import { dayWindowOrdered } from "@waste/domain/days"
+import { validityOrdered } from "@waste/domain/periods"
+import { changesSomething } from "@waste/domain/requests"
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { dayWindowIsOrdered, ProjectScopedListQuery } from "./queries"
+import { somethingToChange, stamped } from "./resource"
 import { Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, ValidityCreate } from "./validity"
 
 /** Why a driver is away. */
 export const DriverAbsenceReason = z.enum(DRIVER_ABSENCE_REASONS)
