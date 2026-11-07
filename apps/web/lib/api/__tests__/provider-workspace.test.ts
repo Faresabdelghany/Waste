@@ -12,14 +12,14 @@ import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
-import { grantKeyOf, type Grants } from "../grants"
-import { isLocalRefusal, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import type { Grants } from "../grants"
+import { isLocalRefusal, moduleKeyOf, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { serverModuleOf } from "../records/modules"
 import { teamModule, teamUserAdapter, userAdapter } from "../records/organisation"
 import { ticketAdapter } from "../records/tickets"
 import { clientOver, json, scripted } from "./scripted-fetch"
 
-const TEAM_KEY = grantKeyOf(TEAM_MODULE)
+const TEAM_KEY = moduleKeyOf(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)
 const providerId = "01a0d2a4-a280-7003-8000-000000000001"
 const projectId = "01a0d2a4-a280-7002-8000-000000000001"
 const routeId = "01a0d2a4-a280-7030-8000-000000000001"

@@ -29,7 +29,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { useGrants } from "@/components/auth/use-grants"
 import { useApiClient } from "@/components/waste/api-session-store"
+import { mayTake, type ModuleAction } from "@/lib/api/grants"
 import { useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useServerNames } from "@/components/waste/commands/use-command-support"
@@ -386,17 +388,26 @@ export function CredentialCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-/** Operate › Site visits' primary: the attendant's check-in, and the Likely trades beside it. */
+/** Site visits' primary actions, each under the grant its API route checks: Likely trades' `GET /site-visits/frequent`, the check-in's create. */
+export const SITE_VISITS_PRIMARY_ACTIONS = {
+  likelyTrades: { module: SITE_VISITS_MODULE, action: "view" },
+  checkIn: { module: SITE_VISITS_MODULE, action: "create" },
+} as const satisfies Record<string, ModuleAction>
+
+/** Operate › Site visits' primary: the attendant's check-in, and the Likely trades beside it, each where its grant is held. */
 export function SiteVisitsPrimarySurface({ label }: PrimarySurfaceProps) {
+  const grants = useGrants()
   return (
     <div className="flex flex-wrap gap-2">
-      <LikelyTradesSurface />
-      <Button size="sm" asChild>
-        <Link href={CHECK_IN_PATH}>
-          <Storefront className="h-4 w-4" weight="bold" />
-          {label}
-        </Link>
-      </Button>
+      {mayTake(grants, SITE_VISITS_PRIMARY_ACTIONS.likelyTrades) && <LikelyTradesSurface />}
+      {mayTake(grants, SITE_VISITS_PRIMARY_ACTIONS.checkIn) && (
+        <Button size="sm" asChild>
+          <Link href={CHECK_IN_PATH}>
+            <Storefront className="h-4 w-4" weight="bold" />
+            {label}
+          </Link>
+        </Button>
+      )}
     </div>
   )
 }

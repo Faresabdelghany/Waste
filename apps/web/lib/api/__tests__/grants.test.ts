@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 
-import { accountGrants, allows, grantKeyOf, mayOn, viewedModules, type Grants } from "../grants"
+import { accountGrants, allows, mayOn, viewedModules, type Grants } from "../grants"
 
 const charter = (key: SystemRoleKey): Grants => {
   const role = SYSTEM_ROLES.find((candidate) => candidate.key === key)
@@ -28,10 +28,6 @@ describe("the grants", () => {
   test("view the modules they grant `view` on", () => {
     assert.deepEqual([...viewedModules([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "improve.analytics", actions: [] }])], ["improve.performance"])
     assert.equal(viewedModules(undefined).size, 0)
-  })
-
-  test("name a workspace module by its `workspace.module` key", () => {
-    assert.equal(grantKeyOf({ workspaceId: "route-studio", moduleId: "routes" }), "route-studio.routes")
   })
 })
 

@@ -97,6 +97,8 @@ const restrictedWorkspaceDefinitions: Record<
         workspaceLabel: "Routes",
         navigationBasePath: "/service-provider-workspace/routes",
         showWorkspaceActions: true,
+        // Dispatch day and Balance day are the office's: each picks a project's day, and a provider's account works in no project.
+        showWorkspaceActionsOnApi: false,
         showFilters: true,
       },
       {

@@ -174,7 +174,7 @@ export type ServerModule = {
    * has new rows since, or its projects' day has turned since it was read.
    * None names itself or another such module (modules.ts' test).
    */
-  derivedFrom?: readonly string[]
+  derivedFrom?: readonly ModuleKey[]
   /** Whether its records are read on the project's day (a boundary in force, a container's serving): the store reads it again once that day turns (#232). */
   readsTheDay?: true
   /**
@@ -198,7 +198,7 @@ export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
   typeof value === "object" && value !== null && typeof (value as LocalRefusal).path === "string" && typeof (value as LocalRefusal).message === "string"
 
 /** `${workspaceId}.${moduleId}`, the key every store, link and relation uses. */
-export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string) => `${workspaceId}.${moduleId}`
+export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string): ModuleKey => `${workspaceId}.${moduleId}` as ModuleKey
 
 /** `<prefix>-<uuid>`: a resource's web id. */
 export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`

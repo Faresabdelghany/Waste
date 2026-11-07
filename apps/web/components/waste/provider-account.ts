@@ -6,7 +6,7 @@
 // a provider's account the ones the API gives a provider, where its role
 // allows them. Null while the adapter is off, before `/me` has answered, and
 // for an office account.
-import { grantKeyOf } from "@/lib/api/grants"
+import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { webIdVia } from "@/lib/api/records/references"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { commandOffered, providerWorkspaceOf, type ProviderWorkspace } from "@/lib/data/provider-workspace"
@@ -29,7 +29,7 @@ export function useIsProviderAccount(): boolean {
 export function useCommandOffered(module: ModuleLocation): (command: string) => boolean {
   const { apiConfigured, me } = useApiSession()
   const provider = apiConfigured && me !== null && me.serviceProvider !== null
-  return (command) => commandOffered({ provider, grants: me?.role.grants }, grantKeyOf(module), command)
+  return (command) => commandOffered({ provider, grants: me?.role.grants }, moduleKeyOf(module.workspaceId, module.moduleId), command)
 }
 
 /** A provider's web id, by its server id, through the resolver: the providers module's handle once read, its chip before. */

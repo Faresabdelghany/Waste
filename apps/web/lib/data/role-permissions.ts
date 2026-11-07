@@ -1,6 +1,6 @@
 import { ACTIONS, type Action } from "@waste/domain/access/modules"
-import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
+import { charterOf } from "@/lib/api/grants"
 import {
   businessWorkspaces,
   type WorkspaceId,
@@ -83,24 +83,17 @@ export function isRoleAccessMap(value: unknown): value is RoleAccessMap {
   )
 }
 
-// Seeded grants for the built-in roles, keyed by fixture role id, so the
-// permission matrix reflects each role's charter out of the box. The charters
-// themselves live in @waste/domain/access/system-roles, where the database
-// seed reads them too (Issue #70): one source for the grants a company starts
-// with, whether they are drawn as a matrix or written as `role_grant` rows.
-// The web's fixture roles are ided `role-<key>`; custom roles (and any unknown
-// id) start with nothing granted.
-const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = Object.fromEntries(
-  SYSTEM_ROLES.map((role) => [
-    `role-${role.key}`,
-    Object.fromEntries(role.grants.map((grant) => [grant.moduleKey, [...grant.actions]])),
-  ]),
-)
+const FIXTURE_ROLE_PREFIX = "role-"
 
+/**
+ * A role's seeded grants as the permission matrix draws them, by fixture role
+ * id, so the matrix reflects each role's charter out of the box. The charters
+ * live in @waste/domain/access/system-roles, where the database seed reads
+ * them too (Issue #70), read here through `charterOf`. The web's fixture
+ * roles are ided `role-<key>`; custom roles (and any unknown id) start with
+ * nothing granted. The map is the caller's own.
+ */
 export function defaultAccessForRole(roleId: string): RoleAccessMap {
-  const defaults = DEFAULT_ROLE_ACCESS[roleId]
-  if (!defaults) return {}
-  return Object.fromEntries(
-    Object.entries(defaults).map(([key, actions]) => [key, [...actions]]),
-  )
+  if (!roleId.startsWith(FIXTURE_ROLE_PREFIX)) return {}
+  return Object.fromEntries(charterOf(roleId.slice(FIXTURE_ROLE_PREFIX.length)).map((grant) => [grant.moduleKey, [...grant.actions]]))
 }

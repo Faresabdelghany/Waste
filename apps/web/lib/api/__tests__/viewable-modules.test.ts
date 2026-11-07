@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
-import { grantKeyOf, type Grants } from "../grants"
+import type { Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"
 import { MODULES_WITHOUT_ME, SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
 
@@ -25,12 +25,12 @@ describe("the switched modules a person's grants let the store read", () => {
   })
 
   test("are all of them, in SERVER_MODULES' order, for a provider's role that views everything, however its grants are listed", () => {
-    const everything: Grants = [...SERVER_MODULES].reverse().map((module) => ({ moduleKey: grantKeyOf(module), actions: ["view"] }))
+    const everything: Grants = [...SERVER_MODULES].reverse().map((module) => ({ moduleKey: moduleKeyOf(module.workspaceId, module.moduleId), actions: ["view"] }))
     assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES, { provider: true })), [...SERVER_MODULE_KEYS])
   })
 
   test("leave a provider's own team to a provider's account (#291 C24): the office's accounts are the access module's", () => {
-    const everything: Grants = SERVER_MODULES.map((module) => ({ moduleKey: grantKeyOf(module), actions: ["view"] }))
+    const everything: Grants = SERVER_MODULES.map((module) => ({ moduleKey: moduleKeyOf(module.workspaceId, module.moduleId), actions: ["view"] }))
     const team = "service-providers.service-provider-workspace"
     assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES)), SERVER_MODULE_KEYS.filter((key) => key !== team))
     assert.deepEqual(keysOf(MODULES_WITHOUT_ME), SERVER_MODULE_KEYS.filter((key) => key !== team))

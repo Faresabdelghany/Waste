@@ -43,8 +43,8 @@ import { useApiSession } from "@/components/waste/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/waste/provider-account"
 import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
-import { allows, grantKeyOf } from "@/lib/api/grants"
-import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
+import { allows } from "@/lib/api/grants"
+import { moduleKeyOf, statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
@@ -201,7 +201,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   // A sub-ticket is a create in this module: the create grant, and the office's alone.
   const { me } = useApiSession()
   const resolve = useServerResolver()
-  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, grantKeyOf({ workspaceId, moduleId }), "create")
+  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, moduleKeyOf(workspaceId, moduleId), "create")
 
   const value = (key: string) => (typeof live.submittedValues?.[key] === "string" ? (live.submittedValues[key] as string) : "")
   const projectId = value("projectId") || live.projectIds?.[0]

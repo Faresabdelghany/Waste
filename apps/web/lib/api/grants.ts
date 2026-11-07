@@ -6,6 +6,7 @@ import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 
 import type { ModuleLocation } from "../data/business-modules"
+import { moduleKeyOf } from "./records/adapter"
 
 /** A role's grants as /me answers them. */
 export type Grants = readonly Grant[]
@@ -18,16 +19,8 @@ export const allows = (grants: Grants | undefined, moduleKey: ModuleKey, action:
 export const viewedModules = (grants: Grants | undefined): ReadonlySet<ModuleKey> =>
   new Set((grants ?? []).filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
 
-/**
- * The grant a workspace module is read under: its `workspace.module` key,
- * which lib/data/__tests__/permission-catalogue.test.ts holds to the
- * vocabulary. A module of no workspace in the catalogue names no grant, and
- * nothing is allowed on it.
- */
-export const grantKeyOf = (location: ModuleLocation): ModuleKey => `${location.workspaceId}.${location.moduleId}` as ModuleKey
-
-/** The charter a seeded role starts with: what a fixture persona works under. */
-const charterOf = (key: SystemRoleKey): Grants => SYSTEM_ROLES.find((role) => role.key === key)?.grants ?? []
+/** The charter a seeded role starts with, by its key: what a fixture persona works under, and the matrix a seeded role starts from; nothing for any other key. */
+export const charterOf = (key: string): Grants => SYSTEM_ROLES.find((role) => role.key === key)?.grants ?? []
 
 /** The account a shell is signed in as: on the Pilot `/me`'s, null until it answers; in fixture mode the persona's seeded role, where it has one. */
 export type SignedInAccount = {
@@ -50,3 +43,10 @@ export function accountGrants(account: SignedInAccount): Grants | null {
 /** Whether the account may take the action on the module: its grants allow it, or nothing holds it back. */
 export const mayOn = (grants: Grants | null, moduleKey: ModuleKey, action: Action): boolean =>
   grants === null || allows(grants, moduleKey, action)
+
+/** An action on a workspace module: the grant an API route checks before it answers. */
+export type ModuleAction = { module: ModuleLocation; action: Action }
+
+/** `mayOn`, for an action on a workspace module. */
+export const mayTake = (grants: Grants | null, { module, action }: ModuleAction): boolean =>
+  mayOn(grants, moduleKeyOf(module.workspaceId, module.moduleId), action)

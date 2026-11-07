@@ -234,7 +234,7 @@ import { CollectionGroupsEditorDialog } from "@/components/waste/collection-grou
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryGranted, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -260,7 +260,8 @@ import {
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import { useGrants } from "@/components/auth/use-grants"
-import { grantKeyOf, mayOn } from "@/lib/api/grants"
+import { mayOn } from "@/lib/api/grants"
+import { moduleKeyOf } from "@/lib/api/records/adapter"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -932,7 +933,7 @@ export function BusinessWorkspace({
     // configured modules are kept so the workspace can still render its
     // frame around the access notice instead of crashing.
     const viewableModules = modules.filter((module) =>
-      mayOn(grants, grantKeyOf({ workspaceId: sourceWorkspace.id, moduleId: module.id }), "view"),
+      mayOn(grants, moduleKeyOf(sourceWorkspace.id, module.id), "view"),
     )
 
     return {
@@ -943,7 +944,7 @@ export function BusinessWorkspace({
   // The records a restricted shell shows, of all its module holds (the citizen portal's one property).
   const recordAllowed = useCallback((record: BusinessRecord) => allowedRecordIds === undefined || allowedRecordIds.includes(record.id), [allowedRecordIds])
   const hasRoleViewableModules = workspace.modules.some((module) =>
-    mayOn(grants, grantKeyOf({ workspaceId: workspace.id, moduleId: module.id }), "view"),
+    mayOn(grants, moduleKeyOf(workspace.id, module.id), "view"),
   )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   // The module a bare address opens on: the page's own, else the workspace's first.
@@ -1028,10 +1029,10 @@ export function BusinessWorkspace({
   const agreementPriceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
   const agreementProducts = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const productsViewed = !agreementProducts.notGranted
-  const hasGrant = (action: Action) => mayOn(grants, grantKeyOf({ workspaceId: workspace.id, moduleId: activeModule.id }), action)
+  const hasGrant = (action: Action) => mayOn(grants, moduleKeyOf(workspace.id, activeModule.id), action)
   // A grant on another module — Map Planning creates Service Areas, so it
   // follows the Service Areas module's create grant, not Plan's.
-  const hasGrantOn = (location: ModuleLocation, action: Action) => mayOn(grants, grantKeyOf(location), action)
+  const hasGrantOn = (location: ModuleLocation, action: Action) => mayOn(grants, moduleKeyOf(location.workspaceId, location.moduleId), action)
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
   // How a switched module is operated beyond its own forms (Issue #181): what
@@ -1432,8 +1433,12 @@ export function BusinessWorkspace({
     ? viewOptions.viewType
     : "table"
   const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create") && !keptOnApi
-  // A surface's own dialog stands with the create grant alone, whatever the fixture form (#186: Settlements').
-  const primary = primaryOf(commandSurface, effectiveShowPrimaryAction, canOpenBusinessForm && Boolean(formSchema))
+  // A surface's own dialog stands with its actions' grants — the create grant unless it names others — whatever the fixture form (#186: Settlements').
+  const primary = primaryOf(
+    commandSurface,
+    showPrimaryAction && !keptOnApi && primaryGranted(commandSurface, { workspaceId: workspace.id, moduleId: activeModule.id }, grants),
+    canOpenBusinessForm && Boolean(formSchema),
+  )
   const canCreateFromView =
     effectiveShowPrimaryAction &&
     formIsPrimary &&

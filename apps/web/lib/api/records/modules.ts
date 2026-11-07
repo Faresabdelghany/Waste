@@ -14,7 +14,7 @@
 
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
-import { grantKeyOf, viewedModules, type Grants } from "../grants"
+import { viewedModules, type Grants } from "../grants"
 import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
@@ -161,7 +161,7 @@ export function isServerBacked(workspaceId: WorkspaceId, moduleId: string): bool
 }
 
 /** The `workspace.module` keys switched so far, in load order. */
-export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map(grantKeyOf)
+export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))
 
 /**
  * The modules a person's grants let the store read, in the order given: those
@@ -178,7 +178,7 @@ export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map(grantKey
  */
 export function viewableModules(grants: Grants, modules: readonly ServerModule[], { provider = false }: { provider?: boolean } = {}): ServerModule[] {
   const viewed = viewedModules(grants)
-  return modules.filter((module) => (viewed.has(grantKeyOf(module)) || (module.alsoViewedUnder ?? []).some((key) => viewed.has(key))) && (provider || module.providersOnly !== true))
+  return modules.filter((module) => (viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)) || (module.alsoViewedUnder ?? []).some((key) => viewed.has(key))) && (provider || module.providersOnly !== true))
 }
 
 /** The modules tried where `/me` could not be read: every one an office account may be refused nothing by (#291 C24: a provider's own are its alone). */

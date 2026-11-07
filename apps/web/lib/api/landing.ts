@@ -38,6 +38,7 @@ import { PAGE_MODULE_IDS } from "../data/office-pages"
 import { navItems, type NavItemId } from "../data/sidebar"
 import { tabsShown } from "../insight/dashboard"
 import { viewedModules, type Grants } from "./grants"
+import { moduleKeyOf } from "./records/adapter"
 import type { SessionEnding } from "./session"
 
 /** The one page the gate never stands in front of. */
@@ -62,7 +63,7 @@ export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: (Pi
 function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
   if (id === "improve") return tabsShown(viewed).length > 0
   const shown = PAGE_MODULE_IDS[id]
-  const keys = shown === undefined ? modulesOf(id) : shown.map((moduleId) => `${id}.${moduleId}` as ModuleKey)
+  const keys = shown === undefined ? modulesOf(id) : shown.map((moduleId) => moduleKeyOf(id, moduleId))
   return keys.some((key) => viewed.has(key))
 }
 

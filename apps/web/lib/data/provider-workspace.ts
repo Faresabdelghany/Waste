@@ -13,7 +13,8 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { allows, grantKeyOf, type Grants } from "../api/grants"
+import { allows, type Grants } from "../api/grants"
+import { moduleKeyOf } from "../api/records/adapter"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "../api/records/provider-activities"
@@ -65,7 +66,7 @@ export const PATCH_RECORD = "patch"
 
 export const PROVIDER_COMMANDS: Readonly<Partial<Record<ModuleKey, readonly string[]>>> = {
   "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
-  [grantKeyOf(TEAM_MODULE)]: [DEACTIVATE_USER, REACTIVATE_USER],
+  [moduleKeyOf(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)]: [DEACTIVATE_USER, REACTIVATE_USER],
   // Its own proposals and notes (#474): withdrawn, completed and corrected; the office alone decides a proposal.
   "service-providers.activities": [WITHDRAW_ACTIVITY, COMPLETE_ACTIVITY, PATCH_RECORD],
 }
