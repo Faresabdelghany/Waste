@@ -27,9 +27,9 @@ import {
   PREVIEW_HORIZON_MONTHS,
   formatClockTime,
   formatOccurrenceDate,
-} from "@waste/domain/route-schemes/occurrences"
+} from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { sortServiceDays, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays, todayIso } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 

@@ -4,7 +4,7 @@
 // points are sorted by id first, so the same registry always draws the same
 // picture. Pure data logic — the map component only renders the result.
 
-import { avalancheHash } from "@waste/domain/route-schemes/hash"
+import { avalancheHash } from "@waste/domain/hash"
 import { worldPoint, type LngLat, type WorldPoint } from "@waste/domain/map-planning/geo"
 import { rankFractions, type MapPoint } from "@/lib/prototype/map-planning/points"
 

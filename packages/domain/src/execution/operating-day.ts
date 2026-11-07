@@ -2,7 +2,7 @@
 // #290): what the office's `reschedule` asks before it moves a route's
 // operating date.
 //
-// The domain's calendar rule is generation's (route-schemes/occurrences.ts),
+// The domain's calendar rule is generation's (planning/occurrences.ts),
 // read for one day: a holiday on the project's list is a day the scheme
 // collects on only under the `collect` policy, and a weekend day matters only
 // where the scheme does not serve that weekday — "a scheme whose service days
@@ -23,7 +23,7 @@
 // calendars.
 
 import type { HolidayPolicy } from "../planning/vocabulary"
-import type { SchemeCalendar } from "../route-schemes/occurrences"
+import type { SchemeCalendar } from "../planning/occurrences"
 import { formatShortDay, SERVICE_DAY_LABELS, type ServiceDay, serviceDayOf } from "../days"
 
 /** What a generated route's scheme says of a holiday and of its weekdays; null for the office's ad-hoc route, which has no scheme. */

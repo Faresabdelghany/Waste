@@ -1,4 +1,4 @@
-// Shared deterministic string hash for Route Scheme features. FNV-1a plus an
+// A stable string hash, for a spot or a colour a key always lands on. FNV-1a plus an
 // avalanche mix: the hashed keys (container ids, route identity keys) differ
 // only in trailing digits, and without the mix the outputs cluster.
 

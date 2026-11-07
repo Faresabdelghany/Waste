@@ -51,7 +51,7 @@ import { project } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { holidayReleases, WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
-import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { timeOf } from "@waste/db/shapes/times"
 

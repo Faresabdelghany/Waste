@@ -50,7 +50,7 @@ import {
   type StopMatchRule,
 } from "@/lib/prototype/route-schemes/matching"
 import { STOP_MATCH_VEHICLE_TYPES } from "@waste/fixtures/taxonomy"
-import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 

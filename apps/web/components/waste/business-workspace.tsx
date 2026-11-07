@@ -68,7 +68,7 @@ import type { Action } from "@waste/domain/access/modules"
 import { draftGroups } from "@/lib/prototype/route-schemes/draft"
 import { driverFormOptions } from "@/lib/data/driver-form-options"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
-import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
+import { HOLIDAY_POLICY_LABELS } from "@waste/domain/planning/occurrences"
 import {
   schemeAttention,
   schemeCanGenerateRoutes,
@@ -99,7 +99,7 @@ import {
   withDerivedSchemeContext,
   type SchemeRowSummary,
 } from "@/lib/prototype/route-schemes/scheme-list"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/planning/recurrence"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
@@ -2803,7 +2803,7 @@ export function BusinessWorkspace({
 
     // A scheme's recurrence is machine-readable in submittedValues (frequency,
     // serviceDays, weekRotation, effectiveFrom/To, plannedStartTime — the shape
-    // @waste/domain/route-schemes/recurrence reads); the facts get the one-line summary
+    // @waste/domain/planning/recurrence reads); the facts get the one-line summary
     // the record detail shows.
     const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
       let nextFacts = { ...record.facts }

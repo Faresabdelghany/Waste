@@ -1,7 +1,7 @@
 // A tank's last emptying (M11 of #293): its container's latest completed
 // stop, by the day its route ran, and the litres the driver recorded there.
 // The one reading the API's register answers and generation's due-from-last
-// cadence reckons from (`tankDueOn`, @waste/domain/route-schemes/due-from-last),
+// cadence reckons from (`tankDueOn`, @waste/domain/planning/due-from-last),
 // so the day a tank is due on the office's screen is the day the run plans
 // it from. A container with no completed stop is not in the map.
 import { and, desc, eq, inArray, sql } from "drizzle-orm"

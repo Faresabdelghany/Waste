@@ -10,7 +10,7 @@ import { isoWeek, NO_HOLIDAYS, serviceDayOf } from "../../days"
 import { cadenceOn, matchesRecurrence, recurrenceFromValues, type SchemeRecurrence } from "../recurrence"
 import { SCHEME_SEASONS_KEY, seasonProblems, seasonsFromValues, seasonsValue, storedSeasonsFromValues, type StoredSchemeSeason } from "../scheme-seasons"
 import { isMonthDay, overlappingSeasons, seasonContains, seasonLastDay, seasonOn, seasonsCoverYear, seasonSpanLabel, seasonStartOf, seasonsOverlap, type SchemeSeason } from "../seasons"
-import { schemeFrequencyReconciliationWarnings } from "../../planning/frequency-reconciliation"
+import { schemeFrequencyReconciliationWarnings } from "../frequency-reconciliation"
 
 const calendar = { holidays: NO_HOLIDAYS, weekend: ["saturday", "sunday"] as const }
 

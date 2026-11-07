@@ -36,17 +36,17 @@ import {
   draftOccurrenceInput,
   type DraftRecurrenceFields,
 } from "@/lib/prototype/route-schemes/draft"
-import { formatOccurrenceDate, type Occurrence } from "@waste/domain/route-schemes/occurrences"
+import { formatOccurrenceDate, type Occurrence } from "@waste/domain/planning/occurrences"
 import { formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import {
   DEFAULT_SIMULATION_COUNT,
   SIMULATION_COUNTS,
   simulateOccurrences,
   type OccurrenceChange,
   type SimulatedOccurrence,
-} from "@waste/domain/route-schemes/simulation"
+} from "@waste/domain/planning/simulation"
 import { cn } from "@/lib/utils"
 
 import type { WizardModel } from "./wizard-model"

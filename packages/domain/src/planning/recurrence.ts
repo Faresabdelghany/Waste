@@ -18,7 +18,7 @@
 // database and the contracts read them too; the day arithmetic is ../days.
 
 import { addDays, daysBetween, isIsoDate, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
-import { RECURRENCE_FREQUENCIES, type WEEK_ROTATIONS } from "../planning/vocabulary"
+import { RECURRENCE_FREQUENCIES, type WEEK_ROTATIONS } from "./vocabulary"
 import { seasonsFromValues } from "./scheme-seasons"
 import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
 

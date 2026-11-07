@@ -9,9 +9,9 @@
 import { SCHEME_EDIT_POLICY_LABELS } from "./creation"
 import type { CollectionGroup } from "./groups"
 import { containerTypeShortLabel } from "./matching"
-import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
+import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/planning/recurrence"
 import { count } from "@waste/domain/text"
 
 export type SchemeDraftChange = {

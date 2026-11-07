@@ -30,7 +30,7 @@ import {
   schemeValidationGroups,
 } from "./groups"
 import { vehicleTypeOfRecord } from "./matching"
-import { recurrenceFromValues, serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, serviceDaysFromValues } from "@waste/domain/planning/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import {

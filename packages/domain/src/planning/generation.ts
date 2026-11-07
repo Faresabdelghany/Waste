@@ -7,7 +7,7 @@
 // group's drift stamp moved. The job in `apps/worker` is the I/O shell around
 // these: it reads the rows, calls this module, and writes what it answers.
 //
-// The dates are `generateOccurrences`'s (route-schemes/occurrences.ts), the
+// The dates are `generateOccurrences`'s (planning/occurrences.ts), the
 // ONE implementation the guided setup's preview, the API's occurrence read
 // and this module share, so a preview row and a generated route agree by
 // construction; `planRoutes` wraps it and never re-derives a date. The walk
@@ -74,12 +74,12 @@
 // latest rows are the two latest distinct sets, which is what
 // `containerDriftBetween` compares.
 import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
-import { tankWaits, type TankCadence, type TankGate } from "../route-schemes/due-from-last"
-import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
-import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
+import { tankWaits, type TankCadence, type TankGate } from "./due-from-last"
+import { holidayLabel, holidayNamesFor, withCarriedNames } from "./holiday-names"
+import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "./occurrences"
 import { addDays, formatShortDay, type HolidayList, NO_HOLIDAYS, serviceDayOf } from "../days"
 import { lastDayIn } from "../periods"
-import type { SchemeRecurrence } from "../route-schemes/recurrence"
+import type { SchemeRecurrence } from "./recurrence"
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
 /* --------------------------------- window ---------------------------------- */

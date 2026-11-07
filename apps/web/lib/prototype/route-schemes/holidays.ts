@@ -7,7 +7,7 @@
 // import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
-import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
+import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/planning/occurrences"
 import { isIsoDate } from "@waste/domain/days"
 import { stringValue } from "./validation"
 

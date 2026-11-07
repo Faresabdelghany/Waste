@@ -9,7 +9,7 @@
 // months between emptyings and, for a tank emptied before the platform knew
 // it, the day that was. The next emptying is reckoned from the last completed
 // stop of its container, else from that day (`tankDueOn`,
-// @waste/domain/route-schemes/due-from-last); generation reads it and plans
+// @waste/domain/planning/due-from-last); generation reads it and plans
 // the container from its due date on, once. In force over its validity, a
 // tank taken out of use ending there; a container is one tank's for good.
 //

@@ -56,7 +56,7 @@ import {
 } from "@/lib/prototype/route-schemes/matching"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { allowedContainerTypes } from "@/lib/prototype/route-schemes/scope"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { licenceDayOf, timezoneOfProject } from "@/lib/data/route-schemes"
 import { cn } from "@/lib/utils"

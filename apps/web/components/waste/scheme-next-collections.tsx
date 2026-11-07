@@ -10,9 +10,9 @@
 import { useEffect, useState } from "react"
 
 import type { Occurrence } from "@waste/contracts/route-schemes"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/planning/recurrence"
 import { addDays, formatShortDay } from "@waste/domain/days"
-import { SCHEME_SEASONS_KEY } from "@waste/domain/route-schemes/scheme-seasons"
+import { SCHEME_SEASONS_KEY } from "@waste/domain/planning/scheme-seasons"
 
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"

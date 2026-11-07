@@ -92,7 +92,7 @@ import {
 } from "@waste/domain/planning/schemes"
 import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
 import { changesSomething, eachOnce } from "@waste/domain/requests"
-import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
+import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, MONTH_DAY_SOURCE, overlappingSeasons, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/planning/seasons"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"

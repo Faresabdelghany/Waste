@@ -28,7 +28,7 @@ import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-creat
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@/lib/prototype/route-schemes/groups"
 import { effectiveSchemeStatus, schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
-import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
+import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/planning/scheme-seasons"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { schemeValuesOfDraft } from "../../data/route-schemes"

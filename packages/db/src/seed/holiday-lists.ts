@@ -2,7 +2,7 @@
 // 2026-11-05): one per list its projects name — Danish for Copenhagen
 // Central, Egyptian for Cairo Operations — holding the fixtures' days, 22 and
 // 9, named as the list's lookup names them (`holidayNamesFor`,
-// @waste/domain/route-schemes/holiday-names) and unnamed where it does not:
+// @waste/domain/planning/holiday-names) and unnamed where it does not:
 // Cairo's two Eid days of 2027. They are the days the seed once wrote on the
 // projects' Collection Calendars, which the Holiday Lists' migration carried onto the lists
 // before the calendars' holidays were dropped, so a run after the migrations
@@ -13,7 +13,7 @@
 // /holiday-lists/:id/holidays` replaces whole, written through `replaceSets`.
 // The lists are written before the projects, whose `holiday_list` is a key
 // into them.
-import { holidayNamesFor, knownHolidayListCountry } from "@waste/domain/route-schemes/holiday-names"
+import { holidayNamesFor, knownHolidayListCountry } from "@waste/domain/planning/holiday-names"
 import { and, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"

@@ -38,7 +38,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { project } from "@waste/db/schema/organisation"
 import { intervalCollectionsPerWeek, schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
-import { schemeSeasonsOf } from "@waste/domain/route-schemes/scheme-seasons"
+import { schemeSeasonsOf } from "@waste/domain/planning/scheme-seasons"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 /** What the reconciliation reads of one scheme: its row's recurrence and period, its groups, and what its runs matched. */

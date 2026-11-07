@@ -33,8 +33,8 @@ import {
   stopSelectionMode,
   type StopMatchRule,
 } from "./matching"
-import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
-import { isRecurrenceFrequency, parseServiceDays, type RecurrenceFrequency, type WeekRotation } from "@waste/domain/route-schemes/recurrence"
+import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/planning/occurrences"
+import { isRecurrenceFrequency, parseServiceDays, type RecurrenceFrequency, type WeekRotation } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import { isSchemeServiceType } from "./scope"
 

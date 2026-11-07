@@ -9,8 +9,8 @@
 // result here.
 
 import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "../days"
-import { occurrencesPerWeek, RECURRENCE_FREQUENCY_LABELS, RECURRENCE_WEEKLY_RATES, sortServiceDays, type RecurrenceFrequency } from "../route-schemes/recurrence"
-import { seasonsCoverYear, seasonSpanLabel, type SchemeSeason } from "../route-schemes/seasons"
+import { occurrencesPerWeek, RECURRENCE_FREQUENCY_LABELS, RECURRENCE_WEEKLY_RATES, sortServiceDays, type RecurrenceFrequency } from "./recurrence"
+import { seasonsCoverYear, seasonSpanLabel, type SchemeSeason } from "./seasons"
 
 /** A promise's interval, as `service_frequency` stores it: collections per week, and the weeks or days between them. null collections per week is on demand. */
 export type FrequencyInterval = {

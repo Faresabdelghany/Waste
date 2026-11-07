@@ -7,9 +7,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { SchemeCalendar } from "../../route-schemes/occurrences"
-import type { TankGate } from "../../route-schemes/due-from-last"
-import type { SchemeRecurrence } from "../../route-schemes/recurrence"
+import type { SchemeCalendar } from "../occurrences"
+import type { TankGate } from "../due-from-last"
+import type { SchemeRecurrence } from "../recurrence"
 import {
   compatibilityKey,
   holidayListOf,

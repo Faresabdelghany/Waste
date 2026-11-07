@@ -22,13 +22,10 @@
 // targets: a scheme whose service days include Saturday collects on Saturdays.
 
 import { addDays, addMonthsRolling, formatShortDay, type HolidayList, isIsoDate, isoWeek, MONTH_SHORT_LABELS, type ServiceDay, serviceDayOf } from "../days"
-import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../planning/vocabulary"
+import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "./vocabulary"
 import { matchesRecurrence, type SchemeRecurrence } from "./recurrence"
 import { seasonOn } from "./seasons"
 
-// The list lives in ../planning/vocabulary since Issue #97, where the database
-// and the contracts read it too; re-exported so its importers did not move.
-export { HOLIDAY_POLICIES }
 export type HolidayPolicy = (typeof HOLIDAY_POLICIES)[number]
 
 export const HOLIDAY_POLICY_LABELS: Record<HolidayPolicy, string> = {
@@ -52,8 +49,6 @@ export type SchemeCalendar = {
   weekend: readonly ServiceDay[]
 }
 
-// The list lives in ../planning/vocabulary since the #97 review round, where the contracts read it too.
-export { OCCURRENCE_STATUSES }
 export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
 
 export type Occurrence = {

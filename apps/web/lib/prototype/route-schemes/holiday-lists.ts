@@ -9,7 +9,7 @@
 // never was. Pure data logic.
 
 import { formatValidity } from "./calendar-list"
-import type { HolidayNameLookup } from "@waste/domain/route-schemes/holiday-names"
+import type { HolidayNameLookup } from "@waste/domain/planning/holiday-names"
 import { serializeHolidayNames } from "./holidays"
 import { addDays, isIsoDate } from "@waste/domain/days"
 

@@ -4,8 +4,8 @@
 // occurrence tests keep their own copy beside them.
 
 import type { ServiceDay } from "@waste/domain/days"
-import type { SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
-import type { SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
+import type { SchemeCalendar } from "@waste/domain/planning/occurrences"
+import type { SchemeRecurrence } from "@waste/domain/planning/recurrence"
 
 // Armed Forces Day (Tue), Coptic Christmas (Thu), Revolution Day (Mon), Eid
 // al-Fitr (Mon, Tue), Sinai Liberation Day (Sun).

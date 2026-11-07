@@ -1157,7 +1157,7 @@ export const operationsBusinessFormSchemas = [
           },
           {
             // Step 1's service type (issue #43): the container types a
-            // scheme may collect follow from it (@waste/domain/route-schemes/
+            // scheme may collect follow from it (lib/prototype/route-schemes/
             // scope) — the group editor offers only those and
             // checkCollectionGroups refuses a group outside them — so the
             // form gates on it as Guided Setup does.

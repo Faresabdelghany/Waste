@@ -41,7 +41,7 @@ import {
   type RouteEstimateStatus,
   type RouteMeasure,
 } from "@/lib/prototype/route-schemes/estimates"
-import { formatClockTime } from "@waste/domain/route-schemes/occurrences"
+import { formatClockTime } from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"

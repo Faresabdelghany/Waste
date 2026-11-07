@@ -9,7 +9,7 @@
 
 import type { CollectionGroup } from "./groups"
 import { containerTypeShortLabel } from "./matching"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 import { containerTypesOutsideServiceType } from "./scope"
 

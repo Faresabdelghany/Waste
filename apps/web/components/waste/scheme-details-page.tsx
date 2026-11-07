@@ -61,7 +61,7 @@ import { settingsHref } from "@/lib/data/settings-panes"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import { SCHEME_EDIT_POLICY_LABELS } from "@/lib/prototype/route-schemes/creation"
 import { schemeEditPolicy } from "@/lib/prototype/route-schemes/edit"
-import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
+import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/planning/occurrences"
 import { stopRuleSummary } from "@/lib/prototype/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/prototype/route-schemes/plan-ahead"
 import { schemeAreaName } from "@/lib/prototype/route-schemes/scheme-list"
@@ -79,7 +79,7 @@ import {
   withRouteWasteFractions,
   withStopServiceDate,
 } from "@/lib/prototype/route-schemes/scheme-tabs"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/planning/recurrence"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import { stringValue } from "@/lib/prototype/route-schemes/validation"
 import { recordCountLabel } from "@/lib/table-copy"

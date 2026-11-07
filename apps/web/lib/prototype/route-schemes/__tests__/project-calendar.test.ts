@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { egyptianHolidayName, holidayListFromDates, holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
-import { generateOccurrences, occurrencePreview } from "@waste/domain/route-schemes/occurrences"
+import { egyptianHolidayName, holidayListFromDates, holidayNamesFor } from "@waste/domain/planning/holiday-names"
+import { generateOccurrences, occurrencePreview } from "@waste/domain/planning/occurrences"
 import {
   NO_HOLIDAY_LIST_LABEL,
   projectCalendarLabel,

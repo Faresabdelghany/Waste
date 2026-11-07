@@ -7,7 +7,7 @@
 //
 // A scheme is one resource with its collection groups on it, and the record
 // is the prototype's scheme: the scheme's fields under the form's ids, and
-// the groups in the prototype's one group shape (@waste/domain/route-schemes/
+// the groups in the prototype's one group shape (lib/prototype/route-schemes/
 // groups) — the legacy single-assignment keys when one group runs every
 // service day, the explicit JSON under `group-<uuid>` ids otherwise, which is
 // what `collectionGroupsToValues` writes for the same groups on the browser's
@@ -75,9 +75,9 @@ import type {
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@/lib/prototype/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { SCHEME_API_WARNINGS_KEY } from "@/lib/prototype/route-schemes/lifecycle"
-import { parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { parseServiceDays, sortServiceDays } from "@waste/domain/planning/recurrence"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
-import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
+import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/planning/scheme-seasons"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"

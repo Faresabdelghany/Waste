@@ -21,7 +21,7 @@ import {
   recurrenceCadenceLabel,
   recurrenceFromValues,
   serviceDaysFromValues,
-} from "@waste/domain/route-schemes/recurrence"
+} from "@waste/domain/planning/recurrence"
 import { stringValue } from "./validation"
 
 /** A display fact, with blank and placeholder values treated as absent. */

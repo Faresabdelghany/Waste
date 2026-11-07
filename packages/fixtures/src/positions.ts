@@ -14,7 +14,7 @@
 // `pnpm db:seed` stores the point it derives for each demo property.
 
 import { offsetMetres, type LngLat, type LngLatBounds } from "@waste/domain/map-planning/geo"
-import { avalancheHash } from "@waste/domain/route-schemes/hash"
+import { avalancheHash } from "@waste/domain/hash"
 
 /** The default viewport centre: the sidebar identity is Copenhagen Central. */
 export const COPENHAGEN_CENTER: LngLat = { lng: 12.5683, lat: 55.6867 }

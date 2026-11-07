@@ -13,7 +13,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, splitList, typedString } from "../record-values"
 import { schemeLicenceDay } from "@waste/domain/planning/checks"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { addDays, isIsoDate, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
 import { lastDayIn } from "@waste/domain/periods"
 import { stringValue } from "./validation"

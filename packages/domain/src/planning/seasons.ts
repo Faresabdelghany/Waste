@@ -22,7 +22,7 @@
 // Pure date math over ISO `yyyy-mm-dd` strings and `mm-dd` month-days.
 
 import { MONTH_SHORT_LABELS } from "../days"
-import type { SeasonFrequency, WeekRotation } from "../planning/vocabulary"
+import type { SeasonFrequency, WeekRotation } from "./vocabulary"
 
 /** The most seasons a scheme may have: a form's list, and more than a year's quarters and halves need. The contracts bound a body by it. */
 export const SEASONS_MAX = 6

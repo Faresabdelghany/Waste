@@ -14,7 +14,7 @@ import {
   schemesInPlanning,
   type SchemeLifecycleStatus,
 } from "../route-schemes/lifecycle"
-import { recurrenceFromValues } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceFromValues } from "@waste/domain/planning/recurrence"
 import { convexHull, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
 import type { Gazetteer } from "@waste/fixtures/positions"
 import { containerLocation } from "./positions"

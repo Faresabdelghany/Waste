@@ -17,9 +17,9 @@ import {
 } from "./groups"
 import { schemesInPlanning } from "./lifecycle"
 import { vehicleTypeOfRecord } from "./matching"
-import type { OccurrencePreviewInput, SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import type { OccurrencePreviewInput, SchemeCalendar } from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import { occurrencesPerWeek, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
+import { occurrencesPerWeek, type SchemeRecurrence } from "@waste/domain/planning/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import {

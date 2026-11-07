@@ -15,7 +15,7 @@ import type {
 import { picksLetGoBy } from "@/lib/data/address-lookup"
 import { formReseeds, type FormSeedEdge } from "@/lib/data/business-form-seed"
 import { splitList } from "@/lib/prototype/record-values"
-import { nextServiceDates, recurrenceFromValues, recurrenceSentence } from "@waste/domain/route-schemes/recurrence"
+import { nextServiceDates, recurrenceFromValues, recurrenceSentence } from "@waste/domain/planning/recurrence"
 import { formatShortDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"

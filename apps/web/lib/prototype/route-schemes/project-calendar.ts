@@ -18,10 +18,10 @@ import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
-import { holidayListFromDates, holidayNamesFor, withCarriedNames } from "@waste/domain/route-schemes/holiday-names"
-import type { SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import { holidayListFromDates, holidayNamesFor, withCarriedNames } from "@waste/domain/planning/holiday-names"
+import type { SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { type HolidayList, NO_HOLIDAYS, type ServiceDay } from "@waste/domain/days"
-import { parseServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { parseServiceDays } from "@waste/domain/planning/recurrence"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
 
 /** The list name shown when the project has no holiday list. */

@@ -4,7 +4,7 @@
  * 2026-11-05): the list a project names and the project's weekend on the
  * project record (`configure.organization`, read by resolveProjectCalendar),
  * and each list's dated, named holidays on its own record among the
- * calendars (`configure.calendars`, @waste/domain/route-schemes/
+ * calendars (`configure.calendars`, lib/prototype/route-schemes/
  * holiday-list-records). This module is the one place that knows how a
  * list's entries become record writes.
  */
@@ -22,7 +22,7 @@ import {
   holidayEntryValues,
   type HolidayEntry,
 } from "@/lib/prototype/route-schemes/holiday-lists"
-import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
+import { holidayNamesForCountry } from "@waste/domain/planning/holiday-names"
 
 /* --------------------------- the company's lists --------------------------- */
 // Since 2026-11-05 a holiday list is the company's own record, one per

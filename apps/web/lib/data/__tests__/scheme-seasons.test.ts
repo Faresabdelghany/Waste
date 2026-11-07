@@ -4,8 +4,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { recurrenceFromValues } from "@waste/domain/route-schemes/recurrence"
-import { storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
+import { recurrenceFromValues } from "@waste/domain/planning/recurrence"
+import { storedSeasonsFromValues } from "@waste/domain/planning/scheme-seasons"
 
 import type { BusinessRecord } from "../business-modules"
 import { seasonLine, withSeasons } from "../scheme-seasons"

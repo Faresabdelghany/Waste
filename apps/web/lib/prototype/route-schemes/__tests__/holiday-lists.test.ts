@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { danishHolidayName, egyptianHolidayName, holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
+import { danishHolidayName, egyptianHolidayName, holidayNamesFor } from "@waste/domain/planning/holiday-names"
 import { holidayListEntries } from "../holiday-list-records"
 import { carryHolidaysToYear, holidayEntryIssue, holidayEntryValues, knownHolidaysOfYear } from "../holiday-lists"
 

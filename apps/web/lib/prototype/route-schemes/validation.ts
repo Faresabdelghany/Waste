@@ -6,7 +6,7 @@
 // submittedValues.
 
 import { schemeFrequencyReconciliationWarnings, type SchemeFrequencyReconciliationInput } from "@waste/domain/planning/frequency-reconciliation"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { addDays, isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
 
 /** Container selection carried by the wizard: one shared list, or one per day. */

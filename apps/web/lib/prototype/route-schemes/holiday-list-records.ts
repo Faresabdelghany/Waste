@@ -11,7 +11,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { parseHolidayDates } from "./calendar"
-import { holidayNamesForCountry } from "@waste/domain/route-schemes/holiday-names"
+import { holidayNamesForCountry } from "@waste/domain/planning/holiday-names"
 import type { HolidayEntry } from "./holiday-lists"
 import { HOLIDAY_NAMES_KEY, parseHolidayNames } from "./holidays"
 

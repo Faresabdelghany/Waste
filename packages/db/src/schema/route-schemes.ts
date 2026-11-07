@@ -68,7 +68,7 @@
 // cadence. That a scheme's seasons share no day is a rule over a cyclic
 // stretch no exclusion constraint spells; the API, the one writer, replaces
 // the set whole and refuses an overlap, and generation reads at most one
-// season on a date (`seasonOn`, @waste/domain/route-schemes/seasons).
+// season on a date (`seasonOn`, @waste/domain/planning/seasons).
 //
 // O21 of #290 gave the scheme its lifecycle's two columns: `plan_ahead_days`,
 // how far from tomorrow the nightly sweep keeps it planned (7 unless said, at
@@ -82,7 +82,7 @@
 // decides while the scheme plans.
 import { HOLIDAY_POLICIES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SEASON_FREQUENCIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
 import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
-import { MONTH_DAY_SOURCE } from "@waste/domain/route-schemes/seasons"
+import { MONTH_DAY_SOURCE } from "@waste/domain/planning/seasons"
 import { sql } from "drizzle-orm"
 import { boolean, check, integer, text, time, timestamp, unique, uuid } from "drizzle-orm/pg-core"
 

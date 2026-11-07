@@ -53,9 +53,9 @@ import {
   type OccurrencePreview,
   type OccurrencePreviewInput,
   type SchemeCalendar,
-} from "@waste/domain/route-schemes/occurrences"
+} from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { recurrenceCadenceLabel, serviceDaysRangeLabel, sortServiceDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
+import { recurrenceCadenceLabel, serviceDaysRangeLabel, sortServiceDays, type SchemeRecurrence } from "@waste/domain/planning/recurrence"
 import type { ServiceDay } from "@waste/domain/days"
 import type { SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 

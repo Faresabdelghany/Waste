@@ -8,9 +8,9 @@
 // API boundary and the check in the column cannot drift.
 //
 // Two lists moved here from the route-scheme modules that grew them —
-// `HOLIDAY_POLICIES` from route-schemes/occurrences.ts, which re-exports it,
-// and `SCHEME_EDIT_POLICIES` from the prototype's scheme creation. `SERVICE_DAYS`, the weekdays, is the calendar's (../days), which every
-// context's day arithmetic reads; it is listed here among the lists the
+// `HOLIDAY_POLICIES` from ./occurrences and `SCHEME_EDIT_POLICIES` from the
+// prototype's scheme creation. `SERVICE_DAYS`, the weekdays, is the
+// calendar's (../days), which every context's day arithmetic reads; it is listed here among the lists the
 // database and the contracts read. `RECURRENCE_FREQUENCIES` is the tuple the
 // existing `RecurrenceFrequency` union is now read off.
 // One list is the tokens of a display tuple the prototype still reads by

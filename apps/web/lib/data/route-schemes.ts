@@ -11,7 +11,7 @@ import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, sche
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { schemeGenerationRecorded } from "@/lib/prototype/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysFromValues } from "@waste/domain/planning/recurrence"
 import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 import { count } from "@waste/domain/text"

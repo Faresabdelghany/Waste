@@ -27,7 +27,7 @@ import {
   PREVIEW_HORIZON_MONTHS,
   formatOccurrenceDate,
   type OccurrencePreview,
-} from "@waste/domain/route-schemes/occurrences"
+} from "@waste/domain/planning/occurrences"
 import { SERVICE_DAY_LABELS, serviceDayOf } from "@waste/domain/days"
 
 import { OccurrenceStatusBadge } from "./occurrence-status-badge"

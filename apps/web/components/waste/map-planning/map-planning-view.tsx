@@ -86,7 +86,7 @@ import {
 } from "@/lib/prototype/map-planning/selection"
 import { selectionStatistics } from "@/lib/prototype/map-planning/statistics"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/planning/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"

@@ -28,7 +28,7 @@ import {
   stopSelectionMode,
   type StopMatchExclusion,
 } from "./matching"
-import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import {
   dayPlansFromValues,

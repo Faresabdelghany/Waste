@@ -6,7 +6,7 @@
 // and `recurrenceFromValues` reads it, so the fixture preview and the API's
 // occurrence read run a season alike. The date math is seasons.ts's.
 
-import { SEASON_FREQUENCIES, WEEK_ROTATIONS, type SeasonFrequency, type WeekRotation } from "../planning/vocabulary"
+import { SEASON_FREQUENCIES, WEEK_ROTATIONS, type SeasonFrequency, type WeekRotation } from "./vocabulary"
 import { isMonthDay, overlappingSeasons, SEASONS_MAX, type SchemeSeason } from "./seasons"
 
 /** The record's key the seasons ride under, as JSON. */

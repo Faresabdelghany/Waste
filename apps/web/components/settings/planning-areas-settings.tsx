@@ -69,7 +69,7 @@ import {
   type PlanningAreaLookups,
 } from "@/lib/data/planning-areas"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/planning/recurrence"
 
 const ACTOR_NAME = "Olivia Larsen"
 

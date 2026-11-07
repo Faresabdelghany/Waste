@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import type { GenerationRun } from "@waste/contracts/generation"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/planning/recurrence"
 import { addDays, formatShortDay } from "@waste/domain/days"
 
 import { Badge } from "@/components/ui/badge"
