@@ -3,8 +3,7 @@
 // trimmed to what `TicketCreate` carries, the edit of a case's own words, and
 // the dialogs of the commands that say something, the reply with the stop's
 // record among them (M6 of #293) — and the list's categories, read off a row
-// for the person looking. Fixture mode keeps the
-// registry's ticket form and the fixture details dialog untouched.
+// for the person looking.
 //
 // Every field id is a key the adapter reads (lib/api/records/tickets.ts):
 // the create's `toCreateBody`, a command's `toBody`. The pickers name rows by

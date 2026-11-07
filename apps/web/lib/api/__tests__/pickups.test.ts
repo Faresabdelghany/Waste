@@ -18,7 +18,7 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"
 import { routesInWindow } from "@waste/domain/map-planning/routes"
 
-import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"
 import { contaminantCodeOptions } from "../../data/routes"
 import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
@@ -359,9 +359,10 @@ describe("the pickup's commands", () => {
   })
 
   test("its photos and signatures are a read of their own, a signed URL per proof naming an object, null where Storage holds none (O1 of #290)", async () => {
+    const COMPANY_ID = "01a0d2a4-a280-7001-8000-000000000001"
     const items = [
-      { proofId: "01a0d2a4-a280-7034-8000-000000000002", objectKey: `${FIXTURE_COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000002.jpg`, url: "http://storage.test/object/sign/proofs/a.jpg?token=t", expiresAt: "2026-10-01T04:25:00.000Z" },
-      { proofId: "01a0d2a4-a280-7034-8000-000000000003", objectKey: `${FIXTURE_COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000003.png`, url: null, expiresAt: "2026-10-01T04:25:00.000Z" },
+      { proofId: "01a0d2a4-a280-7034-8000-000000000002", objectKey: `${COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000002.jpg`, url: "http://storage.test/object/sign/proofs/a.jpg?token=t", expiresAt: "2026-10-01T04:25:00.000Z" },
+      { proofId: "01a0d2a4-a280-7034-8000-000000000003", objectKey: `${COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000003.png`, url: null, expiresAt: "2026-10-01T04:25:00.000Z" },
     ]
     const { fetch, calls } = scripted([() => json({ items })])
     assert.deepEqual(await pickupProofObjects(clientOver(fetch), first.id), items)

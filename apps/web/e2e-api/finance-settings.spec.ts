@@ -9,8 +9,8 @@
 // the creditor number while a project's invoices name it.
 import { uniqueName } from "./env"
 import { expect, test } from "./fixtures"
-import { answerOf, toasts } from "./routes-support"
-import { projectNamed, type Project } from "./tester"
+import { answerOf, pick, toasts } from "./routes-support"
+import { projectNamed, TESTER_PROJECT, type Project } from "./tester"
 
 type Company = { vatNumber: string | null; bankIban: string | null; bankBic: string | null; fikCreditorNumber: string | null }
 type ApiProject = Project & { paymentTermsDays: number; paymentReferenceScheme: string }
@@ -93,6 +93,7 @@ test.describe("finance settings (#291 C4)", () => {
     expect((await loaded).status()).toBe(200)
     await page.getByRole("button", { name: "Create party" }).click()
     const dialog = page.getByRole("dialog")
+    await pick(dialog, page, "Operating project", TESTER_PROJECT)
     await dialog.getByRole("combobox", { name: /^Party type/ }).click()
     await page.getByRole("option", { name: "Company or organization" }).click()
     await dialog.getByLabel("Display or legal name").fill(name)

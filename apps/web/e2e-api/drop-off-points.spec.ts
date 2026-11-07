@@ -2,6 +2,8 @@ import type { Page } from "@playwright/test"
 
 import { E2E, uniqueName } from "./env"
 import { chainLanded, expect, test } from "./fixtures"
+import { pick } from "./routes-support"
+import { TESTER_PROJECT } from "./tester"
 
 // Resources › Drop-off Points on the API (Issue #293, M3c). The office
 // registers a recycling centre through the generic form — what it takes from
@@ -36,6 +38,7 @@ test("the office registers a drop-off point with what it takes, its hours and an
   await page.getByRole("button", { name: "Save drop-off point" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "New drop-off point" }) })
   await expect(dialog).toBeVisible()
+  await pick(dialog, page, "Project", TESTER_PROJECT)
   await dialog.getByRole("textbox", { name: /^Name\*?$/ }).fill(name)
   await dialog.getByRole("textbox", { name: /^Code\*?$/ }).fill(code)
   await dialog.getByRole("combobox", { name: /^Status/ }).click()

@@ -9,8 +9,9 @@ import { schemeWithRoutes } from "./routes-support"
 // at — the seeded tenant's placed containers at their properties' points —
 // so the fixture suite's Containers list test (e2e/tests/map-planning.spec.ts)
 // lives here now, against the seeded registry, and since #186 its Create
-// service area test too. Tile requests are aborted: the
-// base map reports itself unavailable and the markers still stand.
+// service area test too, and the page's frame and its toolbar's opening
+// state. Tile requests are aborted: the base map reports itself unavailable
+// and the markers still stand.
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
 const CANVAS = '[data-testid="planning-map-canvas"]'
@@ -46,6 +47,27 @@ async function selectRectangle(page: Page, area = CENTRAL): Promise<void> {
   await page.mouse.up()
   await expect(overlay).toHaveCount(0)
 }
+
+test("the sidebar entry is Map Planning and the page has no title, counter, or module tabs", async ({ page }) => {
+  await openMapPlanning(page)
+  const sidebar = page.getByRole("complementary").first()
+  await expect(page.getByRole("link", { name: "Map Planning" })).toBeVisible()
+  await expect(sidebar.getByRole("link", { name: "Plan", exact: true })).toHaveCount(0)
+  await expect(page.getByRole("tab")).toHaveCount(0)
+  await expect(page.getByText("Collection Calendars")).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Map Planning", level: 1 })).toHaveCount(0)
+  await expect(page.getByText(/containers on the map/)).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Saved views" })).toHaveCount(0)
+  await expect(page.getByRole("radiogroup", { name: "Marker mode" })).toHaveCount(0)
+})
+
+test("the map opens on Any date with the search, filters, and window in the toolbar", async ({ page }) => {
+  await openMapPlanning(page)
+  await expect(page.getByRole("combobox", { name: "Search the map" })).toBeVisible()
+  await expect(page.getByLabel("Collection window")).toContainText("Any date")
+  await expect(page.getByRole("button", { name: "Reset all" })).toBeDisabled()
+  await expect(page.getByRole("status").filter({ hasText: "Base map unavailable" })).toBeVisible()
+})
 
 test("the Containers list mirrors the selection of the server's placed containers and hover highlights run both ways between rows and markers", async ({ page }) => {
   await openMapPlanning(page)

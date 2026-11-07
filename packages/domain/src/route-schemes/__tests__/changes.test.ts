@@ -45,7 +45,6 @@ const base: GuidedSchemeData = {
   effectiveTo: "",
   plannedStartTime: "06:30",
   holidayPolicy: "skip",
-  createAs: "validated",
   editPolicy: "ask",
   depotId: "depot-central",
   unloadingStationId: "station-arc",
@@ -94,15 +93,9 @@ describe("schemeDraftChanges", () => {
     ])
   })
 
-  test("the edit policy reads as its label, after the create option", () => {
-    const after: GuidedSchemeData = { ...base, createAs: "effective", editPolicy: "single" }
+  test("the edit policy reads as its label", () => {
+    const after: GuidedSchemeData = { ...base, editPolicy: "single" }
     assert.deepEqual(schemeDraftChanges(base, after), [
-      {
-        field: "createAs",
-        label: "Create as",
-        before: "Validated — routes stay unpublished",
-        after: "Effective — routes publish from the first collection",
-      },
       {
         field: "editPolicy",
         label: "Changes to a running scheme",

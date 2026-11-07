@@ -5,8 +5,7 @@
 // ticket assigned to them — read from and saved whole to the API's
 // `/me/notification-preferences`, and the newest of the notices they were
 // sent (`GET /me/notices`). Nothing is sent until asked for. The rules are
-// lib/data/notification-preferences.ts's; fixture mode keeps the browser's
-// pane.
+// lib/data/notification-preferences.ts's.
 
 import { useState } from "react"
 import { ArrowClockwise, FloppyDisk } from "@phosphor-icons/react/dist/ssr"

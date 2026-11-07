@@ -4,7 +4,6 @@
 
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
-  SCHEME_CREATE_AS_LABELS,
   SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
 } from "@waste/domain/route-schemes/creation"
@@ -81,10 +80,6 @@ export const SERVICE_TYPE_OPTIONS: readonly SelectOption[] = SCHEME_SERVICE_TYPE
   label: value,
 }))
 
-export const CREATE_AS_OPTIONS: readonly SelectOption[] = Object.entries(SCHEME_CREATE_AS_LABELS).map(
-  ([value, label]) => ({ value, label }),
-)
-
 /** "Changes to a running scheme" (issue #38), in the vocabulary's order: ask, future, single. */
 export const EDIT_POLICY_OPTIONS: readonly SelectOption[] = SCHEME_EDIT_POLICIES.map((value) => ({
   value,
@@ -104,7 +99,6 @@ export function initialSchemeDraft(): GuidedSchemeData {
     effectiveTo: "",
     plannedStartTime: "06:30",
     holidayPolicy: "skip",
-    createAs: "validated",
     editPolicy: DEFAULT_SCHEME_EDIT_POLICY,
     groups: [],
   }

@@ -56,14 +56,11 @@ export function withMeProjects(state: ServerRecordsState, projects: readonly MeP
 }
 
 /**
- * The project scope a workspace pins on the Pilot: the project named
- * `preferred` (the operator shell's, as its sidebar names it) wherever the
- * person works in it; else their first project, `/me`'s order; every project
- * while `/me` is unread and for a person with none, a provider's user, whose
- * rows the API fences by their provider.
+ * The project scope a workspace pins on the Pilot: the one project `/me`
+ * names, where the person works in exactly one; every project otherwise —
+ * for a person who works in several, for one in none (a provider's user,
+ * whose rows the API fences by their provider), and while `/me` is unread.
  */
-export function projectScopeOfMe(projects: readonly MeProject[] | undefined, preferred: string): ProjectScope {
-  if (projects === undefined || projects.length === 0) return ALL_PROJECTS
-  const project = projects.find((candidate) => candidate.name === preferred) ?? projects[0]
-  return projectWebIdOf(project) as ProjectScope
+export function projectScopeOfMe(projects: readonly MeProject[] | undefined): ProjectScope {
+  return projects?.length === 1 ? (projectWebIdOf(projects[0]) as ProjectScope) : ALL_PROJECTS
 }

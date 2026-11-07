@@ -68,7 +68,6 @@ describe("the wizard's validation over the API's containers", () => {
     effectiveTo: "",
     plannedStartTime: "06:30",
     holidayPolicy: "skip",
-    createAs: "validated",
     editPolicy: "ask",
     groups: [{ id: "group-a", name: "Residual · bins", days: ["monday", "thursday"], fractions: ["Residual"], stopSource: "rule", containerTypes: ["Two-wheel bin · 240 L"], containerIds: [], vehicleId: vehicle.id, driverId: "driver-mads" }],
     ...over,
