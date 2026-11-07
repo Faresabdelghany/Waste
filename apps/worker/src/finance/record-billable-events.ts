@@ -2,10 +2,10 @@
 // queues of the kinds the relay publishes that Finance reads —
 // `pickup-completed`, `pickup-corrected` and `ticket-completed`, and since
 // O28 of #290 `weight-reviewed` (`unload-recorded` is not read: only a
-// reviewed weight is billable, and the review is its own event) — taken through `defineOutboxConsumer` (../outbox/subscribe.ts), one
+// reviewed weight is billable, and the review is its own event) — taken through `defineOutboxConsumer` (../runtime/outbox.ts), one
 // registry entry per kind, whose handler takes the job's event parsed with the
 // contracts (`RelayedEvent`, its payload read through `payloadOf`), reads the facts beside the payload in one
-// statement each under `withCompany` (finance-facts.ts), hands the plain facts
+// statement each under `withCompany` (facts.ts), hands the plain facts
 // to the domain's `billableFor`, and does what it answers: records the draft through
 // `recordBillableEvent` with no person and the event's id, cancels the
 // pickup's live event with the consumer's reason, records the reversal of an
@@ -27,7 +27,7 @@
 // office's correction to `completed` minutes later are two ids, on two
 // queues, and the index holds one row per id — so every pickup's event
 // begins with the pickup's own row lock (`pickupRow` with `lock`,
-// finance-facts.ts): two workers on two events of one pickup take turns, the
+// facts.ts): two workers on two events of one pickup take turns, the
 // second reads the first's live event, and the pickup is charged for once. A
 // ticket's event takes the ticket's lock the same way. The facts are the
 // table's word and not the payload's — the pickup's status now, the live
@@ -62,7 +62,7 @@
 // that is not there, a shape the domain drafted that the table would refuse —
 // fails the job, which pg-boss retries on the queue's policy, then counts on
 // `/readyz` and copies to `outbox.dead` for an operator to redrive
-// (../outbox/subscribe.ts). A row that is not there is thrown and not skipped,
+// (../runtime/outbox.ts). A row that is not there is thrown and not skipped,
 // since an event about a pickup nobody can find is a relay or a fence gone
 // wrong and never news to drop. The retry policy is five retries backing off
 // from ten seconds and capped at five minutes — 10, 20, 40, 80 s and then up
@@ -82,9 +82,9 @@ import { billableActionsFor, FINANCE_EVENT_KINDS, type BillableAction, type Fina
 import { eventOf, type EventReading } from "@waste/db/shapes/billable-events"
 import { visitById } from "@waste/db/shapes/site-visits"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import type { JobContext } from "./definition"
-import { pickupFacts, pickupRow, scaleTicketFacts, ticketFacts, ticketRow, visitFacts, weightFacts } from "./finance-facts"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import type { JobContext } from "../runtime/definition"
+import { pickupFacts, pickupRow, scaleTicketFacts, ticketFacts, ticketRow, visitFacts, weightFacts } from "./facts"
 
 /** What one action came to. */
 export type Done = { did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }

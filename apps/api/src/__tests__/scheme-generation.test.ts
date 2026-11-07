@@ -4,7 +4,7 @@
 // latest match stamps, read from `generation_run` and `generation_match`
 // against Postgres whenever the scheme is read — a list, a read, and the
 // answer of a write. The runs and stamps are written here the way the worker
-// leaves them (apps/worker/src/jobs/generate-routes.ts), through `tx` as
+// leaves them (apps/worker/src/planning/generate-routes.ts), through `tx` as
 // `wms_api` inside `withCompany`, since this suite proves the reading and not
 // the job; `dropTenant` drops them with the company.
 import assert from "node:assert/strict"

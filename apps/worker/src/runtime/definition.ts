@@ -1,21 +1,25 @@
-// What a job is to this process, so the registry (index.ts) and the wiring
-// (../boss.ts) agree without either reading the other's files. One job is one
-// file under this directory exporting one `JobDefinition`, and one line in
-// index.ts; the wiring gives every job of the list its queue (created with the
-// job's own options), a worker, and, where it has a `schedule`, a cron
-// schedule on the queue, and takes the schedule away when the job stops
-// naming one; a job that sends to queues of its own (`publishes`) has them
-// created too, so a send never meets a queue that does not exist. Nothing
-// here knows pg-boss's connection: a handler gets what it needs from the
-// context, so a test runs it with pools of its own.
+// What a job is to this process, so the registry (../jobs.ts) and the wiring
+// (boss.ts) agree without either reading the other's files. One job is one
+// file of its context (`src/<context>/`) exporting one `JobDefinition`, and
+// one line in the registry; the wiring gives every job of the list its queue
+// (created with the job's own options), a worker, and, where it has a
+// `schedule`, a cron schedule on the queue, and takes the schedule away when
+// the job stops naming one; a job that sends to queues of its own
+// (`publishes`) has them created too, so a send never meets a queue that does
+// not exist. Nothing here knows pg-boss's connection: a handler gets what it
+// needs from the context, so a test runs it with pools of its own.
+//
+// The context is narrow: `JobContext` is what every handler has, and what a
+// few jobs need beyond it — the routing engine, the messaging provider, the
+// proofs' Storage — is a type of their own context's, which a job names as
+// its definition's second parameter. The registry holds every job of its
+// list to one context, `WorkerContext`, which main.ts builds, so a job that
+// names a need the process does not meet fails the build there.
 import type { Database } from "@waste/db/client"
 import type { Complete, Send } from "@waste/db/jobs"
-import type { ProofStorage } from "@waste/db/storage"
-import type { QuotaEngine } from "@waste/routing/quota"
-import type { MessagingProvider } from "../messaging/provider"
 import type { Job, Queue, QueueOptions, ScheduleOptions, WorkOptions } from "pg-boss"
 
-/** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
+/** What every handler runs with. Built once per process by main.ts; a test builds its own (`../__tests__/context.ts`). */
 export type JobContext = {
   /**
    * The API role's pool: every write a job makes runs on it under
@@ -54,36 +58,16 @@ export type JobContext = {
    * (`succeedInTransaction`, `@waste/db/jobs`) — a deferral (#171).
    */
   complete: Complete
-  /**
-   * The routing adapter (#169, #171): the provider — the fake unless
-   * `ROUTING_PROVIDER` says otherwise, built by main.ts through
-   * `providerFromEnv` (@waste/routing/select) — behind the quota engine
-   * (@waste/routing/quota), which paces the calls, holds the reserve and
-   * reads every answer. One per process, so one key's quota is spent in one
-   * place. Never called inside a database transaction (#124 §4); a test
-   * builds its own over a scripted fake.
-   */
-  routing: QuotaEngine
-  /**
-   * The Pilot's polling knob, `WORKER_POLLING_INTERVAL_SECONDS` (#149): the
-   * floor under every poll this process makes — each queue's, which the
-   * wiring raises to it (../boss.ts), and a handler's own cadence where it
-   * has one (the relay's successor delay). Undefined, the one case a test
-   * needs, means the code's own defaults.
-   */
-  pollingIntervalSeconds?: number
-  /** The proofs' Storage (O1 of #290), where the deployment holds Supabase's URL and service-role key; undefined, the purge removes nothing. main.ts builds it; a test hands in a fake. */
-  proofStorage?: ProofStorage
-  /** How many days a photo or a signature is kept, `PROOF_RETENTION_DAYS`: a Pilot setting, never a code default; undefined, the purge removes nothing. */
-  proofRetentionDays?: number
-  /**
-   * The messaging provider (#291 C15), built by main.ts from
-   * `MESSAGING_PROVIDER` (../messaging/select.ts): the log-only sender, which
-   * sends nothing, until a card-free provider is verified. Undefined, the one
-   * case a test needs, the send job uses the log-only sender over `log`.
-   */
-  messaging?: MessagingProvider
 }
+
+/**
+ * The Pilot's polling knob, `WORKER_POLLING_INTERVAL_SECONDS` (#149): the
+ * floor under every poll this process makes — each queue's, which the wiring
+ * raises to it (boss.ts), and a handler's own cadence where it has one (the
+ * relay's successor delay). Undefined where the deployment leaves it unset:
+ * the code's own defaults.
+ */
+export type PollingKnob = { pollingIntervalSeconds: number | undefined }
 
 /**
  * One job. `queue` is its name in pg-boss (`<context>.<verb>`:
@@ -105,15 +89,16 @@ export type JobContext = {
  * queue `outbox.dead` — each created with its options at start, so a send
  * finds its queue whether or not a consumer has registered yet. A consumer of
  * the outbox is not a job of its own but a worker on one of those queues:
- * `defineOutboxConsumer` (../outbox/subscribe.ts) spells one `JobDefinition`
- * per kind, its `queue` `outbox.<kind>`, spread into the registry, so the
- * relay's `send` is the one door an event takes.
+ * `defineOutboxConsumer` (outbox.ts) spells one `JobDefinition` per kind,
+ * its `queue` `outbox.<kind>.<consumer>`, spread into the registry, so the
+ * relay's `send` is the one door an event takes. `Context` is what the
+ * handler reads: `JobContext`, or it and what the job's own context adds.
  */
-export type JobDefinition<Data extends object = object> = {
+export type JobDefinition<Data extends object = object, Context extends JobContext = JobContext> = {
   queue: string
   /** What the job is for, one sentence, for the person reading the registry. */
   description: string
-  handler: (jobs: Job<Data>[], context: JobContext) => Promise<unknown>
+  handler: (jobs: Job<Data>[], context: Context) => Promise<unknown>
   /**
    * Retry, expiry and retention of the queue, its `policy` (`standard`
    * unless said: the relay is `short`, one queued tick at a time) and its
@@ -172,9 +157,14 @@ export function updatableOptions({ policy: _policy, ...options }: JobQueueOption
   return options
 }
 
-/** Spells a job with its data type inferred from the handler, and nothing else: `export const someJob = defineJob({ ... })`. */
-export const defineJob = <Data extends object>(definition: JobDefinition<Data>): JobDefinition<Data> => definition
+/** Spells a job, and nothing else: `export const someJob = defineJob<SomeData>({ ... })`, or `defineJob<SomeData, JobContext & RoutingEngine>` for a job that needs more than the core. */
+export const defineJob = <Data extends object, Context extends JobContext = JobContext>(definition: JobDefinition<Data, Context>): JobDefinition<Data, Context> => definition
 
-/** The registry's element type: a job whose data is some object, which is what the wiring needs and all it needs. */
+/**
+ * A job of any data, run with the context `Context` has: what `startBoss`
+ * registers. Without `Context`, a job whatever its context needs — what code
+ * that reads the list and never runs a handler takes (the relay's routes, the
+ * drain, the registry test).
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the registry holds jobs of different data types; the wiring never reads the data, pg-boss hands each handler its own.
-export type AnyJob = JobDefinition<any>
+export type AnyJob<Context extends JobContext = never> = JobDefinition<any, Context>

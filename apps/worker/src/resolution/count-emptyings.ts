@@ -56,8 +56,8 @@ import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm"
 import { NO_TICKET_LINKS } from "@waste/db/shapes/tickets"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import type { JobContext } from "./definition"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import type { JobContext } from "../runtime/definition"
 
 /** What one stop's event came to: the tickets its count opened, by rule. */
 export type EmptyingCounted = { event: string; opened: { countingRuleId: string; ticketId: string }[] }
@@ -207,7 +207,7 @@ export async function countEmptying(event: RelayedEvent<"pickup-completed" | "pi
   return { event: event.id, opened }
 }
 
-/** The counting entries on `outbox.pickup-completed` and `outbox.pickup-corrected`; spread into `OUTBOX_CONSUMERS`. Starts fresh: the emptyings before it are counted by the next one at their property. */
+/** The counting entries on `outbox.pickup-completed` and `outbox.pickup-corrected`; spread into `CONSUMERS` (../jobs.ts). Starts fresh: the emptyings before it are counted by the next one at their property. */
 export const countEmptyings = defineOutboxConsumer({
   name: "counting",
   kinds: ["pickup-completed", "pickup-corrected"],

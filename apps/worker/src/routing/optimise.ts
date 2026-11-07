@@ -43,20 +43,19 @@
 // full, and the Plan writes each such visit as an unload stop at the route's
 // station between the pickups it comes after.
 //
-// Everything else is routing.measure's rule (routing-plans.ts): the read and
+// Everything else is routing.measure's rule (plan-job.ts): the read and
 // the write in two fenced transactions around a call made outside both, what
 // cannot be optimised final, the quota's answers the engine's.
 import type { Position2D } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
-import { activateSolved, classOf, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
-import { quotaRows, type QuotaRow } from "@waste/db/commands/routing-quota"
+import { activateSolved, ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
+import { quotaRows } from "@waste/db/commands/routing-quota"
 import { reloadOver, routeLoad } from "@waste/db/commands/route-load"
 import { routeTiming } from "@waste/db/commands/stop-timing"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
-import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { OPTIMISER_MAX_PARTS, sweepParts } from "@waste/domain/routing/parts"
@@ -65,23 +64,16 @@ import { shipsReload, unloadsAlong, withUnloads } from "@waste/domain/routing/re
 import { SUPERSEDED, type PlanStopWarning, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
 import { distinctConsecutive } from "@waste/domain/geo"
 import { DEFAULT_PROFILE, type OptimiseRequest, type OptimiseResult, type RoutedLeg } from "@waste/routing/provider"
-import type { Outcome } from "@waste/routing/quota"
+import type { Outcome, QuotaEngine } from "@waste/routing/quota"
 import { and, asc, eq } from "drizzle-orm"
-import type { Job } from "pg-boss"
 
-import { defineJob, type JobContext } from "./definition"
-import { ROUTING_QUEUE_OPTIONS, ROUTING_WORK_OPTIONS } from "./routing-measure"
-import { adoptRows, deferPlan, failPlan, learnedAt, legsWithin, positionOf, recordLearned, type Disposition } from "./routing-plans"
+import { definePlanJob, legsWithin, positionOf, type Gathered } from "./plan-job"
 
-export { ROUTING_OPTIMISE_QUEUE }
+/** What the optimiser is asked: the request, and the pickups its stops are. */
+type Request = { request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; warnings: Map<number, PlanStopWarning>; unloadingStationId: string | null }
 
-/** What the first transaction reads: the request and the pickups its stops are, or the sentence that ends the Plan. */
-type Gathered =
-  | { kind: "request"; request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; operatingDate: string; quota: QuotaRow[]; warnings: Map<number, PlanStopWarning>; unloadingStationId: string | null }
-  | { kind: "refused"; sentence: string }
-  | { kind: "done"; status: string }
-
-async function gather(tx: Tx, keys: { planId: string; companyId: string; provider: string }): Promise<Gathered> {
+/** The first transaction: the request, or the sentence that ends the Plan. */
+async function gather(tx: Tx, keys: { planId: string; companyId: string; provider: string }): Promise<Gathered<Request>> {
   const { planId } = keys
   const [found] = await tx.select({ status: plan.status, solver: plan.solver, trip: plan.trip, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId))
   if (!found) return { kind: "done", status: "not there; a sweep between send and work retries nothing" }
@@ -152,7 +144,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     ...(reload === null ? {} : { reload }),
   }
   const quota = await quotaRows(tx, { companyId: keys.companyId, provider: keys.provider })
-  return { kind: "request", request, routeId: found.routeId, pickupIds, trip: found.trip, operatingDate: ends.operatingDate, quota, warnings, unloadingStationId: ends.unloadingStationId }
+  return { kind: "asks", ask: { request, routeId: found.routeId, pickupIds, trip: found.trip, warnings, unloadingStationId: ends.unloadingStationId }, operatingDate: ends.operatingDate, quota }
 }
 
 /**
@@ -161,7 +153,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
  * every leg of the closed trip, the station at each unload visit on the way
  * (O15 of #290). Throws when the answer does not fit the trip asked for.
  */
-function shaped(gathered: Extract<Gathered, { kind: "request" }>, order: readonly number[], unloads: readonly number[], trip: readonly RoutedLeg[]): { pickupIds: string[]; unloads: number[]; legs: RoutedLeg[] } {
+function shaped(gathered: Request, { order, unloads = [], legs: trip }: OptimiseResult): { pickupIds: string[]; unloads: number[]; legs: RoutedLeg[] } {
   const { request } = gathered
   const { station } = request
   if (unloads.length > 0 && (!station || gathered.unloadingStationId === null)) throw new Error("the optimiser unloaded on the way of a trip with no station")
@@ -170,8 +162,6 @@ function shaped(gathered: Extract<Gathered, { kind: "request" }>, order: readonl
   const legs = gathered.trip === "full" ? legsWithin(tripPoints, trip, 0, tripPoints.length - 1) : legsWithin(tripPoints, trip, 1, driven.length)
   return { pickupIds: order.map((index) => gathered.pickupIds[index]), unloads: [...unloads], legs }
 }
-
-type Request = Extract<Gathered, { kind: "request" }>
 
 /**
  * The route's stops ordered: in one request where they fit one, else in
@@ -187,7 +177,7 @@ type Request = Extract<Gathered, { kind: "request" }>
  * the break falls in its own stretch of the day, and the over-shift verdict
  * counts the break whatever the Plan says.
  */
-async function ordered(engine: JobContext["routing"], gathered: Request, jobClass: RoutingJobClass): Promise<Outcome<OptimiseResult>> {
+async function ordered(engine: QuotaEngine, gathered: Request, jobClass: RoutingJobClass): Promise<Outcome<OptimiseResult>> {
   const { request } = gathered
   const parts = sweepParts(request.depot, request.stops, optimiserMaxStops(gathered.trip as PlanTrip))
   const ships = request.reload != null && parts.length === 1 && shipsReload(request.stops.length)
@@ -248,108 +238,51 @@ async function ordered(engine: JobContext["routing"], gathered: Request, jobClas
   return { kind: "answered", result: { ...answer.result, unloads: after, legs: measured.result.legs, provenance: measured.result.provenance } }
 }
 
-async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promise<Disposition["status"]> {
-  const { planId, companyId } = job.data
-  const engine = context.routing
-  const gathered = await withCompany(context.api.db, companyId, (tx: Tx) => gather(tx, { planId, companyId, provider: engine.name }))
-  if (gathered.kind === "done") {
-    context.log(`routing.optimise: plan ${planId} is ${gathered.status}; this run writes nothing`)
-    return "completed"
-  }
-  if (gathered.kind === "refused") {
-    await withCompany(context.api.db, companyId, (tx: Tx) => failPlan(tx, planId, gathered.sentence, context.log, ROUTING_OPTIMISE_QUEUE))
-    context.log(`routing.optimise: plan ${planId} failed: ${gathered.sentence}`)
-    return "completed"
-  }
-  adoptRows(engine, gathered.quota)
-  const before = { optimisation: learnedAt(engine, "optimisation"), directions: learnedAt(engine, "directions") }
-  let outcome: Outcome<OptimiseResult>
-  try {
-    outcome = await ordered(engine, gathered, classOf(job.data))
-  } finally {
-    await recordLearned(context, companyId, "optimisation", before.optimisation)
-    await recordLearned(context, companyId, "directions", before.directions)
-  }
-  // The answer is shaped before anything is written: one that does not fit the trip it was asked for is final, since a retry would pay for the same answer again.
-  let solved: ReturnType<typeof shaped> | undefined
-  if (outcome.kind === "answered") {
-    try {
-      solved = shaped(gathered, outcome.result.order, outcome.result.unloads ?? [], outcome.result.legs)
-    } catch (error) {
-      const sentence = `the provider's answer did not fit the trip: ${error instanceof Error ? error.message : String(error)}`
-      await withCompany(context.api.db, companyId, (tx: Tx) => failPlan(tx, planId, sentence, context.log, ROUTING_OPTIMISE_QUEUE))
-      context.log(`routing.optimise: plan ${planId} failed: ${sentence}`)
-      return "completed"
-    }
-  }
-  return withCompany(context.api.db, companyId, async (tx: Tx): Promise<Disposition["status"]> => {
-    switch (outcome.kind) {
-      case "deferred":
-        await deferPlan(tx, context, job, ROUTING_OPTIMISE_QUEUE, { until: outcome.until, operatingDate: gathered.operatingDate })
-        context.log(`routing.optimise: plan ${planId} waits for the ${outcome.family} quota (${outcome.cause}) until ${outcome.until.toISOString()}`)
-        return "completed"
-      case "refused":
-        await failPlan(tx, planId, outcome.sentence, context.log, ROUTING_OPTIMISE_QUEUE)
-        return "completed"
-      case "key-refused":
-        await failPlan(tx, planId, outcome.sentence, context.log, ROUTING_OPTIMISE_QUEUE)
-        return "deadletter"
-      case "answered": {
-        // The route before the Plan, the office's order of locks.
-        const [current] = await tx.select({ status: route.status, activePlanId: route.activePlanId }).from(route).where(eq(route.id, gathered.routeId)).for("update")
-        const [locked] = await tx.select({ status: plan.status, projectId: plan.projectId, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId)).for("update")
-        if (!locked || locked.status !== "calculating" || !current) {
-          context.log(`routing.optimise: plan ${planId} moved to ${locked?.status ?? "nowhere"} meanwhile; this run writes nothing`)
-          return "completed"
-        }
-        const { provenance } = outcome.result
-        const { pickupIds, unloads, legs } = solved as NonNullable<typeof solved>
-        const warningOf = new Map([...gathered.warnings].map(([index, warning]) => [gathered.pickupIds[index], warning] as const))
-        // The pickups in the solver's order, its unload visits on the way between them at the route's station (O15 of #290).
-        await tx.insert(planStop).values(
-          withUnloads(pickupIds, unloads).map((stop, index) => ({
-            companyId,
-            projectId: locked.projectId,
-            routeId: locked.routeId,
-            planId,
-            position: index + 1,
-            ...(stop.kind === "pickup" ? { pickupId: stop.pickupId, windowWarning: warningOf.get(stop.pickupId) ?? null } : { kind: "unload", unloadingStationId: gathered.unloadingStationId }),
-          })),
-        )
-        if (legs.length > 0) {
-          await tx.insert(planLeg).values(legs.map((leg, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, position: index + 1, path: leg.geometry, metres: leg.metres, seconds: leg.seconds })))
-        }
-        await tx
-          .update(plan)
-          .set({
-            status: "ready",
-            distanceMetres: legs.reduce((sum, leg) => sum + leg.metres, 0),
-            durationSeconds: legs.reduce((sum, leg) => sum + leg.seconds, 0),
-            waitingSeconds: outcome.result.waitingSeconds,
-            deferredUntil: null,
-            engineVersion: provenance.engineVersion,
-            graphDate: provenance.graphDate,
-          })
-          .where(eq(plan.id, planId))
-        if (!orderIsOpen(current.status as RouteStatus) || isSuperseded({ solver: "optimiser", planId, activePlanId: current.activePlanId })) {
-          context.log(`routing.optimise: plan ${planId} is ready but not activated: the route ${orderIsOpen(current.status as RouteStatus) ? "has a newer order" : `is ${current.status}`}`)
-          return "completed"
-        }
-        await activateSolved(tx, { companyId, routeId: locked.routeId, planId })
-        return "completed"
-      }
-    }
-  })
-}
-
-export const routingOptimise = defineJob<RoutingJobData>({
+export const routingOptimise = definePlanJob({
   queue: ROUTING_OPTIMISE_QUEUE,
   description: "Orders an optimiser Plan's stops through the routing provider's optimiser and its quota engine: the solver's sequence, legs, totals and provenance onto the Plan, activated on ready unless the route has moved past it, or deferred to the quota's reset.",
-  queueOptions: ROUTING_QUEUE_OPTIONS,
-  workOptions: ROUTING_WORK_OPTIONS,
-  handler: async (jobs, context): Promise<Disposition[]> => {
-    const settled: Disposition[] = []
-    for (const job of jobs) settled.push({ id: job.id, status: await optimiseOne(job, context) })
-    return settled
+  families: ["optimisation", "directions"],
+  gather,
+  call: ordered,
+  shape: shaped,
+  write: async (tx, { planId, companyId, ask: gathered, solved: { pickupIds, unloads, legs }, answer, lockPlan, log }) => {
+    // The route before the Plan, the office's order of locks.
+    const [current] = await tx.select({ status: route.status, activePlanId: route.activePlanId }).from(route).where(eq(route.id, gathered.routeId)).for("update")
+    const locked = await lockPlan()
+    // The route is the Plan's parent by key: a Plan still there has its route.
+    if (locked === undefined || current === undefined) return
+    const { provenance } = answer
+    const warningOf = new Map([...gathered.warnings].map(([index, warning]) => [gathered.pickupIds[index], warning] as const))
+    // The pickups in the solver's order, its unload visits on the way between them at the route's station (O15 of #290).
+    await tx.insert(planStop).values(
+      withUnloads(pickupIds, unloads).map((stop, index) => ({
+        companyId,
+        projectId: locked.projectId,
+        routeId: locked.routeId,
+        planId,
+        position: index + 1,
+        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId, windowWarning: warningOf.get(stop.pickupId) ?? null } : { kind: "unload", unloadingStationId: gathered.unloadingStationId }),
+      })),
+    )
+    if (legs.length > 0) {
+      await tx.insert(planLeg).values(legs.map((leg, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, position: index + 1, path: leg.geometry, metres: leg.metres, seconds: leg.seconds })))
+    }
+    await tx
+      .update(plan)
+      .set({
+        status: "ready",
+        distanceMetres: legs.reduce((sum, leg) => sum + leg.metres, 0),
+        durationSeconds: legs.reduce((sum, leg) => sum + leg.seconds, 0),
+        waitingSeconds: answer.waitingSeconds,
+        deferredUntil: null,
+        engineVersion: provenance.engineVersion,
+        graphDate: provenance.graphDate,
+      })
+      .where(eq(plan.id, planId))
+    if (!orderIsOpen(current.status as RouteStatus) || isSuperseded({ solver: "optimiser", planId, activePlanId: current.activePlanId })) {
+      log(`${ROUTING_OPTIMISE_QUEUE}: plan ${planId} is ready but not activated: the route ${orderIsOpen(current.status as RouteStatus) ? "has a newer order" : `is ${current.status}`}`)
+      return
+    }
+    await activateSolved(tx, { companyId, routeId: locked.routeId, planId })
   },
 })

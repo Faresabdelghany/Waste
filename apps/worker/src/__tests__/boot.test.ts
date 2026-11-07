@@ -5,7 +5,7 @@
 // the heartbeat's schedule fires and its handler runs with the context it was
 // given, a job sent by hand runs the same way, a `RelayedEvent` sent to a
 // consumer's `outbox.<kind>.<consumer>` queue the way the relay sends one is
-// worked by that consumer (the seam `outbox/subscribe.ts` spells, proved
+// worked by that consumer (the seam `runtime/outbox.ts` spells, proved
 // against pg-boss's own tables), a job the old relay left on the kind's own
 // `outbox.<kind>` is moved to every consumer of the kind at the next start and
 // worked once by each (#339), a handler that throws is a failed job the readiness count sees,
@@ -23,16 +23,16 @@ import { PGBOSS_SCHEMA, PGBOSS_SCHEMA_VERSION } from "@waste/db/sql/pgboss"
 import { REFUSED_URL } from "@waste/tooling/unreachable"
 import { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, type Boss } from "../boss"
-import { defineJob, JOBS, type JobContext } from "../jobs"
-import { heartbeat } from "../jobs/heartbeat"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
-import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
-import { relayOutbox } from "../jobs/relay-outbox"
-import { CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../outbox/subscribe"
+import { createBoss, startBoss, type Boss } from "../runtime/boss"
+import { JOBS, relay } from "../jobs"
+import { defineJob } from "../runtime/definition"
+import { heartbeat } from "../runtime/heartbeat"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../resolution/open-tickets"
+import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../finance/record-billable-events"
+import { CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../runtime/outbox"
 import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
-import { fakeRouting } from "./routing-context"
+import { jobContext } from "./context"
 import { until } from "./until"
 
 const owner = ownerUnderTest()
@@ -46,15 +46,15 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
   const errors: string[] = []
   let running: Boss | undefined
 
-  const context = (pools: Database): JobContext => ({
-    api: pools,
-    worker: pools,
-    now: () => new Date("2026-09-25T12:00:00Z"),
-    log: (message) => void lines.push(message),
-    send: (queue, data, options) => running!.boss.send(queue, data, options),
-    complete: (queue, id, options) => running!.boss.complete(queue, id, undefined, options),
-    routing: fakeRouting(),
-  })
+  const context = (pools: Database) =>
+    jobContext({
+      api: pools,
+      worker: pools,
+      now: () => new Date("2026-09-25T12:00:00Z"),
+      log: (message) => void lines.push(message),
+      send: (queue, data, options) => running!.boss.send(queue, data, options),
+      complete: (queue, id, options) => running!.boss.complete(queue, id, undefined, options),
+    })
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })
@@ -102,7 +102,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const heartbeatQueue = queues.find((queue) => queue.name === heartbeat.queue)
     assert.equal(heartbeatQueue?.retryLimit, 0)
     assert.equal(heartbeatQueue?.deleteAfterSeconds, 86_400)
-    const relayQueue = queues.find((queue) => queue.name === relayOutbox.queue)
+    const relayQueue = queues.find((queue) => queue.name === relay.queue)
     assert.equal(relayQueue?.policy, "short", "one relay tick queued at a time")
     assert.equal(relayQueue?.retryLimit, 0)
     const dead = queues.find((queue) => queue.name === OUTBOX_DEAD_QUEUE)
@@ -184,7 +184,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
   })
 
   test("the relay's schedule fired in the same minute and the tick chained: a completed occurrence of the schedule's, a completed successor five seconds on, and at most one tick queued at any moment", async () => {
-    const ticks = () => fresh.sql.unsafe<{ state: string; source: string }[]>(`select state, data->>'source' as source from ${PGBOSS_SCHEMA}.job where name = '${relayOutbox.queue}' order by created_on`)
+    const ticks = () => fresh.sql.unsafe<{ state: string; source: string }[]>(`select state, data->>'source' as source from ${PGBOSS_SCHEMA}.job where name = '${relay.queue}' order by created_on`)
     await until(async () => (await ticks()).some((tick) => tick.source === "schedule" && tick.state === "completed"), 10_000, "the scheduled tick completing")
     await until(async () => (await ticks()).some((tick) => tick.source === "successor" && tick.state === "completed"), 10_000, "a successor completing")
     const seen = await ticks()
@@ -391,7 +391,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.deepEqual(await checkBoss({ boss: running!.boss, queues: running!.queues, isStarted: () => false }), { boss: "stopped" })
     // A registry with the heartbeat's retry policy changed and its schedule dropped, the relay's published queues brought to a changed retry policy, and a consumer dropped: the second start rewrites the one, unschedules the other, updates the third without touching its policy, and leaves the dropped consumer's queues where they are (their rows are evidence; retention takes them).
     const changed = defineJob({ ...heartbeat, queueOptions: { retryLimit: 2, deleteAfterSeconds: 3_600 }, schedule: undefined })
-    const republished = defineJob({ ...relayOutbox, publishes: [{ queue: "outbox.pickup-failed", queueOptions: { retryLimit: 5 } }] })
+    const republished = defineJob({ ...relay, publishes: [{ queue: "outbox.pickup-failed", queueOptions: { retryLimit: 5 } }] })
     const boss: PgBoss = createBoss({ url, log: (line) => void errors.push(line) })
     running = await startBoss(boss, [changed, republished, ...recordBillableEvents], context(fresh))
     const [queue] = await boss.getQueues([heartbeat.queue])
@@ -401,7 +401,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.deepEqual(running.published, ["outbox.pickup-failed"])
     const [pickupFailed] = await boss.getQueues(["outbox.pickup-failed"])
     assert.deepEqual([pickupFailed.policy, pickupFailed.retryLimit], ["standard", 5], "the published queue's retry policy rewritten; Resolution's consumer, dropped from this registry, no longer writes its own over it")
-    assert.deepEqual(running.queues, [heartbeat.queue, relayOutbox.queue, ...recordBillableEvents.map((job) => job.queue)])
+    assert.deepEqual(running.queues, [heartbeat.queue, relay.queue, ...recordBillableEvents.map((job) => job.queue)])
     const [skipped] = await boss.getQueues([consumerQueue("pickup-skipped", "resolution")])
     assert.equal(skipped?.retryDelay, OPEN_TICKETS_QUEUE_OPTIONS.retryDelay, "a queue the dropped consumer worked is left as it was")
     await running.stop(2_000)

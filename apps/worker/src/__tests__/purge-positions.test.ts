@@ -13,9 +13,9 @@ import { session, sessionPosition } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq, sql } from "drizzle-orm"
 
-import type { JobContext } from "../jobs/definition"
-import { PURGE_BATCH, purgePositions } from "../jobs/purge-positions"
+import { PURGE_BATCH, purgePositions } from "../execution/purge-positions"
 import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -41,7 +41,7 @@ describe("execution.purge-positions", { skip: roles.skip }, () => {
   let route: SeededRoute
   const sessionId = testId()
   const lines: string[] = []
-  const context = () => ({ api, worker, now: () => NOW, log: (line: string) => void lines.push(line) }) as JobContext
+  const context = () => jobContext({ api, worker, now: () => NOW, log: (line) => void lines.push(line) })
 
   /** One position of the session fixed `days` ago, written as the driver door writes it. */
   const position = (days: number) =>

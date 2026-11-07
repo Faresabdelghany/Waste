@@ -46,12 +46,12 @@ import type { Job } from "pg-boss"
 import { and, asc, eq } from "drizzle-orm"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
-import type { JobContext } from "../jobs"
-import { recordBillableEvents, type Recorded } from "../jobs/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../outbox/subscribe"
+import type { WorkerContext } from "../jobs"
+import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
+import { consumerQueue, type RelayedJob } from "../runtime/outbox"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -66,15 +66,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   let tenant: FinanceTenant
   const lines: string[] = []
 
-  const context = (): JobContext => ({
-    api: pool,
-    worker: pool,
-    now: () => NOON,
-    log: (message) => void lines.push(message),
-    send: async () => null,
-    complete: settlesNothing,
-    routing: fakeRouting(),
-  })
+  const context = () => jobContext({ api: pool, worker: pool, now: () => NOON, log: (message) => void lines.push(message), send: async () => null })
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
@@ -155,7 +147,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   }
 
   /** Runs the handler over one published event, as pg-boss would hand it in on the kind's queue — over the suite's context, or another worker's — and answers what it did. */
-  const handle = async (event: RelayedJob, on: JobContext = context()): Promise<Recorded> => {
+  const handle = async (event: RelayedJob, on: WorkerContext = context()): Promise<Recorded> => {
     const consumer = consumerOf(event.kind)
     const job: Job<RelayedJob> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     const output = (await consumer.handler([job], on)) as { events: string[] }

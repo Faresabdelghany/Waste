@@ -15,7 +15,7 @@
 // works the queue here, so what was sent stays sent, and the file removes
 // its own jobs as the owner in `after`.
 //
-// The queue is the worker's to create when it starts (apps/worker/src/boss.ts,
+// The queue is the worker's to create when it starts (apps/worker/src/runtime/boss.ts,
 // `exclusive` as its job definition says and its registry test pins); a
 // database no worker has started against has none, so the suite creates it the
 // same way, idempotently, before it sends.

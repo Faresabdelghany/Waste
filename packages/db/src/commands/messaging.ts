@@ -13,7 +13,7 @@
 // what was sent; writes the row `queued`; and sends the worker's job in the
 // same transaction (`sendInTransaction`), so the job commits with the row or
 // not at all. Consent is not judged here: the worker judges it at the send
-// (apps/worker/src/jobs/send-message.ts), against the customer as they stand
+// (apps/worker/src/messaging/send-message.ts), against the customer as they stand
 // then, so a consent withdrawn while a message waits is honoured.
 //
 // It answers a refusal as its outcome rather than throwing it, since the

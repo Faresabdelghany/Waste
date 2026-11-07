@@ -8,7 +8,7 @@
 // pg-boss: a sender app.ts builds once over the probe pool and never starts
 // (Issue #168) — so the run and its job commit together or not at all, and
 // answers at once: 202 with the run before generation has begun.
-// Generation is the worker's (apps/worker/src/jobs/generate-routes.ts), never
+// Generation is the worker's (apps/worker/src/planning/generate-routes.ts), never
 // the request's; a client reads `GET /generation-runs/:id` to watch the run
 // finish, and `GET /route-schemes/:id/generation-runs` for a scheme's runs,
 // newest first.

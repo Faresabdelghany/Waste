@@ -44,12 +44,13 @@ import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
 import { and, asc, eq } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
 
-import { createBoss } from "../boss"
-import type { JobContext } from "../jobs/definition"
-import { runGeneration } from "../jobs/generate-routes"
-import { sweepHorizon, type SweepOutcome } from "../jobs/routing-horizon"
-import { routingMeasure } from "../jobs/routing-measure"
-import { routingOptimise } from "../jobs/routing-optimise"
+import { createBoss } from "../runtime/boss"
+import type { WorkerContext } from "../jobs"
+import { runGeneration } from "../planning/generate-routes"
+import { sweepHorizon, type SweepOutcome } from "../routing/sweep-horizon"
+import { routingMeasure } from "../routing/measure"
+import { routingOptimise } from "../routing/optimise"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -298,16 +299,17 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     return { fake, engine }
   }
   /** The context a job runs with: the API role's pool for the writes, the worker role's for the sweeps, pg-boss's own send and complete. */
-  const contextOf = (engine: QuotaEngine = engineOf().engine, overrides: Partial<JobContext> = {}): JobContext => ({
-    api,
-    worker,
-    now: () => clock.now,
-    log: (message) => void lines.push(message),
-    send: (queue, data, options) => boss.send(queue, data, options ?? {}),
-    complete: (queue, id, options) => boss.complete(queue, id, undefined, options),
-    routing: engine,
-    ...overrides,
-  })
+  const contextOf = (engine: QuotaEngine = engineOf().engine, overrides: Partial<WorkerContext> = {}) =>
+    jobContext({
+      api,
+      worker,
+      now: () => clock.now,
+      log: (message) => void lines.push(message),
+      send: (queue, data, options) => boss.send(queue, data, options ?? {}),
+      complete: (queue, id, options) => boss.complete(queue, id, undefined, options),
+      routing: engine,
+      ...overrides,
+    })
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
@@ -362,7 +364,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
   }
 
   /** Every job due on the queue, taken as the worker's poll takes them, handed to its handler, and settled as pg-boss settles the batch's answers. */
-  const drain = async (queue: string, context: JobContext) => {
+  const drain = async (queue: string, context: WorkerContext) => {
     const jobs = await boss.fetch<RoutingJobData>(queue, { batchSize: 100 })
     if (jobs.length === 0) return
     const settled = (await (queue === ROUTING_OPTIMISE_QUEUE ? routingOptimise : routingMeasure).handler(jobs, context)) as { id: string; status: string }[]

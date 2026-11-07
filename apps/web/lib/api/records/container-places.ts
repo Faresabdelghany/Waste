@@ -29,7 +29,7 @@
 // when (`Serves at`).
 //
 // This is a display derivation for the map and the preview. At generation
-// the worker's PostGIS matcher (apps/worker/src/jobs/stop-matching.ts) is the
+// the worker's PostGIS matcher (apps/worker/src/planning/stop-matching.ts) is the
 // truth: containment in the boundary in force on each service date, never a
 // stored area. Where two areas of a project overlap, the point is in each,
 // as the worker holds it to each scheme's own area; a point on a boundary's

@@ -66,12 +66,11 @@ import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, type Boss } from "../boss"
-import type { JobContext } from "../jobs"
-import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../jobs/generate-routes"
-import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../jobs/plan-ahead"
+import { createBoss, startBoss, type Boss } from "../runtime/boss"
+import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../planning/generate-routes"
+import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../planning/plan-ahead"
 import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "./database"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()
@@ -246,19 +245,18 @@ describe("generation against a migrated database", { skip }, () => {
   const sent: Array<{ queue: string; data: object | null; singletonKey: string | undefined; inTransaction: boolean }> = []
 
   /** The context a job runs with: the API role's pool for the writes, the worker role's for the sweep, a pinned clock, a recording log, and a `send` that records and, where pg-boss runs, sends. */
-  const context = (): JobContext => ({
-    api,
-    worker,
-    now: () => NOW,
-    log: (message) => void lines.push(message),
-    complete: settlesNothing,
-    routing: fakeRouting(),
-    send: async (queue, data, options) => {
-      sent.push({ queue, data, singletonKey: options?.singletonKey, inTransaction: options?.db !== undefined })
-      if (running === undefined) return `sent-${sent.length}`
-      return running.boss.send(queue, data, options)
-    },
-  })
+  const context = () =>
+    jobContext({
+      api,
+      worker,
+      now: () => NOW,
+      log: (message) => void lines.push(message),
+      send: async (queue, data, options) => {
+        sent.push({ queue, data, singletonKey: options?.singletonKey, inTransaction: options?.db !== undefined })
+        if (running === undefined) return `sent-${sent.length}`
+        return running.boss.send(queue, data, options)
+      },
+    })
 
   /** A run row of company a's scheme over the window, written as the owner, answering its id. */
   const runFor = async (schemeId: string, companyId: string, projectId: string, window: { from: string; to: string }): Promise<string> => {

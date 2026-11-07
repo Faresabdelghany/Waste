@@ -27,7 +27,7 @@ import type { MessageChannel } from "@waste/domain/messaging/vocabulary"
 import { REMINDER_BATCH, REMINDER_DAILY_CAP, reminderDayAt } from "@waste/domain/notifications/notices"
 import { sql } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export const COLLECTION_REMINDERS_QUEUE = "messaging.collection-reminders"
 

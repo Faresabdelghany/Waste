@@ -24,11 +24,11 @@ import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { alertColumns, alertOf } from "@waste/db/shapes/alerts"
 import { ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import type { JobContext } from "../jobs/definition"
-import { sendMessage } from "../jobs/send-message"
-import { ALERTS_MODULE, notifyStaffFor } from "../jobs/staff-notifications"
+import { sendMessage } from "../messaging/send-message"
+import { ALERTS_MODULE, notifyStaffFor } from "../notifications/staff-notifications"
 import type { MessagingProvider, OutgoingMessage } from "../messaging/provider"
 import { at, dropConsumerTenant, outboxJob, seedConsumerTenant, testId, type ConsumerTenant } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
 const api = databaseUnderTest()
@@ -44,7 +44,7 @@ describe("the staff notices", { skip: api.skip || owner.skip }, () => {
     sent.push({ name, data })
     return testId()
   }
-  const context = () => ({ api: pool, send, now: () => at("13:30"), log: (line: string) => void lines.push(line) }) as unknown as JobContext
+  const context = () => jobContext({ api: pool, send, now: () => at("13:30"), log: (line) => void lines.push(line) })
   /** Who is who: the board's role reads alerts, the clerk's reads nothing of them. */
   const people = {
     ida: { id: testId(), name: "Ida Berg" },

@@ -1,6 +1,6 @@
 // Right-sizing's proposals (M23b of #293, row 26.5), the one writer of
 // `right_sizing_proposal`: the worker runs it nightly per company
-// (apps/worker/src/jobs/propose-right-sizing.ts), and the office on demand
+// (apps/worker/src/registry/propose-right-sizing.ts), and the office on demand
 // (`POST /right-sizing-proposals/run`), within its projects. Run as `wms_api`
 // under the company's fence.
 //

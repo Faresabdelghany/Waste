@@ -33,9 +33,8 @@ import { needsConsent } from "@waste/domain/messaging/template"
 import type { MessageChannel, MessagePurpose } from "@waste/domain/messaging/vocabulary"
 import { and, eq, sql } from "drizzle-orm"
 
-import { LogOnlyProvider } from "../messaging/log-only"
-import type { MessagingProvider } from "../messaging/provider"
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
+import type { MessagingDoor } from "./provider"
 
 /** The tries a message gets: the first and pg-boss's two retries. */
 export const MAX_ATTEMPTS = 3
@@ -49,9 +48,6 @@ export type SendOutcome = "sent" | "withheld" | "failed" | "retry" | "settled"
 /** A failed attempt as the log's reason says it: the error's sentence, never a statement's parameters, bounded. */
 export const reasonOf = (error: unknown): string => (error instanceof Error ? messageWithoutStatement(error.message) : String(error)).slice(0, 500)
 
-/** The provider the job sends through: the context's, or the log-only sender where a test hands none. */
-const providerOf = (context: JobContext): MessagingProvider => context.messaging ?? new LogOnlyProvider(context.log)
-
 /** Whether the customer a message names allows service messages now; a message that names none (a staff notice) has no one's consent to ask. */
 async function allowsServiceMessages(tx: Tx, companyId: string, customerId: string | null): Promise<boolean> {
   if (customerId === null) return false
@@ -60,8 +56,8 @@ async function allowsServiceMessages(tx: Tx, companyId: string, customerId: stri
 }
 
 /** Sends one message, recording each step; throws to have pg-boss retry a failed attempt that was not the last. */
-export async function sendMessage(data: SendMessageData, context: JobContext): Promise<SendOutcome> {
-  const provider = providerOf(context)
+export async function sendMessage(data: SendMessageData, context: Pick<JobContext, "api" | "now" | "log"> & MessagingDoor): Promise<SendOutcome> {
+  const provider = context.messaging
   const fence = () => and(eq(message.companyId, data.companyId), eq(message.id, data.messageId), eq(message.status, "queued"))
 
   // The consent and the attempt, in one short transaction under the message's lock.
@@ -99,7 +95,7 @@ export async function sendMessage(data: SendMessageData, context: JobContext): P
   }
 }
 
-export const sendMessageJob = defineJob<SendMessageData>({
+export const sendMessageJob = defineJob<SendMessageData, JobContext & MessagingDoor>({
   queue: SEND_MESSAGE_QUEUE,
   description: "Sends one queued message of the delivery log through the messaging provider, honouring the customer's consent (#291 C15).",
   queueOptions: { retryLimit: MAX_ATTEMPTS - 1, retryDelay: 30, retryBackoff: true },

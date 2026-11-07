@@ -4,7 +4,7 @@
 // replaces it whole: an alert raised at or above a severity, and a ticket
 // assigned to them, one `notification_preference` row each while asked for
 // and none otherwise. The worker's notifications consumer reads the rows when
-// an event comes (apps/worker/src/jobs/staff-notifications.ts) and queues each
+// an event comes (apps/worker/src/notifications/staff-notifications.ts) and queues each
 // notice as a `staff` message, which `GET /me/notices` reads back newest
 // first: the delivery log's rows to the caller, in the projects they work in.
 //

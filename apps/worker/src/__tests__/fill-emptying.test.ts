@@ -18,9 +18,9 @@ import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
-import type { JobContext } from "../jobs/definition"
-import { runAlertRules } from "../jobs/alert-rules"
+import { runAlertRules } from "../resolution/alert-rules"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -38,7 +38,7 @@ describe("the fill-driven emptying", { skip: roles.skip }, () => {
   const pairings = { bin1: testId(), bin2: testId() }
   const sensors = { bin1: testId(), bin2: testId() }
   let NOW = at("09:00")
-  const context = () => ({ api, worker, now: () => NOW, log: (line: string) => void line }) as JobContext
+  const context = () => jobContext({ api, worker, now: () => NOW })
 
   const reads = (which: keyof typeof pairings, time: string, fillPercent: number) =>
     withCompany(api.db, tenant.companyId, (tx) => tx.insert(fillReading).values({ companyId: tenant.companyId, projectId: tenant.projectId, sensorId: sensors[which], pairingId: pairings[which], measuredAt: at(time), fillPercent }))

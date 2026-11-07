@@ -27,9 +27,9 @@ import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq } from "drizzle-orm"
 
-import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../jobs/alert-rules"
-import type { JobContext } from "../jobs/definition"
+import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../resolution/alert-rules"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -59,7 +59,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
   const lines: string[] = []
   /** The tick's clock: 07:10 on the fixtures' Monday, Copenhagen's. */
   let NOW = at("07:10")
-  const context = () => ({ api, worker, now: () => NOW, log: (line: string) => void lines.push(line) }) as JobContext
+  const context = () => jobContext({ api, worker, now: () => NOW, log: (line) => void lines.push(line) })
 
   const alerts = () => withCompany(api.db, tenant.companyId, (tx) => tx.select().from(alert).where(eq(alert.companyId, tenant.companyId)).orderBy(asc(alert.id)))
   const alertOf = async (rule: string, subjectId: string) => (await alerts()).filter((row) => row.rule === rule && [row.routeId, row.driverId, row.ticketId].includes(subjectId))

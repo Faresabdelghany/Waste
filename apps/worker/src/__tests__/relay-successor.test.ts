@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, successorDelaySeconds } from "../jobs/relay-outbox"
+import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, successorDelaySeconds } from "../runtime/relay-outbox"
 
 describe("successorDelaySeconds", () => {
   test("is the relay's own five seconds after a short sweep without the knob", () => {

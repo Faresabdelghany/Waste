@@ -99,7 +99,16 @@
 //   judged: nothing says it was to tip.
 // Each is about its load, or its route, and our vehicle and driver where there
 // are any (@waste/domain/resolution/alert-rules).
+//
+// Each rule is one entry of `RULES`, spelled once for the raise and the
+// clear: its subject's rows (`from`, and how an alert names the subject), its
+// key at the tick, the condition its alert stands on (`holds`), and, for the
+// raise, when a condition that holds is news — a grace passed, inside the
+// lookback — and what its alert says. The raise reads where the condition
+// holds, it is news, and no alert holds the key; the clear reads the open
+// alerts whose subject no longer holds under the same key.
 import { routeLabel, ticketLabel } from "@waste/domain/numbering"
+import type { Database } from "@waste/db/client"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
@@ -109,7 +118,7 @@ import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, P
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export const ALERT_RULES_QUEUE = "resolution.alert-rules"
 export const ALERT_RULES_SCHEDULE = "*/5 * * * *"
@@ -149,7 +158,7 @@ const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p
  * The active plans of vehicles not retired, each judged at the tick's
  * instant: its next limits, the readings it is judged on — the last
  * service's — whether it is past a limit or within the margins of one, and
- * its key. As `mp`, read by the raise and, by the plan in the key, the clear.
+ * its key. As `mp`.
  */
 const duePlans = (now: SQL) => sql`(
   select j.*,
@@ -184,180 +193,222 @@ const OVER_PAYLOAD = sql`v.capacity_kg is not null and ol.net_kg > v.capacity_kg
 const UNTIPPED = sql`exists (select 1 from wms.pickup pk where pk.company_id = r.company_id and pk.route_id = r.id and pk.status = 'completed')
        and not exists (select 1 from wms.unload u where u.company_id = r.company_id and u.route_id = r.id)`
 
-/** Each rule's key at the tick's instant, spelled once for the raise and the clear. */
-const keysAt = (now: SQL) => ({
-  /** The route and its planned day and start: a route moved is a new occurrence. */
-  route: sql`'route-not-started:' || r.id || ':' || to_char(r.operating_date, 'YYYY-MM-DD') || 'T' || to_char(r.planned_start_time, 'HH24:MI')`,
-  session: sql`'session-silent:' || s.id || ':' || ${keyInstant(sql`s.last_seen_at`)}`,
-  /** The expiry, and `:expired` once the project's today is past it: a licence that runs out while warned of is a second, graver occurrence, and its warning clears. */
-  licence: sql`'licence-expiring:' || d.id || ':' || to_char(d.licence_expiry, 'YYYY-MM-DD') || case when d.licence_expiry < (${now} at time zone p.timezone)::date then ':expired' else '' end`,
-  ticket: sql`'ticket-overdue:' || t.id || ':' || ${keyInstant(sql`t.due_at`)}`,
-  /** The session and its newest fix: a fix that comes in is a new occurrence, its predecessor cleared. */
-  position: sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
-  /** The pairing and the last reading below its threshold: the bin read low and filling again is a new occurrence. */
-  fill: sql`'fill-threshold:' || sp.id || ':' || coalesce(${LAST_LOW}, 'none')`,
-  /** The load: once per load, whatever the ticks between. */
-  unreceived: sql`'load-not-received:' || ol.id`,
-  /** The load and its receipt: a corrected receipt is a new occurrence. */
-  mismatch: sql`'load-weight-mismatch:' || ol.id || ':' || ol.receiving_ticket || ':' || ol.received_net_kg`,
-  overweight: sql`'load-overweight:' || ol.id`,
-  untipped: sql`'route-not-tipped:' || r.id`,
-})
+/** What a raise reads of an occurrence, beside what the rule's own columns add. */
+type Keyed = { company_id: string; project_id: string; rule_key: string }
+
+/** An occurrence of the rule as its alert tells it, the rule itself aside. */
+type Told<R extends AlertRule> = Omit<Extract<RuleOccurrence, { rule: R }>, "rule">
+
+/**
+ * One rule in SQL. `from` is the subject's rows, with the joins `key` and
+ * `holds` read; `company`, `project` and `subjectOf` are how the subject's
+ * row names its tenant and project and how an alert `a` names the subject.
+ * `holds` is the condition the alert stands on at the tick `now`. The raise
+ * reads `raise.joins` beside `from`, takes the rows where `raise.when` makes
+ * the condition news, and reads `raise.columns` into what the alert tells.
+ */
+type RuleSql<R extends AlertRule, Row> = {
+  from: (now: SQL) => SQL
+  company: SQL
+  project: SQL
+  subjectOf: SQL
+  key: (now: SQL) => SQL
+  holds: (now: SQL) => SQL
+  raise: {
+    joins?: SQL
+    when?: (now: SQL, lookback: SQL) => SQL
+    columns: (now: SQL) => SQL
+    told: (row: Row) => Told<R>
+    books?: (row: Row) => RaisedOccurrence["books"]
+  }
+}
+
+/** A rule as the tick runs it: the occurrences to raise, and when one of its open alerts is cleared. */
+type RuleSweep<R extends AlertRule> = {
+  raises: (worker: Database, now: SQL, lookback: SQL) => Promise<{ companyId: string; projectId: string; ruleKey: string; told: Told<R>; books?: RaisedOccurrence["books"] }[]>
+  clears: (now: SQL) => SQL
+}
 
 /** An alert that holds its key: any but one the worker itself cleared — `alert_rule_key_idx`'s predicate. */
 const HOLDS_ITS_KEY = sql`(a.status <> 'resolved' or a.resolved_by is not null)`
 
 const noAlertWith = (key: SQL, companyColumn: SQL) => sql`not exists (select 1 from wms.alert a where a.company_id = ${companyColumn} and a.rule_key = ${key} and ${HOLDS_ITS_KEY})`
 
-/** The occurrences no alert names yet, across companies, as the worker role: each with what its alert says. */
-export async function occurrencesToRaise(worker: JobContext["worker"], at: Date): Promise<RaisedOccurrence[]> {
-  const now = sql`${at.toISOString()}::timestamptz`
-  const KEYS = keysAt(now)
-  const lookback = sql`${now} - make_interval(hours => ${RULE_LOOKBACK_HOURS})`
+function sweep<R extends AlertRule, Row extends Record<string, unknown>>(rule: RuleSql<R, Row>): RuleSweep<R> {
+  const { from, company, project, subjectOf, key, holds, raise } = rule
+  return {
+    raises: async (worker, now, lookback) => {
+      const rows = await worker.db.execute<Keyed & Row>(sql`
+        select ${company} as company_id, ${project} as project_id, ${key(now)} as rule_key, ${raise.columns(now)}
+          from ${from(now)} ${raise.joins ?? sql``}
+         where ${holds(now)}
+           and ${raise.when?.(now, lookback) ?? sql`true`}
+           and ${noAlertWith(key(now), company)}
+      `)
+      // The statement's columns are the rule's: `execute` cannot see through a row type the rule names.
+      return rows.map((found) => {
+        const row = found as Keyed & Row
+        const books = raise.books?.(row)
+        return { companyId: row.company_id, projectId: row.project_id, ruleKey: row.rule_key, told: raise.told(row), ...(books === undefined ? {} : { books }) }
+      })
+    },
+    clears: (now) => sql`not exists (select 1 from ${from(now)} where ${company} = a.company_id and ${subjectOf} and a.rule_key = ${key(now)} and ${holds(now)})`,
+  }
+}
 
-  const routes = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; operating_date: string; planned_start: string; driver_id: string | null; vehicle_id: string | null }>(sql`
-    select r.company_id, r.project_id, ${KEYS.route} as rule_key, r.id as route_id, r.number,
-           to_char(r.operating_date, 'YYYY-MM-DD') as operating_date, to_char(r.planned_start_time, 'HH24:MI') as planned_start,
-           r.planned_driver_id as driver_id, r.planned_vehicle_id as vehicle_id
-      from wms.route r
-      join wms.project p on p.company_id = r.company_id and p.id = r.project_id
-     where r.status in ('planned', 'ready')
-       and r.planned_start_time is not null
+/** A running session on an active route: the silent device's subject and the stale position's. */
+const RUNNING_SESSION = {
+  from: () => sql`wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id`,
+  company: sql`s.company_id`,
+  project: sql`s.project_id`,
+  subjectOf: sql`s.route_id = a.route_id and s.driver_id = a.driver_id`,
+  holds: () => sql`s.ended_at is null and s.paused_at is null and r.status = 'active'`,
+}
+/** The session's driver, and the project whose clock a time is told on. */
+const SESSION_TOLD = sql`join wms.driver d on d.company_id = s.company_id and d.id = s.driver_id
+          join wms.project p on p.company_id = s.company_id and p.id = s.project_id`
+
+/** An outbound load, the four reconciliation rules' subject. */
+const LOAD = {
+  company: sql`ol.company_id`,
+  project: sql`ol.project_id`,
+  subjectOf: sql`ol.id = a.outbound_load_id`,
+}
+
+/** A container's filling as the raise reads it. */
+type FillRow = { container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }
+
+/** Every rule, in the order a tick raises them. */
+const RULES: { [R in AlertRule]: RuleSweep<R> } = {
+  "route-not-started": sweep({
+    from: () => sql`wms.route r`,
+    company: sql`r.company_id`,
+    project: sql`r.project_id`,
+    subjectOf: sql`r.id = a.route_id`,
+    /** The route and its planned day and start: a route moved is a new occurrence. */
+    key: () => sql`'route-not-started:' || r.id || ':' || to_char(r.operating_date, 'YYYY-MM-DD') || 'T' || to_char(r.planned_start_time, 'HH24:MI')`,
+    holds: () => sql`r.status in ('planned', 'ready')`,
+    raise: {
+      joins: sql`join wms.project p on p.company_id = r.company_id and p.id = r.project_id`,
+      when: (now, lookback) => sql`r.planned_start_time is not null
        -- the days the lookback can reach on any clock, so the horizon's planned routes are not each given a start to compute
        and r.operating_date between (${now} at time zone 'UTC')::date - 2 and (${now} at time zone 'UTC')::date + 1
        and ((r.operating_date + r.planned_start_time) at time zone p.timezone) + make_interval(mins => ${ROUTE_START_GRACE_MINUTES}) <= ${now}
-       and ((r.operating_date + r.planned_start_time) at time zone p.timezone) > ${lookback}
-       and ${noAlertWith(KEYS.route, sql`r.company_id`)}
-  `)
-  const sessions = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_seen: string }>(sql`
-    select s.company_id, s.project_id, ${KEYS.session} as rule_key, s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id,
-           to_char(s.last_seen_at at time zone p.timezone, 'HH24:MI') as last_seen
-      from wms.session s
-      join wms.route r on r.company_id = s.company_id and r.id = s.route_id
-      join wms.driver d on d.company_id = s.company_id and d.id = s.driver_id
-      join wms.project p on p.company_id = s.company_id and p.id = s.project_id
-     where s.ended_at is null
-       and s.paused_at is null
-       and r.status = 'active'
-       and s.last_seen_at <= ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES})
-       and s.last_seen_at > ${lookback}
-       and ${noAlertWith(KEYS.session, sql`s.company_id`)}
-  `)
-  const positions = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_fix: string | null }>(sql`
-    select s.company_id, s.project_id, ${KEYS.position} as rule_key, s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id,
-           to_char(${NEWEST_FIX} at time zone p.timezone, 'HH24:MI') as last_fix
-      from wms.session s
-      join wms.route r on r.company_id = s.company_id and r.id = s.route_id
-      join wms.driver d on d.company_id = s.company_id and d.id = s.driver_id
-      join wms.project p on p.company_id = s.company_id and p.id = s.project_id
-     where s.ended_at is null
-       and s.paused_at is null
-       and r.status = 'active'
-       -- heard from: a device not heard from at all is the silent session's alert
-       and s.last_seen_at > ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES})
-       and greatest(${NEWEST_FIX}, s.started_at, ${LAST_RESUME}) <= ${now} - make_interval(mins => ${POSITION_STALE_MINUTES})
-       and ${noAlertWith(KEYS.position, sql`s.company_id`)}
-  `)
-  const licences = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; driver_id: string; driver_name: string; licence_expiry: string; today: string }>(sql`
-    select d.company_id, d.project_id, ${KEYS.licence} as rule_key, d.id as driver_id, d.name as driver_name,
-           to_char(d.licence_expiry, 'YYYY-MM-DD') as licence_expiry, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today
-      from wms.driver d
-      join wms.project p on p.company_id = d.company_id and p.id = d.project_id
-     where d.status = 'active'
-       and d.licence_expiry is not null
-       and d.licence_expiry <= (${now} at time zone p.timezone)::date + ${LICENCE_WARNING_DAYS}::int
-       and ${noAlertWith(KEYS.licence, sql`d.company_id`)}
-  `)
-  const tickets = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; ticket_id: string; number: number; subject: string; due: string }>(sql`
-    select t.company_id, t.project_id, ${KEYS.ticket} as rule_key, t.id as ticket_id, t.number, t.subject,
-           to_char(t.due_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as due
-      from wms.ticket t
-      join wms.project p on p.company_id = t.company_id and p.id = t.project_id
-     where t.status in (${OPEN_TICKETS})
-       and t.due_at < ${now}
-       and ${noAlertWith(KEYS.ticket, sql`t.company_id`)}
-  `)
-  const plans = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; vehicle_id: string; vehicle_label: string; name: string; overdue: boolean; next_on: string | null; next_km: number | null; next_hours: number | null }>(sql`
-    select mp.company_id, mp.project_id, mp.rule_key, mp.vehicle_id, mp.vehicle_label, mp.name, mp.overdue,
-           to_char(mp.next_on, 'YYYY-MM-DD') as next_on, mp.next_km, mp.next_hours
-      from ${duePlans(now)}
-     where mp.due
-       and ${noAlertWith(sql`mp.rule_key`, sql`mp.company_id`)}
-  `)
-
-  const fills = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }>(sql`
-    select sp.company_id, sp.project_id, ${KEYS.fill} as rule_key, sp.container_id, c.label, se.identifier,
+       and ((r.operating_date + r.planned_start_time) at time zone p.timezone) > ${lookback}`,
+      columns: () => sql`r.id as route_id, r.number, to_char(r.operating_date, 'YYYY-MM-DD') as operating_date, to_char(r.planned_start_time, 'HH24:MI') as planned_start,
+           r.planned_driver_id as driver_id, r.planned_vehicle_id as vehicle_id`,
+      told: (row: { route_id: string; number: number; operating_date: string; planned_start: string; driver_id: string | null; vehicle_id: string | null }) => ({
+        routeId: row.route_id,
+        routeLabel: routeLabel(Number(row.number)),
+        operatingDate: row.operating_date,
+        plannedStart: row.planned_start,
+        driverId: row.driver_id,
+        vehicleId: row.vehicle_id,
+      }),
+    },
+  }),
+  "session-silent": sweep({
+    ...RUNNING_SESSION,
+    key: () => sql`'session-silent:' || s.id || ':' || ${keyInstant(sql`s.last_seen_at`)}`,
+    raise: {
+      joins: SESSION_TOLD,
+      when: (now, lookback) => sql`s.last_seen_at <= ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES}) and s.last_seen_at > ${lookback}`,
+      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, to_char(s.last_seen_at at time zone p.timezone, 'HH24:MI') as last_seen`,
+      told: (row: { route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_seen: string }) => ({
+        routeId: row.route_id,
+        routeLabel: routeLabel(Number(row.number)),
+        driverId: row.driver_id,
+        driverName: row.driver_name,
+        vehicleId: row.vehicle_id,
+        lastSeen: row.last_seen,
+      }),
+    },
+  }),
+  "position-stale": sweep({
+    ...RUNNING_SESSION,
+    /** The session and its newest fix: a fix that comes in is a new occurrence, its predecessor cleared. */
+    key: () => sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
+    raise: {
+      joins: SESSION_TOLD,
+      // Heard from: a device not heard from at all is the silent session's alert.
+      when: (now) => sql`s.last_seen_at > ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES})
+       and greatest(${NEWEST_FIX}, s.started_at, ${LAST_RESUME}) <= ${now} - make_interval(mins => ${POSITION_STALE_MINUTES})`,
+      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, to_char(${NEWEST_FIX} at time zone p.timezone, 'HH24:MI') as last_fix`,
+      told: (row: { route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_fix: string | null }) => ({
+        routeId: row.route_id,
+        routeLabel: routeLabel(Number(row.number)),
+        driverId: row.driver_id,
+        driverName: row.driver_name,
+        vehicleId: row.vehicle_id,
+        lastFix: row.last_fix,
+      }),
+    },
+  }),
+  "licence-expiring": sweep({
+    from: () => sql`wms.driver d join wms.project p on p.company_id = d.company_id and p.id = d.project_id`,
+    company: sql`d.company_id`,
+    project: sql`d.project_id`,
+    subjectOf: sql`d.id = a.driver_id`,
+    /** The expiry, and `:expired` once the project's today is past it: a licence that runs out while warned of is a second, graver occurrence, and its warning clears. */
+    key: (now) => sql`'licence-expiring:' || d.id || ':' || to_char(d.licence_expiry, 'YYYY-MM-DD') || case when d.licence_expiry < (${now} at time zone p.timezone)::date then ':expired' else '' end`,
+    holds: (now) => sql`d.status = 'active' and d.licence_expiry <= (${now} at time zone p.timezone)::date + ${LICENCE_WARNING_DAYS}::int`,
+    raise: {
+      columns: (now) => sql`d.id as driver_id, d.name as driver_name, to_char(d.licence_expiry, 'YYYY-MM-DD') as licence_expiry, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today`,
+      told: (row: { driver_id: string; driver_name: string; licence_expiry: string; today: string }) => ({ driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today }),
+    },
+  }),
+  "ticket-overdue": sweep({
+    from: () => sql`wms.ticket t`,
+    company: sql`t.company_id`,
+    project: sql`t.project_id`,
+    subjectOf: sql`t.id = a.ticket_id`,
+    key: () => sql`'ticket-overdue:' || t.id || ':' || ${keyInstant(sql`t.due_at`)}`,
+    holds: (now) => sql`t.status in (${OPEN_TICKETS}) and t.due_at < ${now}`,
+    raise: {
+      joins: sql`join wms.project p on p.company_id = t.company_id and p.id = t.project_id`,
+      columns: () => sql`t.id as ticket_id, t.number, t.subject, to_char(t.due_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as due`,
+      told: (row: { ticket_id: string; number: number; subject: string; due: string }) => ({ ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due }),
+    },
+  }),
+  "fill-threshold": sweep({
+    from: () => sql`wms.sensor_pairing sp join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id`,
+    company: sql`sp.company_id`,
+    project: sql`sp.project_id`,
+    subjectOf: sql`sp.container_id = a.container_id`,
+    /** The pairing and the last reading below its threshold: the bin read low and filling again is a new occurrence. */
+    key: () => sql`'fill-threshold:' || sp.id || ':' || coalesce(${LAST_LOW}, 'none')`,
+    holds: (now) => sql`${pairingInForce(now)} and ${NEWEST_FILL} >= sp.full_threshold_percent`,
+    raise: {
+      joins: sql`join wms.sensor se on se.company_id = sp.company_id and se.id = sp.sensor_id
+          join wms.container c on c.company_id = sp.company_id and c.id = sp.container_id`,
+      when: (_now, lookback) => sql`${NEWEST_MEASURED} > ${lookback}`,
+      columns: (now) => sql`sp.container_id, c.label, se.identifier,
            ${NEWEST_FILL} as fill_percent, sp.full_threshold_percent as threshold,
            to_char(${NEWEST_MEASURED} at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as measured_at,
-           sp.books_emptying, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today
-      from wms.sensor_pairing sp
-      join wms.sensor se on se.company_id = sp.company_id and se.id = sp.sensor_id
-      join wms.container c on c.company_id = sp.company_id and c.id = sp.container_id
-      join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id
-     where ${pairingInForce(now)}
-       and ${NEWEST_FILL} >= sp.full_threshold_percent
-       and ${NEWEST_MEASURED} > ${lookback}
-       and ${noAlertWith(KEYS.fill, sql`sp.company_id`)}
-  `)
-
-  const unreceived = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string | null; registration: string; from_station: string; to_station: string; departed_at: string }>(sql`
-    select ol.company_id, ol.project_id, ${KEYS.unreceived} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
-           fs.name as from_station, ts.name as to_station, to_char(ol.departed_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as departed_at
-      from wms.outbound_load ol
-      join wms.unloading_station fs on fs.company_id = ol.company_id and fs.id = ol.from_station_id
-      join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id
-      join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
-     where ol.status = 'departed'
-       and ol.departed_at <= ${now} - make_interval(hours => ${LOAD_RECEIPT_HOURS})
-       and ${noAlertWith(KEYS.unreceived, sql`ol.company_id`)}
-  `)
-  const mismatches = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string | null; registration: string; to_station: string; ticket: string; net_kg: number; received_net_kg: number; tolerance: number }>(sql`
-    select ol.company_id, ol.project_id, ${KEYS.mismatch} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
-           ts.name as to_station, ol.receiving_ticket as ticket, ol.net_kg, ol.received_net_kg, p.weight_tolerance_percent as tolerance
-      from wms.outbound_load ol
-      join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id
-      join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
-     where ol.status = 'received'
-       and ${BEYOND_TOLERANCE}
-       and ${noAlertWith(KEYS.mismatch, sql`ol.company_id`)}
-  `)
-  const overweights = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string; registration: string; net_kg: number; capacity_kg: number }>(sql`
-    select ol.company_id, ol.project_id, ${KEYS.overweight} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration, ol.net_kg, v.capacity_kg
-      from wms.outbound_load ol
-      join wms.vehicle v on v.company_id = ol.company_id and v.id = ol.vehicle_id
-     where ol.status <> 'cancelled'
-       and ${OVER_PAYLOAD}
-       and ol.departed_at > ${lookback}
-       and ${noAlertWith(KEYS.overweight, sql`ol.company_id`)}
-  `)
-  const untipped = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; operating_date: string; station: string; driver_id: string | null; vehicle_id: string | null }>(sql`
-    select r.company_id, r.project_id, ${KEYS.untipped} as rule_key, r.id as route_id, r.number, to_char(r.operating_date, 'YYYY-MM-DD') as operating_date,
-           us.name as station, coalesce(r.actual_driver_id, r.planned_driver_id) as driver_id, coalesce(r.actual_vehicle_id, r.planned_vehicle_id) as vehicle_id
-      from wms.route r
-      join wms.unloading_station us on us.company_id = r.company_id and us.id = r.unloading_station_id
-     where r.status = 'completed'
-       and r.completed_at <= ${now} - make_interval(hours => ${ROUTE_TIP_GRACE_HOURS})
-       and r.completed_at > ${lookback}
-       and ${UNTIPPED}
-       and ${noAlertWith(KEYS.untipped, sql`r.company_id`)}
-  `)
-
-  const of = (row: { company_id: string; project_id: string; rule_key: string }) => ({ companyId: row.company_id, projectId: row.project_id, ruleKey: row.rule_key })
-  return [
-    ...routes.map((row) => ({ ...of(row), occurrence: { rule: "route-not-started" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, plannedStart: row.planned_start, driverId: row.driver_id, vehicleId: row.vehicle_id } })),
-    ...sessions.map((row) => ({ ...of(row), occurrence: { rule: "session-silent" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastSeen: row.last_seen } })),
-    ...positions.map((row) => ({ ...of(row), occurrence: { rule: "position-stale" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastFix: row.last_fix } })),
-    ...licences.map((row) => ({ ...of(row), occurrence: { rule: "licence-expiring" as const, driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today } })),
-    ...tickets.map((row) => ({ ...of(row), occurrence: { rule: "ticket-overdue" as const, ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due } })),
-    ...fills.map((row) => ({
-      ...of(row),
-      occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at },
-      ...(row.books_emptying ? { books: { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } } : {}),
-    })),
-    ...plans.map((row) => ({
-      ...of(row),
-      occurrence: {
-        rule: "maintenance-due" as const,
+           sp.books_emptying, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today`,
+      told: (row: FillRow) => ({
+        containerId: row.container_id,
+        containerLabel: row.label,
+        sensorIdentifier: row.identifier,
+        fillPercent: Number(row.fill_percent),
+        thresholdPercent: Number(row.threshold),
+        measuredAt: row.measured_at,
+      }),
+      books: (row: FillRow) =>
+        row.books_emptying ? { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } : undefined,
+    },
+  }),
+  "maintenance-due": sweep({
+    from: (now) => duePlans(now),
+    company: sql`mp.company_id`,
+    project: sql`mp.project_id`,
+    subjectOf: sql`mp.plan_id = split_part(a.rule_key, ':', 2)::uuid`,
+    key: () => sql`mp.rule_key`,
+    holds: () => sql`mp.due`,
+    raise: {
+      columns: () => sql`mp.vehicle_id, mp.vehicle_label, mp.name, mp.overdue,
+           to_char(mp.next_on, 'YYYY-MM-DD') as next_on, mp.next_km, mp.next_hours`,
+      told: (row: { vehicle_id: string; vehicle_label: string; name: string; overdue: boolean; next_on: string | null; next_km: number | null; next_hours: number | null }) => ({
         vehicleId: row.vehicle_id,
         vehicleLabel: row.vehicle_label,
         planName: row.name,
@@ -365,16 +416,43 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
         nextDueOn: row.next_on,
         nextDueKm: row.next_km === null ? null : Number(row.next_km),
         nextDueHours: row.next_hours === null ? null : Number(row.next_hours),
-      },
-    })),
-    ...unreceived.map((row) => ({
-      ...of(row),
-      occurrence: { rule: "load-not-received" as const, outboundLoadId: row.load_id, vehicleId: row.vehicle_id, registration: row.registration, fromStation: row.from_station, toStation: row.to_station, departedAt: row.departed_at },
-    })),
-    ...mismatches.map((row) => ({
-      ...of(row),
-      occurrence: {
-        rule: "load-weight-mismatch" as const,
+      }),
+    },
+  }),
+  "load-not-received": sweep({
+    ...LOAD,
+    from: () => sql`wms.outbound_load ol`,
+    /** The load: once per load, whatever the ticks between. */
+    key: () => sql`'load-not-received:' || ol.id`,
+    holds: () => sql`ol.status = 'departed'`,
+    raise: {
+      joins: sql`join wms.unloading_station fs on fs.company_id = ol.company_id and fs.id = ol.from_station_id
+          join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id
+          join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id`,
+      when: (now) => sql`ol.departed_at <= ${now} - make_interval(hours => ${LOAD_RECEIPT_HOURS})`,
+      columns: () => sql`ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
+           fs.name as from_station, ts.name as to_station, to_char(ol.departed_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as departed_at`,
+      told: (row: { load_id: string; vehicle_id: string | null; registration: string; from_station: string; to_station: string; departed_at: string }) => ({
+        outboundLoadId: row.load_id,
+        vehicleId: row.vehicle_id,
+        registration: row.registration,
+        fromStation: row.from_station,
+        toStation: row.to_station,
+        departedAt: row.departed_at,
+      }),
+    },
+  }),
+  "load-weight-mismatch": sweep({
+    ...LOAD,
+    from: () => sql`wms.outbound_load ol join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id`,
+    /** The load and its receipt: a corrected receipt is a new occurrence. */
+    key: () => sql`'load-weight-mismatch:' || ol.id || ':' || ol.receiving_ticket || ':' || ol.received_net_kg`,
+    holds: () => sql`ol.status = 'received' and ${BEYOND_TOLERANCE}`,
+    raise: {
+      joins: sql`join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id`,
+      columns: () => sql`ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
+           ts.name as to_station, ol.receiving_ticket as ticket, ol.net_kg, ol.received_net_kg, p.weight_tolerance_percent as tolerance`,
+      told: (row: { load_id: string; vehicle_id: string | null; registration: string; to_station: string; ticket: string; net_kg: number; received_net_kg: number; tolerance: number }) => ({
         outboundLoadId: row.load_id,
         vehicleId: row.vehicle_id,
         registration: row.registration,
@@ -383,71 +461,88 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
         netKg: Number(row.net_kg),
         receivedNetKg: Number(row.received_net_kg),
         tolerancePercent: Number(row.tolerance),
-      },
-    })),
-    ...overweights.map((row) => ({ ...of(row), occurrence: { rule: "load-overweight" as const, outboundLoadId: row.load_id, vehicleId: row.vehicle_id, registration: row.registration, netKg: Number(row.net_kg), capacityKg: Number(row.capacity_kg) } })),
-    ...untipped.map((row) => ({
-      ...of(row),
-      occurrence: { rule: "route-not-tipped" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, station: row.station, driverId: row.driver_id, vehicleId: row.vehicle_id },
-    })),
-  ]
+      }),
+    },
+  }),
+  "load-overweight": sweep({
+    ...LOAD,
+    from: () => sql`wms.outbound_load ol join wms.vehicle v on v.company_id = ol.company_id and v.id = ol.vehicle_id`,
+    key: () => sql`'load-overweight:' || ol.id`,
+    holds: () => sql`ol.status <> 'cancelled' and ${OVER_PAYLOAD}`,
+    raise: {
+      when: (_now, lookback) => sql`ol.departed_at > ${lookback}`,
+      columns: () => sql`ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration, ol.net_kg, v.capacity_kg`,
+      told: (row: { load_id: string; vehicle_id: string; registration: string; net_kg: number; capacity_kg: number }) => ({
+        outboundLoadId: row.load_id,
+        vehicleId: row.vehicle_id,
+        registration: row.registration,
+        netKg: Number(row.net_kg),
+        capacityKg: Number(row.capacity_kg),
+      }),
+    },
+  }),
+  "route-not-tipped": sweep({
+    from: () => sql`wms.route r`,
+    company: sql`r.company_id`,
+    project: sql`r.project_id`,
+    subjectOf: sql`r.id = a.route_id`,
+    key: () => sql`'route-not-tipped:' || r.id`,
+    holds: () => UNTIPPED,
+    raise: {
+      joins: sql`join wms.unloading_station us on us.company_id = r.company_id and us.id = r.unloading_station_id`,
+      when: (now, lookback) => sql`r.status = 'completed'
+       and r.completed_at <= ${now} - make_interval(hours => ${ROUTE_TIP_GRACE_HOURS})
+       and r.completed_at > ${lookback}`,
+      columns: () => sql`r.id as route_id, r.number, to_char(r.operating_date, 'YYYY-MM-DD') as operating_date,
+           us.name as station, coalesce(r.actual_driver_id, r.planned_driver_id) as driver_id, coalesce(r.actual_vehicle_id, r.planned_vehicle_id) as vehicle_id`,
+      told: (row: { route_id: string; number: number; operating_date: string; station: string; driver_id: string | null; vehicle_id: string | null }) => ({
+        routeId: row.route_id,
+        routeLabel: routeLabel(Number(row.number)),
+        operatingDate: row.operating_date,
+        station: row.station,
+        driverId: row.driver_id,
+        vehicleId: row.vehicle_id,
+      }),
+    },
+  }),
+}
+
+/** The tick's instant as SQL. */
+const instant = (at: Date) => sql`${at.toISOString()}::timestamptz`
+
+/** The occurrences no alert names yet, across companies, as the worker role: each with what its alert says. */
+export async function occurrencesToRaise(worker: JobContext["worker"], at: Date): Promise<RaisedOccurrence[]> {
+  const now = instant(at)
+  const lookback = sql`${now} - make_interval(hours => ${RULE_LOOKBACK_HOURS})`
+  const raised: RaisedOccurrence[] = []
+  for (const rule of Object.keys(RULES) as AlertRule[]) {
+    for (const { told, ...found } of await RULES[rule].raises(worker, now, lookback)) raised.push({ ...found, occurrence: { rule, ...told } as RuleOccurrence })
+  }
+  return raised
 }
 
 /**
  * The rules' open alerts whose occurrence no longer holds, across companies,
- * as the worker role: the subject, found by its id, no longer spells the
- * alert's key — a route started, moved or cancelled; a device heard from or
- * its session or route ended; a licence renewed or run out, or its driver no
- * longer active; a ticket closed or re-dated; a container read below its
- * threshold, or its pairing ended; a plan serviced, retired or run overdue —
- * or its condition has passed.
+ * as the worker role: the subject, found by the alert's columns, no longer
+ * spells the alert's key — a route started, moved or cancelled; a device
+ * heard from or its session or route ended; a licence renewed or run out, or
+ * its driver no longer active; a ticket closed or re-dated; a container read
+ * below its threshold, or its pairing ended; a plan serviced, retired or run
+ * overdue — or its condition has passed.
  */
 export async function alertsToClear(worker: JobContext["worker"], at: Date): Promise<ClearedAlert[]> {
-  const now = sql`${at.toISOString()}::timestamptz`
-  const KEYS = keysAt(now)
+  const now = instant(at)
   const rows = await worker.db.execute<{ company_id: string; id: string; rule: AlertRule }>(sql`
     select a.company_id, a.id, a.rule
       from wms.alert a
      where a.rule_key is not null
        and a.status <> 'resolved'
        and case a.rule
-         when 'route-not-started' then not exists (
-           select 1 from wms.route r
-            where r.company_id = a.company_id and r.id = a.route_id and a.rule_key = ${KEYS.route} and r.status in ('planned', 'ready'))
-         when 'session-silent' then not exists (
-           select 1 from wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id
-            where s.company_id = a.company_id and s.route_id = a.route_id and s.driver_id = a.driver_id and a.rule_key = ${KEYS.session}
-              and s.ended_at is null and s.paused_at is null and r.status = 'active')
-         when 'licence-expiring' then not exists (
-           select 1 from wms.driver d join wms.project p on p.company_id = d.company_id and p.id = d.project_id
-            where d.company_id = a.company_id and d.id = a.driver_id and a.rule_key = ${KEYS.licence} and d.status = 'active'
-              and d.licence_expiry <= (${now} at time zone p.timezone)::date + ${LICENCE_WARNING_DAYS}::int)
-         when 'position-stale' then not exists (
-           select 1 from wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id
-            where s.company_id = a.company_id and s.route_id = a.route_id and s.driver_id = a.driver_id and a.rule_key = ${KEYS.position}
-              and s.ended_at is null and s.paused_at is null and r.status = 'active')
-         when 'fill-threshold' then not exists (
-           select 1 from wms.sensor_pairing sp join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id
-            where sp.company_id = a.company_id and sp.container_id = a.container_id and a.rule_key = ${KEYS.fill}
-              and ${pairingInForce(now)} and ${NEWEST_FILL} >= sp.full_threshold_percent)
-         when 'load-not-received' then not exists (
-           select 1 from wms.outbound_load ol
-            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.unreceived} and ol.status = 'departed')
-         when 'load-weight-mismatch' then not exists (
-           select 1 from wms.outbound_load ol join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
-            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.mismatch} and ol.status = 'received' and ${BEYOND_TOLERANCE})
-         when 'load-overweight' then not exists (
-           select 1 from wms.outbound_load ol join wms.vehicle v on v.company_id = ol.company_id and v.id = ol.vehicle_id
-            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.overweight} and ol.status <> 'cancelled' and ${OVER_PAYLOAD})
-         when 'route-not-tipped' then not exists (
-           select 1 from wms.route r
-            where r.company_id = a.company_id and r.id = a.route_id and a.rule_key = ${KEYS.untipped} and ${UNTIPPED})
-         when 'ticket-overdue' then not exists (
-           select 1 from wms.ticket t
-            where t.company_id = a.company_id and t.id = a.ticket_id and a.rule_key = ${KEYS.ticket} and t.status in (${OPEN_TICKETS}) and t.due_at < ${now})
-         when 'maintenance-due' then not exists (
-           select 1 from ${duePlans(now)}
-            where mp.company_id = a.company_id and mp.plan_id = split_part(a.rule_key, ':', 2)::uuid and mp.rule_key = a.rule_key and mp.due)
+         ${sql.join(
+           (Object.keys(RULES) as AlertRule[]).map((rule) => sql`when ${rule} then ${RULES[rule].clears(now)}`),
+           sql`
+         `,
+         )}
          else false
        end
   `)
