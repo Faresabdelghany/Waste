@@ -21,10 +21,10 @@ import type { OccurrencePreviewInput, SchemeCalendar } from "./occurrences"
 import type { GuidedSchemeData } from "./quick-create"
 import { occurrencesPerWeek, type SchemeRecurrence } from "./recurrence"
 import { isIsoDate } from "../days"
+import { servedFrequencyPromises } from "../planning/frequency-reconciliation"
 import {
   allocationConflictSources,
   recurrenceIssues,
-  servedFrequencyPromises,
   validateScheme,
   type RecurrenceIssue,
   type SchemeDayPlan,

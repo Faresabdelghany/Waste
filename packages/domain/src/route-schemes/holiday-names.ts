@@ -10,7 +10,7 @@
 // module does not know — such dates read "Holiday". Pure date math over ISO
 // `yyyy-mm-dd` strings.
 
-import { addDays } from "../days"
+import { addDays, type HolidayList, isIsoDate } from "../days"
 
 const FIXED_HOLIDAYS: Readonly<Record<string, string>> = {
   "01-01": "New Year's Day",
@@ -136,4 +136,16 @@ export function withCarriedNames(
 /** The label a calendar holiday shows: its name on the list, else the generic word. */
 export function holidayLabel(iso: string, names: HolidayNameLookup): string {
   return names(iso) ?? "Holiday"
+}
+
+/** Valid ISO dates → a sorted holiday list named through the list's lookup. */
+export function holidayListFromDates(
+  dates: Iterable<string>,
+  names: HolidayNameLookup,
+): HolidayList {
+  const list = new Map<string, string>()
+  for (const iso of [...new Set(dates)].filter(isIsoDate).sort()) {
+    list.set(iso, holidayLabel(iso, names))
+  }
+  return list
 }

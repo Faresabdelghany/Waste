@@ -6,6 +6,7 @@ import {
   danishHolidayName,
   easterSunday,
   holidayLabel,
+  holidayListFromDates,
   holidayNamesFor,
   withCarriedNames,
 } from "../holiday-names"
@@ -65,5 +66,15 @@ describe("Danish holiday names", () => {
     assert.equal(danishHolidayName("2026-09-16"), undefined)
     assert.equal(holidayLabel("2026-09-16", danishHolidayName), "Holiday")
     assert.equal(holidayLabel("2026-12-25", danishHolidayName), "Christmas Day")
+  })
+
+  test("holidayListFromDates names each date through the given lookup", () => {
+    assert.deepEqual(
+      [...holidayListFromDates(["2026-12-26", "2026-12-25", "not-a-date"], danishHolidayName).entries()],
+      [
+        ["2026-12-25", "Christmas Day"],
+        ["2026-12-26", "2nd Christmas Day"],
+      ],
+    )
   })
 })

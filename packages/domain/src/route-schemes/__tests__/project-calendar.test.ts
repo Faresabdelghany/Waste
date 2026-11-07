@@ -2,8 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { egyptianHolidayName, holidayNamesFor } from "../holiday-names"
-import { holidayListFromDates } from "../holidays"
+import { egyptianHolidayName, holidayListFromDates, holidayNamesFor } from "../holiday-names"
 import { generateOccurrences, occurrencePreview } from "../occurrences"
 import {
   NO_HOLIDAY_LIST_LABEL,

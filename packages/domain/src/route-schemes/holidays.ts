@@ -7,24 +7,11 @@
 // import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
-import { holidayLabel, type HolidayNameLookup } from "./holiday-names"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
-import { type HolidayList, isIsoDate } from "../days"
+import { isIsoDate } from "../days"
 import { stringValue } from "./validation"
 
 type StoredValues = Record<string, string | boolean | undefined>
-
-/** Valid ISO dates → a sorted holiday list named through the list's lookup. */
-export function holidayListFromDates(
-  dates: Iterable<string>,
-  names: HolidayNameLookup,
-): HolidayList {
-  const list = new Map<string, string>()
-  for (const iso of [...new Set(dates)].filter(isIsoDate).sort()) {
-    list.set(iso, holidayLabel(iso, names))
-  }
-  return list
-}
 
 /** The stored holiday policy; records that predate the field skip holidays, as they always did. */
 export function schemeHolidayPolicy(values: StoredValues | undefined): HolidayPolicy {

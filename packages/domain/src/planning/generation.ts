@@ -66,15 +66,14 @@
 //
 // The drift stamp (#41) is the set a rule group matches as of the window's
 // first day — one day, so a nightly 7-day run and a 90-day on-demand run
-// compare like with like — under the group's `ruleSignature`
-// (route-schemes/container-drift.ts), the rule's own matches before any
-// other group's claim, since the signature covers the rule alone. A stamp is
+// compare like with like — under the rule's signature (`stopRuleSignature`),
+// the rule's own matches before any other group's claim, since the signature
+// covers the rule alone. A stamp is
 // written when the group has none, or its latest has another signature or
 // another set (`stampMoved`); an identical set writes nothing, so the two
 // latest rows are the two latest distinct sets, which is what
 // `containerDriftBetween` compares.
 import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
-import { ruleSignature } from "../route-schemes/container-drift"
 import { tankWaits, type TankCadence, type TankGate } from "../route-schemes/due-from-last"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
 import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
@@ -615,12 +614,15 @@ export function pickupChanges(existing: readonly ExistingPickup[], planned: read
 /** A rule group's drift stamp: the signature it matched under, and the sorted set it matched. */
 export type MatchStamp = { ruleSignature: string; containerIds: readonly string[] }
 
-/** The signature of a rule by ids, over the planning area it matches within: `ruleSignature`'s spelling, so the read and the write agree. */
+/**
+ * What a rule group's matches depend on besides the container base: the
+ * planning area it matches within (O30 of #290), its fractions, its vehicle
+ * type and its container types, each list sorted. Two stamps are compared only
+ * under one signature; compared whole, never parsed, so the separators need no
+ * escaping.
+ */
 export function stopRuleSignature(rule: StopRule): string {
-  return ruleSignature(
-    { fractions: [...rule.fractionIds], ...(rule.vehicleTypeId === null ? {} : { ruleVehicleType: rule.vehicleTypeId }), containerTypes: [...rule.containerTypeIds] },
-    rule.planningAreaId ?? undefined,
-  )
+  return [rule.planningAreaId ?? "", [...rule.fractionIds].sort().join(","), rule.vehicleTypeId ?? "", [...rule.containerTypeIds].sort().join(",")].join("|")
 }
 
 /** The stamp a run would write for a rule group on the window's first day: the rule's own matches, sorted. */

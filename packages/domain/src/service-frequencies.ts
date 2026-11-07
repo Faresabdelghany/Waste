@@ -24,11 +24,9 @@
 // facts from it, so it must not import fixture data back (type-only imports
 // are fine).
 
+import { intervalCollectionsPerWeek } from "./planning/frequency-reconciliation"
 import { EMPTY_FACT } from "./record-values"
-import {
-  RECURRENCE_WEEKLY_RATES,
-  type RecurrenceFrequency,
-} from "./route-schemes/recurrence"
+import type { RecurrenceFrequency } from "./route-schemes/recurrence"
 
 export type ServiceFrequencyDefinition = {
   id: string
@@ -188,28 +186,6 @@ export function canonicalServiceFrequencyName(value: string | undefined) {
   return resolveServiceFrequencyValue(value)?.name ?? value
 }
 
-/** The interval vocabulary alone, as `service_frequency` stores it: what the API's reconciliation reads (O22 of #290). */
-export type FrequencyInterval = Pick<
-  ServiceFrequencyDefinition,
-  "collectionsPerWeek" | "weeksBetween" | "daysBetween"
->
-
-/**
- * An interval's nominal collections per week, the promise side of the
- * reconciliation (issue #21 asks for interval comparison, not a hard-coded
- * cadence ladder). weeks-between divides; days-between promises already
- * state a weekly count; a rate with neither interval is the store's monthly
- * (`service_frequency.collections_per_week`'s comment: 1 with neither
- * interval is monthly), which reads the scheme-cadence rate. null = on
- * demand — no standing cadence to reconcile.
- */
-export function intervalCollectionsPerWeek(interval: FrequencyInterval): number | null {
-  if (interval.collectionsPerWeek === null) return null
-  if (interval.weeksBetween !== null) return interval.collectionsPerWeek / interval.weeksBetween
-  if (interval.daysBetween !== null) return interval.collectionsPerWeek
-  return interval.collectionsPerWeek === 1 ? RECURRENCE_WEEKLY_RATES.monthly : interval.collectionsPerWeek
-}
-
 /** A catalog definition's nominal collections per week: its interval's (`intervalCollectionsPerWeek`). */
 export function promisedCollectionsPerWeek(
   definition: ServiceFrequencyDefinition,
@@ -229,8 +205,8 @@ export const PROMISED_RATE_KEY = "promisedCollectionsPerWeek"
  * What the reconciliation validation needs to know about one linked
  * container: its name (for the warning copy), the promised cadence's display
  * name, and the promised rate on the shared collections-per-week scale.
- * Mirrors validation.ts SchemeFrequencyPromise structurally — validation
- * stays free of this module. null when the container carries no resolvable
+ * Mirrors SchemeFrequencyPromise (planning/frequency-reconciliation)
+ * structurally — the reconciliation stays free of this module. null when the container carries no resolvable
  * standing promise (no frequency recorded, free text, or on demand). A
  * record read from the API names its promise under `PROMISED_RATE_KEY`.
  */

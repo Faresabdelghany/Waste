@@ -2,9 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { danishHolidayName } from "../holiday-names"
 import {
-  holidayListFromDates,
   parseHolidayNames,
   schemeHolidayPolicy,
   schemeProjectId,
@@ -53,16 +51,6 @@ describe("a holiday list's dates and names as a record spells them", () => {
       JSON.stringify({ "2027-01-01": "New Year's Day", "2027-12-25": "Christmas Day" }),
     )
     assert.equal(serializeHolidayNames(new Map()), "")
-  })
-
-  test("holidayListFromDates names each date through the given lookup", () => {
-    assert.deepEqual(
-      [...holidayListFromDates(["2026-12-26", "2026-12-25", "not-a-date"], danishHolidayName).entries()],
-      [
-        ["2026-12-25", "Christmas Day"],
-        ["2026-12-26", "2nd Christmas Day"],
-      ],
-    )
   })
 })
 

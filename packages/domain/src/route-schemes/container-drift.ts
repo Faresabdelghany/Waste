@@ -37,11 +37,7 @@
 // within the threshold clears it, a rule edit restarts the comparison — rather
 // than clearing on the next Plan Ahead load of the same set.
 
-import {
-  IMPLICIT_GROUP_ID,
-  type CollectionGroup,
-  type ResolvedCollectionGroup,
-} from "./groups"
+import { IMPLICIT_GROUP_ID, type ResolvedCollectionGroup } from "./groups"
 import { stringValue } from "./validation"
 
 /** The last run's matches per rule group, JSON under submittedValues. */
@@ -54,7 +50,7 @@ export const PREVIOUS_GENERATION_MATCHES_KEY = "previousGenerationMatches"
 export const CONTAINER_DRIFT_THRESHOLD_PERCENT = 10
 
 export type GroupMatches = {
-  /** The rule signature the containers were matched under (ruleSignature). */
+  /** The rule signature the containers were matched under (`stopRuleSignature`, @waste/domain/planning/generation). */
   rule: string
   /** The container ids the group matched, sorted. */
   containerIds: string[]
@@ -70,27 +66,6 @@ export type GenerationMatchHistory = {
 }
 
 type StoredValues = Record<string, string | boolean | undefined>
-
-/* -------------------------------- signature -------------------------------- */
-
-/**
- * What a rule group's matches depend on besides the container base: the
- * planning area it matches within — its own where it has one (O30 of #290),
- * else the scheme's — and the group's fractions, vehicle type and container
- * types. Two runs are compared only when this is unchanged between
- * them. Compared whole, never parsed, so the separators need no escaping.
- */
-export function ruleSignature(
-  group: Pick<CollectionGroup, "fractions" | "ruleVehicleType" | "containerTypes">,
-  areaId: string | undefined,
-): string {
-  return [
-    areaId ?? "",
-    [...group.fractions].sort().join(","),
-    group.ruleVehicleType ?? "",
-    [...(group.containerTypes ?? [])].sort().join(","),
-  ].join("|")
-}
 
 /* --------------------------------- matches --------------------------------- */
 

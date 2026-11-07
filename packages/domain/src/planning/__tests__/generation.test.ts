@@ -7,7 +7,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ruleSignature } from "../../route-schemes/container-drift"
 import type { SchemeCalendar } from "../../route-schemes/occurrences"
 import type { TankGate } from "../../route-schemes/due-from-last"
 import type { SchemeRecurrence } from "../../route-schemes/recurrence"
@@ -520,9 +519,8 @@ describe("pickupChanges", () => {
 /* ---------------------------------- stamps --------------------------------- */
 
 describe("the drift stamp", () => {
-  test("the signature is ruleSignature's spelling over the planning area, the sorted fractions, the vehicle type and the sorted container types", () => {
+  test("the signature spells the planning area, the sorted fractions, the vehicle type and the sorted container types", () => {
     const rule: StopRule = { fractionIds: ["paper", "residual"], containerTypeIds: ["type-660", "type-240"], vehicleTypeId: "rear-loader", planningAreaId: "area-1" }
-    assert.equal(stopRuleSignature(rule), ruleSignature({ fractions: ["residual", "paper"], ruleVehicleType: "rear-loader", containerTypes: ["type-240", "type-660"] }, "area-1"))
     assert.equal(stopRuleSignature(rule), "area-1|paper,residual|rear-loader|type-240,type-660")
     assert.equal(stopRuleSignature({ ...residualRule, planningAreaId: null }), "|residual||")
     assert.equal(stopRuleSignature({ ...residualRule, planningAreaId: "area-north" }), "area-north|residual||", "a group's own area is part of what its matches depend on (O30 of #290)")

@@ -32,9 +32,9 @@ import {
 import { vehicleTypeOfRecord } from "./matching"
 import { recurrenceFromValues, serviceDaysFromValues } from "./recurrence"
 import { isIsoDate } from "../days"
+import { servedFrequencyPromises } from "../planning/frequency-reconciliation"
 import {
   allocationConflictSources,
-  servedFrequencyPromises,
   stringValue,
   validateScheme,
   type SchemeValidationResult,

@@ -1,8 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { danishHolidayName } from "../holiday-names"
-import { holidayListFromDates } from "../holidays"
+import { danishHolidayName, holidayListFromDates } from "../holiday-names"
 import { PREVIEW_HORIZON_MONTHS, formatClockTime, formatOccurrenceDate, generateOccurrences, isWorkingDay, occurrencePreview, SHIFT_SEARCH_DAYS, shiftedNote, shiftToWorkingDay } from "../occurrences"
 import { addDays, addMonthsRolling, formatShortDay, NO_HOLIDAYS } from "../../days"
 import {
