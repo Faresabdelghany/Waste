@@ -13,14 +13,14 @@
 // with the same fraction and frequency override, so it never leaves service
 // and no stock movement is written (`servingOn`, then `carryPlacements`).
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId } from "../ids"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { containerServicePlacement } from "../schema/containers"
 import { accessCredential } from "../schema/site-visits"
-import { endChildrenOn, endOn, type DatedChild } from "./periods"
+import { endChildrenOn, endOn, runsPast, type DatedChild } from "./periods"
 
 /** "it" or "them": the sentence has just counted the rows, so the pronoun follows the count. */
 const them = (rows: number) => (rows === 1 ? "it" : "them")
@@ -64,26 +64,28 @@ export async function endSubscriptionsOn(tx: Tx, companyId: string, subscription
  * Ends everything the agreement holds on `on`, under its lock — its
  * subscriptions with their placements and pauses, and its credentials —
  * refused first where any of them begins on or after the day; the agreement's
- * own end is its caller's patch, which then strands nothing.
+ * own end is its caller's patch, which then strands nothing. Answers the
+ * subscriptions it ended and the containers whose placements it ended, read
+ * under the subscriptions' locks.
  */
-export async function endAgreementHoldingsOn(tx: Tx, companyId: string, agreementId: string, on: string): Promise<void> {
-  await endChildrenOn(tx, AGREEMENT_CHILDREN, companyId, [agreementId], on)
-}
-
-/** The subscriptions of an agreement in force past `on`: what its end on that day ends. */
-export async function subscriptionsPast(tx: Tx, companyId: string, agreementId: string, on: string): Promise<string[]> {
-  const rows = await tx
-    .select({ id: subscription.id })
-    .from(subscription)
-    .where(and(eq(subscription.companyId, companyId), eq(subscription.agreementId, agreementId), or(isNull(subscription.validTo), gt(subscription.validTo, on))))
-    .orderBy(asc(subscription.id))
-  return rows.map((row) => row.id)
+export async function endAgreementHoldingsOn(tx: Tx, companyId: string, agreementId: string, on: string): Promise<{ subscriptionIds: readonly string[]; containerIds: readonly string[] }> {
+  const ended = await endChildrenOn(tx, AGREEMENT_CHILDREN, companyId, [agreementId], on)
+  const placementIds = ended.get(PLACEMENTS) ?? []
+  const placed =
+    placementIds.length === 0
+      ? []
+      : await tx
+          .selectDistinct({ containerId: containerServicePlacement.containerId })
+          .from(containerServicePlacement)
+          .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, [...placementIds])))
+          .orderBy(asc(containerServicePlacement.containerId))
+  return { subscriptionIds: ended.get(SUBSCRIPTIONS) ?? [], containerIds: placed.map((row) => row.containerId) }
 }
 
 /** A placement serving a subscription on the day, as a replacement carries it on. */
 export type ServingPlacement = { id: string; subscriptionId: string; containerId: string; wasteFractionId: string; serviceFrequencyId: string | null; validTo: string | null }
 
-/** The placements serving the subscriptions past `on` — begun before it, ending after it or open — read before they end, since each replacement keeps its end. */
+/** The placements serving the subscriptions past `on`, read before they end, since each replacement keeps its end; the caller holds the subscriptions' locks, and ends them refusing any placement that begins on or after the day. */
 export async function servingOn(tx: Tx, companyId: string, subscriptionIds: readonly string[], on: string): Promise<ServingPlacement[]> {
   if (subscriptionIds.length === 0) return []
   const rows = await tx
@@ -100,8 +102,7 @@ export async function servingOn(tx: Tx, companyId: string, subscriptionIds: read
       and(
         eq(containerServicePlacement.companyId, companyId),
         inArray(containerServicePlacement.subscriptionId, [...subscriptionIds]),
-        lt(containerServicePlacement.validFrom, on),
-        or(isNull(containerServicePlacement.validTo), gt(containerServicePlacement.validTo, on)),
+        runsPast(containerServicePlacement, on),
       ),
     )
     .orderBy(asc(containerServicePlacement.id))

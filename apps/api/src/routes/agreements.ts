@@ -88,12 +88,12 @@ import type { JobSender } from "@waste/db/jobs"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { refuseInactiveCustomer, type Party } from "@waste/domain/registry/agreements"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
-import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm"
+import { and, asc, eq, gt, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { AGREEMENT_CHILDREN, carryPlacements, endAgreementHoldingsOn, endSubscriptionsOn, servingOn, SUBSCRIPTION_CHILDREN, subscriptionsPast } from "@waste/db/commands/agreement-periods"
-import { refuseStrandedChildren } from "@waste/db/commands/periods"
+import { AGREEMENT_CHILDREN, carryPlacements, endAgreementHoldingsOn, endSubscriptionsOn, servingOn, SUBSCRIPTION_CHILDREN } from "@waste/db/commands/agreement-periods"
+import { refuseStrandedChildren, runsPast } from "@waste/db/commands/periods"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { pauseSubscription } from "@waste/db/commands/subscription-pauses"
 import { stampsOf } from "@waste/db/shapes/times"
@@ -506,7 +506,7 @@ export async function changeSubscription(tx: Tx, principal: Principal, id: strin
   const [pausing] = await tx
     .select({ validTo: subscriptionPause.validTo })
     .from(subscriptionPause)
-    .where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), lt(subscriptionPause.validFrom, on), or(isNull(subscriptionPause.validTo), gt(subscriptionPause.validTo, on))))
+    .where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), runsPast(subscriptionPause, on)))
 
   // Each half ends before the other begins, so no exclusion constraint sees two at once: the subscription ends with what it holds
   // (`endSubscriptionsOn`, refused where a placement or a pause begins on or after the day), and the replacement is written as any
@@ -861,12 +861,9 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         if (current === undefined) throw noSuchAgreement(id)
         requireStrictlyInside(current, on, INSIDE_AGREEMENT)
 
-        // What ends — the subscriptions in force past the day and the containers serving them — read before it does; then everything
-        // the agreement holds ends on the day, refused (409) where a subscription, a placement, a pause or a credential begins on or
-        // after it, and the agreement's own patch strands nothing.
-        const ending = await subscriptionsPast(tx, companyId, id, on)
-        const containerIds = [...new Set((await servingOn(tx, companyId, ending, on)).map((placement) => placement.containerId))]
-        await endAgreementHoldingsOn(tx, companyId, id, on)
+        // Everything the agreement holds ends on the day, refused (409) where a subscription, a placement, a pause or a credential
+        // begins on or after it, and the agreement's own patch then strands nothing.
+        const { subscriptionIds: ending, containerIds } = await endAgreementHoldingsOn(tx, companyId, id, on)
         const terminated = await patchAgreement(tx, principal, id, { validTo: on })
 
         const within = { companyId, projectId: current.projectId }

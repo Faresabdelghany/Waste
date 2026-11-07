@@ -52,7 +52,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { AGREEMENT_CHILDREN, carryPlacements, endSubscriptionsOn, servingOn } from "@waste/db/commands/agreement-periods"
-import { holdsPast } from "@waste/db/commands/periods"
+import { holdsPast, runsPast } from "@waste/db/commands/periods"
 import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
@@ -98,7 +98,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
     .select({ id: subscription.id, agreementId: subscription.agreementId, validFrom: subscription.validFrom, number: agreement.number })
     .from(subscription)
     .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.id, subscription.agreementId)))
-    .where(and(eq(subscription.companyId, companyId), eq(subscription.propertyId, id), eq(agreement.customerId, body.outgoingCustomerId), or(isNull(subscription.validTo), gt(subscription.validTo, on))))
+    .where(and(eq(subscription.companyId, companyId), eq(subscription.propertyId, id), eq(agreement.customerId, body.outgoingCustomerId), runsPast(subscription, on)))
     .orderBy(asc(subscription.id))
   if (subscribed.length > 0 && body.agreementNumber === undefined) throw invalidRequest("body", [{ path: "agreementNumber", message: NUMBER_OWED }])
 

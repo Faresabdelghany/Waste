@@ -70,8 +70,11 @@ export type DatedChild = {
 /** The rows of `child` whose parent is one of `parentIds`. */
 const ofParents = (child: DatedChild, companyId: string, parentIds: readonly string[]): SQL | undefined => and(eq(child.table.companyId, companyId), inArray(child.parent, [...parentIds]))
 
-/** A row in force past `on`: open, or ending after it. */
-const runsPast = (columns: ValidityColumns, on: string): SQL | undefined => or(isNull(columns.validTo), gt(columns.validTo, on))
+/** A row in force past `on`: open, or ending after it — what ending its parent on the day ends, and what keeps the parent running. */
+export const runsPast = (columns: ValidityColumns, on: string): SQL | undefined => or(isNull(columns.validTo), gt(columns.validTo, on))
+
+/** What ending parents on a day ended, by declared child: the ids of its rows that ran past the day. */
+export type Ended = ReadonlyMap<DatedChild, readonly string[]>
 
 async function idsOf(tx: Tx, child: DatedChild, where: SQL | undefined): Promise<string[]> {
   const rows = await tx.select({ id: child.table.id }).from(child.table).where(where).orderBy(asc(child.table.id))
@@ -94,37 +97,48 @@ async function refuseBeginningOn(tx: Tx, children: readonly DatedChild[], compan
   }
 }
 
-/** Ends these rows of `child` on `on`: a child that is a parent itself locked in id order, its own children ended first, so it strands none. */
-async function endRowsOn(tx: Tx, child: DatedChild, companyId: string, ids: readonly string[], on: string): Promise<void> {
+/**
+ * Ends these rows of `child` on `on`, into `ended`: a child that is a parent
+ * itself locked in id order, and its own children running past the day read
+ * under that lock and ended first, so it strands none and a child written
+ * beside it meanwhile is either ended here or waits for the end.
+ */
+async function endRowsOn(tx: Tx, child: DatedChild, companyId: string, ids: readonly string[], on: string, ended: Map<DatedChild, string[]>): Promise<void> {
   if (ids.length === 0) return
   if (child.children.length > 0) {
     await lockRows(tx, child.table, companyId, ids)
-    for (const grandchild of child.children) await endRowsOn(tx, grandchild, companyId, await idsOf(tx, grandchild, and(ofParents(grandchild, companyId, ids), runsPast(grandchild.table, on))), on)
+    for (const grandchild of child.children) await endRowsOn(tx, grandchild, companyId, await idsOf(tx, grandchild, and(ofParents(grandchild, companyId, ids), runsPast(grandchild.table, on))), on, ended)
   }
   await tx
     .update(child.table)
     .set({ validTo: on })
     .where(and(eq(child.table.companyId, companyId), inArray(child.table.id, [...ids])))
+  ended.set(child, [...(ended.get(child) ?? []), ...ids])
 }
 
 /**
  * Ends what the parents hold on `on`, the parents themselves left to their
  * caller: refuses first every declared child beginning on or after the day,
- * then ends every one in force past it, each child's own children first.
+ * then ends every one in force past it, each child's own children first, and
+ * answers what it ended.
  */
-export async function endChildrenOn(tx: Tx, children: readonly DatedChild[], companyId: string, parentIds: readonly string[], on: string): Promise<void> {
+export async function endChildrenOn(tx: Tx, children: readonly DatedChild[], companyId: string, parentIds: readonly string[], on: string): Promise<Ended> {
   await refuseBeginningOn(tx, children, companyId, parentIds, on)
-  for (const child of children) await endRowsOn(tx, child, companyId, await idsOf(tx, child, and(ofParents(child, companyId, parentIds), runsPast(child.table, on))), on)
+  const ended = new Map<DatedChild, string[]>()
+  for (const child of children) await endRowsOn(tx, child, companyId, await idsOf(tx, child, and(ofParents(child, companyId, parentIds), runsPast(child.table, on))), on, ended)
+  return ended
 }
 
 /**
  * Ends these rows of a declared child on `on`, with what they hold: refuses
  * first their own children beginning on or after the day, then ends those in
- * force past it and the rows themselves.
+ * force past it and the rows themselves, and answers what it ended.
  */
-export async function endOn(tx: Tx, child: DatedChild, companyId: string, ids: readonly string[], on: string): Promise<void> {
+export async function endOn(tx: Tx, child: DatedChild, companyId: string, ids: readonly string[], on: string): Promise<Ended> {
   await refuseBeginningOn(tx, child.children, companyId, ids, on)
-  await endRowsOn(tx, child, companyId, ids, on)
+  const ended = new Map<DatedChild, string[]>()
+  await endRowsOn(tx, child, companyId, ids, on, ended)
+  return ended
 }
 
 /** Whether the parent still holds a declared child in force past `on`: something of it runs on. */
