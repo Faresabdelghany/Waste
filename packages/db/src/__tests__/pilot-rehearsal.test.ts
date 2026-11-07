@@ -7,7 +7,8 @@
 // database (scripts/pilot/rehearse.ts); this file is the rehearsal a machine
 // can run on its own.
 //
-// It needs PostgreSQL client 17 and age on PATH: without them it skips,
+// It needs the PostgreSQL client of supabase/config.toml's major and age on
+// PATH: without them it skips,
 // visibly, unless REQUIRE_DATABASE is on, where their absence is a failure,
 // as it is in CI.
 import assert from "node:assert/strict"
@@ -25,6 +26,7 @@ import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
 import { rehearsalTools, rehearseRestore } from "../pilot/rehearsal"
 import { seedDemo } from "../seed/demo"
+import { postgresMajor } from "../supabase-config"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, withDatabaseName } from "./database"
 
@@ -33,7 +35,8 @@ const missing = database.skip === false ? rehearsalTools() : undefined
 if (missing !== undefined && isDatabaseRequired(process.env)) {
   throw new Error(`REQUIRE_DATABASE is set, but the restore rehearsal cannot run: ${missing}`)
 }
-const skip = database.skip || (missing === undefined ? false : `${missing}: the restore rehearsal needs PostgreSQL client 17 and age`)
+const major = postgresMajor()
+const skip = database.skip || (missing === undefined ? false : `${missing}: the restore rehearsal needs PostgreSQL client ${major} and age`)
 
 describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
   test("restores a seeded database to the same journal and fingerprint, and the app roles work on it", async () => {
@@ -53,7 +56,7 @@ describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
       const lines: string[] = []
       const rehearsal = await rehearseRestore(fresh.url, { log: (line) => lines.push(line) })
       assert.ok(rehearsal.journalRows > 0)
-      assert.match(lines.join("\n"), /pilot-backup: pg_dump 17 against server 17/)
+      assert.ok(lines.includes(`pilot-backup: pg_dump ${major} against server ${major}`))
       assert.match(lines.join("\n"), /the fingerprint matches/)
 
       // The API role, fenced by its tenant, reads and writes the restored rows.

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { expectPilot, PAUSED_HINT, poolerUser, targetOfUrl, unreachableHint } from "../pilot/identity"
+import { expectPilot, PAUSED_HINT, targetOfUrl, unreachableHint } from "../pilot/identity"
+import { poolerUser } from "../supabase"
 
 const REF = "abcdefghijklmnopqrst"
 const HOST = "aws-0-eu-north-1.pooler.supabase.com"

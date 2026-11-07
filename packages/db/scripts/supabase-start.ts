@@ -11,10 +11,10 @@ import { constants } from "node:os"
 import { resolve } from "node:path"
 
 import { startWithOneRetry, type SupabaseRunner } from "../src/local-stack/start"
+import { databaseVolume } from "../src/supabase-config"
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../../..")
-// The CLI names it after `project_id` in supabase/config.toml.
-const DATABASE_VOLUME = "supabase_db_waste"
+const DATABASE_VOLUME = databaseVolume()
 
 const run: SupabaseRunner = (args) => {
   const result = spawnSync("supabase", args, { cwd: REPOSITORY_ROOT, stdio: "inherit" })

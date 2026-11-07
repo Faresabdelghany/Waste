@@ -1,16 +1,20 @@
-name: PostgreSQL client 17 and age
+name: PostgreSQL client and age
 description: >-
-  The Pilot's backup and restore tools (Issue #152): postgresql-client-17 from
-  the official PGDG repository, first on PATH, and age from Ubuntu. Used by the
-  protected pilot-database workflow and by CI's restore rehearsal, so both run
-  the same client.
+  The Pilot's backup and restore tools (Issue #152): the PostgreSQL client of
+  the major supabase/config.toml names (`[db] major_version`, the hosted
+  project's) from the official PGDG repository, first on PATH, and age from
+  Ubuntu. Used by the protected pilot-database workflow and by CI's restore
+  rehearsal, so both run the same client. Runs after the checkout.
 runs:
   using: composite
   steps:
-    - name: Install postgresql-client-17 and age
+    - name: Install the PostgreSQL client and age
+      id: install
       shell: bash
       run: |
         set -euo pipefail
+        major="$(sed -nE 's/^major_version = ([0-9]+)$/\1/p' supabase/config.toml)"
+        [[ "$major" =~ ^[0-9]+$ ]] || { echo "::error::supabase/config.toml sets no [db] major_version"; exit 1; }
         # The runner image removes its own PGDG source after installing its
         # PostgreSQL; a second source for the same repository under another
         # key would make apt refuse both, so one is added only where none is.
@@ -24,11 +28,14 @@ runs:
             | sudo tee /etc/apt/sources.list.d/pgdg-waste.list > /dev/null
         fi
         sudo apt-get update -qq
-        sudo apt-get install --yes --quiet --no-install-recommends postgresql-client-17 age
-        echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+        sudo apt-get install --yes --quiet --no-install-recommends "postgresql-client-$major" age
+        echo "/usr/lib/postgresql/$major/bin" >> "$GITHUB_PATH"
+        echo "bin=/usr/lib/postgresql/$major/bin" >> "$GITHUB_OUTPUT"
     - name: Say which
       shell: bash
+      env:
+        BIN: ${{ steps.install.outputs.bin }}
       run: |
-        /usr/lib/postgresql/17/bin/pg_dump --version
-        /usr/lib/postgresql/17/bin/psql --version
+        "$BIN/pg_dump" --version
+        "$BIN/psql" --version
         age --version

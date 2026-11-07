@@ -31,9 +31,11 @@
 // - pg-boss's date partitions of `queue_stats` (the day's and the next day's,
 //   named by the date the migration ran) are left out with everything on them;
 // - the journal's `id`, a serial a hand replay left gaps in, is left out;
-// - a role's LOGIN, password and validity are left out: the Pilot's app roles
-//   log in with their own credentials and the local stack's with bootstrap's,
-//   and the LOGIN state is a check of its own (scripts/pilot/state.ts);
+// - a role's password and validity are left out, and so is the LOGIN of a
+//   role a URL logs in as: the Pilot's app roles log in with their own
+//   credentials and the local stack's with bootstrap's, and their LOGIN state
+//   is a check of its own (scripts/pilot/state.ts). A role that logs in as
+//   nobody has its LOGIN recorded, since no environment gives it one;
 // - an extension's version and a sequence's current value are left out.
 //
 // Every definition is deparsed by Postgres itself (`pg_get_constraintdef`,
@@ -49,7 +51,7 @@ import type { PendingQuery, Row, Sql } from "postgres"
 import { createDb } from "./client"
 import { MIGRATIONS_FOLDER, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, OWNED_SCHEMAS } from "./migrate"
 import { textList } from "./query/text-list"
-import { API_ROLE, WORKER_ROLE } from "./roles"
+import { DATABASE_ROLES } from "./roles"
 import { wms } from "./schema/wms"
 import { sha256 } from "./sha256"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
@@ -57,8 +59,8 @@ import { PGBOSS_SCHEMA } from "./sql/pgboss"
 /** The committed fingerprint of a database migrated from this checkout's files. `_`-prefixed: drizzle-kit reads every other file of `meta/` as a snapshot. */
 export const FINGERPRINT_FILE = path.join(MIGRATIONS_FOLDER, "meta", "_fingerprint.txt")
 
-/** The service roles the migrations create. */
-export const FINGERPRINT_ROLES = [API_ROLE, WORKER_ROLE] as const
+const FINGERPRINTED = DATABASE_ROLES.filter((role) => role.fingerprint)
+export const FINGERPRINT_ROLES: readonly string[] = FINGERPRINTED.map((role) => role.name)
 /** The extensions the foundation installs into `extensions`. */
 const EXTENSIONS = ["btree_gist", "postgis"] as const
 /** The functions the migrations put outside their own schemas, as `schema.name`. */
@@ -179,7 +181,7 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
   }
   const [extensionsSchema] = await sql<{ acl: string }[]>`
     select ${exploded(sql`n.nspacl`, sql`'n'::"char"`, sql`n.nspowner`)} as acl from pg_namespace n where n.nspname = 'extensions'`
-  const serviceRoleGrants = (text: string) => (parse<AclItem[]>(text) ?? []).filter((item) => (FINGERPRINT_ROLES as readonly string[]).includes(item.grantee))
+  const serviceRoleGrants = (text: string) => (parse<AclItem[]>(text) ?? []).filter((item) => FINGERPRINT_ROLES.includes(item.grantee))
   lines.push(
     extensionsSchema === undefined ? "schema extensions missing" : `schema extensions service-role-grants=${spellAcl(serviceRoleGrants(extensionsSchema.acl), role, { grantor: false })}`,
   )
@@ -188,14 +190,16 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
     lines.push(extension === undefined ? `extension ${name} missing` : `extension ${name} schema=${extension.schema}`)
   }
 
-  // The service roles: attributes (never LOGIN, a password or its validity),
-  // settings, memberships in either direction.
-  for (const name of FINGERPRINT_ROLES) {
-    const [attributes] = await sql<{ spelled: string }[]>`
+  // The service roles: attributes (never a password or its validity, LOGIN
+  // only where no URL logs in as the role), settings, memberships in either
+  // direction.
+  for (const { name, login } of FINGERPRINTED) {
+    const [attributes] = await sql<{ spelled: string; login: boolean }[]>`
       select format('superuser=%s inherit=%s createrole=%s createdb=%s replication=%s bypassrls=%s connlimit=%s',
-                    rolsuper::text, rolinherit::text, rolcreaterole::text, rolcreatedb::text, rolreplication::text, rolbypassrls::text, rolconnlimit) as spelled
+                    rolsuper::text, rolinherit::text, rolcreaterole::text, rolcreatedb::text, rolreplication::text, rolbypassrls::text, rolconnlimit) as spelled,
+             rolcanlogin as login
       from pg_roles where rolname = ${name}`
-    lines.push(attributes === undefined ? `role ${name} missing` : `role ${name} ${attributes.spelled}`)
+    lines.push(attributes === undefined ? `role ${name} missing` : `role ${name} ${attributes.spelled}${login === "never" ? ` login=${attributes.login}` : ""}`)
   }
   for (const setting of await sql<{ name: string; database: string | null; config: string }[]>`
     select r.rolname as name, d.datname::text as database, array_to_json(s.setconfig)::text as config
