@@ -52,16 +52,14 @@ import { and, eq } from "drizzle-orm"
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
 
-type NoticeKind = CustomerNoticeKind
-
 /** What one event came to: the notice it is, the messages queued for it, and why any customer was not told. */
-export type Noticed = { event: string; kind: NoticeKind; notice: CustomerNoticeEvent | null; messageIds: string[]; why: string[] }
+export type Noticed = { event: string; kind: CustomerNoticeKind; notice: CustomerNoticeEvent | null; messageIds: string[]; why: string[] }
 
 /** Who a notice goes to and what it fills in. */
 type Recipients = { customerIds: readonly string[]; values: Partial<Record<MessageVariable, string>> }
 
 /** The facts `customerNoticeOf` reads off the payload: the booking a stop collects, the rule an alert is of. */
-function factsOf(event: RelayedEvent<NoticeKind>): { bulkyBookingId?: string | null; alertRule?: string | null } {
+function factsOf(event: RelayedEvent<CustomerNoticeKind>): { bulkyBookingId?: string | null; alertRule?: string | null } {
   switch (event.kind) {
     case "pickup-completed":
     case "pickup-failed":
@@ -74,7 +72,7 @@ function factsOf(event: RelayedEvent<NoticeKind>): { bulkyBookingId?: string | n
 }
 
 /** The customers a broadcast about a route reaches, with its day: within the rule's areas, or the whole project. */
-async function routeRecipients(tx: Tx, event: RelayedEvent<NoticeKind>, ruleId: string, routeId: string, operatingDate: string): Promise<Recipients> {
+async function routeRecipients(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, ruleId: string, routeId: string, operatingDate: string): Promise<Recipients> {
   const areas = await tx
     .select({ id: notificationRuleArea.planningAreaId })
     .from(notificationRuleArea)
@@ -84,7 +82,7 @@ async function routeRecipients(tx: Tx, event: RelayedEvent<NoticeKind>, ruleId: 
 }
 
 /** Who the event's notice goes to, read in the event's transaction. */
-async function recipientsOf(tx: Tx, event: RelayedEvent<NoticeKind>, ruleId: string): Promise<Recipients> {
+async function recipientsOf(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, ruleId: string): Promise<Recipients> {
   switch (event.kind) {
     case "bulky-booking-booked":
     case "bulky-booking-cancelled":
@@ -134,7 +132,7 @@ async function recipientsOf(tx: Tx, event: RelayedEvent<NoticeKind>, ruleId: str
 }
 
 /** One event to the notices it owes, queued in one fenced transaction as the tenant, each customer in a savepoint of its own. */
-export async function noticeCustomerFor(event: RelayedEvent<NoticeKind>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Noticed> {
+export async function noticeCustomerFor(event: RelayedEvent<CustomerNoticeKind>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Noticed> {
   const notice = customerNoticeOf(event.kind, factsOf(event))
   const outcome: Noticed = { event: event.id, kind: event.kind, notice, messageIds: [], why: [] }
   if (notice === null) return outcome

@@ -130,7 +130,7 @@ async function factsOf(tx: Tx, event: RelayedEvent<FinanceEventKind>) {
     }
     case "scale-ticket-completed":
     case "scale-ticket-voided": {
-      // The ticket's id is all the consumer reads off the payload; the rest is read from the tables as they stand.
+      // The payload is parsed as the whole ScaleTicket, but its id is all the consumer takes from it; the rest is read from the tables as they stand.
       const named = payloadOf(event)
       return await scaleTicketFacts(tx, event.companyId, event.kind, named.id)
     }
