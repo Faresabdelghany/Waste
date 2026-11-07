@@ -104,15 +104,3 @@ export function defaultAccessForRole(roleId: string): RoleAccessMap {
     Object.entries(defaults).map(([key, actions]) => [key, [...actions]]),
   )
 }
-
-/**
- * The grants a role is effectively working with: its stored map when it has
- * one (an empty object means "explicitly nothing"), otherwise the seeded
- * defaults for built-in roles.
- */
-export function effectiveRoleAccess(role: {
-  id: string
-  access?: RoleAccessMap
-}): RoleAccessMap {
-  return role.access ?? defaultAccessForRole(role.id)
-}

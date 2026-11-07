@@ -1,7 +1,7 @@
 import { Suspense } from "react"
-import { redirect } from "next/navigation"
 
 import { WorkspacePageShell } from "@/components/waste/workspace-page-shell"
+import { followMovedAddress } from "@/lib/moved-address"
 // PROTOTYPE — scheme-wizard variants, remove after evaluation (see components/waste/prototypes/).
 import { SchemeWizardPrototype } from "@/components/waste/prototypes/scheme-wizard-prototype"
 
@@ -13,10 +13,9 @@ export const instant = false;
 export default async function RouteStudioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ module?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { module } = await searchParams
-  if (module === "history") redirect("/route-studio?module=pickups")
+  followMovedAddress("/route-studio", await searchParams)
 
   return (
     <>

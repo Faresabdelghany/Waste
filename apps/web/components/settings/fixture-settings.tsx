@@ -22,7 +22,8 @@ import { Switch } from "@/components/ui/switch"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
-import { readPersisted, SETTINGS_STORAGE_KEY } from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { SETTINGS_STORAGE_KEY } from "@/lib/storage-keys"
 import { cn } from "@/lib/utils"
 
 type SettingValue = string | boolean
@@ -64,17 +65,17 @@ function mergeStored(defaults: Record<string, SettingValue>, raw: string): Recor
   return { ...defaults, ...Object.fromEntries(kept) }
 }
 
+/** The values this browser saved, over the defaults. */
+const keptValues = persistedStore<Record<string, SettingValue>>(SETTINGS_STORAGE_KEY, { parse: (raw) => mergeStored(INITIAL.values, raw) })
+
 function useFormState(): FormState {
   const current = useSyncExternalStore(subscribe, () => state, () => INITIAL)
   useEffect(() => {
     if (loaded) return
     loaded = true
-    try {
-      const stored = readPersisted(window.localStorage, SETTINGS_STORAGE_KEY)
-      if (stored) setState({ ...state, values: mergeStored(INITIAL.values, stored) })
-    } catch {
-      // Keep the defaults when local storage is unavailable or holds something unreadable.
-    }
+    // The defaults stand where local storage is unavailable or holds something unreadable.
+    const stored = keptValues.read()
+    if (stored !== null) setState({ ...state, values: stored })
   }, [])
   return current
 }
@@ -85,9 +86,7 @@ function change(controlId: string, value: SettingValue) {
 
 function save() {
   const controls = state.dirty
-  try {
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(state.values))
-  } catch {
+  if (!keptValues.write(state.values)) {
     toast.error("Settings could not be saved", { description: "Local storage is unavailable. Your changes are still visible in this session." })
     return
   }

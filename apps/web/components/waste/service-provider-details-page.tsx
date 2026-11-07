@@ -10,7 +10,7 @@ import type {
   BusinessRecord,
   WorkspaceId,
 } from "@/lib/data/business-modules"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { PageTopBar } from "@/components/page-layout"
@@ -230,11 +230,7 @@ function RelatedRecordsTable({
                         {workspaceId && moduleId ? (
                           <Button variant="ghost" size="sm" asChild>
                             <Link
-                              href={getBusinessModuleHref(
-                                workspaceId,
-                                moduleId,
-                                relatedRecord.id,
-                              )}
+                              href={workspaceHref({ workspaceId, moduleId }, relatedRecord.id)}
                             >
                               Open
                             </Link>

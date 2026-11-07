@@ -43,7 +43,7 @@ import { useApiSession } from "@/components/waste/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/waste/provider-account"
 import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
-import { allows } from "@/lib/api/grants"
+import { allows, grantKeyOf } from "@/lib/api/grants"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
@@ -75,7 +75,7 @@ import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord, typeLetsRole } from "@/lib/api/records/ticket-types"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
@@ -201,7 +201,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   // A sub-ticket is a create in this module: the create grant, and the office's alone.
   const { me } = useApiSession()
   const resolve = useServerResolver()
-  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, `${workspaceId}.${moduleId}`, "create")
+  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, grantKeyOf({ workspaceId, moduleId }), "create")
 
   const value = (key: string) => (typeof live.submittedValues?.[key] === "string" ? (live.submittedValues[key] as string) : "")
   const projectId = value("projectId") || live.projectIds?.[0]
@@ -295,7 +295,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     const name = live.facts[fact] ?? webId
     // A name the store resolved is a loaded row of a switched module: the way there. An id chip has none yet.
     const module = LINK_MODULES[key]
-    return [{ key, fact, name, href: name !== webId && module !== undefined ? getBusinessModuleHref(module.workspaceId, module.moduleId, webId) : undefined }]
+    return [{ key, fact, name, href: name !== webId && module !== undefined ? workspaceHref(module, webId) : undefined }]
   })
 
   return (
@@ -526,7 +526,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
                       {subTickets.map((child) => (
                         <Row key={child.id} label={child.facts[TICKET_NUMBER_FACT] ?? "New"} value={child.name}>
-                          <Link href={getBusinessModuleHref(workspaceId, moduleId, child.id)} className="inline-flex min-w-0 items-center gap-1 underline-offset-4 hover:underline">
+                          <Link href={workspaceHref({ workspaceId, moduleId }, child.id)} className="inline-flex min-w-0 items-center gap-1 underline-offset-4 hover:underline">
                             <span className="truncate">{child.name}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">· {child.status}</span>
                           </Link>
@@ -612,7 +612,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <ul className="mt-3 divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="ticket-alerts">
                     {detail.alerts.map((alert) => (
                       <li key={alert.id} className="flex items-center justify-between gap-2 py-2">
-                        <Link href={getBusinessModuleHref(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId, alertWebId(alert.id))} className="truncate underline-offset-4 hover:underline">
+                        <Link href={workspaceHref(ALERTS_MODULE, alertWebId(alert.id))} className="truncate underline-offset-4 hover:underline">
                           {alert.title}
                         </Link>
                         <Badge variant="outline" className="shrink-0 rounded-full text-[11px]">

@@ -12,7 +12,7 @@ import { useServerModuleState } from "@/components/waste/business-record-store"
 import { useApiSession } from "@/components/waste/api-session-store"
 import { useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
@@ -57,7 +57,7 @@ export function PickupExceptionsSection({ record, module, place }: { record: Bus
                     <span className="flex items-baseline gap-3">
                       <span className="text-muted-foreground">{chargeSentence(item, productName)}</span>
                       {stop !== null && (
-                        <Link className="text-xs underline underline-offset-2" href={getBusinessModuleHref(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, stop)}>
+                        <Link className="text-xs underline underline-offset-2" href={workspaceHref(PICKUPS_MODULE, stop)}>
                           Open stop
                         </Link>
                       )}

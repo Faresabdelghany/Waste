@@ -22,6 +22,7 @@
 // field ids where the module has a form (the edit dialog seeds from them) and
 // by the wire's names where it has none.
 import type { AuditedTable } from "@waste/contracts/audit"
+import type { ModuleKey } from "@waste/domain/access/modules"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
@@ -187,7 +188,7 @@ export type ServerModule = {
    * ticket teams and types, which the people working tickets pick from
    * without keeping them (#545 of #544). A write is still its own grant's.
    */
-  alsoViewedUnder?: readonly string[]
+  alsoViewedUnder?: readonly ModuleKey[]
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */

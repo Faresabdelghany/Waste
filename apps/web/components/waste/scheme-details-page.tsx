@@ -58,6 +58,7 @@ import {
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
 import { settingsHref } from "@/lib/data/settings-panes"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
 import { schemeEditPolicy } from "@waste/domain/route-schemes/edit"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
@@ -113,6 +114,7 @@ import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
 import { dayIn } from "@/lib/api/records/clock"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { planAheadToggledSentence, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { useBusinessRecordStore, useServerModuleState, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
@@ -836,10 +838,6 @@ function SchemeTabToolbar({
   )
 }
 
-function routeDetailsHref(routeId: string) {
-  return `/route-studio?module=routes&record=${routeId}`
-}
-
 /** The workspace's clickable-row contract: button role, keyboard activation, hover. */
 function recordRowProps(label: string, onOpen: () => void) {
   return {
@@ -1011,7 +1009,7 @@ function SchemeRoutesTab({
                         <TableRow
                           key={route.id}
                           {...recordRowProps(route.name, () =>
-                            router.push(routeDetailsHref(route.id)),
+                            router.push(workspaceHref(ROUTES_MODULE, route.id)),
                           )}
                         >
                           <TableCell className="min-w-[180px]">
@@ -1183,7 +1181,7 @@ function SchemeStopsTab({
                       key={pickup.id}
                       {...(routeId
                         ? recordRowProps(pickup.facts.Route ?? "route", () =>
-                            router.push(routeDetailsHref(routeId)),
+                            router.push(workspaceHref(ROUTES_MODULE, routeId)),
                           )
                         : {})}
                     >

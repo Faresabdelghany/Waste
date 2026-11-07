@@ -2,22 +2,37 @@ import type { Request } from "@playwright/test"
 
 import { accessTokenOf, apiAs, chainLanded, expect, freshContext, recordToasts, signIn, test, toastsOf } from "./fixtures"
 import { E2E, uniqueName } from "./env"
-import { ensureTester } from "./tester"
+import { ensureTester, roleNamed, TESTER_ROLE } from "./tester"
 
-// Scenario 2: a grant refused in-session. The tester's role, Route Planner,
-// views the customers and edits none of them, and views nothing of the
-// organisation. The record store reads only the switched modules the role
-// views (`viewableModules`, lib/api/records/modules.ts; Issue #145), so
-// Company & Projects is never asked for and nobody is told of it: it is not
-// granted, a state of its own and not a failed read (Issue #200), and the
-// customers the API returns are listed, found and opened beside it. A
-// change the role may not make is still sent, the API refuses it —
-// `about:blank` 403 — and the person is told in the API's own words
-// (business-record-store.tsx, `reportProblem`) while the session stays
-// open: authentication and authorization are apart (lib/api/session.ts),
-// and only the account's own refusal ends a session.
-test("a role without the grant is refused in the API's words and stays signed in", async ({ api, browser }) => {
-  await ensureTester(api, E2E.testerEmail)
+type Grant = { moduleKey: string; actions: string[] }
+
+// Scenario 2: a grant refused in-session. The tester works under a custom
+// role: the Route Planner's charter — the customers viewed, nothing of the
+// organisation — and the contacts' edit beside it. The record store reads
+// only the switched modules the role views (`viewableModules`,
+// lib/api/records/modules.ts; Issue #145), so Company & Projects is never
+// asked for and nobody is told of it: it is not granted, a state of its own
+// and not a failed read (Issue #200), and the customers the API returns are
+// listed, found and opened beside it. The workspace offers what `/me`'s
+// grants allow (`useGrants`), so a status change is offered; the edit is
+// then withdrawn from the role while the page is open, and the change the
+// role may no longer make is refused by the API — `about:blank` 403 — and
+// the person told in the API's own words (business-record-store.tsx,
+// `reportProblem`) while the session stays open: authentication and
+// authorization are apart (lib/api/session.ts), and only the account's own
+// refusal ends a session. Read again, `/me` grants no edit on the contacts,
+// and no status change is offered.
+test("a grant withdrawn in-session is refused in the API's words, stays signed in, and is no longer offered once read again", async ({ api, browser }) => {
+  const { user } = await ensureTester(api, E2E.testerEmail)
+  const planner = (await (await api.get(`/roles/${(await roleNamed(api, TESTER_ROLE)).id}`)).json()) as { grants: Grant[] }
+  const contactsEdit: Grant = { moduleKey: "customers.contacts", actions: ["view", "edit"] }
+  const role = await api.post("/roles", {
+    data: { name: uniqueName("E2E Contacts Editor"), scope: "Assigned projects", description: "The Route Planner's charter and the contacts' edit", grants: [...planner.grants.filter((grant) => grant.moduleKey !== contactsEdit.moduleKey), contactsEdit] },
+  })
+  expect(role.status(), await role.text()).toBe(201)
+  const roleId = ((await role.json()) as { id: string }).id
+  const moved = await api.patch(`/users/${user.id}`, { data: { roleId } })
+  expect(moved.status(), await moved.text()).toBe(200)
   const name = uniqueName("E2E Refused Organisation")
   const created = await api.post("/customers", { data: { kind: "organisation", name } })
   expect(created.status(), await created.text()).toBe(201)
@@ -40,7 +55,7 @@ test("a role without the grant is refused in the API's words and stays signed in
     expect(asked.filter((call) => /\/waste-api\/(company|projects)\b/.test(call))).toEqual([])
     await expect(page.getByText("configure.organization could not be read from the API")).toHaveCount(0)
 
-    // A status change on a customer is an edit the role does not hold: sent, refused in the API's words.
+    // A status change on a customer is an edit the role holds: offered.
     // The search is typed once: the modules landing after it no longer clear it (#197), and a module not granted loses no row (#200).
     await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
     await page.getByRole("button", { name: `Open ${name}` }).click()
@@ -48,6 +63,11 @@ test("a role without the grant is refused in the API's words and stays signed in
     await expect(sheet.getByRole("heading", { name })).toBeVisible()
     await sheet.getByRole("button", { name: "Inactive" }).click()
     const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
+    await expect(governed.getByRole("button", { name: "Confirm inactive" })).toBeEnabled()
+
+    // The edit is withdrawn while the page is open: the change is still sent, and refused in the API's words.
+    const withdrawn = await api.put(`/roles/${roleId}/grants`, { data: { grants: planner.grants } })
+    expect(withdrawn.status(), await withdrawn.text()).toBe(200)
     const [patched] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname.startsWith("/waste-api/customers/")),
       governed.getByRole("button", { name: "Confirm inactive" }).click(),
@@ -82,8 +102,19 @@ test("a role without the grant is refused in the API's words and stays signed in
     } finally {
       await tester.dispose()
     }
+
+    // Read again on a page loaded afresh, `/me` grants no edit on the contacts: the customer opens, and no status change is offered.
+    const meRead = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/me")
+    await page.goto("/customers?module=contacts")
+    expect((await meRead).status()).toBe(200)
+    await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
+    await page.getByRole("button", { name: `Open ${name}` }).click()
+    await expect(sheet.getByRole("heading", { name })).toBeVisible()
+    await expect(sheet.getByRole("button", { name: "Inactive" })).toHaveCount(0)
   } finally {
     await context.close()
+    // Back to the tester's own shape, which the other specs stand on.
+    await ensureTester(api, E2E.testerEmail)
   }
 })
 

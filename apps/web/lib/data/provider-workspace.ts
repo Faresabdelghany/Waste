@@ -9,19 +9,18 @@
 // through `POST /users` on a provider's role (`PROVIDER_ROLE_SCOPE`), and its
 // tickets, raised about a route it runs, in that route's project. Fixture
 // mode keeps NordRen ApS, its fixture role and its fixture forms untouched.
-import type { Grant } from "@waste/contracts/permissions"
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "../api/grants"
-import { accessMapOf, DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
+import { allows, grantKeyOf, type Grants } from "../api/grants"
+import { DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "../api/records/provider-activities"
 import { ASSIGN_ROUTE, DISPATCH_ROUTE, ROUTES_MODULE } from "../api/records/routes"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
-import type { RoleAccessMap } from "./role-permissions"
 import { createTicketRecord, tokenOptions } from "./tickets"
 
 /** Service Providers › Service Provider Workspace: a provider's own team, read and invited through `/users` (#291 C24). */
@@ -30,20 +29,17 @@ export const TEAM_MODULE: ModuleLocation = { workspaceId: "service-providers", m
 /** The provider `/me` names, as the shell reads it: null for an office account. */
 export type ProviderOfMe = { id: string; legalName: string }
 
-/** What the shell reads off `/me`: whose workspace it is, who acts in it, and what its role allows. */
+/** What the shell reads off `/me`: whose workspace it is, and who acts in it. What its role allows is `useGrants`'s. */
 export type ProviderWorkspace = {
   /** The provider's server id. */
   providerId: string
   legalName: string
   /** The account's name, which the forms stamp as the actor. */
   actorName: string
-  /** The role's grants as `/me` answers them: what the workspace's modules and actions read. */
-  access: RoleAccessMap
 }
 
 type MeOfProvider = {
   user: { fullName: string }
-  role: { grants: readonly Grant[] }
   serviceProvider: ProviderOfMe | null
 }
 
@@ -54,7 +50,6 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
     providerId: me.serviceProvider.id,
     legalName: me.serviceProvider.legalName,
     actorName: me.user.fullName,
-    access: accessMapOf(me.role.grants),
   }
 }
 
@@ -68,9 +63,9 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
 /** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
 export const PATCH_RECORD = "patch"
 
-export const PROVIDER_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+export const PROVIDER_COMMANDS: Readonly<Partial<Record<ModuleKey, readonly string[]>>> = {
   "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
-  [`${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`]: [DEACTIVATE_USER, REACTIVATE_USER],
+  [grantKeyOf(TEAM_MODULE)]: [DEACTIVATE_USER, REACTIVATE_USER],
   // Its own proposals and notes (#474): withdrawn, completed and corrected; the office alone decides a proposal.
   "service-providers.activities": [WITHDRAW_ACTIVITY, COMPLETE_ACTIVITY, PATCH_RECORD],
 }
@@ -81,7 +76,7 @@ export const PROVIDER_COMMANDS: Readonly<Record<string, readonly string[]>> = {
  * API gives a provider (`PROVIDER_COMMANDS`), and only where its role allows
  * `edit` on the module.
  */
-export function commandOffered(account: { provider: boolean; grants: Grants | undefined }, moduleKey: string, command: string): boolean {
+export function commandOffered(account: { provider: boolean; grants: Grants | undefined }, moduleKey: ModuleKey, command: string): boolean {
   if (!account.provider) return true
   return (PROVIDER_COMMANDS[moduleKey] ?? []).includes(command) && allows(account.grants, moduleKey, "edit")
 }

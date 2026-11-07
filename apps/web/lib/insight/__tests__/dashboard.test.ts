@@ -28,7 +28,6 @@ import {
   tonnageCsvOf,
   tonnageLabelOf,
   tonnageLines,
-  viewedModules,
   weightOf,
   windowEnding,
 } from "../dashboard"
@@ -152,13 +151,6 @@ describe("the scheme rows", () => {
     const report = { window, routes: empty, pickups: pickups(0), rates, missedByReason: [], intervals: [], schemes: [centrum, adHoc, havnen] }
     assert.deepEqual(schemesByAttention(report).map(schemeNameOf), ["Havnen Mondays", AD_HOC_ROUTES, "Centrum Mondays"])
     assert.equal(schemeRowOf(adHoc, () => "Copenhagen Central")[0], AD_HOC_ROUTES)
-  })
-})
-
-describe("viewedModules", () => {
-  test("is the modules a role grants view on, and nothing before /me answers", () => {
-    assert.deepEqual([...viewedModules([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "improve.analytics", actions: [] }])], ["improve.performance"])
-    assert.equal(viewedModules(undefined).size, 0)
   })
 })
 

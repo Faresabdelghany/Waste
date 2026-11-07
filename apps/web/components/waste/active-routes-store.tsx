@@ -12,16 +12,19 @@ import {
 } from "react"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { migrateLegacyState } from "@/lib/data/legacy-ids"
 import type { ActiveRouteSummary } from "@/lib/data/sidebar"
-import { ACTIVE_ROUTES_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
+import { workspaceHref } from "@/lib/data/workspace-href"
+import { persistedStore } from "@/lib/persisted-store"
+import { ACTIVE_ROUTES_STORAGE_KEY } from "@/lib/storage-keys"
 
 // Two generations of this store live behind the current key (see
 // lib/storage-keys.ts): the pins the service provider saved before the
 // operator scope existed, a bare route-id list, and the two-scope object that
 // replaced it. `readPersisted` hands over whichever the browser holds and
-// `loadStoredState` recognises both shapes. The chain stops at the first key
+// `storedStarredRoutes` recognises both shapes. The chain stops at the first key
 // that holds anything, so a newer key with an unreadable value is not backed
 // out of into an older one: no writer ever produced such a value, and no pins
 // are the better answer to a corrupt newer store than pins the user last saw
@@ -71,19 +74,19 @@ function isStarredRoutesState(value: unknown): value is StarredRoutesState {
   return isRouteIdList(state.operator) && isRouteIdList(state["service-provider"])
 }
 
-function loadStoredState(): StarredRoutesState | null {
-  const raw = readPersisted(window.localStorage, ACTIVE_ROUTES_STORAGE_KEY)
-  const parsed: unknown = raw ? JSON.parse(raw) : null
-  // Idempotent: state already in the current shape passes through unchanged,
-  // so this runs on every load rather than behind a version flag.
-  const migrated = migrateLegacyState(parsed, LEGACY_SCOPE_KEYS)
-  if (isStarredRoutesState(migrated)) return migrated
-  // The oldest generation held the service provider's pins alone.
-  if (isRouteIdList(migrated)) {
-    return { ...DEFAULT_STARRED_ROUTES, "service-provider": migrated }
-  }
-  return null
-}
+const storedStarredRoutes = persistedStore<StarredRoutesState>(ACTIVE_ROUTES_STORAGE_KEY, {
+  parse: (raw) => {
+    // Idempotent: state already in the current shape passes through unchanged,
+    // so this runs on every load rather than behind a version flag.
+    const migrated = migrateLegacyState(JSON.parse(raw) as unknown, LEGACY_SCOPE_KEYS)
+    if (isStarredRoutesState(migrated)) return migrated
+    // The oldest generation held the service provider's pins alone.
+    if (isRouteIdList(migrated)) {
+      return { ...DEFAULT_STARRED_ROUTES, "service-provider": migrated }
+    }
+    return null
+  },
+})
 
 export function ActiveRoutesStoreProvider({
   children,
@@ -95,21 +98,10 @@ export function ActiveRoutesStoreProvider({
   )
 
   useEffect(() => {
-    try {
-      const stored = loadStoredState()
-      if (stored) store.set(stored)
-    } catch {
-      // A corrupt or unavailable browser store keeps no pins.
-    }
+    const stored = storedStarredRoutes.read()
+    if (stored) store.set(stored)
     const persist = () => {
-      try {
-        window.localStorage.setItem(
-          ACTIVE_ROUTES_STORAGE_KEY,
-          JSON.stringify(store.getSnapshot()),
-        )
-      } catch {
-        // In-memory stars remain usable when persistence is blocked.
-      }
+      storedStarredRoutes.write(store.getSnapshot())
     }
     // Persist once right after loading — so a migrated legacy shape is written
     // back in the current shape immediately — and then on every change.
@@ -161,9 +153,10 @@ export function useActiveRoutes(scope: ActiveRoutesScope): ActiveRoutesValue {
   )
 }
 
-const routesTableHrefByScope: Record<ActiveRoutesScope, string> = {
-  operator: "/route-studio?module=routes&record=",
-  "service-provider": "/service-provider-workspace/routes?module=routes&record=",
+/** Where a scope's routes are shown: the provider's own routes page, or Route Studio's. */
+const routesPageByScope: Record<ActiveRoutesScope, string | undefined> = {
+  operator: undefined,
+  "service-provider": "/service-provider-workspace/routes",
 }
 
 const ROUTE_PIN_COLORS = [
@@ -203,7 +196,7 @@ function summarizeStarredRoute(
     name: area ? `${area} · ${record.name}` : record.name,
     color: ROUTE_PIN_COLORS[colorSeed % ROUTE_PIN_COLORS.length],
     progress,
-    href: `${routesTableHrefByScope[scope]}${record.id}`,
+    href: workspaceHref(ROUTES_MODULE, record.id, { page: routesPageByScope[scope] }),
   }
 }
 

@@ -34,6 +34,7 @@ import {
   getWorkspaceDefinition,
   type BusinessRecord,
   type ModuleDefinition,
+  type ModuleLocation,
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
@@ -115,10 +116,8 @@ import type {
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
 import { isSoftDeleted, softDeletedRecord } from "@waste/domain/record-visibility"
-import {
-  getBusinessModuleHref,
-  resolveBusinessRelation,
-} from "@/lib/data/business-links"
+import { resolveBusinessRelation } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import {
   agreementFormSchemaOnApi,
   agreementPriceListOptions,
@@ -260,10 +259,8 @@ import {
 } from "@/lib/data/project-scope"
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
-import {
-  effectiveRoleAccess,
-  type RoleAccessMap,
-} from "@/lib/data/role-permissions"
+import { useGrants } from "@/components/auth/use-grants"
+import { grantKeyOf, mayOn } from "@/lib/api/grants"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -286,14 +283,6 @@ type BusinessWorkspaceProps = {
    * provider itself (#291 C24), so the scope filters only the rest.
    */
   serviceProviderScopeId?: string
-  /**
-   * Resolves view/edit/create/delete per module from this organization
-   * role's effective access map (Settings → role permissions). Absent means
-   * the office workspace default: everything permitted.
-   */
-  permissionsRoleId?: string
-  /** The role's grants as `/me` answers them, in place of a fixture role's matrix (#291 C24): the provider's workspace on the Pilot. */
-  roleGrants?: RoleAccessMap
   /** Name written as owner/actor on audit events and created records. */
   actorName?: string
 }
@@ -424,21 +413,6 @@ function matchesFactFilter(
     : [factValue]
   ).map((value) => normalizeValue?.(value) ?? value)
   return selections.some((selection) => values.includes(selection))
-}
-
-function getWorkspaceNavigationHref(
-  navigationBasePath: string | undefined,
-  workspaceId: WorkspaceId,
-  moduleId: string,
-  recordId?: string,
-): string {
-  if (!navigationBasePath) {
-    return getBusinessModuleHref(workspaceId, moduleId, recordId)
-  }
-
-  const params = new URLSearchParams({ module: moduleId })
-  if (recordId) params.set("record", recordId)
-  return `${navigationBasePath}?${params.toString()}`
 }
 
 const allocationMonthIndexes: Record<string, number> = {
@@ -914,8 +888,6 @@ export function BusinessWorkspace({
   showFilters = true,
   navigationBasePath,
   serviceProviderScopeId,
-  permissionsRoleId,
-  roleGrants,
   actorName = "Olivia Larsen",
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
@@ -946,13 +918,8 @@ export function BusinessWorkspace({
     serviceProviderScopeId ? "service-provider" : "operator",
   )
   const router = useRouter()
-  // The grants of the restricting role: `/me`'s on the Pilot, else the
-  // fixture persona's role's charter. Null means no role restriction (office default).
-  const roleAccess = useMemo<RoleAccessMap | null>(() => {
-    if (roleGrants) return roleGrants
-    if (!permissionsRoleId) return null
-    return effectiveRoleAccess({ id: permissionsRoleId })
-  }, [permissionsRoleId, roleGrants])
+  // What the account signed in may do, office and provider alike (`useGrants`).
+  const grants = useGrants()
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
     const modules = sourceWorkspace.modules.filter((module) => !allowedModules || allowedModules.has(module.id))
@@ -961,29 +928,23 @@ export function BusinessWorkspace({
       throw new Error(`No permitted modules are available in ${sourceWorkspace.id}`)
     }
 
-    // A restricting role hides modules it cannot view. When it can view none,
-    // the configured modules are kept so the workspace can still render its
+    // A role hides the modules it cannot view. When it can view none, the
+    // configured modules are kept so the workspace can still render its
     // frame around the access notice instead of crashing.
-    const viewableModules = roleAccess
-      ? modules.filter((module) =>
-          (roleAccess[`${sourceWorkspace.id}.${module.id}`] ?? []).includes(
-            "view",
-          ),
-        )
-      : modules
+    const viewableModules = modules.filter((module) =>
+      mayOn(grants, grantKeyOf({ workspaceId: sourceWorkspace.id, moduleId: module.id }), "view"),
+    )
 
     return {
       ...sourceWorkspace,
       modules: viewableModules.length > 0 ? viewableModules : modules,
     }
-  }, [allowedModuleIds, roleAccess, sourceWorkspace])
+  }, [allowedModuleIds, grants, sourceWorkspace])
   // The records a restricted shell shows, of all its module holds (the citizen portal's one property).
   const recordAllowed = useCallback((record: BusinessRecord) => allowedRecordIds === undefined || allowedRecordIds.includes(record.id), [allowedRecordIds])
-  const hasRoleViewableModules =
-    !roleAccess ||
-    workspace.modules.some((module) =>
-      (roleAccess[`${workspace.id}.${module.id}`] ?? []).includes("view"),
-    )
+  const hasRoleViewableModules = workspace.modules.some((module) =>
+    mayOn(grants, grantKeyOf({ workspaceId: workspace.id, moduleId: module.id }), "view"),
+  )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   // The module a bare address opens on: the page's own, else the workspace's first.
   const landingModuleId = workspace.modules.some((module) => module.id === initialModuleId)
@@ -1067,17 +1028,10 @@ export function BusinessWorkspace({
   const agreementPriceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
   const agreementProducts = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const productsViewed = !agreementProducts.notGranted
-  const activeModuleGrants = roleAccess
-    ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
-    : null
-  const hasGrant = (action: Action) =>
-    activeModuleGrants === null || activeModuleGrants.includes(action)
+  const hasGrant = (action: Action) => mayOn(grants, grantKeyOf({ workspaceId: workspace.id, moduleId: activeModule.id }), action)
   // A grant on another module — Map Planning creates Service Areas, so it
   // follows the Service Areas module's create grant, not Plan's.
-  const hasGrantOn = (workspaceId: WorkspaceId, moduleId: string, action: Action) => {
-    if (!roleAccess) return true
-    return (roleAccess[`${workspaceId}.${moduleId}`] ?? []).includes(action)
-  }
+  const hasGrantOn = (location: ModuleLocation, action: Action) => mayOn(grants, grantKeyOf(location), action)
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
   // How a switched module is operated beyond its own forms (Issue #181): what
@@ -1796,6 +1750,8 @@ export function BusinessWorkspace({
   // record-store change that makes WorkspaceQuerySync ask again
   // (lib/url/module-sync.ts); a tab click is a module applied.
   const [moduleSync] = useState(createModuleSync)
+  // A module of this workspace, and a record in it, on the page it is shown on: a restricted shell's own.
+  const moduleHref = (moduleId: string, recordId?: string) => workspaceHref({ workspaceId: workspace.id, moduleId }, recordId, { page: navigationBasePath })
 
   const handleModuleChange = (moduleId: string) => {
     moduleSync.record(moduleId)
@@ -1806,7 +1762,7 @@ export function BusinessWorkspace({
     setPendingAction(null)
     setIsCreateOpen(false)
     router.push(
-      getWorkspaceNavigationHref(navigationBasePath, workspace.id, moduleId),
+      moduleHref(moduleId),
       { scroll: false },
     )
   }
@@ -1861,12 +1817,7 @@ export function BusinessWorkspace({
   const openRecord = (record: BusinessRecord) => {
     setSelectedRecord(record)
     router.push(
-      getWorkspaceNavigationHref(
-        navigationBasePath,
-        workspace.id,
-        activeModule.id,
-        record.id,
-      ),
+      moduleHref(activeModule.id, record.id),
       { scroll: false },
     )
   }
@@ -1874,7 +1825,7 @@ export function BusinessWorkspace({
   const closeRecord = () => {
     setSelectedRecord(null)
     router.replace(
-      getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id),
+      moduleHref(activeModule.id),
       { scroll: false },
     )
   }
@@ -1934,11 +1885,7 @@ export function BusinessWorkspace({
       setSelectedRecord(null)
       setPendingAction(null)
       router.replace(
-        getWorkspaceNavigationHref(
-          navigationBasePath,
-          workspace.id,
-          activeModule.id,
-        ),
+        moduleHref(activeModule.id),
         { scroll: false },
       )
       toast.success(`${record.name} soft-deleted`, {
@@ -3075,12 +3022,7 @@ export function BusinessWorkspace({
         if (resolvedTarget.workspaceId === workspace.id && resolvedTarget.module.id === activeModule.id) {
           setSelectedRecord(createdRecord)
           router.push(
-            getWorkspaceNavigationHref(
-              navigationBasePath,
-              workspace.id,
-              activeModule.id,
-              createdRecord.id,
-            ),
+            moduleHref(activeModule.id, createdRecord.id),
             { scroll: false },
           )
         }
@@ -3338,7 +3280,7 @@ export function BusinessWorkspace({
     whenSaved(saved, () => {
       if (origin.method !== "Guided Setup") {
         setSelectedRecord(newRecord)
-        router.push(getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id, newRecord.id), { scroll: false })
+        router.push(moduleHref(activeModule.id, newRecord.id), { scroll: false })
       }
       if (newRecord.status === "Draft") {
         toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
@@ -3461,7 +3403,7 @@ export function BusinessWorkspace({
       <>
         {isContainersAssetsView && (
           <Button variant="outline" size="sm" asChild>
-            <Link href={settingsHref("master-data", { from: "/resources?module=containers" })}>
+            <Link href={settingsHref("master-data", { from: moduleHref("containers") })}>
               <Gear className="h-4 w-4" />
               <span className="hidden sm:inline">Asset settings</span>
             </Link>
@@ -3737,7 +3679,7 @@ export function BusinessWorkspace({
           pickups={mapPlanningRecords.pickups}
           schemes={mapPlanningRecords.schemes}
           canCreateScheme={hasGrant("create")}
-          canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
+          canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE, "create")}
           onCreateServiceArea={(seed) => {
             // The award is the planning areas the selection touches, the drawn polygon never persisted (slice 11 of #81).
             const opened = pilotServiceAreaCreate(seed)

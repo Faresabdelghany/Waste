@@ -15,7 +15,7 @@ import { TablePagination, useTablePagination } from "@/components/ui/table-pagin
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { RouteSurfacePage } from "@/components/waste/commands/route-surfaces"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
@@ -246,11 +246,7 @@ function TicketsTab({
                       <TableCell className="py-3 text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link
-                            href={getBusinessModuleHref(
-                              "operate",
-                              "tickets",
-                              ticketRecord.id,
-                            )}
+                            href={workspaceHref(TICKETS_MODULE, ticketRecord.id)}
                           >
                             Open
                           </Link>

@@ -44,8 +44,10 @@ import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { importTemplate, previewImport, sendImportBatch, startImportRun } from "@/lib/api/imports"
 import { ApiProblem, genericProblem, problemSentence, type Problem } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
+import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { settingsHref } from "@/lib/data/settings-panes"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
 import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, textOf, type FileReading } from "@/lib/imports/import-file"
 
@@ -404,13 +406,13 @@ function resultSubtitle(counts: ReturnType<typeof countsOf>, total: number): str
 function recordsHref(kind: ImportKind): string {
   switch (kind) {
     case "customers":
-      return "/customers?module=contacts"
+      return workspaceHref({ workspaceId: "customers", moduleId: "contacts" })
     case "properties":
-      return "/customers?module=properties"
+      return workspaceHref({ workspaceId: "customers", moduleId: "properties" })
     case "containers":
-      return "/resources?module=containers"
+      return workspaceHref({ workspaceId: "resources", moduleId: "containers" })
     case "agreements":
-      return "/customers?module=agreements"
+      return workspaceHref({ workspaceId: "customers", moduleId: "agreements" })
     case "waste-fractions":
       return settingsHref("master-data", { kind: "waste-fraction" })
     case "container-types":
@@ -418,12 +420,12 @@ function recordsHref(kind: ImportKind): string {
     case "vehicle-types":
       return settingsHref("master-data", { kind: "vehicle-type" })
     case "vehicles":
-      return getBusinessModuleHref("fleet", "vehicles")
+      return workspaceHref({ workspaceId: "fleet", moduleId: "vehicles" })
     case "drivers":
-      return getBusinessModuleHref("fleet", "drivers")
+      return workspaceHref({ workspaceId: "fleet", moduleId: "drivers" })
     case "collection-calendars":
-      return getBusinessModuleHref("configure", "calendars")
+      return workspaceHref(COLLECTION_CALENDARS_MODULE)
     case "planning-areas":
-      return getBusinessModuleHref("configure", "areas")
+      return workspaceHref(PLANNING_AREAS_MODULE)
   }
 }

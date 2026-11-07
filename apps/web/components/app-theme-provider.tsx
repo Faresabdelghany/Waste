@@ -27,10 +27,10 @@ import {
   type AppThemeSelection,
   type CustomThemePalette,
 } from "@/lib/app-themes"
+import { persistedStore } from "@/lib/persisted-store"
 import {
   APP_THEME_SELECTION_STORAGE_KEY,
   CUSTOM_THEME_STORAGE_KEY,
-  readPersisted,
 } from "@/lib/storage-keys"
 
 type AppThemeContextValue = {
@@ -102,45 +102,34 @@ function applyThemeSelection(
   setBaseTheme(baseTheme)
 }
 
+const keptPalette = persistedStore<CustomThemePalette>(CUSTOM_THEME_STORAGE_KEY, {
+  parse: (raw) => {
+    const parsed: unknown = JSON.parse(raw)
+    return isCustomThemePalette(parsed) ? normalizeCustomTheme(parsed) : null
+  },
+})
+
+const asText = { parse: (raw: string) => raw, serialize: (value: string) => value }
+
+const keptSelection = persistedStore<string>(APP_THEME_SELECTION_STORAGE_KEY, asText)
+
+/** The base theme next-themes keeps under its own key, which a browser holds from before there was a selection. */
+const keptBaseTheme = persistedStore<string>("theme", asText)
+
 function readStoredPalette(): CustomThemePalette {
-  try {
-    const rawPalette = readPersisted(
-      window.localStorage,
-      CUSTOM_THEME_STORAGE_KEY,
-    )
-    if (!rawPalette) return defaultCustomTheme
-    const parsed: unknown = JSON.parse(rawPalette)
-    return isCustomThemePalette(parsed)
-      ? normalizeCustomTheme(parsed)
-      : defaultCustomTheme
-  } catch {
-    return defaultCustomTheme
-  }
+  return keptPalette.read() ?? defaultCustomTheme
 }
 
+/** The selection kept, else the base theme migrated, else the default; a storage that cannot be read leaves the default. */
 function readStoredSelection(): AppThemeSelection {
   const prefersDark = window.matchMedia(
     "(prefers-color-scheme: dark)",
   ).matches
-
-  try {
-    const stored = readPersisted(
-      window.localStorage,
-      APP_THEME_SELECTION_STORAGE_KEY,
-    )
-    const migratedStored = migrateThemeSelection(stored, prefersDark)
-    if (migratedStored) return migratedStored
-
-    const existingTheme = window.localStorage.getItem("theme")
-    const migratedBaseTheme = migrateThemeSelection(
-      existingTheme,
-      prefersDark,
-    )
-    if (migratedBaseTheme) return migratedBaseTheme
-  } catch {
-    // Use the default when storage is unavailable.
-  }
-  return prefersDark ? "midnight" : defaultThemeSelection
+  return (
+    migrateThemeSelection(keptSelection.read(), prefersDark) ??
+    migrateThemeSelection(keptBaseTheme.read(), prefersDark) ??
+    (prefersDark ? "midnight" : defaultThemeSelection)
+  )
 }
 
 function createAppThemeStore(): AppThemeStoreHandle {
@@ -156,14 +145,8 @@ function createAppThemeStore(): AppThemeStoreHandle {
       store.getSnapshot().customPalette,
       setBaseTheme,
     )
-    try {
-      window.localStorage.setItem(
-        APP_THEME_SELECTION_STORAGE_KEY,
-        nextSelection,
-      )
-    } catch {
-      // The selected theme still applies for the current session.
-    }
+    // Where the storage refuses it, the selected theme still applies for the current session.
+    keptSelection.write(nextSelection)
   }
 
   const setCustomPalette = (nextPalette: CustomThemePalette) => {
@@ -172,14 +155,7 @@ function createAppThemeStore(): AppThemeStoreHandle {
     if (store.getSnapshot().selection === "custom") {
       applyThemeSelection("custom", normalized, setBaseTheme)
     }
-    try {
-      window.localStorage.setItem(
-        CUSTOM_THEME_STORAGE_KEY,
-        JSON.stringify(normalized),
-      )
-    } catch {
-      // The custom palette still applies for the current session.
-    }
+    keptPalette.write(normalized)
   }
 
   return {
@@ -217,14 +193,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       mounted: true,
     })
     applyThemeSelection(storedSelection, storedPalette, setBaseTheme)
-    try {
-      window.localStorage.setItem(
-        APP_THEME_SELECTION_STORAGE_KEY,
-        storedSelection,
-      )
-    } catch {
-      // The migrated selection still applies for the current session.
-    }
+    keptSelection.write(storedSelection)
   }, [publicPage, setBaseTheme, store])
 
   useEffect(() => {

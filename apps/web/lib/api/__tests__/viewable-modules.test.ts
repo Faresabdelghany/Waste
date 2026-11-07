@@ -8,6 +8,7 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
+import { grantKeyOf, type Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"
 import { MODULES_WITHOUT_ME, SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
 
@@ -24,12 +25,12 @@ describe("the switched modules a person's grants let the store read", () => {
   })
 
   test("are all of them, in SERVER_MODULES' order, for a provider's role that views everything, however its grants are listed", () => {
-    const everything = [...SERVER_MODULE_KEYS].reverse().map((moduleKey) => ({ moduleKey, actions: ["view"] as const }))
+    const everything: Grants = [...SERVER_MODULES].reverse().map((module) => ({ moduleKey: grantKeyOf(module), actions: ["view"] }))
     assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES, { provider: true })), [...SERVER_MODULE_KEYS])
   })
 
   test("leave a provider's own team to a provider's account (#291 C24): the office's accounts are the access module's", () => {
-    const everything = SERVER_MODULE_KEYS.map((moduleKey) => ({ moduleKey, actions: ["view"] as const }))
+    const everything: Grants = SERVER_MODULES.map((module) => ({ moduleKey: grantKeyOf(module), actions: ["view"] }))
     const team = "service-providers.service-provider-workspace"
     assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES)), SERVER_MODULE_KEYS.filter((key) => key !== team))
     assert.deepEqual(keysOf(MODULES_WITHOUT_ME), SERVER_MODULE_KEYS.filter((key) => key !== team))
@@ -39,10 +40,10 @@ describe("the switched modules a person's grants let the store read", () => {
   })
 
   test("are exactly the ones viewed, for a role between the two", () => {
-    const grants = [
-      { moduleKey: "configure.areas", actions: ["view", "edit"] as const },
-      { moduleKey: "customers.contacts", actions: ["view"] as const },
-      { moduleKey: "operate.driver-app", actions: ["view", "edit"] as const },
+    const grants: Grants = [
+      { moduleKey: "configure.areas", actions: ["view", "edit"] },
+      { moduleKey: "customers.contacts", actions: ["view"] },
+      { moduleKey: "operate.driver-app", actions: ["view", "edit"] },
     ]
     assert.deepEqual(keysOf(viewableModules(grants, SERVER_MODULES)), ["customers.contacts", "configure.areas"])
   })
