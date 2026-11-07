@@ -7,7 +7,6 @@ import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 const projectRelation = {
   workspaceId: "configure",
   moduleId: "organization",
-  allowedRecordIds: ["project-copenhagen", "project-harbor"],
 } as const
 
 const customerOrCompanyRelation = {
