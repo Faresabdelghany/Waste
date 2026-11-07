@@ -24,6 +24,7 @@ import { backupTools } from "../pilot/backup-scripts"
 import { LOGIN_STATE_FILE, readLogins } from "../pilot/barrier"
 import { createContext, type Context, type Environment } from "../pilot/phase"
 import { releasePhases, resetToSeedPhases } from "../pilot/phases"
+import { LOCAL_RUN } from "../pilot/run"
 import { seedDemo } from "../seed/demo"
 import { databaseUnderTest, freshDatabase } from "./database"
 
@@ -53,6 +54,8 @@ async function onFreshDatabase(prefix: string, env: Environment, body: (run: Run
     const said: string[] = []
     const context = createContext({
       env: { ...process.env, DATABASE_ADMIN_URL: fresh.url, PILOT_SUPABASE_REF: "", BACKUP_RECIPIENT_FILE: path.join(work, "recipient.txt"), ...env },
+      // The local run, whatever CI's own GITHUB_RUN_ID says.
+      run: LOCAL_RUN,
       temp: work,
       barrierRoles: roles,
       log: (line) => said.push(line),
