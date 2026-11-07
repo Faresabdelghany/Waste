@@ -124,7 +124,8 @@
 // the stamps, and the row's own id.
 import { bulkyQuantity, isBulkyProductUnit } from "../execution/bulky"
 import type { PickupExceptionJudgement } from "../execution/pickup-exceptions"
-import type { OutboxKind, PickupOrigin, PickupOutcome, PickupService } from "../execution/vocabulary"
+import type { PickupOrigin, PickupOutcome, PickupService } from "../execution/vocabulary"
+import type { OutboxKind } from "../outbox/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
 import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
 import { HIRE_UNIT } from "./hire"
@@ -149,6 +150,10 @@ export type WeightEventKind = (typeof WEIGHT_EVENT_KINDS)[number]
 /** The events about a Scale Ticket that Finance reads (M16b of #293). */
 export const SCALE_TICKET_EVENT_KINDS = ["scale-ticket-completed", "scale-ticket-voided"] as const satisfies readonly OutboxKind[]
 export type ScaleTicketEventKind = (typeof SCALE_TICKET_EVENT_KINDS)[number]
+
+/** The kinds Finance reads, the queues its consumer works (§3's table, the visits' two, the weight review and the scale house's two): `unload-recorded` is not one, since only a reviewed weight is billable. */
+export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed", ...VISIT_EVENT_KINDS, ...WEIGHT_EVENT_KINDS, ...SCALE_TICKET_EVENT_KINDS] as const satisfies readonly OutboxKind[]
+export type FinanceEventKind = (typeof FINANCE_EVENT_KINDS)[number]
 
 /** The placement valid on the service date, with what it reaches: the subscription, the agreement it runs under, and the product it delivers. */
 export type PlacementFacts<Row extends PriceRow = PriceRow> = {

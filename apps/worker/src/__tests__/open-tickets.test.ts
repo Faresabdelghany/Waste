@@ -34,12 +34,13 @@ import { ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/
 import type { Tx } from "@waste/db/client"
 import { withCompany } from "@waste/db/tenant"
 import { stopMissed } from "@waste/domain/execution/ticket-stops"
+import { RESOLUTION_EVENT_KINDS } from "@waste/domain/resolution/from-event"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUE_OPTIONS, outboxQueue } from "../outbox/subscribe"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, type OpenTicketsOutcome } from "../jobs/open-tickets"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUE_OPTIONS, outboxQueue, relayedEventOf } from "../outbox/subscribe"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, proofPayload, receiptPayload, routePayload, seedConsumerTenant, seedReceipt, seedRoute, testId, type ConsumerTenant } from "./consumer-fixtures"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
@@ -76,7 +77,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
   const ticketById = async (id: string) => withCompany(pool.db, tenant.companyId, async (tx) => (await tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, id))))[0])
 
   test("is in the registry, one entry per kind Resolution reads on its own queue of the kind (#339) and none for route-cancelled, with a retry policy", () => {
-    assert.deepEqual(RESOLUTION_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual(RESOLUTION_EVENT_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
     assert.deepEqual(
       openTickets.map((job) => job.queue),
       ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.command-rejected.resolution"],
@@ -732,14 +733,8 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     const event = outboxJob(tenant, { kind: "pickup-failed", aggregateKind: "pickup", aggregateId: testId(), payload: { id: "not-an-id", status: "failed" } })
     await assert.rejects(openTicketFor(event, context()), /Invalid|invalid|expected/i)
     assert.deepEqual(await ticketsFrom(event.id), [])
-    await assert.rejects(openTicketFor({ ...event, companyId: "nobody" }, context()), /Invalid|invalid/i, "a job without its tenant is a contract drift, not a fact")
-    await assert.rejects(openTicketFor({ kind: "pickup-failed" }, context()), /Invalid|invalid|expected/i, "and so is a job that is not an outbox row")
-  })
-
-  test("a kind of another consumer's, handed to the handler directly, is news and not a case, whatever its payload", async () => {
-    const event = outboxJob(tenant, { kind: "route-cancelled", aggregateKind: "route", aggregateId: testId(), payload: { anything: true } })
-    assert.deepEqual(await openTicketFor(event, context()), { outcome: "nothing" })
-    const completed = outboxJob(tenant, { kind: "pickup-completed", aggregateKind: "pickup", aggregateId: testId(), payload: { anything: true } })
-    assert.deepEqual(await openTicketFor(completed, context()), { outcome: "nothing" })
+    assert.throws(() => relayedEventOf({ ...event, companyId: "nobody" }), /Invalid|invalid/i, "a job without its tenant is a contract drift, not a fact")
+    assert.throws(() => relayedEventOf({ kind: "pickup-failed" }), /Invalid|invalid|expected/i, "and so is a job that is not an outbox row")
+    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "route" }), /about pickup, never a route/, "and so is an event about an aggregate its kind is never about")
   })
 })

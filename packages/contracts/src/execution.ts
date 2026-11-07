@@ -1,12 +1,12 @@
 // Execution's closed lists at the API boundary (Issue #104): each of
 // @waste/domain/execution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because seven modules
+// would refuse it as a 500 naming nothing. Shared here because several modules
 // read them — `routes.ts` the route status and its cancel's reason codes, `pickups.ts` the pickup's status,
 // origin and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
 // `driver-commands.ts` the command kinds, the outcomes and the driver's
-// reasons, `outbox.ts` the event kinds and aggregates — and a list spelled in
-// one place is a list that cannot drift between them.
+// reasons — and a list spelled in one place is a list that cannot drift
+// between them.
 //
 // Two things beside the enums are the context's presentation on the wire.
 // The route's display number is `RC-1042`: the database stores `number:
@@ -28,8 +28,6 @@ import {
   IDENTIFICATION_METHODS,
   OFFICE_CANCEL_REASON_CODES,
   OFFICE_STOP_SERVICES,
-  OUTBOX_AGGREGATES,
-  OUTBOX_KINDS,
   PICKUP_ORIGINS,
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
@@ -103,14 +101,6 @@ export type IdentificationMethod = z.infer<typeof IdentificationMethod>
 /** What the receipt stores of a command: applied or rejected. */
 export const CommandOutcome = z.enum(COMMAND_OUTCOMES)
 export type CommandOutcome = z.infer<typeof CommandOutcome>
-
-/** What the outbox tells the other contexts: Execution's twelve kinds, Resolution's three (Issue #109) and Finance's two (Issue #112), the tuple being the union of every context's news. */
-export const OutboxKind = z.enum(OUTBOX_KINDS)
-export type OutboxKind = z.infer<typeof OutboxKind>
-
-/** What an outbox event is about: a route, a pickup, an unload, a command, a ticket, an invoice or a settlement. */
-export const OutboxAggregate = z.enum(OUTBOX_AGGREGATES)
-export type OutboxAggregate = z.infer<typeof OutboxAggregate>
 
 /** The prefix a route's number is shown with: `RC-1042`. Presentation, spelled once. */
 export const ROUTE_NUMBER_PREFIX = "RC-"

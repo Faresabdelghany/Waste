@@ -95,7 +95,9 @@
 // domain's rule, in its sentence.
 // The domain's base layer (F2 of #574) added @waste/domain/days: bulky.ts,
 // reports.ts and route-schemes.ts count a window's days through the domain's
-// daysBetween and daysInclusive.
+// daysBetween and daysInclusive. The typed outbox (F2 of #574) added
+// @waste/domain/outbox/vocabulary: outbox.ts reads the kinds, the aggregates
+// and which aggregates each kind is about, which its payload table is keyed by.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -130,6 +132,7 @@ definePurityTests({
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
     "@waste/domain/notifications/vocabulary",
+    "@waste/domain/outbox/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/address",

@@ -2,7 +2,7 @@
 // queues their entries work, by kind. A consumer is listed here once and
 // spread into `JOBS` (jobs/index.ts); the registry test holds the two to the
 // same entries, so a consumer the relay does not send to cannot be added.
-import { OutboxKind } from "@waste/contracts/execution"
+import { OutboxKind } from "@waste/contracts/outbox"
 
 import type { AnyJob } from "../jobs/definition"
 import { applyPauseGrants } from "../jobs/apply-pause-grants"

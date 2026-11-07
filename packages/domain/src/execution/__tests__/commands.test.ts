@@ -163,7 +163,7 @@ describe("decide: start-route", () => {
     assert.deepEqual(applied(decide(start({ trailerId: TRAILER, appVersion: "1.4.0", location: point, accuracyM: 12 }), mads, readyToStart(), clock)), [
       { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: TRAILER, appVersion: "1.4.0", at: EARLIER },
       { kind: "append-proof", proof: { id: COMMAND, kind: "route-started", pickupId: null, occurredAt: EARLIER, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 12 } },
-      { kind: "event", event: "route-started", aggregate: "route", aggregateId: ROUTE },
+      { kind: "event", event: { kind: "route-started", aggregate: "route", aggregateId: ROUTE } },
     ])
     const bare = applied(decide(start(), mads, readyToStart({ trailer: undefined }), clock))
     assert.deepEqual(bare[0], { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: null, appVersion: null, at: EARLIER })
@@ -240,7 +240,7 @@ describe("decide: every later command", () => {
     assert.deepEqual(applied(decide(command("end-route", { note: "Done for today", location: point, accuracyM: 6 }), mads, running(), clock)), [
       { kind: "append-proof", proof: { id: COMMAND, kind: "route-ended", pickupId: null, occurredAt: EARLIER, reason: null, note: "Done for today", weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 6 } },
       { kind: "end-route", at: EARLIER },
-      { kind: "event", event: "route-completed", aggregate: "route", aggregateId: ROUTE },
+      { kind: "event", event: { kind: "route-completed", aggregate: "route", aggregateId: ROUTE } },
     ])
     assert.deepEqual((applied(decide(command("end-route", {}), mads, running(), clock))[0] as { proof: { note: null; location: null } }).proof.note, null)
   })
@@ -275,15 +275,15 @@ describe("decide: the pickup", () => {
     assert.deepEqual(applied(decide(command("complete-pickup", { pickupId: PICKUP, note: "Two bins", location: point, accuracyM: 8 }), mads, running(), clock)), [
       { kind: "append-proof", proof: { id: COMMAND, kind: "completion", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: "Two bins", weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 8 } },
       { kind: "pickup-outcome", pickupId: PICKUP, status: "completed", reason: null, at: EARLIER },
-      { kind: "event", event: "pickup-completed", aggregate: "pickup", aggregateId: PICKUP },
+      { kind: "event", event: { kind: "pickup-completed", aggregate: "pickup", aggregateId: PICKUP } },
     ])
     const skipped = applied(decide(command("skip-pickup", { pickupId: PICKUP, reason: "not-presented" }), mads, running(), clock))
     assert.deepEqual(skipped[1], { kind: "pickup-outcome", pickupId: PICKUP, status: "skipped", reason: "not-presented", at: EARLIER })
-    assert.deepEqual(skipped[2], { kind: "event", event: "pickup-skipped", aggregate: "pickup", aggregateId: PICKUP })
+    assert.deepEqual(skipped[2], { kind: "event", event: { kind: "pickup-skipped", aggregate: "pickup", aggregateId: PICKUP } })
     assert.equal((skipped[0] as { proof: { kind: string; reason: string } }).proof.kind, "skip")
     const failed = applied(decide(command("fail-pickup", { pickupId: PICKUP, reason: "contamination", note: "Paint in the bin" }), mads, running(), clock))
     assert.deepEqual(failed[1], { kind: "pickup-outcome", pickupId: PICKUP, status: "failed", reason: "contamination", at: EARLIER })
-    assert.deepEqual(failed[2], { kind: "event", event: "pickup-failed", aggregate: "pickup", aggregateId: PICKUP })
+    assert.deepEqual(failed[2], { kind: "event", event: { kind: "pickup-failed", aggregate: "pickup", aggregateId: PICKUP } })
     assert.equal((failed[0] as { proof: { kind: string } }).proof.kind, "failure")
   })
 
@@ -328,11 +328,11 @@ describe("decide: the pickup", () => {
   test("report-problem moves no status: a problem proof, and an event about the pickup, or about the route when none is named", () => {
     assert.deepEqual(applied(decide(command("report-problem", { pickupId: PICKUP, reason: "safety", note: "Dog loose" }), mads, running({ pickup: pickup({ status: "completed" }) }), clock)), [
       { kind: "append-proof", proof: { id: COMMAND, kind: "problem", pickupId: PICKUP, occurredAt: EARLIER, reason: "safety", note: "Dog loose", weightKg: null, volumeLitres: null, objectKey: null, location: null, locationAccuracyM: null } },
-      { kind: "event", event: "pickup-problem-reported", aggregate: "pickup", aggregateId: PICKUP },
+      { kind: "event", event: { kind: "pickup-problem-reported", aggregate: "pickup", aggregateId: PICKUP } },
     ])
     const onRoute = applied(decide(command("report-problem", { reason: "other", note: "Road closed" }), mads, running(), clock))
     assert.equal((onRoute[0] as { proof: { pickupId: string | null } }).proof.pickupId, null)
-    assert.deepEqual(onRoute[1], { kind: "event", event: "pickup-problem-reported", aggregate: "route", aggregateId: ROUTE })
+    assert.deepEqual(onRoute[1], { kind: "event", event: { kind: "pickup-problem-reported", aggregate: "route", aggregateId: ROUTE } })
   })
 
   test("weight, signature and note are proofs and nothing else; a note or a photo may stand on the route", () => {
@@ -388,7 +388,7 @@ describe("decide: the body", () => {
         kind: "append-unload",
         unload: { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: 12_400, tareKg: 8_200, weighbridgeTicket: "WB-2026-3901", objectKey: KEY, note: "Second tip", location: point, refusalReason: null, refusalNote: null },
       },
-      { kind: "event", event: "unload-recorded", aggregate: "unload", aggregateId: COMMAND },
+      { kind: "event", event: { kind: "unload-recorded", aggregate: "unload", aggregateId: COMMAND } },
     ])
     const bare = applied(decide(command("record-unload", { unloadingStationId: STATION, wasteFractionId: FRACTION, netKg: 4200 }), mads, running(), clock))
     assert.deepEqual((bare[0] as { unload: object }).unload, { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: null, tareKg: null, weighbridgeTicket: null, objectKey: null, note: null, location: null, refusalReason: null, refusalNote: null })

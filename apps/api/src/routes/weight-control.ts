@@ -163,7 +163,7 @@ async function decided(tx: Tx, principal: Principal, id: string, decision: Weigh
     })
     .returning(reviewColumns)
   // Finance's news (O28 of #290): the review as answered, after the row it describes.
-  await emit(tx, principal, { aggregate: "unload", aggregateId: current.id, kind: "weight-reviewed", payload: reviewOf(review), projectId: current.projectId, occurredAt: review.recordedAt })
+  await emit(tx, principal, { aggregateId: current.id, kind: "weight-reviewed", payload: reviewOf(review), projectId: current.projectId, occurredAt: review.recordedAt })
   return { review, wrote: true }
 }
 

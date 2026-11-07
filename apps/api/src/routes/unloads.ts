@@ -258,7 +258,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           refusalNote: refusal?.note ?? null,
         })
         const answered = await unloadAnswered(tx, principal.companyId, row)
-        await emit(tx, principal, { aggregate: "unload", aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: tipped })
+        await emit(tx, principal, { aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: tipped })
         return created(c, "/unloads", answered)
       },
     )

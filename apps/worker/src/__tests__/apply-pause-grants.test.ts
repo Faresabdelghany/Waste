@@ -47,7 +47,7 @@ describe("registry.apply-pause-grants against Postgres (M11 of #293)", { skip: d
 
   let number = 0
   /** The decided Application as the API answers it, and the event the relay hands the queue. */
-  const decided = (subscriptionId: string | null, decision: Partial<NonNullable<Application["decision"]>> & Pick<NonNullable<Application["decision"]>, "outcome">, kind: Application["kind"] = "pause"): RelayedEvent => {
+  const decided = (subscriptionId: string | null, decision: Partial<NonNullable<Application["decision"]>> & Pick<NonNullable<Application["decision"]>, "outcome">, kind: Application["kind"] = "pause"): RelayedEvent<"application-decided"> => {
     number += 1
     const applicationId = testId()
     const application: Application = {
@@ -67,7 +67,7 @@ describe("registry.apply-pause-grants against Postgres (M11 of #293)", { skip: d
       statement: "The summer house stands empty this winter",
       decision: { id: testId(), applicationId, conditions: null, validFrom: null, validTo: null, appealText: null, decidedBy: tenant.users.olivia.id, decidedAt: "2026-10-20T09:00:00.000Z", ...decision },
     }
-    return { id: testId(), kind: "application-decided", aggregateKind: "application", aggregateId: applicationId, projectId: tenant.projects.copenhagen.id, occurredAt: "2026-10-20T09:00:00.000Z", payload: application, publishedAt: "2026-10-20T09:00:05.000Z", createdAt: "2026-10-20T09:00:00.000Z", updatedAt: "2026-10-20T09:00:05.000Z", companyId: tenant.companyId } as RelayedEvent
+    return { id: testId(), kind: "application-decided", aggregateKind: "application", aggregateId: applicationId, projectId: tenant.projects.copenhagen.id, occurredAt: "2026-10-20T09:00:00.000Z", payload: application, publishedAt: "2026-10-20T09:00:05.000Z", createdAt: "2026-10-20T09:00:00.000Z", updatedAt: "2026-10-20T09:00:05.000Z", companyId: tenant.companyId } as RelayedEvent<"application-decided">
   }
 
   const pausesOf = (subscriptionId: string) =>

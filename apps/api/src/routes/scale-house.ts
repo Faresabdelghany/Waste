@@ -804,7 +804,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .returning(lineColumns)
           const answered = ticketOf(row!, written)
           // Finance's news, after the rows it describes: an account's lines are charged by its consumer.
-          await emit(tx, principal, { aggregate: "scale-ticket", aggregateId: id, kind: "scale-ticket-completed", payload: answered, projectId: ticket.projectId, occurredAt: weighedOutAt })
+          await emit(tx, principal, { aggregateId: id, kind: "scale-ticket-completed", payload: answered, projectId: ticket.projectId, occurredAt: weighedOutAt })
           return c.json(answered)
         },
       )
@@ -851,7 +851,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .returning(ticketColumns)
           const [answer] = await ticketsOf(tx, principal.companyId, [row!])
           // A completed ticket's charges are Finance's to undo; an open one was never charged.
-          if (ticket.status === "completed") await emit(tx, principal, { aggregate: "scale-ticket", aggregateId: id, kind: "scale-ticket-voided", payload: answer!, projectId: ticket.projectId, occurredAt: now() })
+          if (ticket.status === "completed") await emit(tx, principal, { aggregateId: id, kind: "scale-ticket-voided", payload: answer!, projectId: ticket.projectId, occurredAt: now() })
           return c.json(answer!)
         },
       )

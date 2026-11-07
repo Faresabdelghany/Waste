@@ -153,7 +153,9 @@ import {
 import { RouteStatus, routeLabel } from "@waste/contracts/execution"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
+import type { RouteProblem } from "@waste/contracts/outbox"
 import { Page, PageRequest } from "@waste/contracts/pagination"
+import type { PickupDetail } from "@waste/contracts/pickups"
 import type { Problem } from "@waste/contracts/problem"
 import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
@@ -172,7 +174,7 @@ import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
 import { alreadyOnRoute, assignedTo, decide, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
-import type { DriverCommandKind, OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
+import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
@@ -685,10 +687,17 @@ async function readRoute(tx: Tx, companyId: string, id: string): Promise<Route |
   return row === undefined ? undefined : await routeWithProgress(tx, companyId, row)
 }
 
+/** The route on the wire as it stands, which an event of the command names: the payload of its route events. */
+async function routeNamed(tx: Tx, companyId: string, routeId: string): Promise<Route> {
+  const found = await readRoute(tx, companyId, routeId)
+  if (found === undefined) throw new Error(`route ${routeId} is not in company ${companyId}`)
+  return found
+}
+
 /** A pickup on the wire as it stands, with the proofs this command made for it: the payload of a pickup event. */
-async function readPickupWithProofs(tx: Tx, companyId: string, pickupId: string, commandId: string): Promise<unknown> {
+async function readPickupWithProofs(tx: Tx, companyId: string, pickupId: string, commandId: string): Promise<PickupDetail> {
   const [row] = await tx.select(pickupColumns).from(pickup).where(and(eq(pickup.companyId, companyId), eq(pickup.id, pickupId))).limit(1)
-  if (row === undefined) return undefined
+  if (row === undefined) throw new Error(`pickup ${pickupId}, which command ${commandId} names, is not in company ${companyId}`)
   const proofs = await tx
     .select(proofColumns)
     .from(proofOfService)
@@ -703,9 +712,8 @@ async function readPickupWithProofs(tx: Tx, companyId: string, pickupId: string,
  * problem travels with its pickup, and a consumer reads `proofs[0]` either
  * way. The route's other events carry the bare `Route`.
  */
-async function readRouteWithProofs(tx: Tx, companyId: string, routeId: string, commandId: string): Promise<unknown> {
-  const found = await readRoute(tx, companyId, routeId)
-  if (found === undefined) return undefined
+async function readRouteWithProofs(tx: Tx, companyId: string, routeId: string, commandId: string): Promise<RouteProblem> {
+  const found = await routeNamed(tx, companyId, routeId)
   const proofs = await tx
     .select(proofColumns)
     .from(proofOfService)
@@ -806,11 +814,6 @@ async function writeReceipt(tx: Tx, applier: Applier, draft: ReceiptDraft): Prom
   return receiptOf(row)
 }
 
-/** One outbox event of a command, its payload read now: the resource the route would answer at this instant. */
-async function emitFor(tx: Tx, applier: Applier, envelope: DriverCommandEnvelope, projectId: string, kind: OutboxKind, aggregate: OutboxAggregate, aggregateId: string, payload: unknown): Promise<void> {
-  await emit(tx, applier.principal, { aggregate, aggregateId, kind, payload, projectId, occurredAt: new Date(envelope.occurredAt) })
-}
-
 /**
  * Records a rejection: the receipt with its problem, then `command-rejected`
  * with the receipt as payload, inside the command's savepoint. Every
@@ -822,7 +825,7 @@ async function recordRejection(tx: Tx, applier: Applier, envelope: DriverCommand
   const scope = receiptScope(applier, read.route)
   await tx.transaction(async (savepoint) => {
     const receipt = await writeReceipt(savepoint, applier, { envelope, scope, sessionId: read.session?.id ?? null, pickupId: read.pickup?.id ?? null, outcome: "rejected", problem })
-    await emitFor(savepoint, applier, envelope, scope.projectId, "command-rejected", "command", envelope.id, receipt)
+    await emit(savepoint, applier.principal, { kind: "command-rejected", aggregateId: envelope.id, payload: receipt, projectId: scope.projectId, occurredAt: new Date(envelope.occurredAt) })
   })
   return outcome
 }
@@ -1019,19 +1022,22 @@ async function recordApplication(tx: Tx, applier: Applier, envelope: DriverComma
       await savepoint.update(session).set({ lastSeenAt: applier.now }).where(and(eq(session.companyId, companyId), eq(session.id, made.sessionId)))
     }
     await writeReceipt(savepoint, applier, { envelope, scope, sessionId: made.sessionId, pickupId: read.pickup?.id ?? null, outcome: "applied" })
-    for (const event of made.events) {
-      const payload =
-        event.aggregate === "route"
-          ? event.event === "pickup-problem-reported"
-            ? await readRouteWithProofs(savepoint, companyId, event.aggregateId, envelope.id)
-            : await readRoute(savepoint, companyId, event.aggregateId)
-          : event.aggregate === "pickup"
-            ? await readPickupWithProofs(savepoint, companyId, event.aggregateId, envelope.id)
-            : (await resultOf(savepoint, companyId, envelope.kind, envelope.id, routeRow.id))?.value
-      await emitFor(savepoint, applier, envelope, scope.projectId, event.event, event.aggregate, event.aggregateId, payload)
+    // Each payload is read now, after the rows it describes: the resource the route would answer at this instant.
+    const at = { projectId: scope.projectId, occurredAt: new Date(envelope.occurredAt) }
+    for (const { event } of made.events) {
+      if (event.aggregate === "route") {
+        if (event.kind === "pickup-problem-reported") await emit(savepoint, applier.principal, { ...event, ...at, payload: await readRouteWithProofs(savepoint, companyId, event.aggregateId, envelope.id) })
+        else await emit(savepoint, applier.principal, { ...event, ...at, payload: await routeNamed(savepoint, companyId, event.aggregateId) })
+      } else if (event.aggregate === "pickup") {
+        await emit(savepoint, applier.principal, { ...event, ...at, payload: await readPickupWithProofs(savepoint, companyId, event.aggregateId, envelope.id) })
+      } else {
+        const recorded = await resultOf(savepoint, companyId, envelope.kind, envelope.id, routeRow.id)
+        if (recorded?.resource !== "unload") throw new Error(`command ${envelope.id} recorded no unload to tell of`)
+        await emit(savepoint, applier.principal, { ...event, ...at, payload: recorded.value })
+      }
     }
     for (const closedId of made.closed) {
-      await emitFor(savepoint, applier, envelope, scope.projectId, "pickup-skipped", "pickup", closedId, await readPickupWithProofs(savepoint, companyId, closedId, envelope.id))
+      await emit(savepoint, applier.principal, { kind: "pickup-skipped", aggregateId: closedId, ...at, payload: await readPickupWithProofs(savepoint, companyId, closedId, envelope.id) })
     }
     const result = await resultOf(savepoint, companyId, envelope.kind, envelope.id, routeRow.id)
     return result === undefined ? { commandId: envelope.id, outcome: "applied" } : { commandId: envelope.id, outcome: "applied", result }

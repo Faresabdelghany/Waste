@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CLOSING_REASONS, OUTBOX_KINDS, PICKUP_REASONS, type OutboxKind, type PickupReason } from "../../execution/vocabulary"
+import { CLOSING_REASONS, PICKUP_REASONS, type PickupReason } from "../../execution/vocabulary"
+import { OUTBOX_KINDS, type OutboxKind } from "../../outbox/vocabulary"
 import {
   boundedDescription,
   boundedSubject,

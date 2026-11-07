@@ -27,7 +27,7 @@ import { outboxEvent } from "@waste/db/schema/execution"
 import { company, project } from "@waste/db/schema/organisation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/contracts/execution"
+import type { OutboxKind } from "@waste/contracts/outbox"
 import { asc } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
 
@@ -35,7 +35,7 @@ import { createBoss, startBoss, type Boss } from "../boss"
 import { defineJob, type JobContext } from "../jobs"
 import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, relayOutbox, staleOutboxCount } from "../jobs/relay-outbox"
 import { OUTBOX_ROUTES } from "../outbox/routes"
-import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
+import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, type RelayedEvent } from "../outbox/subscribe"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { fakeRouting, settlesNothing } from "./routing-context"
 import { until } from "./until"
@@ -212,7 +212,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     const jobs = await outboxJobs()
     assert.equal(jobs.length, 9, "a1 on Resolution's, Finance's (#293 M5b) and the customer notices' queues (O16 of #290), b1 on Finance's, the customer notices' and the counting rules' (#547 of #544), the other three on one each")
     for (const job of jobs) {
-      const event = RelayedEvent.parse(job.data)
+      const event = RelayedJob.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
       assert.ok((OUTBOX_ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]).includes(job.name), "the queue is a consumer's of the kind, or the kind's own where none takes it (#339)")
       assert.equal(event.companyId, row.companyId, "the company travels with the event")
@@ -221,7 +221,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       assert.equal(event.occurredAt, "2026-10-05T06:00:00.000Z")
     }
     const failed = jobs.find((job) => job.name === "outbox.pickup-failed.resolution")!
-    assert.deepEqual(RelayedEvent.parse(failed.data).payload, { id: id(0x201), status: "failed", reason: "inaccessible" }, "the payload is the wire resource as the write left it")
+    assert.deepEqual(RelayedJob.parse(failed.data).payload, { id: id(0x201), status: "failed", reason: "inaccessible" }, "the payload is the wire resource as the write left it")
     assert.deepEqual(errors, [])
   })
 
@@ -257,7 +257,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(byId.get(b4)!.publishedAt, null)
     const jobs = await outboxJobs()
     assert.equal(jobs.length, 11, "the nine before, and A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
-    assert.ok(!jobs.some((job) => RelayedEvent.parse(job.data).id === b3), "b3's send did not survive its transaction")
+    assert.ok(!jobs.some((job) => RelayedJob.parse(job.data).id === b3), "b3's send did not survive its transaction")
 
     // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order, b3 to Finance's queue and the counting rules'.
     await boss.createQueue(outboxQueue("route-dispatched"), { retryLimit: 3, retryDelay: 10, retryBackoff: true })
@@ -295,7 +295,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.ok(rows.get(b6)!.publishedAt !== null, "B's row is stamped")
     assert.ok(poisoned.every((eventId) => rows.get(eventId)!.publishedAt === null), "none of A's is")
     const jobs = await outboxJobs()
-    assert.ok(jobs.some((job) => RelayedEvent.parse(job.data).id === b6), "B's job is on its queue")
+    assert.ok(jobs.some((job) => RelayedJob.parse(job.data).id === b6), "B's job is on its queue")
     assert.ok(!jobs.some((job) => job.name === outboxQueue("ticket-rejected")), "none of A's survived its transaction")
 
     // The same again: A still fails, B has nothing, and the tick throws with nothing published — the stale count climbs for A alone.
@@ -346,7 +346,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.ok(first.swept <= 6 && second.swept <= 6)
     const jobs = await outboxJobs()
     assert.equal(jobs.length, before + 6, "six new jobs, not twelve")
-    const published = jobs.slice(before).map((job) => RelayedEvent.parse(job.data).id).sort()
+    const published = jobs.slice(before).map((job) => RelayedJob.parse(job.data).id).sort()
     assert.deepEqual(published, [...ids].sort(), "each event once")
     assert.deepEqual(sent.map((entry) => entry.id).sort(), [...ids].sort())
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
@@ -379,7 +379,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual(await boss.findJobs(subscribed, {}), [], "no copy on the subscribed queue: one door, so a consumer that also subscribed would not hear an event twice")
     const own = (await outboxJobs()).filter((job) => job.name === "outbox.route-reassigned")
     assert.equal(own.length, 1, "the kind's queue has the one job")
-    assert.equal(RelayedEvent.parse(own[0].data).id, a8)
+    assert.equal(RelayedJob.parse(own[0].data).id, a8)
     await boss.unsubscribe(outboxQueue("route-reassigned"), subscribed)
     await boss.deleteQueue(subscribed)
   })
@@ -426,7 +426,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
 
   test("a consumer refuses a job of another kind on its queue, and one whose data is not a relayed event: the job fails, for the readiness count, and the handler is not reached", async () => {
     const handled = received.length
-    const stray = RelayedEvent.parse((await outboxJobs()).find((job) => job.name === "outbox.pickup-completed.finance")!.data)
+    const stray = RelayedJob.parse((await outboxJobs()).find((job) => job.name === "outbox.pickup-completed.finance")!.data)
     const wrong = await boss.send("outbox.pickup-failed.resolution", stray)
     const garbage = await boss.send("outbox.pickup-failed.resolution", { not: "an event" })
     assert.ok(wrong && garbage)
@@ -465,7 +465,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     const dead = await owner.sql.unsafe<{ state: string; source_name: string; data: unknown }[]>(`select state, source_name, data from ${PGBOSS_SCHEMA}.job where name = '${OUTBOX_DEAD_QUEUE}' order by created_on`)
     assert.equal(dead.length, 2)
     assert.ok(dead.every((letter) => letter.state === "created" && letter.source_name === "outbox.pickup-failed.resolution"))
-    assert.ok(dead.some((letter) => RelayedEvent.safeParse(letter.data).success && RelayedEvent.parse(letter.data).kind === "pickup-completed"), "the stray event, intact")
+    assert.ok(dead.some((letter) => RelayedJob.safeParse(letter.data).success && RelayedJob.parse(letter.data).kind === "pickup-completed"), "the stray event, intact")
     assert.ok(dead.some((letter) => JSON.stringify(letter.data) === JSON.stringify({ not: "an event" })), "the garbage, as sent")
   })
 })

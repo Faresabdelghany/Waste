@@ -8,7 +8,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_KINDS, PICKUP_OUTCOMES, WORK_ORDER_SERVICES, type OutboxKind } from "../../execution/vocabulary"
+import { PICKUP_OUTCOMES, WORK_ORDER_SERVICES } from "../../execution/vocabulary"
+import { OUTBOX_KINDS, type OutboxKind } from "../../outbox/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
 import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, weightActionsFor, WEIGHT_EVENT_KINDS, type WeighedStopFacts, type WeightReviewedFacts, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, VISIT_EVENT_KINDS, type EventFacts, type VisitEventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"

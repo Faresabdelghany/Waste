@@ -509,7 +509,7 @@ export async function takeOffStop(tx: Tx, principal: Principal, id: string, note
     .returning(pickupColumns)
   if (row === undefined) throw noSuchPickup(id)
   const detail = await detailOf(tx, principal, row)
-  await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-skipped", payload: detail, projectId: row.projectId, occurredAt: at })
+  await emit(tx, principal, { aggregateId: row.id, kind: "pickup-skipped", payload: detail, projectId: row.projectId, occurredAt: at })
   return detail
 }
 
@@ -744,7 +744,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         // And so does the ticket a stop is booked to answer (O3c of #290): serviced by a correction to completed, told of one away from it.
         await ticketHearsOfStop(tx, principal, jobs.send, row.id, { from: current.status, to: transition.to, note }, at)
         const detail = await detailOf(tx, principal, row)
-        await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
+        await emit(tx, principal, { aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)
       },
     )

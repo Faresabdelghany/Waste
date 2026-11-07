@@ -9,7 +9,7 @@
 // the platform's: here is only which notice an outbox event is, the booking's
 // own two kinds, and its stop's completion or failure where the stop
 // collects a Bulky Booking.
-import type { OutboxKind } from "../execution/vocabulary"
+import type { OutboxKind } from "../outbox/vocabulary"
 import { EVERY_MESSAGE_FILLS, MESSAGE_VARIABLES, placeholdersOf, type MessageVariable } from "../messaging/template"
 import { addDays } from "../days"
 import type { AlertSeverity, TicketPriority } from "../resolution/vocabulary"
@@ -59,6 +59,10 @@ export function countingTicketNotice(ticket: { number: number; subject: string; 
   }
 }
 
+/** The outbox kinds a customer notice may come from, the queues the customer notices' consumer works: the booking's two, its stop's completion and failure, the ticket's reply and completion, and the route's cancel and a rule's alert. */
+export const CUSTOMER_NOTICE_KINDS = ["bulky-booking-booked", "bulky-booking-cancelled", "pickup-completed", "pickup-failed", "ticket-replied", "ticket-completed", "route-cancelled", "alert-raised"] as const satisfies readonly OutboxKind[]
+export type CustomerNoticeKind = (typeof CUSTOMER_NOTICE_KINDS)[number]
+
 /** What an outbox event says that decides its notice: the stop's booking, where a stop's event; the rule that raised it, where an alert's. */
 export type NoticeFacts = { bulkyBookingId?: string | null; alertRule?: string | null }
 
@@ -69,7 +73,7 @@ export type NoticeFacts = { bulkyBookingId?: string | null; alertRule?: string |
  * completed, a route cancelled, and a route late — the alert rules' alert of
  * a route not started (C18 of #291).
  */
-export function customerNoticeOf(kind: OutboxKind, facts: NoticeFacts = {}): CustomerNoticeEvent | null {
+export function customerNoticeOf(kind: CustomerNoticeKind, facts: NoticeFacts = {}): CustomerNoticeEvent | null {
   switch (kind) {
     case "bulky-booking-booked":
     case "bulky-booking-cancelled":
@@ -83,8 +87,6 @@ export function customerNoticeOf(kind: OutboxKind, facts: NoticeFacts = {}): Cus
       return facts.bulkyBookingId == null ? null : "bulky-booking-not-collected"
     case "alert-raised":
       return facts.alertRule === "route-not-started" ? "route-late" : null
-    default:
-      return null
   }
 }
 

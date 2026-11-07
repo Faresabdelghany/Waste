@@ -16,15 +16,14 @@
 // consumer of the kind and completed (boss.ts, `drainInherited`). That is the
 // cut-over — a job the old relay sent before the deploy is worked once, by
 // the consumers it was meant for — and the way a consumer added later starts
-// from the events held for it. A job's data is `RelayedEvent`: the contracts' `OutboxEvent` — the
+// from the events held for it. A job's data is `RelayedJob`: the contracts' `OutboxEvent` — the
 // row as the API would answer it, `publishedAt` stamped, `payload` the wire
 // resource as the write left it — plus `companyId`, the tenant, since a
 // consumer opens its writes with `withCompany(context.api.db, event.companyId,
-// …)` and no request carries the claim for it. A consumer parses `payload`
-// with the schema its kind promises (`PickupDetail` for a stop's events, the
-// `Route` with `proofs` for a problem on the route alone, `DriverCommandReceipt`
-// for `command-rejected`, `Unload`, `Ticket`, `InvoiceDetail`; #104 §6, #109
-// §5, #112 §5), and is idempotent by `event.id`: pg-boss delivers at least
+// …)` and no request carries the claim for it. A consumer reads `payload`
+// through `payloadOf`, the schema its kind and aggregate promise
+// (`OUTBOX_PAYLOADS`, @waste/contracts/outbox, which the writer's `emit` is
+// typed by), and is idempotent by `event.id`: pg-boss delivers at least
 // once, and a job that fails is retried under the queue's policy and then
 // failed, where `/readyz` counts it.
 //
@@ -76,8 +75,8 @@
 // dead-lettered again, so a redrive is never a loss. The seam sets the dead
 // letter and not each consumer, so a consumer added later cannot forget it.
 import { Id } from "@waste/contracts/ids"
-import { OutboxKind } from "@waste/contracts/execution"
-import { OutboxEvent } from "@waste/contracts/outbox"
+import { OutboxEvent, OutboxKind, outboxPayloadOf, type OutboxPayload } from "@waste/contracts/outbox"
+import { aggregateOf, type AggregateOf } from "@waste/domain/outbox/vocabulary"
 import type { WorkOptions } from "pg-boss"
 import * as z from "zod"
 
@@ -96,11 +95,24 @@ export const CONSUMER_NAME = /^[a-z]+(?:-[a-z]+)*$/
 export const OUTBOX_DEAD_QUEUE = "outbox.dead"
 
 /** What a job on an `outbox.<kind>` queue carries: the contracts' `OutboxEvent`, stamped, with the tenant it belongs to. */
-export const RelayedEvent = OutboxEvent.extend({
+export const RelayedJob = OutboxEvent.extend({
   /** The company whose event this is: what a consumer opens `withCompany` on. */
   companyId: Id,
 })
-export type RelayedEvent<Kind extends OutboxKind = OutboxKind> = Omit<z.infer<typeof RelayedEvent>, "kind"> & { kind: Kind }
+export type RelayedJob = z.infer<typeof RelayedJob>
+
+/** A relayed job as a consumer reads it: an event of one of the kinds, about one of the aggregates its kind is about, its payload as the write left it for `payloadOf` to read. */
+export type RelayedEvent<Kind extends OutboxKind = OutboxKind> = Kind extends OutboxKind ? { [A in AggregateOf<Kind>]: Omit<RelayedJob, "kind" | "aggregateKind"> & { kind: Kind; aggregateKind: A } }[AggregateOf<Kind>] : never
+
+/** A job's data as a relayed event: the row parsed with the contracts, about an aggregate its kind is about. */
+export function relayedEventOf(data: unknown): RelayedEvent {
+  const job = RelayedJob.parse(data)
+  aggregateOf(job.kind, job.aggregateKind)
+  return job as RelayedEvent
+}
+
+/** An event's payload read as the resource its kind carries for its aggregate (`OUTBOX_PAYLOADS`); throws where it is not, failing the job. */
+export const payloadOf = <Kind extends OutboxKind, A extends AggregateOf<Kind>>(event: { kind: Kind; aggregateKind: A; payload: unknown }): OutboxPayload<Kind, A> => outboxPayloadOf(event.kind, event.aggregateKind, event.payload)
 
 /** How long a job waits on a queue no consumer works yet: ninety days, so the consumer a kind is waiting for starts from the queue and not blind. */
 export const UNCONSUMED_RETENTION_SECONDS = 90 * 24 * 60 * 60
@@ -139,7 +151,7 @@ export type OutboxConsumer<Kind extends OutboxKind> = {
   /** What the consumer does with an event, one sentence; each queue's description is this and its kind. */
   description: string
   /**
-   * Runs once per event with the job's data parsed as `RelayedEvent` and the
+   * Runs once per event with the job's data parsed as `RelayedJob` and the
    * process's context; throw to fail the job, which pg-boss retries under the
    * queue's policy and then fails for `/readyz` to count and copies to
    * `outbox.dead` for an operator to redrive. A job whose data does not parse,
@@ -176,7 +188,7 @@ export type OutboxConsumer<Kind extends OutboxKind> = {
  * retry policy and `CONSUMED_OUTBOX_QUEUE_OPTIONS` under the consumer's own,
  * since the consumer's queue is its own to create.
  */
-export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kinds, description, handler, queueOptions, workOptions, startsFresh }: OutboxConsumer<Kind>): JobDefinition<RelayedEvent>[] {
+export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kinds, description, handler, queueOptions, workOptions, startsFresh }: OutboxConsumer<Kind>): JobDefinition<RelayedJob>[] {
   if (!CONSUMER_NAME.test(name)) throw new Error(`an outbox consumer's name is lowercase words joined by hyphens: ${JSON.stringify(name)}`)
   return kinds.map((kind) => ({
     queue: consumerQueue(kind, name),
@@ -188,7 +200,7 @@ export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kind
     handler: async (jobs, context) => {
       const events: string[] = []
       for (const job of jobs) {
-        const event = RelayedEvent.parse(job.data)
+        const event = relayedEventOf(job.data)
         if (event.kind !== kind) {
           throw new Error(`${consumerQueue(kind, name)}: job ${job.id} carries a ${event.kind} event (${event.id}); the relay sends each kind to its own consumers' queues`)
         }

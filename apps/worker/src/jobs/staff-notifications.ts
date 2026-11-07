@@ -22,8 +22,8 @@
 // notice once (`message_source_event_id_user_account_id_idx`), so a
 // redelivery writes nothing. Every read and write is `wms_api`'s under
 // `withCompany` on the event's company, in one transaction.
-import { Alert } from "@waste/contracts/alerts"
-import { Ticket } from "@waste/contracts/tickets"
+import type { Alert } from "@waste/contracts/alerts"
+import type { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { queueStaffMessage } from "@waste/db/commands/messaging"
 import { newId } from "@waste/db/ids"
@@ -31,13 +31,12 @@ import { projectAccess, roleGrant, userAccount } from "@waste/db/schema/access"
 import { notificationPreference } from "@waste/db/schema/notifications"
 import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import { alertNotice, severityReaches, ticketAssignedNotice, type Notice } from "@waste/domain/notifications/notices"
-import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
+import { NOTIFICATION_EVENTS, type NotificationEvent } from "@waste/domain/notifications/vocabulary"
 import type { AlertSeverity } from "@waste/domain/resolution/vocabulary"
 import { and, eq, exists, isNull, or, sql } from "drizzle-orm"
 
-import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
 
 /** The module whose view grant reads an alert: the board's. */
@@ -105,12 +104,12 @@ async function ticketRecipients(tx: Tx, companyId: string, assigned: Ticket): Pr
 }
 
 /** What one event came to: how many notices were queued, the rest having been queued before or reaching nobody. */
-export type Notified = { event: string; kind: OutboxKind; queued: number }
+export type Notified = { event: string; kind: NotificationEvent; queued: number }
 
 /** One event to the notices it owes, queued in one fenced transaction as the tenant. */
-export async function notifyStaffFor(event: RelayedEvent<(typeof NOTIFICATION_EVENTS)[number]>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Notified> {
+export async function notifyStaffFor(event: RelayedEvent<NotificationEvent>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Notified> {
   const queued = await withCompany(api.db, event.companyId, async (tx) => {
-    const addressed = event.kind === "alert-raised" ? await alertRecipients(tx, event.companyId, Alert.parse(event.payload)) : await ticketRecipients(tx, event.companyId, Ticket.parse(event.payload))
+    const addressed = event.kind === "alert-raised" ? await alertRecipients(tx, event.companyId, payloadOf(event)) : await ticketRecipients(tx, event.companyId, payloadOf(event))
     let count = 0
     for (const { userAccountId, notice } of addressed) {
       const written = await queueStaffMessage(tx, send, { id: newId(), companyId: event.companyId, projectId: event.projectId, userAccountId, sourceEventId: event.id, ...notice })
