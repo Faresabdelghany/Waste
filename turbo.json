@@ -156,7 +156,11 @@
       "dependsOn": [
         "^test"
       ],
-      "cache": false
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/workflows/ci.yml",
+        "$TURBO_ROOT$/.github/workflows/pilot-database.yml"
+      ]
     },
     "@waste/db#test": {
       "dependsOn": [

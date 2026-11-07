@@ -35,9 +35,11 @@
 # environment is all that phase reads, and between two phases only what a
 # script cannot do — storing the artifact the phase before named in its
 # outputs, or downloading the one a phase chose. A phase refuses a run off
-# main, holds the owner's URL to PILOT_SUPABASE_REF before it connects, and
-# checks its operation's inputs itself (packages/db/src/pilot/phase.ts);
-# apps/pilot's operations test holds every job here to its list.
+# main and checks its operation's inputs itself (apps/pilot/src/operation.ts),
+# which three jobs hand it as job-level `env` (inputs, never a secret), and
+# holds the owner's URL to PILOT_SUPABASE_REF before it connects
+# (packages/db/src/pilot/phase.ts); apps/pilot's operations test holds every
+# job here to its list.
 #
 # Secrets are the `pilot` environment's and reach only the step that needs
 # them, as that step's environment: never a job's or the workflow's, never
@@ -196,7 +198,8 @@ jobs:
     # `contents: write` for the deploy phase alone, the release commit on the
     # deploy branch, and `checks: read` for the prove phase, CI's proof of the
     # commit; the checkout below still keeps the token out of the tree, and
-    # each phase reads it as its own environment.
+    # each of the two reads it as its own environment, and only when the
+    # release deploys: a database-only release hands neither the token.
     permissions:
       contents: write
       checks: read
@@ -214,7 +217,7 @@ jobs:
       - name: Say what is released and require CI green on this commit
         working-directory: apps/pilot
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ env.DEPLOY_API == 'true' && github.token || '' }}
         run: node --import tsx src/operate.ts release prove
       # 3–4. The journal agrees with main's migrations, then a backup on every release, stored before the migrations run.
       - uses: ./.github/actions/postgres-client
@@ -240,7 +243,7 @@ jobs:
         id: deploy
         working-directory: apps/pilot
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ env.DEPLOY_API == 'true' && github.token || '' }}
         run: node --import tsx src/operate.ts release deploy
       # 9. With deploy_api, three consecutive observations of the released build within ten minutes.
       - name: Prove it live

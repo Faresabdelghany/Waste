@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url"
 import { requireFingerprint } from "../fingerprint"
 import { requireJournal } from "../migrate"
 import { postgresMajor } from "../supabase-config"
-import { BACKUP_INCOMPLETE, FINGERPRINT_COPY, majorOf } from "./backup"
+import { BACKUP_INCOMPLETE, backupMembers, FINGERPRINT_COPY, majorOf } from "./backup"
 import type { RunRef } from "./run"
 
 const SCRIPTS = fileURLToPath(new URL("../../scripts", import.meta.url))
@@ -50,6 +50,8 @@ export type BackupOptions = {
   url: string
   /** The encrypted file to write; its directory is made. */
   output: string
+  /** The `mktemp -d` template of the directory the dumps live in until they are encrypted (phase.ts, `layout`). */
+  scratch: string
   /** The run and the commit the manifest records. */
   run: RunRef
   commit: string
@@ -59,17 +61,32 @@ export type BackupOptions = {
 }
 
 /** pilot-backup.sh against the URL, encrypted to the committed recipient (or env's BACKUP_RECIPIENT_FILE). Answers whether a backup was taken: not, only where an incomplete database is tolerated. */
-export function backUpDatabase({ env, url, output, run, commit, tolerateIncomplete = false, log }: BackupOptions): { taken: boolean } {
+export function backUpDatabase({ env, url, output, scratch, run, commit, tolerateIncomplete = false, log }: BackupOptions): { taken: boolean } {
   mkdirSync(path.dirname(output), { recursive: true })
-  const status = runScript("pilot-backup.sh", [], { ...env, DATABASE_ADMIN_URL: url, BACKUP_OUTPUT: output, GITHUB_RUN_ID: run.id, GITHUB_RUN_ATTEMPT: run.attempt, GITHUB_SHA: commit }, log)
+  const status = runScript(
+    "pilot-backup.sh",
+    [],
+    { ...env, DATABASE_ADMIN_URL: url, BACKUP_OUTPUT: output, BACKUP_SCRATCH: scratch, GITHUB_RUN_ID: run.id, GITHUB_RUN_ATTEMPT: run.attempt, GITHUB_SHA: commit },
+    log,
+  )
   if (status === 0) return { taken: true }
   if (status === BACKUP_INCOMPLETE && tolerateIncomplete) return { taken: false }
   throw new Error(`pilot-backup.sh failed (exit ${status})`)
 }
 
-/** pilot-restore.sh decrypt: the archive decrypted with the age identity and unpacked into `dir`, its members held to a backup's. */
-export function decryptBackup({ env, archive, identity, dir, log }: { env: Environment; archive: string; identity: string; dir: string; log: Log }): void {
-  const status = runScript("pilot-restore.sh", ["decrypt"], { ...env, BACKUP_FILE: archive, AGE_IDENTITY: identity, RESTORE_DIR: dir }, log)
+/**
+ * pilot-restore.sh decrypt: the archive decrypted with the age identity and
+ * unpacked into `dir`, its members held to a backup's (`backupMembers`, handed
+ * over here, so nothing but bash and age holds the key), the key in a
+ * directory made from the `scratch` template.
+ */
+export function decryptBackup({ env, archive, identity, dir, scratch, log }: { env: Environment; archive: string; identity: string; dir: string; scratch: string; log: Log }): void {
+  const status = runScript(
+    "pilot-restore.sh",
+    ["decrypt"],
+    { ...env, BACKUP_FILE: archive, AGE_IDENTITY: identity, RESTORE_DIR: dir, BACKUP_MEMBERS: backupMembers().join("\n"), RESTORE_KEY_SCRATCH: scratch },
+    log,
+  )
   if (status !== 0) throw new Error(`pilot-restore.sh decrypt failed (exit ${status})`)
 }
 

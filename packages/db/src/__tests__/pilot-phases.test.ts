@@ -57,7 +57,7 @@ async function onFreshDatabase(prefix: string, env: Environment, body: (run: Run
       // The local run, whatever CI's own GITHUB_RUN_ID says.
       run: LOCAL_RUN,
       temp: work,
-      barrierRoles: roles,
+      barrier: { roles, alwaysLoggingIn: [roles[0]] },
       log: (line) => said.push(line),
       output: (name, value) => outputs.set(name, value),
     })

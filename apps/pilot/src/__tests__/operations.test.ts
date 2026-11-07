@@ -6,9 +6,9 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
-import { PILOT_OPERATIONS } from "@waste/db/pilot/phase"
 import { GRANTED_ROLES, OWNER } from "@waste/db/roles"
 
+import { PILOT_OPERATIONS } from "../operation"
 import { OPERATIONS, WORKFLOW } from "../operations"
 
 const workflow = readFileSync(new URL(`../../../../${WORKFLOW}`, import.meta.url), "utf8")
@@ -112,6 +112,26 @@ describe("the Pilot database workflow", () => {
         for (const line of step.text.split("\n").filter((candidate) => candidate.includes("secrets."))) assert.match(line, /^ {10}[A-Z_]+: \$\{\{ secrets\.[A-Z_]+ \}\}$/, `${job}: ${line.trim()}`)
       }
     }
+  })
+
+  test("hands the job's token only to the phases that call GitHub, and a release's prove and deploy phases only when the release deploys", () => {
+    const given = new Map<string, string>()
+    for (const [job, steps] of JOBS) {
+      for (const step of steps) {
+        const call = step.run === undefined ? null : PHASE_CALL.exec(step.run)
+        const token = step.env.get("GITHUB_TOKEN")
+        if (call !== null && token !== undefined) given.set(`${job}: ${call[1]} ${call[2]}`, token)
+      }
+    }
+    const always = "${{ github.token }}"
+    const whenDeploying = "${{ env.DEPLOY_API == 'true' && github.token || '' }}"
+    assert.deepEqual(Object.fromEntries(given), {
+      "resolve: release order": always,
+      "release: release prove": whenDeploying,
+      "release: release deploy": whenDeploying,
+      "restore: restore choose": always,
+      "recover-logins: recover-logins choose": always,
+    })
   })
 
   test("gives grant-logins the owner's URL and one secret for every role the table gives a URL of its own, each under its own name", () => {

@@ -7,6 +7,9 @@
 #
 #   DATABASE_ADMIN_URL      the owner's URL (the `pilot` environment's secret)
 #   BACKUP_OUTPUT           the encrypted file to write
+#   BACKUP_SCRATCH          the `mktemp -d` template of the directory the dumps
+#                           live in, in the clear, until they are encrypted
+#                           (src/pilot/phase.ts, `layout`)
 #   BACKUP_RECIPIENT_FILE   the age recipient; the committed
 #                           supabase/pilot-backup.pub unless a rehearsal names
 #                           its own throwaway key
@@ -42,6 +45,7 @@ set -euo pipefail
 
 : "${DATABASE_ADMIN_URL:?DATABASE_ADMIN_URL is not set}"
 : "${BACKUP_OUTPUT:?BACKUP_OUTPUT names the encrypted file to write}"
+: "${BACKUP_SCRATCH:?BACKUP_SCRATCH names the template of the directory the dumps are written to}"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$(dirname "$here")"
@@ -59,7 +63,7 @@ output="$(absolute "$BACKUP_OUTPUT")"
 recipient="$(absolute "${BACKUP_RECIPIENT_FILE:-$repository/supabase/pilot-backup.pub}")"
 [ -s "$recipient" ] || fail "no age recipient at $recipient"
 
-work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pilot-backup.XXXXXX")"
+work="$(mktemp -d "$BACKUP_SCRATCH")"
 trap 'rm -rf "$work"' EXIT
 plain="$work/plain"
 mkdir -m 700 "$plain"

@@ -67,7 +67,7 @@ function backingUp(checks: (context: Context, url: string) => Promise<void>, { t
       const url = context.adminUrl()
       await checks(context, url)
       const { backup } = context.layout
-      const { taken } = backUpDatabase({ env: context.env, url, output: backup.file, run: context.run, commit: context.commit, tolerateIncomplete, log: context.log })
+      const { taken } = backUpDatabase({ env: context.env, url, output: backup.file, scratch: context.layout.scratch.backup, run: context.run, commit: context.commit, tolerateIncomplete, log: context.log })
       if (!taken) context.summary("No safety backup: the database lacks a schema a backup requires, so it cannot be backed up whole. The restore goes on.")
       context.output("taken", String(taken))
       context.output("artifact", backup.artifact)
@@ -86,7 +86,7 @@ function recording(operation: BarrierOperation, before: (context: Context, ident
       await asOwner(url, async (sql) => {
         const identity = await databaseIdentity(sql, url)
         before(context, identity)
-        const recorded = await recordLogins(sql, { operation, identity, run: context.run, commit: context.commit, roles: context.barrierRoles })
+        const recorded = await recordLogins(sql, { operation, identity, run: context.run, commit: context.commit, barrier: context.barrier })
         mkdirSync(path.dirname(loginState.file), { recursive: true })
         writeFileSync(loginState.file, recorded.text)
         context.output("artifact", loginState.artifact)
@@ -106,7 +106,7 @@ function behindTheBarrier(name: string, work: (context: Context, url: string) =>
       const url = context.adminUrl()
       const { loginState } = context.layout
       await asOwner(url, async (sql) => {
-        const scope = { identity: await databaseIdentity(sql, url), run: context.run, commit: context.commit, roles: context.barrierRoles }
+        const scope = { identity: await databaseIdentity(sql, url), run: context.run, commit: context.commit, barrier: context.barrier }
         const recorded = readFileSync(loginState.file, "utf8")
         const stored = readFileSync(path.join(loginState.copy, LOGIN_STATE_FILE), "utf8")
         await behindBarrier(sql, { ...scope, recorded, stored, say: context.summary }, () => work(context, url))
@@ -162,7 +162,7 @@ export const restorePhases = {
     name: "decrypt",
     async run(context) {
       const archive = theOneFile(context.layout.source(BACKUP_ARTIFACT).dir, (name) => name.endsWith(".tar.age"), "encrypted backups")
-      decryptBackup({ env: context.env, archive, identity: context.required("AGE_IDENTITY"), dir: context.layout.restore, log: context.log })
+      decryptBackup({ env: context.env, archive, identity: context.required("AGE_IDENTITY"), dir: context.layout.restore, scratch: context.layout.scratch.restoreKey, log: context.log })
     },
   } satisfies Phase,
   record: recording("restore", (context, identity) => {
@@ -187,7 +187,7 @@ export const recoverLoginsPhases = {
       const source = readSourceRun(context, LOGIN_STATE_ARTIFACT)
       const file = theOneFile(context.layout.source(LOGIN_STATE_ARTIFACT).dir, (name) => name === LOGIN_STATE_FILE, "login records")
       await asOwner(url, async (sql) => {
-        const scope = { identity: await databaseIdentity(sql, url), run: source.run, commit: source.commit, roles: context.barrierRoles }
+        const scope = { identity: await databaseIdentity(sql, url), run: source.run, commit: source.commit, barrier: context.barrier }
         context.summary(spellOpened(await openFromRecord(sql, readFileSync(file, "utf8"), scope)))
       })
     },

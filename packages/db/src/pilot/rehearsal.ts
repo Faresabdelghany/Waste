@@ -29,20 +29,20 @@ import { isLocalHost } from "../local-host"
 import { OWNED_SCHEMAS } from "../migrate"
 import { DROP_OWNED_SCHEMAS, verifyBackup } from "./backup"
 import { backupTools } from "./backup-scripts"
-import { BARRIER_ROLES, LOGIN_STATE_FILE, readLogins, spellLogins } from "./barrier"
+import { LOGIN_STATE_FILE, PILOT_BARRIER, readLogins, spellLogins, type BarrierRoles } from "./barrier"
 import { BACKUP_ARTIFACT, createContext, writeSourceRun } from "./phase"
 import { restorePhases } from "./phases"
 import { LOCAL_RUN } from "./run"
 
 export type RehearsalOptions = {
   /** The roles the barrier closes on: the real app roles in CI's step, a suite's throwaway roles where other suites log in beside it. */
-  barrierRoles?: readonly string[]
+  barrier?: BarrierRoles
   log?: (line: string) => void
 }
 
 export type Rehearsal = { fingerprint: string; journalRows: number; logins: string }
 
-export async function rehearseRestore(url: string, { barrierRoles = BARRIER_ROLES, log = () => {} }: RehearsalOptions = {}): Promise<Rehearsal> {
+export async function rehearseRestore(url: string, { barrier = PILOT_BARRIER, log = () => {} }: RehearsalOptions = {}): Promise<Rehearsal> {
   if (!isLocalHost(url)) throw new Error("the restore rehearsal drops schemas: it runs against the local stack only")
   const missing = backupTools()
   if (missing !== undefined) throw new Error(`the restore rehearsal needs the PostgreSQL client and age: ${missing}`)
@@ -71,7 +71,7 @@ export async function rehearseRestore(url: string, { barrierRoles = BARRIER_ROLE
       },
       run: LOCAL_RUN,
       temp: work,
-      barrierRoles,
+      barrier,
       log,
       output: (name, value) => outputs.set(name, value),
       summary: log,
@@ -101,7 +101,7 @@ export async function rehearseRestore(url: string, { barrierRoles = BARRIER_ROLE
     if (lost.length + unexpected.length > 0) {
       throw new Error(`the restored database differs from the fingerprint before the backup:\n${[...lost.map((line) => `- ${line}`), ...unexpected.map((line) => `+ ${line}`)].join("\n")}`)
     }
-    const logins = spellLogins(await readLogins(owner.sql, barrierRoles))
+    const logins = spellLogins(await readLogins(owner.sql, barrier.roles))
     log(`rehearsal: restored ${rowsAfter.length} journal rows and ${verifyBackup(restore).schemas.join(", ")}; the fingerprint matches`)
     return { fingerprint: after, journalRows: rowsAfter.length, logins }
   } finally {

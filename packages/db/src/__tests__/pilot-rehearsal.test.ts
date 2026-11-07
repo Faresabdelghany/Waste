@@ -27,7 +27,7 @@ import { sql as drizzleSql } from "drizzle-orm"
 
 import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
-import { BACKUP_INCOMPLETE } from "../pilot/backup"
+import { BACKUP_INCOMPLETE, backupMembers } from "../pilot/backup"
 import { backUpDatabase, backupTools } from "../pilot/backup-scripts"
 import { rehearseRestore } from "../pilot/rehearsal"
 import { LOCAL_RUN } from "../pilot/run"
@@ -64,7 +64,7 @@ describe("the Pilot's backup and restore, rehearsed", { skip }, () => {
       }
 
       const lines: string[] = []
-      const rehearsal = await rehearseRestore(fresh.url, { barrierRoles: roles, log: (line) => lines.push(line) })
+      const rehearsal = await rehearseRestore(fresh.url, { barrier: { roles, alwaysLoggingIn: [roles[0]] }, log: (line) => lines.push(line) })
       assert.ok(rehearsal.journalRows > 0)
       assert.ok(lines.includes(`pilot-backup: pg_dump ${major} against server ${major}`))
       assert.ok(lines.includes(`Barrier closed: ${roles.join(" and ")} NOLOGIN, 0 session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`))
@@ -110,7 +110,7 @@ describe("backUpDatabase", { skip }, () => {
     const work = mkdtempSync(path.join(tmpdir(), "waste-incomplete-"))
     try {
       const lines: string[] = []
-      const options = { env: process.env, url: fresh.url, output: path.join(work, "backup.tar.age"), run: LOCAL_RUN.run, commit: LOCAL_RUN.commit, log: (line: string) => lines.push(line) }
+      const options = { env: process.env, url: fresh.url, output: path.join(work, "backup.tar.age"), scratch: path.join(work, "pilot-backup.XXXXXX"), run: LOCAL_RUN.run, commit: LOCAL_RUN.commit, log: (line: string) => lines.push(line) }
       assert.deepEqual(backUpDatabase({ ...options, tolerateIncomplete: true }), { taken: false })
       assert.ok(lines.includes("pilot-backup: the database has no wms schema, so it cannot be backed up whole"), lines.join("\n"))
       assert.throws(() => backUpDatabase(options), new RegExp(`pilot-backup\\.sh failed \\(exit ${BACKUP_INCOMPLETE}\\)`))
@@ -142,7 +142,7 @@ describe("pilot-restore.sh decrypt", { skip }, () => {
       const restore = path.join(work, "restore")
       const result = spawnSync("bash", [RESTORE, "decrypt"], {
         encoding: "utf8",
-        env: { ...process.env, BACKUP_FILE: path.join(work, "backup.tar.age"), AGE_IDENTITY: readFileSync(path.join(work, "identity.txt"), "utf8"), RESTORE_DIR: restore },
+        env: { ...process.env, BACKUP_FILE: path.join(work, "backup.tar.age"), AGE_IDENTITY: readFileSync(path.join(work, "identity.txt"), "utf8"), RESTORE_DIR: restore, BACKUP_MEMBERS: backupMembers().join("\n"), RESTORE_KEY_SCRATCH: path.join(work, "key.XXXXXX") },
       })
       assert.notEqual(result.status, 0)
       assert.match(result.stderr, /the archive holds a member a backup never has: \.\/inner\//)

@@ -70,7 +70,7 @@ describe("requireBarrierOpen and checkRecord", () => {
     assert.doesNotThrow(() => requireBarrierOpen({ wms_api: true, wms_worker: false }))
     assert.throws(() => requireBarrierOpen({ wms_api: false, wms_worker: false }), /wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it\. Run recover-logins/)
     assert.equal(barrierOpen({ wms_api: null, wms_worker: true }), false, "a missing wms_api is no open barrier")
-    assert.equal(barrierOpen({ waste_barrier_a: false }), true, "roles that need not log in say nothing about an earlier barrier")
+    assert.equal(barrierOpen({ wms_api: true }), true)
   })
 
   test("hold a record to its run, its commit and its database", () => {
@@ -157,7 +157,8 @@ describe("the barrier's protocol on a database", { skip: database.skip }, () => 
       await owner.close()
     }
   }
-  const scopeOf = (roles: string[]) => ({ identity: "local/postgres", run: { id: "18000000001", attempt: "1" }, commit: COMMIT, roles })
+  /** The first role stands for wms_api, which logs in wherever the API runs; the second for wms_worker. */
+  const scopeOf = (roles: string[]) => ({ identity: "local/postgres", run: { id: "18000000001", attempt: "1" }, commit: COMMIT, barrier: { roles, alwaysLoggingIn: [roles[0]] } })
 
   test("records the logins, closes over the stored copy, does the work while no role can log in, and puts back what it recorded", () =>
     withRoles(async (roles, sql) => {
@@ -173,6 +174,12 @@ describe("the barrier's protocol on a database", { skip: database.skip }, () => 
         `Barrier closed: ${roles[0]} and ${roles[1]} NOLOGIN, 0 session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`,
         `Logins restored from the restore of run 18000000001: ${roles[0]} LOGIN, ${roles[1]} NOLOGIN`,
       ])
+    }))
+
+  test("records nothing while the role that logs in wherever the API runs cannot: an earlier run's barrier, to recover first", () =>
+    withRoles(async (roles, sql) => {
+      await sql.unsafe(`alter role ${roles[0]} nologin`)
+      await assert.rejects(recordLogins(sql, { ...scopeOf(roles), operation: "restore" }), new RegExp(`^Error: ${roles[0]} cannot log in: an earlier restore or reset closed the write barrier and never opened it\\. Run recover-logins`))
     }))
 
   test("closes nothing over a stored copy that is not the record, or over logins changed since they were recorded", () =>

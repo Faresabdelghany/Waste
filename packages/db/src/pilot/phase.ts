@@ -1,22 +1,18 @@
-// A Pilot operation's phases and what each phase is given (Issue #152). An
-// operation of the protected workflow (.github/workflows/pilot-database.yml)
-// is a list of phases run in order, one workflow step each (apps/pilot's
-// operations.ts holds the six lists, and its test holds the workflow's jobs to
-// them). Between two phases the workflow does only what a step of its own
-// must: move an artifact, which no script can, or hand a secret to the one
-// phase that reads it. Everything else is here, once:
+// What a phase of a Pilot operation is given (Issue #152). An operation of
+// the protected workflow (.github/workflows/pilot-database.yml) is a list of
+// phases run in order, one workflow step each; apps/pilot holds the lists,
+// their admission and the command a step runs, and the database's phases
+// (phases.ts) are written against this context. Between two phases the
+// workflow does only what a step of its own must: move an artifact, which no
+// script can, or hand a secret to the one phase that reads it. Here, once:
 //
-// - the order, which is the list's;
 // - the Pilot-target check: a phase reaches its database only through
 //   `adminUrl`, which holds the owner's URL to the Pilot's Supabase project
 //   (PILOT_SUPABASE_REF) — or, outside the workflow, to the local stack —
 //   every time it is read, so no phase can forget it;
-// - admission: with the Pilot as the target the run must be on main, and an
-//   operation's own conditions (the services stopped, a source run named)
-//   hold before each of its phases;
-// - the names: every file a phase writes and every artifact the workflow
-//   stores (`layout`), which a phase hands the workflow as step outputs, so
-//   the workflow types none of them.
+// - the names: every file a phase writes, every artifact the workflow stores
+//   and the scripts' own temporary directories (`layout`), which a phase
+//   hands the workflow as step outputs, so the workflow types none of them.
 //
 // The restore rehearsal runs the restore's phases through the same context on
 // the local stack (rehearsal.ts).
@@ -24,16 +20,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { failureMessage } from "../sqlstate"
-import { BARRIER_ROLES, LOGIN_STATE_FILE } from "./barrier"
-import { expectPilot, unreachableHint } from "./identity"
+import { LOGIN_STATE_FILE, PILOT_BARRIER, type BarrierRoles } from "./barrier"
+import { expectPilot } from "./identity"
 import { LOCAL_RUN, type RunRef } from "./run"
 
 export type Environment = Readonly<Record<string, string | undefined>>
-
-/** The operations, as the workflow's `operation` input offers them. */
-export const PILOT_OPERATIONS = ["check", "release", "reset-to-seed", "grant-logins", "restore", "recover-logins"] as const
-export type PilotOperation = (typeof PILOT_OPERATIONS)[number]
 
 /** The kinds of artifact the workflow stores, each named `<kind>-<run>-<attempt>`. */
 export const BACKUP_ARTIFACT = "pilot-backup"
@@ -49,9 +40,14 @@ export const artifactsOf = (kind: ArtifactKind, runId: string): RegExp => new Re
 /** Where an artifact of a run a restore or a recovery reads from is downloaded, beside the choice that names it. */
 const SOURCE_DIRECTORY: Record<ArtifactKind, string> = { [BACKUP_ARTIFACT]: "pilot-source", [LOGIN_STATE_ARTIFACT]: "login-state-source" }
 
+/** The part of a `mktemp -d` template mktemp replaces. */
+const MKTEMP_RANDOM = "XXXXXX"
+
 /** Every file and artifact one run's phases share, under the runner's temporary directory (or the rehearsal's own). */
 export function layout(temp: string, run: RunRef) {
   const backup = artifactName(BACKUP_ARTIFACT, run)
+  /** The scripts' own temporary directories, as `mktemp -d` templates: pilot-backup.sh's dumps in the clear, pilot-restore.sh's key and archive. */
+  const scratch = { backup: path.join(temp, `${BACKUP_ARTIFACT}.${MKTEMP_RANDOM}`), restoreKey: path.join(temp, `pilot-restore-key.${MKTEMP_RANDOM}`) }
   return {
     /** This run's encrypted backup, stored as its artifact. */
     backup: { artifact: backup, file: path.join(temp, BACKUP_ARTIFACT, `${backup}.tar.age`) },
@@ -61,8 +57,13 @@ export function layout(temp: string, run: RunRef) {
     source: (kind: ArtifactKind) => ({ dir: path.join(temp, SOURCE_DIRECTORY[kind]), pick: path.join(temp, `${SOURCE_DIRECTORY[kind]}.json`) }),
     /** The decrypted backup a restore applies. */
     restore: path.join(temp, "pilot-restore"),
-    /** What holds a database's rows in the clear, or an encrypted copy of them, removed after every run: the directories above and the scripts' own temporary ones (`<prefix>.XXXXXX`). */
-    plaintext: { directories: [path.join(temp, BACKUP_ARTIFACT), path.join(temp, "pilot-restore"), path.join(temp, SOURCE_DIRECTORY[BACKUP_ARTIFACT])], prefixes: [`${BACKUP_ARTIFACT}.`, "pilot-restore-key."], temp },
+    scratch,
+    /** What holds a database's rows in the clear, or an encrypted copy of them, removed after every run: the directories above, and the scripts' own. */
+    plaintext: {
+      directories: [path.join(temp, BACKUP_ARTIFACT), path.join(temp, "pilot-restore"), path.join(temp, SOURCE_DIRECTORY[BACKUP_ARTIFACT])],
+      temp,
+      prefixes: Object.values(scratch).map((template) => path.basename(template).slice(0, -MKTEMP_RANDOM.length)),
+    },
   }
 }
 export type Layout = ReturnType<typeof layout>
@@ -76,8 +77,8 @@ export type Context = {
   readonly run: RunRef
   readonly commit: string
   readonly layout: Layout
-  /** The roles the write barrier switches off: BARRIER_ROLES, unless a suite closes it on throwaway roles of its own. */
-  readonly barrierRoles: readonly string[]
+  /** The roles the write barrier switches off: PILOT_BARRIER, unless a suite closes it on throwaway roles of its own. */
+  readonly barrier: BarrierRoles
   /** A variable the phase cannot go on without, refused by name. */
   required(name: string): string
   /** The owner's URL, held to the Pilot or, outside the workflow, the local stack, every time it is read. */
@@ -95,7 +96,7 @@ export type ContextOptions = {
   run?: { run: RunRef; commit: string }
   /** Where the layout lives: RUNNER_TEMP, else the system's. */
   temp?: string
-  barrierRoles?: readonly string[]
+  barrier?: BarrierRoles
   log?: (line: string) => void
   output?: (name: string, value: string) => void
   summary?: (line: string) => void
@@ -103,7 +104,7 @@ export type ContextOptions = {
 
 const set = (value: string | undefined): value is string => value !== undefined && value !== ""
 
-export function createContext({ env, run, temp, barrierRoles = BARRIER_ROLES, log = (line) => console.log(line), output, summary }: ContextOptions): Context {
+export function createContext({ env, run, temp, barrier = PILOT_BARRIER, log = (line) => console.log(line), output, summary }: ContextOptions): Context {
   const required = (name: string): string => {
     const value = env[name]
     if (!set(value)) throw new Error(`${name} is not set`)
@@ -121,7 +122,7 @@ export function createContext({ env, run, temp, barrierRoles = BARRIER_ROLES, lo
     run: own.run,
     commit: own.commit,
     layout: layout(temp ?? (set(env.RUNNER_TEMP) ? env.RUNNER_TEMP : tmpdir()), own.run),
-    barrierRoles,
+    barrier,
     required,
     adminUrl: () => {
       const url = required("DATABASE_ADMIN_URL")
@@ -144,7 +145,7 @@ export function createContext({ env, run, temp, barrierRoles = BARRIER_ROLES, lo
   }
 }
 
-/** A refusal before anything ran, said as the workflow's error annotation. */
+/** A refusal before anything was written, said as the workflow's error annotation. */
 export class Refusal extends Error {}
 
 export type Phase = {
@@ -152,44 +153,6 @@ export type Phase = {
   /** A phase that runs whatever came before (`if: always()`): admitted unconditionally, since it only removes what the run left. */
   readonly cleanup?: true
   run(context: Context): Promise<void>
-}
-
-export type Operation = {
-  readonly name: PilotOperation
-  /** What must hold before any of its phases runs. */
-  readonly admit: (context: Context) => void
-  readonly phases: readonly Phase[]
-}
-
-/** With the Pilot as the target, the run is on main and nowhere else. */
-export const fromMain =
-  (sentence: string) =>
-  (context: Context): void => {
-    if (set(context.env.PILOT_SUPABASE_REF) && context.env.GITHUB_REF !== "refs/heads/main") throw new Refusal(sentence)
-  }
-
-/** A restore or a reset replaces what the API and the worker read: the operator says the Pilot's service is stopped. */
-export const servicesSuspended =
-  (operation: string) =>
-  (context: Context): void => {
-    if (context.env.SERVICES_SUSPENDED !== "true") throw new Refusal(`Stop the Pilot's Suga service first, then dispatch the ${operation} with services_suspended on`)
-  }
-
-/** A restore or a recovery reads one run's artifact: the run is named, as a number. */
-export const sourceRunNamed = (context: Context): void => {
-  if (!/^\d+$/.test(context.env.SOURCE_RUN_ID ?? "")) throw new Refusal("source_run_id names no run")
-}
-
-/** Every admission of an operation, in order. */
-export const admitting =
-  (...checks: readonly ((context: Context) => void)[]) =>
-  (context: Context): void => {
-    for (const check of checks) check(context)
-  }
-
-export async function runPhase(operation: Operation, phase: Phase, context: Context): Promise<void> {
-  if (phase.cleanup !== true) operation.admit(context)
-  await phase.run(context)
 }
 
 /** The choice a restore's or a recovery's first phase made, for the phases after the download. */
@@ -228,29 +191,4 @@ export const removePlaintext: Phase = {
       if (plaintext.prefixes.some((prefix) => name.startsWith(prefix))) rmSync(path.join(plaintext.temp, name), { recursive: true, force: true })
     }
   },
-}
-
-/**
- * The command line every workflow step runs, `<operation> <phase>`: the phase
- * admitted and run, and a failure said by its message alone — never a stack a
- * secret could sit in, never a statement's parameters — with the
- * paused-Supabase-project hint where the Pilot could not be reached, and exit
- * 1. A refusal is said as the workflow's error annotation.
- */
-export async function operateFromCommandLine(operations: readonly Operation[], [operationName, phaseName]: readonly string[], env: Environment = process.env): Promise<void> {
-  const operation = operations.find((candidate) => candidate.name === operationName)
-  const phase = operation?.phases.find((candidate) => candidate.name === phaseName)
-  if (operation === undefined || phase === undefined) {
-    console.error(`usage: operate.ts <operation> <phase>, one of: ${operations.flatMap((each) => each.phases.map((step) => `${each.name} ${step.name}`)).join("; ")}`)
-    process.exit(1)
-  }
-  try {
-    await runPhase(operation, phase, createContext({ env }))
-  } catch (error) {
-    if (error instanceof Refusal) console.log(`::error::${error.message}`)
-    else console.error(failureMessage(error))
-    const hint = unreachableHint(env.DATABASE_ADMIN_URL ?? "", error)
-    if (hint !== undefined) console.error(hint)
-    process.exit(1)
-  }
 }

@@ -1,34 +1,16 @@
 // What every phase of a Pilot operation is given (Issue #152): the run it
 // belongs to, the owner's URL held to the Pilot or the local stack on every
-// read, the admission its operation asks, and the names of the files and
-// artifacts the workflow moves between phases — the names the workflow once
-// typed itself, which restores and recoveries of runs already stored still
-// read.
+// read, and the names of the files and artifacts the workflow moves between
+// phases — the names the workflow once typed itself, which restores and
+// recoveries of runs already stored still read. The operations' admission is
+// apps/pilot's, and tested there.
 import assert from "node:assert/strict"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, test } from "node:test"
 
-import {
-  admitting,
-  artifactName,
-  artifactsOf,
-  BACKUP_ARTIFACT,
-  createContext,
-  fromMain,
-  LOGIN_STATE_ARTIFACT,
-  readSourceRun,
-  Refusal,
-  removePlaintext,
-  runPhase,
-  servicesSuspended,
-  sourceRunNamed,
-  theOneFile,
-  writeSourceRun,
-  type Environment,
-  type Operation,
-} from "../pilot/phase"
+import { artifactName, artifactsOf, BACKUP_ARTIFACT, createContext, LOGIN_STATE_ARTIFACT, readSourceRun, removePlaintext, theOneFile, writeSourceRun, type Environment } from "../pilot/phase"
 import { LOCAL_RUN } from "../pilot/run"
 
 const REF = "abcdefghijklmnopqrst"
@@ -81,6 +63,7 @@ describe("the layout", () => {
     assert.deepEqual(layout.source(BACKUP_ARTIFACT), { dir: "/runner/_temp/pilot-source", pick: "/runner/_temp/pilot-source.json" })
     assert.deepEqual(layout.source(LOGIN_STATE_ARTIFACT), { dir: "/runner/_temp/login-state-source", pick: "/runner/_temp/login-state-source.json" })
     assert.equal(layout.restore, "/runner/_temp/pilot-restore")
+    assert.deepEqual(layout.scratch, { backup: "/runner/_temp/pilot-backup.XXXXXX", restoreKey: "/runner/_temp/pilot-restore-key.XXXXXX" })
   })
 
   test("reads an artifact's attempt back from the name it was given, and only for its own kind and run", () => {
@@ -128,40 +111,5 @@ describe("the layout", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
-  })
-})
-
-describe("admission", () => {
-  const ran: string[] = []
-  const operation: Operation = {
-    name: "restore",
-    admit: admitting(fromMain("The Pilot's database is operated from main only"), servicesSuspended("restore"), sourceRunNamed),
-    phases: [
-      { name: "choose", run: async () => void ran.push("choose") },
-      { ...removePlaintext, run: async () => void ran.push("remove-plaintext") },
-    ],
-  }
-  const [choose, cleanup] = operation.phases
-  const admitted = { PILOT_SUPABASE_REF: REF, GITHUB_REF: "refs/heads/main", SERVICES_SUSPENDED: "true", SOURCE_RUN_ID: "18000000001" }
-
-  test("holds every phase to main where the Pilot is the target, and to its operation's inputs, before it runs", async () => {
-    await runPhase(operation, choose, quiet(admitted))
-    assert.deepEqual(ran.splice(0), ["choose"])
-    const refusals: [Environment, RegExp][] = [
-      [{ ...admitted, GITHUB_REF: "refs/heads/db/152" }, /^The Pilot's database is operated from main only$/],
-      [{ ...admitted, SERVICES_SUSPENDED: "false" }, /^Stop the Pilot's Suga service first, then dispatch the restore with services_suspended on$/],
-      [{ ...admitted, SOURCE_RUN_ID: "18000000001; rm" }, /^source_run_id names no run$/],
-      [{ ...admitted, SOURCE_RUN_ID: "" }, /^source_run_id names no run$/],
-    ]
-    for (const [env, reason] of refusals) {
-      await assert.rejects(runPhase(operation, choose, quiet(env)), (error: unknown) => error instanceof Refusal && reason.test(error.message))
-    }
-    assert.deepEqual(ran, [], "no refused phase ran")
-  })
-
-  test("asks no ref off the Pilot, so the rehearsal runs on any branch, and lets a cleanup run whatever came before", async () => {
-    await runPhase(operation, choose, quiet({ GITHUB_REF: "refs/pull/600/merge", SERVICES_SUSPENDED: "true", SOURCE_RUN_ID: "0" }))
-    await runPhase(operation, cleanup, quiet({ PILOT_SUPABASE_REF: REF, GITHUB_REF: "refs/heads/db/152" }))
-    assert.deepEqual(ran.splice(0), ["choose", "remove-plaintext"])
   })
 })

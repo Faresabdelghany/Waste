@@ -4,26 +4,15 @@
 // between two phases the artifact the phase before named — and
 // `operations.test.ts` holds its jobs to these lists. The database's phases
 // are @waste/db's (src/pilot/phases.ts); the ones here talk to GitHub or to
-// the released Pilot, and the harness (admission, the Pilot-target check, the
-// layout of files and artifacts) is @waste/db's src/pilot/phase.ts.
-import {
-  admitting,
-  BACKUP_ARTIFACT,
-  fromMain,
-  LOGIN_STATE_ARTIFACT,
-  removePlaintext,
-  servicesSuspended,
-  sourceRunNamed,
-  writeSourceRun,
-  type ArtifactKind,
-  type Context,
-  type Operation,
-  type Phase,
-} from "@waste/db/pilot/phase"
+// the released Pilot. What an operation is, and its admission, is
+// operation.ts; the context a phase gets (the Pilot-target check, the layout
+// of files and artifacts) is @waste/db's src/pilot/phase.ts.
+import { BACKUP_ARTIFACT, LOGIN_STATE_ARTIFACT, removePlaintext, writeSourceRun, type ArtifactKind, type Context, type Phase } from "@waste/db/pilot/phase"
 import { checkPhases, grantLoginsPhases, recoverLoginsPhases, releasePhases, resetToSeedPhases, restorePhases } from "@waste/db/pilot/phases"
 
 import { fetchSourceArtifact } from "./artifacts"
 import { GITHUB_API, type RepositoryOptions } from "./github"
+import { admitting, fromMain, servicesSuspended, sourceRunNamed, type Operation } from "./operation"
 import { observeRelease, releaseToDeployBranch, requireChecks, resolveReleaseOrder } from "./release"
 
 /** This workflow's file: a restore or a recovery reads only from its own runs. */

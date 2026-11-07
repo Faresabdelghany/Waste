@@ -2,8 +2,7 @@
 // the Pilot's operations (operations.ts), as a step of
 // .github/workflows/pilot-database.yml runs it, reading what it needs from the
 // step's environment.
-import { operateFromCommandLine } from "@waste/db/pilot/phase"
-
+import { operateFromCommandLine } from "./operation"
 import { OPERATIONS } from "./operations"
 
 await operateFromCommandLine(OPERATIONS, process.argv.slice(2))

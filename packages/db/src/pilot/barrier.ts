@@ -26,7 +26,7 @@
 // restore nothing (a restore re-run after one that failed is exactly that), so
 // `recordLogins` refuses and says to recover first.
 //
-// Every function takes the roles, BARRIER_ROLES unless a suite closes the
+// Every function takes the roles, PILOT_BARRIER's unless a suite closes the
 // barrier on throwaway roles of its own: roles are cluster-wide, and every
 // other suite logs in as wms_api.
 import type { Sql } from "postgres"
@@ -41,6 +41,12 @@ export const BARRIER_ROLES: readonly string[] = DATABASE_ROLES.filter((role) => 
 
 /** The roles that log in wherever the API runs: NOLOGIN on any of them is a barrier an earlier run left closed. */
 const ALWAYS_LOGGING_IN = GRANTED_ROLES.filter((role) => role.login === "always").map((role) => role.name)
+
+/** The roles a barrier switches off, and those that log in wherever the API runs, whose NOLOGIN is a barrier an earlier run left closed. */
+export type BarrierRoles = { readonly roles: readonly string[]; readonly alwaysLoggingIn: readonly string[] }
+
+/** The Pilot's barrier: the table's roles (roles.ts). */
+export const PILOT_BARRIER: BarrierRoles = { roles: BARRIER_ROLES, alwaysLoggingIn: ALWAYS_LOGGING_IN }
 
 /** The operations that close the barrier, and the only ones whose record `recover-logins` accepts. */
 export const BARRIER_OPERATIONS = ["restore", "reset-to-seed"] as const
@@ -90,16 +96,18 @@ export function loginRecord(input: Omit<LoginRecord, "schema">): LoginRecord {
 }
 
 /** What wms_api NOLOGIN means wherever it is found, the check's failure and the record's refusal alike: an earlier run's barrier, never a state of its own. */
-export const BARRIER_CLOSED = `${ALWAYS_LOGGING_IN.join(" or ")} cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first (supabase/README.md).`
+const closedBarrier = (alwaysLoggingIn: readonly string[]): string =>
+  `${alwaysLoggingIn.join(" or ")} cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first (supabase/README.md).`
+export const BARRIER_CLOSED = closedBarrier(ALWAYS_LOGGING_IN)
 
-/** Whether the logins read say the barrier is open: every role among them that logs in wherever the API runs can. */
-export function barrierOpen(logins: Record<string, boolean | null>): boolean {
-  return ALWAYS_LOGGING_IN.filter((role) => role in logins).every((role) => logins[role] === true)
+/** Whether the logins read say the barrier is open: every role that logs in wherever the API runs can. */
+export function barrierOpen(logins: Record<string, boolean | null>, alwaysLoggingIn: readonly string[] = ALWAYS_LOGGING_IN): boolean {
+  return alwaysLoggingIn.every((role) => logins[role] === true)
 }
 
 /** Refuses to close a barrier while one is closed: wms_api NOLOGIN is an earlier run's barrier, never a state worth recording. */
-export function requireBarrierOpen(logins: Record<string, boolean>): void {
-  if (!barrierOpen(logins)) throw new Error(`${BARRIER_CLOSED} A record taken now would record the closed state and restore nothing.`)
+export function requireBarrierOpen(logins: Record<string, boolean>, alwaysLoggingIn: readonly string[] = ALWAYS_LOGGING_IN): void {
+  if (!barrierOpen(logins, alwaysLoggingIn)) throw new Error(`${closedBarrier(alwaysLoggingIn)} A record taken now would record the closed state and restore nothing.`)
 }
 
 /** Holds a record to the run, the commit and the database it must be of. */
@@ -197,8 +205,8 @@ export function spellLogins(logins: Record<string, boolean | null>): string {
     .join(", ")
 }
 
-/** Where a barrier is: the database it guards, the run it belongs to, and the roles it switches off. */
-export type BarrierScope = { identity: string; run: RunRef; commit: string; roles?: readonly string[] }
+/** Where a barrier is: the database it guards, the run it belongs to, and its roles (PILOT_BARRIER's unless a suite names throwaway ones). */
+export type BarrierScope = { identity: string; run: RunRef; commit: string; barrier?: BarrierRoles }
 
 /** A recorded login state: the record, its text as stored, and the text's sha256. */
 export type RecordedLogins = { record: LoginRecord; text: string; sha256: string }
@@ -206,10 +214,10 @@ export type RecordedLogins = { record: LoginRecord; text: string; sha256: string
 /** The protocol's first step: the logins read and written as a record, refused while the barrier is closed already. The record goes where a recovery finds it, and is read back, before `behindBarrier`. */
 export async function recordLogins(
   sql: Sql,
-  { operation, identity, run, commit, roles = BARRIER_ROLES, now = new Date() }: BarrierScope & { operation: BarrierOperation; now?: Date },
+  { operation, identity, run, commit, barrier = PILOT_BARRIER, now = new Date() }: BarrierScope & { operation: BarrierOperation; now?: Date },
 ): Promise<RecordedLogins> {
-  const logins = await readLogins(sql, roles)
-  requireBarrierOpen(logins)
+  const logins = await readLogins(sql, barrier.roles)
+  requireBarrierOpen(logins, barrier.alwaysLoggingIn)
   const record = loginRecord({ operation, run, commit, recordedAt: now.toISOString(), identity, logins })
   const text = `${JSON.stringify(record, null, 2)}\n`
   return { record, text, sha256: sha256(text) }
@@ -225,7 +233,8 @@ export function spellRecord({ record, sha256: digest }: RecordedLogins): string 
  * database and a role somebody changed since: the end of `behindBarrier`, and
  * the whole of recover-logins.
  */
-export async function openFromRecord(sql: Sql, text: string, { identity, run, commit, roles = BARRIER_ROLES }: BarrierScope): Promise<{ record: LoginRecord; restored: string[]; logins: Record<string, boolean> }> {
+export async function openFromRecord(sql: Sql, text: string, { identity, run, commit, barrier = PILOT_BARRIER }: BarrierScope): Promise<{ record: LoginRecord; restored: string[]; logins: Record<string, boolean> }> {
+  const { roles } = barrier
   const record = parseLoginRecord(text, roles)
   checkRecord(record, { identity, run, commit })
   const plan = planRecovery(record, await readLogins(sql, roles), roles)
@@ -252,7 +261,7 @@ export async function behindBarrier<T>(
   { recorded, stored, say, ...scope }: BarrierScope & { recorded: string; stored: string; say: (line: string) => void },
   work: () => Promise<T>,
 ): Promise<T> {
-  const roles = scope.roles ?? BARRIER_ROLES
+  const { roles } = scope.barrier ?? PILOT_BARRIER
   if (sha256(stored) !== sha256(recorded)) throw new Error(`the uploaded ${LOGIN_STATE_FILE} reads back with sha256 ${sha256(stored)}, not ${sha256(recorded)}: the barrier stays open`)
   const record = parseLoginRecord(stored, roles)
   checkRecord(record, { identity: scope.identity, run: scope.run })
@@ -261,7 +270,7 @@ export async function behindBarrier<T>(
   const { terminated } = await closeBarrier(sql, roles)
   say(`Barrier closed: ${roles.join(" and ")} NOLOGIN, ${terminated} session(s) ended, none left. On failure or cancellation they stay NOLOGIN: run recover-logins with this run's id.`)
   const result = await work()
-  say(spellOpened(await openFromRecord(sql, recorded, { ...scope, roles })))
+  say(spellOpened(await openFromRecord(sql, recorded, scope)))
   return result
 }
 
