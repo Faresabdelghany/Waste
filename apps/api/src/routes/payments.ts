@@ -68,7 +68,7 @@ import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, lockRows, refuseDuplicate } from "@waste/db/commands/shared"
 import { invoiceColumns, labelOf, standingsOf, type InvoiceRow, type InvoiceStanding } from "@waste/db/shapes/invoices"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"

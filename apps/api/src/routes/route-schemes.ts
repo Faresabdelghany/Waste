@@ -84,14 +84,11 @@ import type { Tx } from "@waste/db/client"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import { Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemeListQuery, RouteSchemePatch } from "@waste/contracts/route-schemes"
 import { validOn } from "@waste/db/query/valid-on"
-import { listHolidayRows } from "@waste/db/query/holidays"
-import { project } from "@waste/db/schema/organisation"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { schemeRecurrenceOf } from "@waste/domain/planning/generation"
 import { DAILY_HAS_NO_SEASONS, DAILY_SERVES_EVERY_DAY, dailyHasNoSeasons, dailyServesEveryDay, GROUPS_MAX, WEEK_ROTATION_WITH_FORTNIGHTLY, weekRotationShape, withinServiceDays } from "@waste/domain/planning/schemes"
-import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/planning/holiday-names"
 import { generateOccurrences, SHIFT_SEARCH_DAYS } from "@waste/domain/planning/occurrences"
-import { addDays, type HolidayList, NO_HOLIDAYS } from "@waste/domain/days"
+import { addDays } from "@waste/domain/days"
 import type { SchemeRecurrence } from "@waste/domain/planning/recurrence"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm"
@@ -99,8 +96,9 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
+import { releasePolicyHolds } from "@waste/db/commands/holiday-holds"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { timeOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -110,7 +108,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
-import { projectCalendarOf, releaseHolds, releaseHolidayHolds, schemeReleases } from "./route-holds"
+import { releaseHolds, schemeReleases } from "./route-holds"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
 import {
@@ -429,8 +427,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         }
         if (patch.holidayPolicy !== undefined && patch.holidayPolicy !== current.holidayPolicy) {
           // A new holiday policy re-decides the scheme's holidays: the held routes it moves go back to the scheme (#226).
-          const calendar = await projectCalendarOf(tx, principal.companyId, current.projectId)
-          await releaseHolidayHolds(tx, principal.companyId, current.projectId, { before: calendar, after: calendar, policy: { routeSchemeId: id, before: current.holidayPolicy, after: patch.holidayPolicy } })
+          await releasePolicyHolds(tx, { companyId: principal.companyId, projectId: current.projectId }, { routeSchemeId: id, before: current.holidayPolicy, after: patch.holidayPolicy })
         }
         // A set restated as it stands writes nothing, so the audit trail records only a change.
         if (seasons !== undefined && !sameSeasons(seasons, storedSeasons)) await writeSeasons(tx, scope, id, seasons, { replacing: true })
@@ -466,28 +463,11 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const scheme = await findScheme(tx, principal, id)
         if (scheme === undefined) throw noSuchScheme(id)
 
-        const [calendar] = await tx
-          .select({ weekend: project.weekend, holidayList: project.holidayList })
-          .from(project)
-          .where(and(eq(project.companyId, principal.companyId), eq(project.id, scheme.projectId)))
-          .limit(1)
-        if (calendar === undefined) throw noSuchScheme(id)
-
-        let holidays: HolidayList = NO_HOLIDAYS
-        if (calendar.holidayList !== null) {
-          // The project's holidays near enough to the window to bear on it: a
-          // recurrence date lies inside it and a shift walks at most
-          // SHIFT_SEARCH_DAYS from one (the domain's own bound), so nothing
-          // further out is read and the two cannot diverge.
-          const rows = await listHolidayRows(tx, principal.companyId, calendar.holidayList, {
-            from: addDays(window.from, -SHIFT_SEARCH_DAYS),
-            to: addDays(window.to, SHIFT_SEARCH_DAYS),
-          })
-          // A name the list carries wins; the known list's lookup names the days it does not.
-          const carried = new Map(rows.flatMap((row) => (row.name === null ? [] : [[row.day, row.name] as const])))
-          const names = withCarriedNames(carried, holidayNamesFor(calendar.holidayList))
-          holidays = new Map(rows.map((row) => [row.day, holidayLabel(row.day, names)]))
-        }
+        // The project's holidays near enough to the window to bear on it: a
+        // recurrence date lies inside it and a shift walks at most
+        // SHIFT_SEARCH_DAYS from one (the domain's own bound), so nothing
+        // further out is read and the two cannot diverge.
+        const calendar = await readProjectCalendar(tx, { companyId: principal.companyId, projectId: scheme.projectId }, { from: addDays(window.from, -SHIFT_SEARCH_DAYS), to: addDays(window.to, SHIFT_SEARCH_DAYS) })
 
         const recurrence: SchemeRecurrence = {
           // `validTo` is the first day out of force; the domain's `effectiveTo` is the last day in it, and schemeRecurrenceOf is where the two meet, for the generation job too.
@@ -505,7 +485,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           recurrence,
           window,
           holidayPolicy: scheme.holidayPolicy,
-          calendar: { holidays, weekend: calendar.weekend },
+          calendar,
         })
         return c.json(rows)
       },

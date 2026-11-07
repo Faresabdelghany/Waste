@@ -31,7 +31,7 @@ import type { Property, PropertyCreate, PropertyParty, PropertyPartyHeld, Proper
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { property, propertyParty } from "@waste/db/schema/customers"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday, todayOnClock } from "@waste/db/query/project-clock"
 import { and, asc, eq, inArray, isNull, lte, or, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
@@ -73,7 +73,7 @@ export type PropertyRow = Pick<typeof property.$inferSelect, keyof typeof proper
 
 /** The day `now` falls on in the project of the party row a statement reads, on that project's clock. */
 const partyDay = (now: Date): SQL =>
-  sql`(select (${now.toISOString()}::timestamptz at time zone p."timezone")::date from "wms"."project" p where p."company_id" = ${propertyParty.companyId} and p."id" = ${propertyParty.projectId})`
+  sql`(select ${todayOnClock(now, sql`p."timezone"`)} from "wms"."project" p where p."company_id" = ${propertyParty.companyId} and p."id" = ${propertyParty.projectId})`
 
 /** A party in force on its project's today, or from a later day: what a property reads (#374). */
 export const heldFromToday = (now: Date): SQL => or(isNull(propertyParty.validTo), sql`${propertyParty.validTo} > ${partyDay(now)}`) as SQL

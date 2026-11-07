@@ -19,7 +19,7 @@
 import type { StopEvidence } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { pickup } from "@waste/db/schema/execution"
-import { project } from "@waste/db/schema/organisation"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import type { ProofKind } from "@waste/domain/execution/vocabulary"
 import { replyFromRecord, stopEvidenceOf, answeredByRecord, type Coordinates } from "@waste/domain/resolution/evidence"
 import type { TicketStatus } from "@waste/domain/resolution/vocabulary"
@@ -49,11 +49,7 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
     .where(and(eq(pickup.companyId, companyId), eq(pickup.projectId, row.projectId), eq(pickup.id, row.pickupId)))
     .limit(1)
   if (stop === undefined) return null
-  const [clock] = await tx
-    .select({ timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, companyId), eq(project.id, row.projectId)))
-    .limit(1)
+  const timezone = await projectTimezone(tx, companyId, row.projectId)
   const proofs = (await proofsOfPickup(tx, companyId, stop.id)).map(proofOf)
   const evidence = stopEvidenceOf(
     { status: stop.status, reason: stop.reason, service: stop.service, arrivedAt: stop.arrivedAt?.toISOString() ?? null, outcomeAt: stop.outcomeAt?.toISOString() ?? null },
@@ -69,7 +65,7 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
     at: evidence.at,
     location: evidence.location === null ? null : { type: "Point", coordinates: [evidence.location[0], evidence.location[1]] },
     proofs: proofs.map(({ id, kind, source, occurredAt, reason, outcome, objectKey }) => ({ id, kind, source, occurredAt, reason, outcome, objectKey })),
-    reply: replyFromRecord(evidence, evidence.at === null ? null : whenOn(evidence.at, clock?.timezone ?? "UTC")),
+    reply: replyFromRecord(evidence, evidence.at === null ? null : whenOn(evidence.at, timezone)),
     answeredByRecord: answeredByRecord(row.kind, evidence),
   }
 }

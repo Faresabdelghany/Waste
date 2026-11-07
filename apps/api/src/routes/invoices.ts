@@ -63,7 +63,7 @@ import { newId } from "@waste/db/ids"
 import { issueInvoice, type LineDraft } from "@waste/db/commands/invoice-writes"
 import { invoiceColumns, invoiceDetailOf, invoiceOf, labelOf, linesOf, standingsOf, type InvoiceRow, type LineRow } from "@waste/db/shapes/invoices"
 import { lockRow } from "@waste/db/commands/shared"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"

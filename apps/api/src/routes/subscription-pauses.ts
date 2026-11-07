@@ -48,7 +48,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 import { OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
 

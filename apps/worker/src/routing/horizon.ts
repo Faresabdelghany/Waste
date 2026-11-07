@@ -47,7 +47,7 @@
 // called here: the jobs call it, outside any transaction (#124 §4).
 import type { Tx } from "@waste/db/client"
 import { ensurePlan, planKey, planStopIds } from "@waste/db/commands/plans"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { plan } from "@waste/db/schema/routing"

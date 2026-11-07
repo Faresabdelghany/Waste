@@ -13,7 +13,7 @@ import { BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 import type { StationTakes } from "@waste/db/commands/unloads"
 import { newId } from "@waste/db/ids"
 import type { Send } from "@waste/db/jobs"
-import { project } from "@waste/db/schema/organisation"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import { ticket } from "@waste/db/schema/resolution"
 import { NO_TICKET_LINKS } from "@waste/db/shapes/tickets"
 import { unloadNotAccepted } from "@waste/domain/execution/unloads"
@@ -41,18 +41,13 @@ export type NotTakenUnload = {
 
 /** Opens the office's internal task for the unload, in the station's sentence and on the project's clock, due by the project's SLA — once while it is open: a route's next unload of the fraction at the station is the same news. */
 export async function tellOfficeNotTaken(tx: Tx, input: NotTakenUnload): Promise<void> {
-  const [scope] = await tx
-    .select({ timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, input.companyId), eq(project.id, input.projectId)))
-    .limit(1)
-  if (scope === undefined) throw new Error(`project ${input.projectId} of route ${input.routeId} is not there`)
+  const timezone = await projectTimezone(tx, input.companyId, input.projectId)
   const task = unloadNotAccepted({
     stationName: input.takes.stationName,
     fractionName: input.takes.fractionName,
     routeLabel: routeLabel(input.routeNumber),
     netKg: input.netKg,
-    recordedAt: whenOn(input.occurredAt, scope.timezone),
+    recordedAt: whenOn(input.occurredAt, timezone),
     stationTakesAny: input.takes.takesAny,
   })
   const [told] = await tx

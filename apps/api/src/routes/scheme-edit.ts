@@ -52,7 +52,7 @@ import { LABEL_MAX } from "@waste/domain/text"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"
-import type { Today } from "@waste/db/commands/project-clock"
+import type { Today } from "@waste/db/query/project-clock"
 import { invalidRequest, problem } from "../problem"
 import { NO_POSITION_LEFT } from "./collection-groups"
 import type { Scope } from "./references"

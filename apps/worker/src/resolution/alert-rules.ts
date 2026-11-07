@@ -111,6 +111,7 @@ import { routeLabel, ticketLabel } from "@waste/domain/numbering"
 import type { Database } from "@waste/db/client"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { raiseAlerts } from "@waste/db/commands/alerts"
+import { dayOnClock, instantAt, instantOnClock, shownOnClock, timeOnClock } from "@waste/db/query/project-clock"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { MAINTENANCE_WARNING_DAYS, MAINTENANCE_WARNING_HOURS, MAINTENANCE_WARNING_KM } from "@waste/domain/resources/maintenance"
@@ -141,6 +142,13 @@ const OPEN_TICKETS = sql.join(
 /** An instant as a key spells it: UTC, to the microsecond, as Postgres holds it. */
 const keyInstant = (column: SQL) => sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 
+/** The project every rule's statement joins as `p`, whose clock its days and times are read on. */
+const PROJECT_ZONE = sql`p.timezone`
+/** The tick's instant as a day on the project's clock. */
+const todayOn = (now: SQL) => dayOnClock(now, PROJECT_ZONE)
+/** A route's planned start as an instant: its start on its operating date, on the project's clock. */
+const PLANNED_START = instantOnClock(sql`r.operating_date`, PROJECT_ZONE, sql`r.planned_start_time`)
+
 /** A session's newest fix, one backward probe into its track's index. */
 const NEWEST_FIX = sql`(select max(sp.fixed_at) from wms.session_position sp where sp.company_id = s.company_id and sp.session_id = s.id)`
 /** When the session last resumed, from its receipts; null where it never paused. */
@@ -153,7 +161,7 @@ const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr
 /** The pairing's newest reading below its threshold: the last time the bin read low, which keys a filling. */
 const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
 /** A pairing in force on the project's today. */
-const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p.timezone)::date and (sp.valid_to is null or sp.valid_to > (${now} at time zone p.timezone)::date)`
+const pairingInForce = (now: SQL) => sql`sp.valid_from <= ${todayOn(now)} and (sp.valid_to is null or sp.valid_to > ${todayOn(now)})`
 /**
  * The active plans of vehicles not retired, each judged at the tick's
  * instant: its next limits, the readings it is judged on — the last
@@ -171,7 +179,7 @@ const duePlans = (now: SQL) => sql`(
         from (
           select m.company_id, m.project_id, m.id as plan_id, m.vehicle_id, m.name, coalesce(v.callsign, v.registration) as vehicle_label,
                  m.last_done_on, m.last_done_km, m.last_done_hours,
-                 (${now} at time zone p.timezone)::date as today,
+                 ${todayOn(now)} as today,
                  m.last_done_on + m.interval_days as next_on,
                  m.last_done_km + m.interval_km as next_km,
                  m.last_done_hours + m.interval_hours as next_hours,
@@ -293,8 +301,8 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
       when: (now, lookback) => sql`r.planned_start_time is not null
        -- the days the lookback can reach on any clock, so the horizon's planned routes are not each given a start to compute
        and r.operating_date between (${now} at time zone 'UTC')::date - 2 and (${now} at time zone 'UTC')::date + 1
-       and ((r.operating_date + r.planned_start_time) at time zone p.timezone) + make_interval(mins => ${ROUTE_START_GRACE_MINUTES}) <= ${now}
-       and ((r.operating_date + r.planned_start_time) at time zone p.timezone) > ${lookback}`,
+       and ${PLANNED_START} + make_interval(mins => ${ROUTE_START_GRACE_MINUTES}) <= ${now}
+       and ${PLANNED_START} > ${lookback}`,
       columns: () => sql`r.id as route_id, r.number, to_char(r.operating_date, 'YYYY-MM-DD') as operating_date, to_char(r.planned_start_time, 'HH24:MI') as planned_start,
            r.planned_driver_id as driver_id, r.planned_vehicle_id as vehicle_id`,
       told: (row: { route_id: string; number: number; operating_date: string; planned_start: string; driver_id: string | null; vehicle_id: string | null }) => ({
@@ -313,7 +321,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
     raise: {
       joins: SESSION_TOLD,
       when: (now, lookback) => sql`s.last_seen_at <= ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES}) and s.last_seen_at > ${lookback}`,
-      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, to_char(s.last_seen_at at time zone p.timezone, 'HH24:MI') as last_seen`,
+      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, ${timeOnClock(sql`s.last_seen_at`, PROJECT_ZONE)} as last_seen`,
       told: (row: { route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_seen: string }) => ({
         routeId: row.route_id,
         routeLabel: routeLabel(Number(row.number)),
@@ -333,7 +341,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
       // Heard from: a device not heard from at all is the silent session's alert.
       when: (now) => sql`s.last_seen_at > ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES})
        and greatest(${NEWEST_FIX}, s.started_at, ${LAST_RESUME}) <= ${now} - make_interval(mins => ${POSITION_STALE_MINUTES})`,
-      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, to_char(${NEWEST_FIX} at time zone p.timezone, 'HH24:MI') as last_fix`,
+      columns: () => sql`s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id, ${timeOnClock(NEWEST_FIX, PROJECT_ZONE)} as last_fix`,
       told: (row: { route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_fix: string | null }) => ({
         routeId: row.route_id,
         routeLabel: routeLabel(Number(row.number)),
@@ -350,10 +358,10 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
     project: sql`d.project_id`,
     subjectOf: sql`d.id = a.driver_id`,
     /** The expiry, and `:expired` once the project's today is past it: a licence that runs out while warned of is a second, graver occurrence, and its warning clears. */
-    key: (now) => sql`'licence-expiring:' || d.id || ':' || to_char(d.licence_expiry, 'YYYY-MM-DD') || case when d.licence_expiry < (${now} at time zone p.timezone)::date then ':expired' else '' end`,
-    holds: (now) => sql`d.status = 'active' and d.licence_expiry <= (${now} at time zone p.timezone)::date + ${LICENCE_WARNING_DAYS}::int`,
+    key: (now) => sql`'licence-expiring:' || d.id || ':' || to_char(d.licence_expiry, 'YYYY-MM-DD') || case when d.licence_expiry < ${todayOn(now)} then ':expired' else '' end`,
+    holds: (now) => sql`d.status = 'active' and d.licence_expiry <= ${todayOn(now)} + ${LICENCE_WARNING_DAYS}::int`,
     raise: {
-      columns: (now) => sql`d.id as driver_id, d.name as driver_name, to_char(d.licence_expiry, 'YYYY-MM-DD') as licence_expiry, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today`,
+      columns: (now) => sql`d.id as driver_id, d.name as driver_name, to_char(d.licence_expiry, 'YYYY-MM-DD') as licence_expiry, to_char(${todayOn(now)}, 'YYYY-MM-DD') as today`,
       told: (row: { driver_id: string; driver_name: string; licence_expiry: string; today: string }) => ({ driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today }),
     },
   }),
@@ -366,7 +374,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
     holds: (now) => sql`t.status in (${OPEN_TICKETS}) and t.due_at < ${now}`,
     raise: {
       joins: sql`join wms.project p on p.company_id = t.company_id and p.id = t.project_id`,
-      columns: () => sql`t.id as ticket_id, t.number, t.subject, to_char(t.due_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as due`,
+      columns: () => sql`t.id as ticket_id, t.number, t.subject, ${shownOnClock(sql`t.due_at`, PROJECT_ZONE)} as due`,
       told: (row: { ticket_id: string; number: number; subject: string; due: string }) => ({ ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due }),
     },
   }),
@@ -384,8 +392,8 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
       when: (_now, lookback) => sql`${NEWEST_MEASURED} > ${lookback}`,
       columns: (now) => sql`sp.container_id, c.label, se.identifier,
            ${NEWEST_FILL} as fill_percent, sp.full_threshold_percent as threshold,
-           to_char(${NEWEST_MEASURED} at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as measured_at,
-           sp.books_emptying, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today`,
+           ${shownOnClock(NEWEST_MEASURED, PROJECT_ZONE)} as measured_at,
+           sp.books_emptying, to_char(${todayOn(now)}, 'YYYY-MM-DD') as today`,
       told: (row: FillRow) => ({
         containerId: row.container_id,
         containerLabel: row.label,
@@ -431,7 +439,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
           join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id`,
       when: (now) => sql`ol.departed_at <= ${now} - make_interval(hours => ${LOAD_RECEIPT_HOURS})`,
       columns: () => sql`ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
-           fs.name as from_station, ts.name as to_station, to_char(ol.departed_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as departed_at`,
+           fs.name as from_station, ts.name as to_station, ${shownOnClock(sql`ol.departed_at`, PROJECT_ZONE)} as departed_at`,
       told: (row: { load_id: string; vehicle_id: string | null; registration: string; from_station: string; to_station: string; departed_at: string }) => ({
         outboundLoadId: row.load_id,
         vehicleId: row.vehicle_id,
@@ -507,12 +515,9 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
   }),
 }
 
-/** The tick's instant as SQL. */
-const instant = (at: Date) => sql`${at.toISOString()}::timestamptz`
-
 /** The occurrences no alert names yet, across companies, as the worker role: each with what its alert says. */
 export async function occurrencesToRaise(worker: JobContext["worker"], at: Date): Promise<RaisedOccurrence[]> {
-  const now = instant(at)
+  const now = instantAt(at)
   const lookback = sql`${now} - make_interval(hours => ${RULE_LOOKBACK_HOURS})`
   const raised: RaisedOccurrence[] = []
   for (const rule of Object.keys(RULES) as AlertRule[]) {
@@ -531,7 +536,7 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
  * overdue — or its condition has passed.
  */
 export async function alertsToClear(worker: JobContext["worker"], at: Date): Promise<ClearedAlert[]> {
-  const now = instant(at)
+  const now = instantAt(at)
   const rows = await worker.db.execute<{ company_id: string; id: string; rule: AlertRule }>(sql`
     select a.company_id, a.id, a.rule
       from wms.alert a

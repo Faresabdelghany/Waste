@@ -75,7 +75,7 @@
 // `containerDriftBetween` compares.
 import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
 import { tankWaits, type TankCadence, type TankGate } from "./due-from-last"
-import { holidayLabel, holidayNamesFor, withCarriedNames } from "./holiday-names"
+import { holidayListFromDates, holidayNamesFor, withCarriedNames } from "./holiday-names"
 import { generateOccurrences, holidayDecision, shiftedNote, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "./occurrences"
 import { addDays, formatShortDay, type HolidayList, NO_HOLIDAYS, serviceDayOf } from "../days"
 import { lastDayIn } from "../periods"
@@ -155,17 +155,20 @@ export type StoredHoliday = { day: string; name: string | null }
 
 /**
  * The holidays a scheme's dates are judged against, from its project's
- * calendars: none when the project names no holiday list (the glossary's
- * rule — a project without one rests on its weekend only, whatever calendars
- * it has), else every row named as the calendar names it or, where it does
- * not, as the list's own lookup does. The API's occurrence read and the job
- * both read through this.
+ * holiday list: none when the project names no list (the glossary's rule — a
+ * project without one rests on its weekend only), else every day of the list,
+ * in date order, named as the list names it or, where it does not, as the
+ * known list's own lookup does. Every reader of a project's calendar names
+ * its holidays through this: the database's (`readProjectCalendar`,
+ * @waste/db/query/project-clock) and the prototype's.
  */
 export function holidayListOf(rows: readonly StoredHoliday[], holidayList: string | null): HolidayList {
   if (holidayList === null) return NO_HOLIDAYS
   const carried = new Map(rows.flatMap((row) => (row.name === null ? [] : [[row.day, row.name] as const])))
-  const names = withCarriedNames(carried, holidayNamesFor(holidayList))
-  return new Map(rows.map((row) => [row.day, holidayLabel(row.day, names)]))
+  return holidayListFromDates(
+    rows.map((row) => row.day),
+    withCarriedNames(carried, holidayNamesFor(holidayList)),
+  )
 }
 
 /* -------------------------------- sentences -------------------------------- */

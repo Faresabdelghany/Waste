@@ -103,18 +103,17 @@ import { cancelRoutesByGeneration, lockSchemeRoutes, routesWithOfficeStops, skip
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/domain/numbering"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
-import { listHolidayRows } from "@waste/db/query/holidays"
+import { readProjectCalendar } from "@waste/db/query/project-clock"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
-import { company, project } from "@waste/db/schema/organisation"
+import { company } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import {
   compatibilityKey,
-  holidayListOf,
   matchAreas,
   matchStampOf,
   NO_PLANNING_AREA,
@@ -250,9 +249,6 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const groupOf = new Map(groups.map((group) => [group.id, group]))
   const planningGroups: GenerationGroup[] = groups.map((group) => ({ id: group.id, position: group.position, days: group.days, stopSource: group.stopSource }))
 
-  // The project's working week and its holidays near the walk: a recurrence date lies inside it and a shift walks at most SHIFT_SEARCH_DAYS from one.
-  const [calendar] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, scheme.projectId)))
-  if (calendar === undefined) throw new Error(`no project ${scheme.projectId} for route scheme ${scheme.id}`)
   const window = { from: run.windowFrom, to: run.windowTo }
   // The scheme's seasons (O17 of #290): the cadence for part of every year, which the occurrences apply as the API's read does.
   const seasons = await tx
@@ -268,11 +264,8 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     validTo: scheme.validTo,
     seasons: seasons.map((season) => ({ ...season, frequency: season.frequency, weekRotation: season.weekRotation })),
   })
-  const holidayRows = await listHolidayRows(tx, companyId, calendar.holidayList, {
-    from: addDays(window.from, -SHIFT_SEARCH_DAYS),
-    to: addDays(window.to, SHIFT_SEARCH_DAYS),
-  })
-  const holidays = holidayListOf(holidayRows, calendar.holidayList)
+  // The project's working week and its holidays near the walk: a recurrence date lies inside it and a shift walks at most SHIFT_SEARCH_DAYS from one.
+  const calendar = await readProjectCalendar(tx, { companyId, projectId: scheme.projectId }, { from: addDays(window.from, -SHIFT_SEARCH_DAYS), to: addDays(window.to, SHIFT_SEARCH_DAYS) })
 
   // The routes of the scheme inside the walk, locked in id order: a dispatch racing the run takes its turn, and a bulk dispatch (O5 of #290), which locks its routes in the same order, never waits on the run's second row while the run waits on its first.
   const walk = walkWindow(window)
@@ -286,7 +279,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const plan = planRoutes({
     recurrence,
     holidayPolicy: scheme.holidayPolicy,
-    calendar: { holidays, weekend: calendar.weekend },
+    calendar,
     window,
     groups: planningGroups,
     existingRoutes: existingRoutes.map((row) => ({

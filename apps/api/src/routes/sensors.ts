@@ -61,7 +61,7 @@ import type { Tx } from "@waste/db/client"
 import type { Action } from "@waste/domain/access/modules"
 import { dayInTimezone } from "@waste/domain/clock"
 import { aheadOfClock } from "@waste/domain/execution/commands"
-import { project } from "@waste/db/schema/organisation"
+import { projectTimezones, projectToday, projectTodays } from "@waste/db/query/project-clock"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { inForceOn } from "@waste/domain/periods"
@@ -192,16 +192,6 @@ const noSuchPairing = (id: string) => problem(404, { detail: `No sensor pairing 
 const sensorScope = (principal: Principal) => and(eq(sensor.companyId, principal.companyId), inProjects(sensor.projectId, principal))
 const pairingScope = (principal: Principal) => and(eq(sensorPairing.companyId, principal.companyId), inProjects(sensorPairing.projectId, principal))
 
-/** Each project's timezone, for the projects named: what "today" is read on. */
-async function timezonesOf(tx: Tx, companyId: string, projectIds: readonly string[]): Promise<Map<string, string>> {
-  if (projectIds.length === 0) return new Map()
-  const rows = await tx
-    .select({ id: project.id, timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, companyId), inArray(project.id, [...new Set(projectIds)])))
-  return new Map(rows.map((row) => [row.id, row.timezone]))
-}
-
 /**
  * The sensors as the wire spells them: the pairing in force today on each
  * one's project's clock, and each one's newest reading, two statements for
@@ -212,8 +202,8 @@ async function timezonesOf(tx: Tx, companyId: string, projectIds: readonly strin
 async function sensorsOf(tx: Tx, companyId: string, rows: readonly SensorRow[], at: Date): Promise<Sensor[]> {
   if (rows.length === 0) return []
   const ids = rows.map((row) => row.id)
-  const zones = await timezonesOf(tx, companyId, rows.map((row) => row.projectId))
-  const today = (projectId: string) => dayInTimezone(at, zones.get(projectId) ?? "UTC")
+  const todays = await projectTodays(tx, companyId, rows.map((row) => row.projectId), at)
+  const today = (projectId: string) => todays.get(projectId)!
   const days = rows.map((row) => today(row.projectId)).sort()
   const [earliest, latest] = [days[0]!, days.at(-1)!]
   const pairings = await tx
@@ -290,8 +280,8 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
     .from(sensor)
     .where(and(sensorScope(principal), inArray(sensor.identifier, identifiers)))
   const byIdentifier = new Map<string, Known>(sensors.map((row) => [row.identifier, row]))
-  const zones = await timezonesOf(tx, companyId, sensors.map((row) => row.projectId))
-  const dayOf = (known: Known, measuredAt: string) => dayInTimezone(new Date(measuredAt), zones.get(known.projectId) ?? "UTC")
+  const zones = await projectTimezones(tx, companyId, sensors.map((row) => row.projectId))
+  const dayOf = (known: Known, measuredAt: string) => dayInTimezone(new Date(measuredAt), zones.get(known.projectId)!)
   const active = sensors.filter((row) => takesReference(row.status, ACTIVE_SENSOR_STATUSES)).map((row) => row.id)
   const pairings =
     active.length === 0
@@ -496,8 +486,7 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await lockRow(tx, sensor, { companyId: principal.companyId, id }, strengthFor(sensor, patch))
         const found = (await findSensor(tx, principal, id))!
         if (patch.status === "retired" && found.status !== "retired") {
-          const zones = await timezonesOf(tx, principal.companyId, [found.projectId])
-          const open = await openPairings(tx, principal.companyId, id, dayInTimezone(now(), zones.get(found.projectId) ?? "UTC"))
+          const open = await openPairings(tx, principal.companyId, id, await projectToday(tx, { companyId: principal.companyId, projectId: found.projectId }, now)())
           if (open > 0) throw problem(409, { detail: stillPaired(open) })
         }
         const sentences: Record<string, string> = patch.identifier === undefined ? {} : { [IDENTIFIER_TAKEN]: identifierTaken(patch.identifier) }

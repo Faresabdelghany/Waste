@@ -39,7 +39,7 @@ import { agreement, subscription, subscriptionPause } from "../schema/agreements
 import { product } from "../schema/catalogue"
 import { billableEvent } from "../schema/finance"
 import { billableEventShapeIssue, priceDraft, type ComposedEvent } from "./billable-writes"
-import type { Scope } from "./project-clock"
+import type { Scope } from "../query/project-clock"
 
 /** A recurring charge's price, or the one block that stands in the way. */
 export type ChargeOutcome = { blockReason: null; price: PricedAmounts } | { blockReason: BlockReason; price: null }

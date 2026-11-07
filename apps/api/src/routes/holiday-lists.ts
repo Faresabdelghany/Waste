@@ -9,7 +9,7 @@
 // A list is the company's, not a project's, so it is fenced by the company
 // alone; the grant is `configure.calendars`, the one a project's holidays
 // were always edited under. A change of a list's days re-decides the holds
-// of every project resting on it (#226, routes/route-holds.ts), whatever
+// of every project resting on it (#226, @waste/db/commands/holiday-holds), whatever
 // projects the caller works in: the holds are the system's reading of the
 // days, not the office's word. A list a project rests on cannot be deleted
 // (409): the project is moved off it, or onto another, first.
@@ -22,6 +22,7 @@ import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { changeProjectCalendars } from "@waste/db/commands/holiday-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -29,7 +30,6 @@ import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -344,14 +344,11 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .returning(columns)
         if (row === undefined) throw noSuchList(id)
         const projects = await projectsOn(tx, companyId, row.name)
-        const before = []
-        for (const projectId of projects) before.push(await projectCalendarOf(tx, companyId, projectId))
-        await tx.delete(holidayListHoliday).where(and(eq(holidayListHoliday.companyId, companyId), eq(holidayListHoliday.holidayListId, id)))
-        await writeHolidays(tx, companyId, id, holidays)
-        // The held routes the new set re-decides go back to their schemes, project by project (#226, routes/route-holds.ts).
-        for (const [n, projectId] of projects.entries()) {
-          await releaseHolidayHolds(tx, companyId, projectId, { before: before[n], after: await projectCalendarOf(tx, companyId, projectId) })
-        }
+        // The held routes the new set re-decides go back to their schemes, project by project (#226).
+        await changeProjectCalendars(tx, companyId, projects, async () => {
+          await tx.delete(holidayListHoliday).where(and(eq(holidayListHoliday.companyId, companyId), eq(holidayListHoliday.holidayListId, id)))
+          await writeHolidays(tx, companyId, id, holidays)
+        })
         return c.json(listOf(row, byDay(holidays), projects.length))
       },
     )

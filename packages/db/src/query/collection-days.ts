@@ -19,7 +19,7 @@
 // planned at their cadence and their seasons', with the routes already standing for those groups in the window
 // and the project's working week and holidays near it, as generation reads
 // them.
-import { holidayListOf, schemeRecurrenceOf, type ExistingRoute, type GenerationWindow } from "@waste/domain/planning/generation"
+import { schemeRecurrenceOf, type ExistingRoute, type GenerationWindow } from "@waste/domain/planning/generation"
 import { lookbackOf, type ServedContainer, type ServingGroup, type ServingScheme } from "@waste/domain/planning/collection-days"
 import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
@@ -29,13 +29,12 @@ import type { PgColumn } from "drizzle-orm/pg-core"
 import type { Tx } from "../client"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
-import { listHolidayRows } from "./holidays"
 import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
 import { route } from "../schema/execution"
 import { generationMatch } from "../schema/generation"
-import { project } from "../schema/organisation"
 import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
+import { readProjectCalendar } from "./project-clock"
 import { validOn } from "./valid-on"
 
 /** A project's property, as a search names it. */
@@ -91,16 +90,7 @@ export async function findCollectedProperty(tx: Tx, scope: ScopedProject, proper
 export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, propertyId: string, window: GenerationWindow): Promise<CollectionDayInputs> {
   const fenced = (table: { companyId: PgColumn; projectId: PgColumn }) => and(eq(table.companyId, scope.companyId), eq(table.projectId, scope.projectId))
 
-  const [calendarRow] = await tx
-    .select({ weekend: project.weekend, holidayList: project.holidayList })
-    .from(project)
-    .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
-    .limit(1)
-  const holidayRows = await listHolidayRows(tx, scope.companyId, calendarRow?.holidayList ?? null, {
-    from: addDays(lookbackOf(window), -SHIFT_SEARCH_DAYS),
-    to: addDays(window.to, SHIFT_SEARCH_DAYS),
-  })
-  const calendar: SchemeCalendar = { holidays: holidayListOf(holidayRows, calendarRow?.holidayList ?? null), weekend: (calendarRow?.weekend ?? []) }
+  const calendar = await readProjectCalendar(tx, scope, { from: addDays(lookbackOf(window), -SHIFT_SEARCH_DAYS), to: addDays(window.to, SHIFT_SEARCH_DAYS) })
 
   // Every placement of the property's containers in force on some service date the plan walks: from the lookback a shift can reach from, to the window's end.
   const walkFrom = lookbackOf(window)

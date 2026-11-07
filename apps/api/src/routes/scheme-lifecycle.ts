@@ -78,7 +78,7 @@ import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { lockRow } from "@waste/db/commands/shared"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
