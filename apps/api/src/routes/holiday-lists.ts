@@ -22,7 +22,7 @@ import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { changeProjectCalendars } from "@waste/db/commands/holiday-holds"
+import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -345,7 +345,7 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (row === undefined) throw noSuchList(id)
         const projects = await projectsOn(tx, companyId, row.name)
         // The held routes the new set re-decides go back to their schemes, project by project (#226).
-        await changeProjectCalendars(tx, companyId, projects, async () => {
+        await changeProjectCalendars(tx, projects.map((projectId) => ({ companyId, projectId })), async () => {
           await tx.delete(holidayListHoliday).where(and(eq(holidayListHoliday.companyId, companyId), eq(holidayListHoliday.holidayListId, id)))
           await writeHolidays(tx, companyId, id, holidays)
         })

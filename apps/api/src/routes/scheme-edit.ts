@@ -52,11 +52,11 @@ import { LABEL_MAX } from "@waste/domain/text"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"
+import { groupReleases, type HoldRelease } from "@waste/db/commands/route-holds"
 import type { Today } from "@waste/db/query/project-clock"
 import { invalidRequest, problem } from "../problem"
 import { NO_POSITION_LEFT } from "./collection-groups"
 import type { Scope } from "./references"
-import { groupReleases, type HoldRelease } from "./route-holds"
 import {
   clearGroupSets,
   groupNameTaken,
@@ -167,7 +167,7 @@ const rowOf = (entry: CollectionGroupEntry) => ({
 
 /**
  * What the edit releases of each stored group's held routes (#209, #226,
- * routes/route-holds.ts): a restated group's as the entry moves it — all of
+ * @waste/db/commands/route-holds): a restated group's as the entry moves it — all of
  * them where its vehicle, driver or provider moved, those on a day taken away
  * — and all of a group the list leaves out that ran, which parking moves off
  * every day. A group the edit adds has no routes yet.
