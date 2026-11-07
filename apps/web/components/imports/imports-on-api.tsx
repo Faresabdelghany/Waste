@@ -43,11 +43,11 @@ import { useApiClient, useApiSession } from "@/components/waste/api-session-stor
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { importTemplate, previewImport, sendImportBatch, startImportRun } from "@/lib/api/imports"
 import { ApiProblem, genericProblem, problemOfError, problemSentence, type Problem } from "@/lib/api/problem"
-import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import type { MasterDataKind } from "@/lib/data/master-data-kinds"
 import { settingsHref } from "@/lib/data/settings-panes"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
+import { moduleAt } from "@/lib/modules/keys"
 import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, textOf, type FileReading } from "@/lib/imports/import-file"
 
 import { ImportResultsTable } from "./import-results-table"
@@ -401,30 +401,16 @@ function resultSubtitle(counts: ReturnType<typeof countsOf>, total: number): str
   return `${recorded} of ${total} rows · ${counts.created} new · ${counts.updated} changed · ${counts.unchanged} unchanged · ${counts.refused} refused`
 }
 
-/** Where a kind's records are worked on. */
+/** The master data's kinds an import makes, each opened at its own tab of the pane. */
+const MASTER_DATA_IMPORTS: Partial<Readonly<Record<ImportKind, MasterDataKind>>> = {
+  "waste-fractions": "waste-fraction",
+  "container-types": "container-type",
+  "vehicle-types": "vehicle-type",
+}
+
+/** Where a kind's records are worked on: its module, a master data kind at its tab. */
 function recordsHref(kind: ImportKind): string {
-  switch (kind) {
-    case "customers":
-      return workspaceHref({ workspaceId: "customers", moduleId: "contacts" })
-    case "properties":
-      return workspaceHref({ workspaceId: "customers", moduleId: "properties" })
-    case "containers":
-      return workspaceHref({ workspaceId: "resources", moduleId: "containers" })
-    case "agreements":
-      return workspaceHref({ workspaceId: "customers", moduleId: "agreements" })
-    case "waste-fractions":
-      return settingsHref("master-data", { kind: "waste-fraction" })
-    case "container-types":
-      return settingsHref("master-data", { kind: "container-type" })
-    case "vehicle-types":
-      return settingsHref("master-data", { kind: "vehicle-type" })
-    case "vehicles":
-      return workspaceHref({ workspaceId: "fleet", moduleId: "vehicles" })
-    case "drivers":
-      return workspaceHref({ workspaceId: "fleet", moduleId: "drivers" })
-    case "collection-calendars":
-      return workspaceHref(COLLECTION_CALENDARS_MODULE)
-    case "planning-areas":
-      return workspaceHref(PLANNING_AREAS_MODULE)
-  }
+  const masterDataKind = MASTER_DATA_IMPORTS[kind]
+  if (masterDataKind !== undefined) return settingsHref("master-data", { kind: masterDataKind })
+  return workspaceHref(moduleAt(kindOption(kind).moduleKey))
 }

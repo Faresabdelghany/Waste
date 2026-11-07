@@ -18,14 +18,16 @@ import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/d
 import { isIsoDate } from "@waste/domain/days"
 import { firstDayOut } from "@waste/domain/periods"
 
+import { moduleAt } from "@/lib/modules/keys"
+
 import { create, listAll, remove } from "../client"
 import { actionOf, said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 
-/** The two modules whose rows the periods belong to; spelled here, since fleet.ts imports this module. */
-const DRIVERS = { workspaceId: "fleet", moduleId: "drivers" } as const
-const VEHICLES = { workspaceId: "fleet", moduleId: "vehicles" } as const
+/** The two modules whose rows the periods belong to. */
+const DRIVERS = moduleAt("fleet.drivers")
+const VEHICLES = moduleAt("fleet.vehicles")
 
 export const RECORD_ABSENCE = "record-absence"
 export const REMOVE_ABSENCE = "remove-absence"

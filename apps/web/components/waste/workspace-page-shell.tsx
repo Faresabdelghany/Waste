@@ -5,7 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
 import { RoutingQuotaBanner } from "@/components/waste/routing/routing-quota-banner"
 import type { WorkspaceId } from "@/lib/data/business-modules"
-import { PAGE_MODULE_IDS } from "@/lib/data/office-pages"
+import { pageModuleIds } from "@/lib/modules/manifest"
 
 export function WorkspacePageShell({
   workspaceId,
@@ -32,7 +32,7 @@ export function WorkspacePageShell({
           <BusinessWorkspace
             workspaceId={workspaceId}
             initialModuleId={initialModuleId}
-            allowedModuleIds={PAGE_MODULE_IDS[workspaceId]}
+            allowedModuleIds={pageModuleIds(workspaceId)}
             showExportAction={workspaceId !== "plan"}
           />
         </Suspense>

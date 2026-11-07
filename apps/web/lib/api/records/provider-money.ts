@@ -249,7 +249,7 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice, IndexWr
 }
 
 /** Price Engine › Service Provider Prices: read on the project's day, which a price's period reading and its Apply index are judged on. */
-export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, resources: [providerPriceAdapter] }
+export const providerPricesModule = { ...PROVIDER_PRICES_MODULE, resources: [providerPriceAdapter] } satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // Settlements
@@ -380,4 +380,4 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
 }
 
 /** Price Engine › Settlements: read on the project's day, which its offers are judged on. */
-export const settlementsModule: ServerModule = { workspaceId: SETTLEMENTS_MODULE.workspaceId, moduleId: SETTLEMENTS_MODULE.moduleId, resources: [settlementAdapter] }
+export const settlementsModule = { ...SETTLEMENTS_MODULE, resources: [settlementAdapter] } satisfies ServerModule

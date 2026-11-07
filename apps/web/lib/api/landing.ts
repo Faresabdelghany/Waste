@@ -31,12 +31,13 @@
 //                 carries no `next`: whoever signs in next lands by their own
 //                 `/me`, not on the page the last person left.
 import type { Me } from "@waste/contracts/me"
-import { modulesOf, type ModuleKey } from "@waste/domain/access/modules"
+import type { ModuleKey } from "@waste/domain/access/modules"
 import type { SystemRoleKey } from "@waste/domain/access/system-roles"
 
-import { PAGE_MODULE_IDS } from "../data/office-pages"
 import { navItems, type NavItemId } from "../data/sidebar"
 import { tabsShown } from "../insight/dashboard"
+import { pageModuleIds } from "../modules/manifest"
+import { PROVIDER_WORKSPACE_PATH } from "../modules/provider-pages"
 import { viewedModules, type Grants } from "./grants"
 import { moduleKeyOf } from "./records/adapter"
 import type { SessionEnding } from "./session"
@@ -62,9 +63,7 @@ export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: (Pi
 /** Whether a role views anything on an office page: one of the Dashboard's tabs, or one of the modules a workspace's page shows. */
 function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
   if (id === "improve") return tabsShown(viewed).length > 0
-  const shown = PAGE_MODULE_IDS[id]
-  const keys = shown === undefined ? modulesOf(id) : shown.map((moduleId) => moduleKeyOf(id, moduleId))
-  return keys.some((key) => viewed.has(key))
+  return pageModuleIds(id).some((moduleId) => viewed.has(moduleKeyOf(id, moduleId)))
 }
 
 /**
@@ -80,7 +79,7 @@ function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
  */
 export function landingOf(me: LandingFacts): string {
   if (me.driver?.id !== undefined) return "/driver"
-  if (me.serviceProvider?.id !== undefined) return "/service-provider-workspace"
+  if (me.serviceProvider?.id !== undefined) return PROVIDER_WORKSPACE_PATH
   if (me.role?.key === SITE_ATTENDANT_ROLE) return "/check-in"
   const grants = me.role?.grants
   if (grants === undefined) return OFFICE_LANDING

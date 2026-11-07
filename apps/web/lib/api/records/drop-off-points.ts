@@ -19,6 +19,7 @@ import type { DropOffPoint } from "@waste/contracts/drop-off-points"
 import type { OpeningException, WeeklyWindow } from "@waste/domain/resources/drop-off-points"
 import { DROP_OFF_POINT_KINDS, DROP_OFF_POINT_STATUSES } from "@waste/domain/resources/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { DROP_OFF_KIND_OPTIONS, exceptionsOf, exceptionsText, exceptionsToSave, weeklyHoursOf, weeklyHoursText } from "@/lib/data/drop-off-points"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
@@ -240,8 +241,7 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint, unknown, DropOff
   read: (client, serverId) => get<DropOffPoint>(client, `/drop-off-points/${serverId}`),
 }
 
-export const dropOffPointsModule: ServerModule = {
-  workspaceId: "resources",
-  moduleId: "drop-off-points",
+export const dropOffPointsModule = {
+  ...moduleAt("resources.drop-off-points"),
   resources: [dropOffPointAdapter],
-}
+} satisfies ServerModule

@@ -704,8 +704,7 @@ export function schemeOccurrences(client: Client, serverId: string, window: Occu
 }
 
 /** Route Studio › Route Schemes: the list, the scheme page, quick create and the collection groups editor. */
-export const routeSchemesModule: ServerModule = {
-  workspaceId: ROUTE_SCHEMES_MODULE.workspaceId,
-  moduleId: ROUTE_SCHEMES_MODULE.moduleId,
+export const routeSchemesModule = {
+  ...ROUTE_SCHEMES_MODULE,
   resources: [routeSchemeAdapter],
-}
+} satisfies ServerModule

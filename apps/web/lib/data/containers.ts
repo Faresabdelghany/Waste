@@ -21,15 +21,17 @@
 import { STOCK_PLACES, ADJUSTMENT_TARGETS } from "@waste/domain/resources/vocabulary"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
+
 import { AGREEMENTS_MODULE } from "./agreements"
-import { type BusinessRecord, type ModuleLocation } from "./business-modules"
+import { type BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
 
 /** Where the projects a form names live. */
-export const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
+export const ORGANISATION_MODULE = moduleAt("configure.organization")
 /** Where the warehouses a command names live (slice 5a). */
-export const WAREHOUSES_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "warehouses" }
+export const WAREHOUSES_MODULE = moduleAt("resources.warehouses")
 
 /** The container's commands as the dialogs offer them, in the ledger's order: into stock, into service, back, between places, out, and the correction door. */
 export const CONTAINER_COMMANDS_OFFERED = ["receive", "issue", "return", "transfer", "decommission", "adjust"] as const
@@ -164,8 +166,6 @@ const SERVED_BY_OPTIONS = [
   { value: SERVED_BY_SUBSCRIPTION, label: "Under a subscription" },
   { value: SERVED_PUBLICLY, label: "Publicly, at a shared point" },
 ]
-/** The shared points' module, `SHARED_POINTS_MODULE` (properties.ts), spelled again since that file imports this one; the test holds the two equal. */
-export const SHARED_POINTS: ModuleLocation = { workspaceId: "customers", moduleId: "shared" }
 const UNDER_A_SUBSCRIPTION = { fieldId: "servedBy", equals: SERVED_BY_SUBSCRIPTION } as const
 const SERVING_PUBLICLY = { fieldId: "servedBy", equals: SERVED_PUBLICLY } as const
 
@@ -175,7 +175,7 @@ export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, B
   issue: commandForm("Issue into service", "The container enters service at a subscription's place, or publicly at one of the project's shared points, from the stock it stands in: the placement and the issue movement together.", "Issue into service", [
     { id: "servedBy", label: "Serves", type: "select", defaultValue: SERVED_BY_SUBSCRIPTION, options: SERVED_BY_OPTIONS },
     { id: "subscriptionId", label: "Subscription", type: "select", relation: AGREEMENTS_MODULE, visibleWhen: UNDER_A_SUBSCRIPTION, requiredWhen: UNDER_A_SUBSCRIPTION, description: "The subscription it serves, at the place the subscription is delivered at." },
-    { id: "sharedPointId", label: "Shared point", type: "select", relation: SHARED_POINTS, visibleWhen: SERVING_PUBLICLY, requiredWhen: SERVING_PUBLICLY, description: "A litter or dog bin the project serves itself: no subscription, so its collections are charged to nobody." },
+    { id: "sharedPointId", label: "Shared point", type: "select", relation: moduleAt("customers.shared"), visibleWhen: SERVING_PUBLICLY, requiredWhen: SERVING_PUBLICLY, description: "A litter or dog bin the project serves itself: no subscription, so its collections are charged to nobody." },
     { id: "wasteFractionId", label: "Waste fraction", type: "select", required: true, relation: MASTER_DATA_MODULE },
     { id: "serviceFrequencyId", label: "Service frequency", type: "select", relation: MASTER_DATA_MODULE, description: "Blank serves at the product's cadence." },
     { id: "validFrom", label: "First day in service", type: "date", required: true },

@@ -1541,7 +1541,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Related route",
             type: "select",
             relation: {
-              workspaceId: "operate",
+              workspaceId: "route-studio",
               moduleId: "routes",
             },
           },

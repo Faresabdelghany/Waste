@@ -5,8 +5,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { workspaceHref } from "../workspace-href"
+import { MODULES } from "@/lib/modules/manifest"
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
-import { settingsModuleDomains } from "../business-domain"
 import { getBusinessFormSchema } from "../business-form-schemas"
 import { settingsHref } from "../settings-panes"
 import { WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
@@ -37,8 +37,7 @@ describe("the master data module", () => {
   test("is one seam: the configure.master module, its Settings pane and its href", () => {
     assert.deepEqual(MASTER_DATA_MODULE, { workspaceId: "configure", moduleId: "master" })
     assert.ok(getModuleDefinition(MASTER_DATA_MODULE))
-    const domain = settingsModuleDomains.find((module) => module.moduleId === "master")
-    assert.equal(domain?.settingsPaneId, "master-data")
+    assert.deepEqual(MODULES["configure.master"].shown, { pane: "master-data" })
     assert.equal(settingsHref("master-data"), "/settings?pane=master-data")
     assert.equal(settingsHref("master-data", { kind: "container-type" }), "/settings?pane=master-data&kind=container-type")
     // The generic registry keeps no create form for the module: the pane's four are local, so fixture mode gains no button it never had.

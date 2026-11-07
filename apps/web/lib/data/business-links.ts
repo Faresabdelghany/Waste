@@ -1,4 +1,5 @@
 import { workspaceHref } from "@/lib/data/workspace-href"
+import { moduleAt } from "@/lib/modules/keys"
 import {
   businessWorkspaces,
   type BusinessRecord,
@@ -23,36 +24,38 @@ type IndexedRecord = ModuleLocation & {
   tokens: Set<string>
 }
 
+// The module a relation names by a noun when no record matches it, the first
+// whose noun it says: an order of precedence ("route scheme" before "route").
 const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
-  { workspaceId: "commercial", moduleId: "events", terms: ["billable event", "billable events"] },
-  { workspaceId: "commercial", moduleId: "billing", terms: ["billing run", "billing runs"] },
-  { workspaceId: "route-studio", moduleId: "schemes", terms: ["route scheme", "route schemes"] },
-  { workspaceId: "customers", moduleId: "agreements", terms: ["agreement", "agreements"] },
-  { workspaceId: "configure", moduleId: "calendars", terms: ["calendar", "calendars"] },
-  { workspaceId: "plan", moduleId: "map-planning", terms: ["map planning"] },
-  { workspaceId: "route-studio", moduleId: "routes", terms: ["route", "routes"] },
-  { workspaceId: "operate", moduleId: "tickets", terms: ["ticket", "tickets"] },
-  { workspaceId: "fleet", moduleId: "vehicles", terms: ["vehicle", "vehicles"] },
-  { workspaceId: "fleet", moduleId: "drivers", terms: ["driver", "drivers"] },
-  { workspaceId: "commercial", moduleId: "invoices", terms: ["invoice", "invoices", "credit note", "credit notes"] },
-  { workspaceId: "service-providers", moduleId: "service-providers", terms: ["service provider", "service providers"] },
-  { workspaceId: "service-providers", moduleId: "service-areas", terms: ["service area", "service areas"] },
-  { workspaceId: "configure", moduleId: "areas", terms: ["planning area", "planning areas"] },
-  { workspaceId: "service-providers", moduleId: "activities", terms: ["service provider activity", "service provider activities"] },
-  { workspaceId: "customers", moduleId: "properties", terms: ["property", "properties"] },
-  { workspaceId: "resources", moduleId: "containers", terms: ["container", "containers", "asset", "assets"] },
-  { workspaceId: "operate", moduleId: "exceptions", terms: ["alert", "alerts", "exception", "exceptions"] },
-  { workspaceId: "configure", moduleId: "integrations", terms: ["integration", "integrations"] },
-  { workspaceId: "improve", moduleId: "intelligence", terms: ["insight", "insights", "metric", "metrics"] },
-  { workspaceId: "improve", moduleId: "autopilot", terms: ["flow", "flows", "suggestion", "suggestions"] },
-  { workspaceId: "resources", moduleId: "warehouses", terms: ["warehouse", "warehouses", "stock movement", "stock movements"] },
-  { workspaceId: "resources", moduleId: "inventory", terms: ["stock item", "stock items", "inventory"] },
-  { workspaceId: "commercial", moduleId: "products", terms: ["product", "products", "price list", "price lists", "pricing"] },
-  { workspaceId: "commercial", moduleId: "settlements", terms: ["settlement", "settlements"] },
-  { workspaceId: "route-studio", moduleId: "weights", terms: ["weight record", "weight records", "weighbridge"] },
-  { workspaceId: "route-studio", moduleId: "pickups", terms: ["pickup", "pickups", "stop", "stops", "proof bundle", "proof bundles"] },
-  { workspaceId: "improve", moduleId: "imports", terms: ["import", "imports", "export", "exports"] },
-  { workspaceId: "improve", moduleId: "compliance", terms: ["report", "reports"] },
+  { ...moduleAt("commercial.events"), terms: ["billable event", "billable events"] },
+  { ...moduleAt("commercial.billing"), terms: ["billing run", "billing runs"] },
+  { ...moduleAt("route-studio.schemes"), terms: ["route scheme", "route schemes"] },
+  { ...moduleAt("customers.agreements"), terms: ["agreement", "agreements"] },
+  { ...moduleAt("configure.calendars"), terms: ["calendar", "calendars"] },
+  { ...moduleAt("plan.map-planning"), terms: ["map planning"] },
+  { ...moduleAt("route-studio.routes"), terms: ["route", "routes"] },
+  { ...moduleAt("operate.tickets"), terms: ["ticket", "tickets"] },
+  { ...moduleAt("fleet.vehicles"), terms: ["vehicle", "vehicles"] },
+  { ...moduleAt("fleet.drivers"), terms: ["driver", "drivers"] },
+  { ...moduleAt("commercial.invoices"), terms: ["invoice", "invoices", "credit note", "credit notes"] },
+  { ...moduleAt("service-providers.service-providers"), terms: ["service provider", "service providers"] },
+  { ...moduleAt("service-providers.service-areas"), terms: ["service area", "service areas"] },
+  { ...moduleAt("configure.areas"), terms: ["planning area", "planning areas"] },
+  { ...moduleAt("service-providers.activities"), terms: ["service provider activity", "service provider activities"] },
+  { ...moduleAt("customers.properties"), terms: ["property", "properties"] },
+  { ...moduleAt("resources.containers"), terms: ["container", "containers", "asset", "assets"] },
+  { ...moduleAt("operate.exceptions"), terms: ["alert", "alerts", "exception", "exceptions"] },
+  { ...moduleAt("configure.integrations"), terms: ["integration", "integrations"] },
+  { ...moduleAt("improve.intelligence"), terms: ["insight", "insights", "metric", "metrics"] },
+  { ...moduleAt("improve.autopilot"), terms: ["flow", "flows", "suggestion", "suggestions"] },
+  { ...moduleAt("resources.warehouses"), terms: ["warehouse", "warehouses", "stock movement", "stock movements"] },
+  { ...moduleAt("resources.inventory"), terms: ["stock item", "stock items", "inventory"] },
+  { ...moduleAt("commercial.products"), terms: ["product", "products", "price list", "price lists", "pricing"] },
+  { ...moduleAt("commercial.settlements"), terms: ["settlement", "settlements"] },
+  { ...moduleAt("route-studio.weights"), terms: ["weight record", "weight records", "weighbridge"] },
+  { ...moduleAt("route-studio.pickups"), terms: ["pickup", "pickups", "stop", "stops", "proof bundle", "proof bundles"] },
+  { ...moduleAt("improve.imports"), terms: ["import", "imports", "export", "exports"] },
+  { ...moduleAt("improve.compliance"), terms: ["report", "reports"] },
 ]
 
 const ignoredTokens = new Set([

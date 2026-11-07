@@ -17,18 +17,19 @@ import type { InvoicePaymentStatus } from "@waste/domain/finance/payments"
 import { BILLABLE_EVENT_KINDS, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, type BillableEventKind, type BlockReason, type CancelReason, type CreditReason, type PaymentSource } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { ofKind } from "@/lib/api/records/adapter"
 
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 
-export const PRODUCTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "products" }
-export const PRICE_ROWS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "price-rows" }
-export const EVENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "events" }
-export const BILLING_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "billing" }
-export const INVOICES_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "invoices" }
-export const PAYMENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "payments" }
+export const PRODUCTS_MODULE = moduleAt("commercial.products")
+export const PRICE_ROWS_MODULE = moduleAt("commercial.price-rows")
+export const EVENTS_MODULE = moduleAt("commercial.events")
+export const BILLING_MODULE = moduleAt("commercial.billing")
+export const INVOICES_MODULE = moduleAt("commercial.invoices")
+export const PAYMENTS_MODULE = moduleAt("commercial.payments")
 /** The routes an event names (slice 6). */
-export const ROUTES_MODULE_LOCATION: ModuleLocation = { workspaceId: "route-studio", moduleId: "routes" }
+export const ROUTES_MODULE_LOCATION = moduleAt("route-studio.routes")
 
 export const PRODUCT_PREFIX = "product"
 export const PRICE_LIST_PREFIX = "price-list"

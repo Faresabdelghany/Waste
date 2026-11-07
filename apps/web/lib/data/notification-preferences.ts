@@ -8,6 +8,7 @@
 // judged by the worker when the alert is raised. The e-mails go through the
 // deployment's messaging provider — a log-only sender until a provider is
 // chosen — so a notice reads `Sent` there without reaching an inbox.
+import type { ModuleKey } from "@waste/domain/access/modules"
 import type { Message } from "@waste/contracts/messaging"
 import type { NotificationPreferences } from "@waste/contracts/notifications"
 import type { AlertSeverity } from "@waste/contracts/resolution"
@@ -15,7 +16,7 @@ import type { AlertSeverity } from "@waste/contracts/resolution"
 import { allows, type Grants } from "../api/grants"
 
 /** The module whose `view` an alert e-mail needs: the alerts' board. */
-export const ALERTS_MODULE_KEY = "operate.exceptions"
+export const ALERTS_MODULE_KEY = "operate.exceptions" satisfies ModuleKey
 
 /** The alert picker's value for no alert e-mails. */
 export const NO_ALERTS = "none"

@@ -203,8 +203,7 @@ export const applicationAdapter: ResourceAdapter<Application, ApplicationCreate,
 }
 
 /** Customers › Applications: read after the customers, the places and the agreements their subjects name. */
-export const applicationsModule: ServerModule = {
-  workspaceId: APPLICATIONS_MODULE.workspaceId,
-  moduleId: APPLICATIONS_MODULE.moduleId,
+export const applicationsModule = {
+  ...APPLICATIONS_MODULE,
   resources: [applicationAdapter],
-}
+} satisfies ServerModule

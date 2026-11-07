@@ -131,8 +131,7 @@ export const siteVisitAdapter: ResourceAdapter<SiteVisit> = {
 }
 
 /** Operate › Site visits: read after the places, the master data, the properties, the customers, the agreements, the products and the accounts its rows name. */
-export const siteVisitsModule: ServerModule = {
-  workspaceId: SITE_VISITS_MODULE.workspaceId,
-  moduleId: SITE_VISITS_MODULE.moduleId,
+export const siteVisitsModule = {
+  ...SITE_VISITS_MODULE,
   resources: [siteVisitAdapter],
-}
+} satisfies ServerModule

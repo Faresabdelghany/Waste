@@ -31,8 +31,8 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
-import { type ModuleLocation } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 import { NO_ONE } from "@/lib/data/properties"
@@ -49,7 +49,7 @@ import { nameVia, webIdVia } from "./references"
 import { ROUTES_MODULE, routesWindowFrom } from "./routes"
 
 /** The workspace module the pickups are the rows of. */
-export const PICKUPS_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "pickups" }
+export const PICKUPS_MODULE = moduleAt("route-studio.pickups")
 
 /** The stop's commands, by the names the surfaces send. */
 export const REMOVE_PICKUP = "remove"
@@ -241,10 +241,9 @@ export const pickupAdapter: ResourceAdapter<Pickup> = {
 }
 
 /** Route Studio › Pickups: every route's stops, after the routes and the containers they name. */
-export const pickupsModule: ServerModule = {
-  workspaceId: PICKUPS_MODULE.workspaceId,
-  moduleId: PICKUPS_MODULE.moduleId,
+export const pickupsModule = {
+  ...PICKUPS_MODULE,
   resources: [pickupAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

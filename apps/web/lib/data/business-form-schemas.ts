@@ -19,10 +19,6 @@ import {
   businessWorkspaces,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import {
-  publicWorkspaceDomains,
-  settingsModuleDomains,
-} from "@/lib/data/business-domain"
 
 /** The driver's reasons in the words the fixture driver-app form gives them. */
 const DRIVER_REASON_OPTION_LABELS: Readonly<Record<DriverPickupReason, string>> = {
@@ -555,14 +551,11 @@ if (duplicateKeys.length > 0) {
   throw new Error(`Duplicate business form schemas: ${duplicateKeys.join(", ")}`)
 }
 
-// Every public module, plus the Settings-managed modules (configure.*) that
-// keep real business records behind a Settings pane.
-const expectedKeys: string[] = [
-  ...publicWorkspaceDomains.flatMap((workspace) =>
-    workspace.moduleIds.map((moduleId) => `${workspace.workspaceId}.${moduleId}`),
-  ),
-  ...settingsModuleDomains.map((module) => module.key),
-]
+// Every module of the manifest but those it says hold no registry form: a
+// Settings pane's own forms, or a surface's.
+const expectedKeys: string[] = Object.values(businessWorkspaces).flatMap((workspace) =>
+  workspace.modules.flatMap((module) => (module.form === false ? [] : [`${workspace.id}.${module.id}`])),
+)
 const actualKeys = new Set<string>(
   businessFormSchemas.map((schema) => schema.key),
 )
@@ -616,10 +609,7 @@ const schemaIntegrityIssues = businessFormSchemas.flatMap((schema) => {
       const directModule = businessWorkspaces[
         field.relation.workspaceId
       ].modules.find((module) => module.id === field.relation?.moduleId)
-      const fallbackModule = Object.values(businessWorkspaces)
-        .flatMap((workspace) => workspace.modules)
-        .find((module) => module.id === field.relation?.moduleId)
-      if (!directModule && !fallbackModule) {
+      if (!directModule) {
         issues.push(
           `${schema.key}: ${field.id} targets missing module ${field.relation.workspaceId}.${field.relation.moduleId}`,
         )

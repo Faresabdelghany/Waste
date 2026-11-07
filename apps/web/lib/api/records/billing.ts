@@ -401,7 +401,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent, BillableEventC
 }
 
 /** Price Engine › Billable Events. */
-export const eventsModule: ServerModule = { workspaceId: EVENTS_MODULE.workspaceId, moduleId: EVENTS_MODULE.moduleId, resources: [billableEventAdapter] }
+export const eventsModule = { ...EVENTS_MODULE, resources: [billableEventAdapter] } satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // Billing runs
@@ -491,7 +491,7 @@ export const billingRunAdapter: ResourceAdapter<BillingRun, BillingRunCreate> = 
 }
 
 /** Price Engine › Billing Runs. */
-export const billingModule: ServerModule = { workspaceId: BILLING_MODULE.workspaceId, moduleId: BILLING_MODULE.moduleId, resources: [billingRunAdapter] }
+export const billingModule = { ...BILLING_MODULE, resources: [billingRunAdapter] } satisfies ServerModule
 
 // ---------------------------------------------------------------------------
 // Invoices and credit notes
@@ -629,5 +629,5 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource, CreditNoteWrite> =
 }
 
 /** Price Engine › Invoices and Credit Notes: one resource, two kinds of document. */
-export const invoicesModule: ServerModule = { workspaceId: INVOICES_MODULE.workspaceId, moduleId: INVOICES_MODULE.moduleId, resources: [invoiceAdapter] }
+export const invoicesModule = { ...INVOICES_MODULE, resources: [invoiceAdapter] } satisfies ServerModule
 

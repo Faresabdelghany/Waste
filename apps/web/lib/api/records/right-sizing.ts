@@ -119,4 +119,4 @@ export const rightSizingAdapter: ResourceAdapter<RightSizingProposal> = {
 export const runRightSizing = async (client: ApiClient): Promise<number> => (await post<RightSizingRun>(client, "/right-sizing-proposals/run", {})).body.proposed
 
 /** Customers › Right-sizing: read after the agreements and the products its rows name. */
-export const rightSizingModule: ServerModule = { workspaceId: RIGHT_SIZING_MODULE.workspaceId, moduleId: RIGHT_SIZING_MODULE.moduleId, resources: [rightSizingAdapter] }
+export const rightSizingModule = { ...RIGHT_SIZING_MODULE, resources: [rightSizingAdapter] } satisfies ServerModule

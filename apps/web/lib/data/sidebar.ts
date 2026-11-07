@@ -1,15 +1,11 @@
+import { WORKSPACE_KEYS, type WorkspaceKey } from "@waste/domain/access/modules"
+
+import { WORKSPACES } from "@/lib/modules/manifest"
+
 import type { SettingsPaneId } from "./settings-panes"
 
-export type NavItemId =
-  | "operate"
-  | "plan"
-  | "route-studio"
-  | "fleet"
-  | "customers"
-  | "resources"
-  | "service-providers"
-  | "commercial"
-  | "improve"
+/** A workspace the sidebar lists: every one but Configure, whose modules are Settings'. */
+export type NavItemId = Exclude<WorkspaceKey, "configure">
 
 export type SidebarFooterItemId = "settings" | "templates"
 
@@ -34,16 +30,12 @@ export type SidebarFooterItem = {
   pane: SettingsPaneId
 }
 
+/** The Dashboard leads the sidebar, at its own page; every other workspace follows in the domain's order, at its page, under its name. */
+const DASHBOARD: NavItem = { id: "improve", label: WORKSPACES.improve.label, href: "/performance" }
+
 export const navItems: NavItem[] = [
-  { id: "improve", label: "Dashboard", href: "/performance" },
-  { id: "operate", label: "Tickets", href: "/tickets" },
-  { id: "plan", label: "Map Planning", href: "/plan" },
-  { id: "route-studio", label: "Route Studio", href: "/route-studio" },
-  { id: "fleet", label: "Fleet", href: "/fleet" },
-  { id: "customers", label: "Customers", href: "/customers" },
-  { id: "resources", label: "Assets & Inventory", href: "/resources" },
-  { id: "service-providers", label: "Service providers", href: "/service-providers" },
-  { id: "commercial", label: "Price Engine", href: "/commercial" },
+  DASHBOARD,
+  ...WORKSPACE_KEYS.flatMap((id) => (id === "configure" || id === DASHBOARD.id ? [] : [{ id, label: WORKSPACES[id].label, href: WORKSPACES[id].path }])),
 ]
 
 /**

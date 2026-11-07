@@ -692,12 +692,12 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint, unknown,
 // ---------------------------------------------------------------------------
 
 /** Customers › Properties: the service addresses and who their customers are. */
-export const propertiesModule: ServerModule = { workspaceId: PROPERTIES_MODULE.workspaceId, moduleId: PROPERTIES_MODULE.moduleId, resources: [propertyAdapter] }
+export const propertiesModule = { ...PROPERTIES_MODULE, resources: [propertyAdapter] } satisfies ServerModule
 
 /** Customers › Property Groups, after the properties they gather. */
-export const propertyGroupsModule: ServerModule = { workspaceId: PROPERTY_GROUPS_MODULE.workspaceId, moduleId: PROPERTY_GROUPS_MODULE.moduleId, resources: [propertyGroupAdapter] }
+export const propertyGroupsModule = { ...PROPERTY_GROUPS_MODULE, resources: [propertyGroupAdapter] } satisfies ServerModule
 
 /** Customers › Shared Points, after the properties they serve. */
-export const sharedPointsModule: ServerModule = { workspaceId: SHARED_POINTS_MODULE.workspaceId, moduleId: SHARED_POINTS_MODULE.moduleId, resources: [sharedPointAdapter] }
+export const sharedPointsModule = { ...SHARED_POINTS_MODULE, resources: [sharedPointAdapter] } satisfies ServerModule
 
 export type { Client }

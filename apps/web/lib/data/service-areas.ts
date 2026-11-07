@@ -1,6 +1,5 @@
 // Where Service Area records live — the module the map's create dialog
-// targets, resolved from the registry like PLANNING_AREAS_MODULE (never
-// hard-code the pair) — and how the map's typed seed lands in that
+// targets — and how the map's typed seed lands in that
 // dialog's form. The field ids are this form's (business-form-schemas);
 // the domain proposes values without knowing them, and the dialog drops
 // any id the schema does not declare, so the mapping lives here and
@@ -10,22 +9,11 @@ import {
   serviceAreaPolygonValue,
   type ServiceAreaSeed,
 } from "@/lib/prototype/map-planning/service-areas"
+import { moduleAt } from "@/lib/modules/keys"
 
-import { publicModuleDomains } from "./business-domain"
 import type { BusinessFormValues } from "./business-form-types"
-import type { ModuleLocation } from "./business-modules"
 
-const serviceAreasDomain = publicModuleDomains.find(
-  (module) => module.key === "service-providers.service-areas",
-)
-if (!serviceAreasDomain) {
-  throw new Error("service-providers.service-areas is missing from publicModuleDomains")
-}
-
-export const SERVICE_AREAS_MODULE: ModuleLocation = {
-  workspaceId: serviceAreasDomain.workspaceId,
-  moduleId: serviceAreasDomain.moduleId,
-}
+export const SERVICE_AREAS_MODULE = moduleAt("service-providers.service-areas")
 
 /**
  * Where each field of the map's seed lands: the form's field ids for the

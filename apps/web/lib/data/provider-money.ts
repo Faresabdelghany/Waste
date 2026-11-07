@@ -16,17 +16,18 @@
 // names the row it indexes: the next row of the chain.
 import { periodOn, type PeriodStanding } from "@waste/domain/periods"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { hasPrefix, ofKind } from "@/lib/api/records/adapter"
 
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { SERVICE_AREAS_MODULE } from "./service-areas"
 
 export { SERVICE_AREAS_MODULE }
-export const PROVIDER_PRICES_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "service-provider-prices" }
-export const SETTLEMENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "settlements" }
-export const WEIGHTS_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "weights" }
+export const PROVIDER_PRICES_MODULE = moduleAt("commercial.service-provider-prices")
+export const SETTLEMENTS_MODULE = moduleAt("commercial.settlements")
+export const WEIGHTS_MODULE = moduleAt("route-studio.weights")
 /** The service providers an area is awarded to. */
-export const SERVICE_PROVIDERS_MODULE: ModuleLocation = { workspaceId: "service-providers", moduleId: "service-providers" }
+export const SERVICE_PROVIDERS_MODULE = moduleAt("service-providers.service-providers")
 
 export const SERVICE_AREA_PREFIX = "service-area"
 export const ASSIGNMENT_PREFIX = "assignment"
