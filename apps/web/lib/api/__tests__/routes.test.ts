@@ -24,7 +24,7 @@ import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { depotAdapter, unloadingStationAdapter } from "../records/places"
 import {
@@ -135,12 +135,8 @@ const [wh24Record, wh31Record, trailerRecord] = vehicleRecords
 const [madsRecord, frejaRecord] = driverRecords
 
 describe("the routes module", () => {
-  test("is switched, after every module a route names a row of", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId))
-    const at = SERVER_MODULE_KEYS.indexOf("route-studio.routes")
-    for (const named of ["configure.organization", "service-providers.service-providers", "resources.depots", "fleet.vehicles", "fleet.drivers"]) {
-      assert.ok(at > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
   })
 
   test("reads the routes over a window from 35 days back with no end — the recent and every future route — named once, for the stops to read by too", () => {

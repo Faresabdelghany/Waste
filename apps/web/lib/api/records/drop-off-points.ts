@@ -25,7 +25,7 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
 import { hasPrefix, NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
-import { projectTimezoneOf, wallClockIn } from "./clock"
+import { projectTimezoneOf, todayIn } from "./clock"
 import {
   coordinatesFact,
   coordinatesOf,
@@ -57,7 +57,7 @@ const codeSetOnce = "The code is set once: a point that needs another code is an
 const projectSetOnce = "A drop-off point stays in its project: register another point in the other project"
 
 /** The project's today, on its own clock, for the exceptions a save keeps. */
-const todayFor = (record: BusinessRecord, context: MappingContext): string => wallClockIn((context.now ?? new Date()).toISOString(), projectTimezoneOf(record, context)).slice(0, 10)
+const todayFor = (record: BusinessRecord, context: MappingContext): string => todayIn(context, projectTimezoneOf(record, context))
 
 /** The weekly hours the form's text names, or the refusal at the field. */
 function hoursFrom(record: BusinessRecord): WeeklyWindow[] | LocalRefusal {

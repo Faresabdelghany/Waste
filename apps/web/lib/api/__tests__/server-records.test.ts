@@ -15,13 +15,13 @@ import { createExternalStore } from "../../external-store"
 import { command, get, patch, put, UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, type Problem } from "../problem"
 import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
+import { todayIn } from "../records/clock"
 import {
   adapterFor,
+  clocksRead,
   commandRecord,
   dayTurned,
   dayTurnRereads,
-  derivedFromChanged,
-  derivedSourcesNow,
   IDLE,
   KEPT_ON_API,
   keptOnApi,
@@ -29,12 +29,13 @@ import {
   loadModule,
   loaded,
   loading,
-  mappedAgainstOf,
+  mapModule,
   moduleState,
   notGranted,
   paneAnswerOf,
-  projectTimezonesOf,
   readModuleInto,
+  readsChanged,
+  readSourcesNow,
   refusalProblem,
   rereadsOf,
   resolverOver,
@@ -47,7 +48,6 @@ import {
   withRecord,
   withoutRecord,
   writeRecord,
-  type ModuleState,
   type ServerRecordsState,
 } from "../records/server-records"
 import { clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -439,15 +439,16 @@ describe("the resolver", () => {
     assert.equal(resolve.byServerId("missing"), undefined)
   })
 
-  test("lists every record a predicate holds for once, in load order, the loaded row before the one being mapped again (#207)", () => {
+  test("lists every record of a module a predicate holds for once, in its order, the loaded row before the one being mapped again (#207)", () => {
     const state: ServerRecordsState = new Map([
       ["a", loaded({ records: [record("x-1", "X"), record("x-2", "X2")], serverIds: new Map() }, 1)],
       ["b", loaded({ records: [record("z-3", "Z")], serverIds: new Map() }, 1)],
     ])
-    const extra = { records: [record("x-1", "X again"), record("x-4", "X4")], serverIds: new Map(), byServerId: new Map() }
-    const names = resolverOver(state, extra).filter((candidate) => candidate.id.startsWith("x-")).map((candidate) => candidate.name)
+    const extra = { key: "a", records: [record("x-1", "X again"), record("x-4", "X4")], serverIds: new Map(), byServerId: new Map() }
+    const names = resolverOver(state, extra).filter("a", (candidate) => candidate.id.startsWith("x-")).map((candidate) => candidate.name)
     assert.deepEqual(names, ["X", "X2", "X4"])
-    assert.deepEqual(NOTHING_RESOLVED.filter(() => true), [])
+    assert.deepEqual(resolverOver(state, extra).filter("b", () => true).map((candidate) => candidate.name), ["Z"], "one module's rows alone")
+    assert.deepEqual(NOTHING_RESOLVED.filter("a", () => true), [])
   })
 })
 
@@ -596,95 +597,143 @@ describe("writing a record", () => {
   })
 })
 
-// A derived module (#232): one whose records are read through others' — a container's place, areas and serving period
-// through the agreements, the properties, the points, the areas and the master data — is stamped, when its read lands,
-// with those modules' rows as the snapshot its read began with held them, and is read again once one of them has new
-// rows since, or its projects' day has turned since it was read.
-describe("a module read through others", () => {
-  const agreementRows = [record("agreement-1", "AGR-1")]
-  const areaRows = [record("area-1", "Indre By")]
-  const ready = (records: BusinessRecord[]) => loaded({ records, serverIds: new Map() }, 1)
-  const derivedModule = (answer: () => Promise<Thing[]>): ServerModule => ({
-    workspaceId: "resources",
-    moduleId: "containers",
-    resources: [{ ...thingAdapter("t", []), list: answer }],
-    derivedFrom: ["customers.agreements", "configure.areas", "customers.shared"],
-  })
-
-  test("is stamped with those modules' rows as the snapshot it was mapped against held them, null where one was not ready", () => {
-    const state: ServerRecordsState = new Map([
-      ["customers.agreements", ready(agreementRows)],
-      ["configure.areas", loading(IDLE)],
-      ["customers.shared", notGranted("customers.shared")],
-    ])
-    assert.deepEqual(mappedAgainstOf(derivedModule(async () => []), state), new Map([["customers.agreements", agreementRows], ["configure.areas", null], ["customers.shared", null]]))
-    assert.equal(mappedAgainstOf({ workspaceId: "resources", moduleId: "inventory", resources: [] }, state), undefined, "a module read through none")
-  })
-
-  test("its read is stamped from the snapshot it began with: a change landing while it is out is still new once it lands", async () => {
-    const store = createExternalStore<ServerRecordsState>(new Map([["customers.agreements", ready(agreementRows)], ["configure.areas", ready(areaRows)]]))
-    const written = [...agreementRows, record("agreement-2", "AGR-2")]
-    const module = derivedModule(async () => {
-      store.set((state) => new Map(state).set("customers.agreements", ready(written)))
-      return []
-    })
+// What a mapping read (#232): the resolver and the clock a load's mapping is handed note what it asks — the rows of
+// other modules it named, the modules it scanned, the ids it found nowhere, the project's day on each clock — stamped
+// with the store as the read began. The store reads the module again once one of them moves, so nothing declares
+// which modules a module is read through, or that it reads the day.
+describe("what a module's mapping read", () => {
+  const thing = (id: string, name: string, parentId?: string): Thing => ({ id, createdAt: "", updatedAt: "", name, ...(parentId === undefined ? {} : { parentId }) })
+  const ready = (records: BusinessRecord[]) => loaded({ records, serverIds: new Map(records.map((row) => [row.id, row.id.slice(row.id.indexOf("-") + 1)])) }, 1)
+  const parents = [record("p-p1", "Parent"), record("p-p2", "Other")]
+  /** The children, each naming its parent by server id. */
+  const childrenOf = (things: Thing[]): ServerModule => ({ workspaceId: "resources", moduleId: "inventory", resources: [thingAdapter("c", things)] })
+  const read = async (state: ServerRecordsState, module: ServerModule) => {
+    const store = createExternalStore<ServerRecordsState>(state)
     await readModuleInto(store, client, module, { alive: () => true })
-    const derived = store.getSnapshot().get("resources.containers")
-    assert.equal(derived?.mappedAgainst?.get("customers.agreements"), agreementRows, "the rows the read began with: the answer is no newer")
-    assert.deepEqual(derivedFromChanged(derived, store.getSnapshot()), ["customers.agreements"], "so it is read again")
-    await readModuleInto(store, client, derivedModule(async () => []), { alive: () => true })
-    assert.deepEqual(derivedFromChanged(store.getSnapshot().get("resources.containers"), store.getSnapshot()), [], "and once it is, it is current")
+    return store
+  }
+
+  test("notes the rows of other modules it named and the fields of each it read, as the read began, never its own", async () => {
+    const store = await read(new Map([["configure.organization", ready(parents)]]), childrenOf([thing("c1", "Child", "p1"), thing("c2", "Second", "c1")]))
+    const reads = store.getSnapshot().get("resources.inventory")?.reads
+    assert.deepEqual([...(reads?.rows ?? [])].map(([key, rows]) => [key, [...rows.keys()]]), [["configure.organization", ["p-p1"]]])
+    const named = reads?.rows.get("configure.organization")?.get("p-p1")
+    assert.equal(named?.record, parents[0])
+    assert.deepEqual([...(named?.fields ?? [])], [["name", true]], "its name, the one field the child reads of it")
   })
 
-  test("a module it is read through with new rows is a change: a write, a read again, one ready after it was read", () => {
-    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["configure.areas", null]]) }
-    const state = (agreements: BusinessRecord[], areas: ModuleState) => new Map([["customers.agreements", ready(agreements)], ["configure.areas", areas]]) as ServerRecordsState
-    assert.deepEqual(derivedFromChanged(derived, state(agreementRows, loading(IDLE))), [], "nothing new")
-    assert.deepEqual(derivedFromChanged(derived, state([record("agreement-1", "AGR-1 renamed")], loading(IDLE))), ["customers.agreements"])
-    assert.deepEqual(derivedFromChanged(derived, state(agreementRows, ready(areaRows))), ["configure.areas"])
-  })
-
-  test("one not ready never counts and never loops: not granted, failed, read again and still out; nor while it is not ready itself", () => {
-    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["customers.shared", null]]) }
-    const failedOnce = loadFailed(loading(IDLE), genericProblem(503))
-    for (const shared of [notGranted("customers.shared"), failedOnce, loading(IDLE)]) {
-      assert.deepEqual(derivedFromChanged(derived, new Map([["customers.agreements", ready(agreementRows)], ["customers.shared", shared]])), [], shared.status)
+  test("a row it named that moves only in what it never read moves nothing: a live route's position, under the stop that names its route", async () => {
+    const naming: ServerModule = {
+      ...childrenOf([]),
+      resources: [{ ...thingAdapter("c", [thing("c1", "Child", "p1")]), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Route: context.resolve.byServerId(candidate.parentId ?? "")?.facts.Name ?? "" } }) }],
     }
-    const keptRows = loadFailed(ready(agreementRows), genericProblem(503))
-    assert.deepEqual(derivedFromChanged({ ...derived, mappedAgainst: new Map([["customers.agreements", keptRows.records]]) }, new Map([["customers.agreements", keptRows]])), [], "a failed read again keeps its rows: nothing new")
-    assert.deepEqual(derivedFromChanged({ ...derived, status: "loading" }, new Map([["customers.agreements", ready([])]])), [], "not ready itself")
-    assert.deepEqual(derivedFromChanged(ready([]), new Map([["customers.agreements", ready([])]])), [], "never stamped")
+    const route = (position: string, name = "RC-1042") => record("p-p1", name, { facts: { Name: name, "Last position": position } })
+    const store = await read(new Map([["configure.organization", ready([route("55.70, 12.57")])]]), naming)
+    assert.deepEqual([...(store.getSnapshot().get("resources.inventory")?.reads?.rows.get("configure.organization")?.get("p-p1")?.fields ?? [])], [["facts", new Set(["Name"])]])
+    const moved = (row: BusinessRecord) => readsChanged(new Map(store.getSnapshot()).set("configure.organization", ready([row])), "resources.inventory")
+    assert.deepEqual(moved(route("55.71, 12.58")), [], "its position: a fact it never read")
+    assert.deepEqual(moved(route("55.70, 12.57", "RC-1043")), ["configure.organization"], "the fact it read")
   })
 
-  test("a read again is asked for once per change of its sources: a failed one is not asked for again until they change once more", () => {
-    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["configure.areas", null]]) }
-    const written: ServerRecordsState = new Map([["customers.agreements", ready([record("agreement-2", "AGR-2")])]])
-    const asked = derivedSourcesNow(derived, written)
-    assert.equal(sameSources(asked, derivedSourcesNow(derived, written)), true, "the same change: asked for already")
-    assert.equal(sameSources(asked, derivedSourcesNow(derived, new Map([["customers.agreements", ready([record("agreement-3", "AGR-3")])]]))), false, "a new one")
+  test("is read again once a row it named moves, and not for a row of the same module it never named", async () => {
+    const store = await read(new Map([["configure.organization", ready(parents)]]), childrenOf([thing("c1", "Child", "p1")]))
+    const moved = (rows: BusinessRecord[]) => new Map(store.getSnapshot()).set("configure.organization", ready(rows))
+    assert.deepEqual(readsChanged(store.getSnapshot(), "resources.inventory"), [], "nothing has moved")
+    assert.deepEqual(readsChanged(moved([parents[0], record("p-p2", "Other renamed")]), "resources.inventory"), [], "another row of the module")
+    assert.deepEqual(readsChanged(moved([record("p-p1", "Parent renamed"), parents[1]]), "resources.inventory"), ["configure.organization"])
+    assert.deepEqual(readsChanged(moved([parents[1]]), "resources.inventory"), ["configure.organization"], "the row it named is gone")
+  })
+
+  test("is stamped from the snapshot its read began with: a change landing while it is out is still new once it lands", async () => {
+    const store = createExternalStore<ServerRecordsState>(new Map([["configure.organization", ready(parents)]]))
+    const module: ServerModule = {
+      ...childrenOf([]),
+      resources: [
+        {
+          ...thingAdapter("c", []),
+          list: async () => {
+            store.set((state) => new Map(state).set("configure.organization", ready([record("p-p1", "Parent renamed"), parents[1]])))
+            return [thing("c1", "Child", "p1")]
+          },
+        },
+      ],
+    }
+    await readModuleInto(store, client, module, { alive: () => true })
+    assert.equal(store.getSnapshot().get("resources.inventory")?.records[0].facts.Parent, "Parent renamed", "mapped against the store as the answer lands")
+    assert.deepEqual(readsChanged(store.getSnapshot(), "resources.inventory"), ["configure.organization"], "but the answer is no newer than the read")
+    await readModuleInto(store, client, childrenOf([thing("c1", "Child", "p1")]), { alive: () => true })
+    assert.deepEqual(readsChanged(store.getSnapshot(), "resources.inventory"), [], "and once read again, it is current")
+  })
+
+  test("a module read before the one it names is read again once that one holds the row: the order is reads, never rows", async () => {
+    const store = await read(new Map(), childrenOf([thing("c1", "Child", "p1")]))
+    assert.equal(store.getSnapshot().get("resources.inventory")?.records[0].facts.Parent, undefined, "its parent not read yet")
+    const landed = new Map(store.getSnapshot()).set("configure.organization", ready(parents))
+    assert.deepEqual(readsChanged(landed, "resources.inventory"), ["configure.organization"])
+    assert.deepEqual(readsChanged(new Map(store.getSnapshot()).set("configure.access", ready([record("u-1", "Someone")])), "resources.inventory"), [], "a module holding none of what it missed")
+    const again = await read(landed, childrenOf([thing("c1", "Child", "p1")]))
+    assert.equal(again.getSnapshot().get("resources.inventory")?.records[0].facts.Parent, "Parent")
+  })
+
+  test("a module it scanned is read whole: any new rows there move it", async () => {
+    const scanning: ServerModule = {
+      ...childrenOf([]),
+      resources: [{ ...thingAdapter("c", [thing("c1", "Child")]), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Areas: String(context.resolve.filter("configure.areas", () => true).length) } }) }],
+    }
+    const store = await read(new Map([["configure.areas", ready([record("area-1", "Indre By")])]]), scanning)
+    assert.equal(store.getSnapshot().get("resources.inventory")?.records[0].facts.Areas, "1")
+    assert.deepEqual(readsChanged(new Map(store.getSnapshot()).set("configure.areas", ready([record("area-1", "Indre By"), record("area-2", "Nørrebro")])), "resources.inventory"), ["configure.areas"])
+  })
+
+  test("one not ready never counts and never loops: not granted, failed, read again and still out; nor while it is not ready itself", async () => {
+    const store = await read(new Map([["configure.organization", ready(parents)]]), childrenOf([thing("c1", "Child", "p1"), thing("c2", "Orphan", "p9")]))
+    const state = store.getSnapshot()
+    for (const source of [notGranted("configure.organization"), loadFailed(loading(IDLE), genericProblem(503)), loading(IDLE)]) {
+      assert.deepEqual(readsChanged(new Map(state).set("configure.organization", source), "resources.inventory"), [], source.status)
+    }
+    const keptRows = loadFailed(state.get("configure.organization") ?? IDLE, genericProblem(503))
+    assert.deepEqual(readsChanged(new Map(state).set("configure.organization", keptRows), "resources.inventory"), [], "a failed read again keeps its rows: nothing new")
+    assert.deepEqual(readsChanged(new Map(state).set("resources.inventory", loading(IDLE)), "resources.inventory"), [], "not ready itself")
+    assert.deepEqual(readsChanged(new Map([["resources.inventory", ready([])], ["configure.organization", ready([])]]), "resources.inventory"), [], "never read")
+  })
+
+  test("a read again is asked for once per change of the store: a failed one is not asked for again until something moves once more", () => {
+    const written: ServerRecordsState = new Map([["configure.organization", ready(parents)], ["resources.inventory", ready([])]])
+    const asked = readSourcesNow(written, "resources.inventory")
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written), "resources.inventory")), true, "the same change: asked for already")
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("configure.organization", ready([parents[0]])), "resources.inventory")), false, "a new one")
+    assert.equal(sameSources(asked, readSourcesNow(new Map(written).set("resources.inventory", ready([record("c-c1", "Child")])), "resources.inventory")), true, "its own rows are not its sources")
     assert.equal(sameSources(undefined, asked), false, "never asked")
   })
 
-  test("the projects' clocks are the organisation's projects' timezones", () => {
-    const organisation = ready([record("company-1", "Kystbyen"), record("project-1", "Copenhagen", { submittedValues: { timezone: "Europe/Copenhagen" } }), record("project-2", "Aarhus", { submittedValues: { timezone: "Europe/Copenhagen" } })])
-    assert.deepEqual(projectTimezonesOf(new Map([["configure.organization", organisation]])), ["Europe/Copenhagen"])
-    assert.deepEqual(projectTimezonesOf(new Map()), [], "none loaded: the browser's clock")
+  test("a read again to no change keeps the rows the store holds, so nothing that read them moves; a moved row is the read's", async () => {
+    const store = await read(new Map([["configure.organization", ready(parents)]]), childrenOf([thing("c1", "Child", "p1"), thing("c2", "Second", "p2")]))
+    const before = store.getSnapshot().get("resources.inventory")?.records ?? []
+    await readModuleInto(store, client, childrenOf([thing("c1", "Child", "p1"), thing("c2", "Second", "p2")]), { alive: () => true })
+    assert.equal(store.getSnapshot().get("resources.inventory")?.records, before, "the same rows")
+    await readModuleInto(store, client, childrenOf([thing("c1", "Child", "p1"), thing("c2", "Second renamed", "p2")]), { alive: () => true })
+    const after = store.getSnapshot().get("resources.inventory")?.records ?? []
+    assert.equal(after[0], before[0], "the unmoved row is the one held")
+    assert.notEqual(after[1], before[1])
+    assert.equal(after[1].name, "Second renamed")
   })
 
-  test("at the day's turn the modules read on the day are read again, one read through another that is followed by it", () => {
-    const areas: ServerModule = { workspaceId: "configure", moduleId: "areas", resources: [], readsTheDay: true }
-    const containers: ServerModule = { workspaceId: "resources", moduleId: "containers", resources: [], derivedFrom: ["configure.areas"], readsTheDay: true }
-    const yesterday = Date.parse("2026-10-24T12:00:00Z")
-    const now = Date.parse("2026-10-25T08:00:00Z")
-    const readAt = (at: number) => ({ ...ready([]), loadedAt: at })
+  test("notes the project's day on each clock it read one on, and is read again at that day's turn there", () => {
+    const evening = new Date("2026-10-24T21:00:00Z") // 23:00 in Copenhagen, summer time
+    const dated: ServerModule = {
+      ...childrenOf([]),
+      resources: [{ ...thingAdapter("c", []), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { value: todayIn(context, "Europe/Copenhagen") }) }],
+    }
+    const result = mapModule(dated, [[thing("c1", "Child")]], { state: new Map(), now: evening })
+    assert.equal(result.records[0].value, "2026-10-24")
+    assert.deepEqual([...(result.reads?.days ?? [])], [["Europe/Copenhagen", "2026-10-24"]])
+    const state: ServerRecordsState = new Map([["resources.inventory", loaded(result, evening.getTime())]])
+    assert.deepEqual(clocksRead(state), ["Europe/Copenhagen"])
     const keys = (modules: ServerModule[]) => modules.map((module) => `${module.workspaceId}.${module.moduleId}`)
-    const both = new Map([["configure.areas", readAt(yesterday)], ["resources.containers", readAt(yesterday)]])
-    assert.deepEqual(keys(dayTurnRereads(both, [areas, containers], now, ["Europe/Copenhagen"])), ["configure.areas"], "the containers follow the areas' new rows")
-    const areasNotGranted = new Map([["configure.areas", notGranted("configure.areas")], ["resources.containers", readAt(yesterday)]])
-    assert.deepEqual(keys(dayTurnRereads(areasNotGranted, [areas, containers], now, ["Europe/Copenhagen"])), ["resources.containers"], "nothing to follow: read on their own")
-    const today = new Map([["configure.areas", readAt(now)], ["resources.containers", readAt(now)]])
-    assert.deepEqual(dayTurnRereads(today, [areas, containers], now, ["Europe/Copenhagen"]), [], "read today already")
-    assert.deepEqual(dayTurnRereads(both, [{ ...areas, readsTheDay: undefined }], now, ["Europe/Copenhagen"]), [], "a module not read on the day")
+    assert.deepEqual(keys(dayTurnRereads(state, [dated], Date.parse("2026-10-24T21:59:00Z"))), [], "still the 24th in Copenhagen")
+    assert.deepEqual(keys(dayTurnRereads(state, [dated], Date.parse("2026-10-24T22:01:00Z"))), ["resources.inventory"], "the 25th there, while UTC is still on the 24th")
+    const undated = mapModule(childrenOf([]), [[thing("c1", "Child")]], { state: new Map(), now: evening })
+    assert.deepEqual(dayTurnRereads(new Map([["resources.inventory", loaded(undated, evening.getTime())]]), [dated], Date.parse("2026-10-26T12:00:00Z")), [], "a module that read no day")
   })
 
   test("a project's day has turned between two instants on its own clock, and the next turn is the first of its projects'", () => {

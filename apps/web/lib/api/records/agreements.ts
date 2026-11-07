@@ -66,7 +66,7 @@ import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/do
 
 import { command, create, listAll, patch, post } from "../client"
 import { NO_PRESENTATION, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./clock"
+import { todayIn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
 
@@ -392,7 +392,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
     const place = property ?? point
     const project = context.resolve.byServerId(subscription.projectId)
     const projectWebId = project?.id ?? webIdOf("project", subscription.projectId)
-    const day = dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
+    const day = todayIn(context, project === undefined ? undefined : typed(project, "timezone"))
     const lastDay = subscription.validTo === null ? undefined : lastDayIn(subscription.validTo)
     return {
       id: webIdOf(SUBSCRIPTION_PREFIX, subscription.id),

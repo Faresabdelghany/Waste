@@ -17,9 +17,9 @@ import { fleetVehiclesModule, vehicleAdapter } from "../records/fleet"
 import { loadModule, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, scripted } from "./scripted-fetch"
 
-const copenhagen = { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central" }
-const harbor = { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" }
-const unnamed = { id: "01a0d2a4-a280-7002-8000-000000000009", name: "Roskilde Pilot" }
+const copenhagen = { id: "01a0d2a4-a280-7002-8000-000000000001", name: "Copenhagen Central", timezone: "Europe/Copenhagen", currency: "DKK" }
+const harbor = { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", timezone: "Europe/Copenhagen", currency: "DKK" }
+const unnamed = { id: "01a0d2a4-a280-7002-8000-000000000009", name: "Roskilde Pilot", timezone: "Europe/Copenhagen", currency: "DKK" }
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
 
 const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: "01a0d2a4-a280-7008-8000-000000000001", ownership: "company", serviceProviderId: null, status: "active", capacityKg: 18_000, requiredLicenceClass: "c", homeDepotId: null, fuel: "hvo", telematicsDeviceId: null, notes: null, compartments: [] }

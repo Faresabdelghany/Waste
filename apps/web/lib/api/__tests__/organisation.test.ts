@@ -89,8 +89,8 @@ function resolverOver(entries: Array<[BusinessRecord, string]>): Resolver {
   return {
     byServerId: (serverId) => entries.find(([, id]) => id === serverId)?.[0],
     serverIdOf: (webId) => entries.find(([record]) => record.id === webId)?.[1],
-    find: (predicate) => entries.find(([record]) => predicate(record))?.[0],
-    filter: (predicate) => entries.filter(([record]) => predicate(record)).map(([record]) => record),
+    find: (_module, predicate) => entries.find(([record]) => predicate(record))?.[0],
+    filter: (_module, predicate) => entries.filter(([record]) => predicate(record)).map(([record]) => record),
   }
 }
 

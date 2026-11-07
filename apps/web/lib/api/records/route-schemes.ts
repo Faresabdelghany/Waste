@@ -82,6 +82,7 @@ import { ROUTE_SCHEME_STATUSES, SERVICE_TYPES, type ServiceType } from "@waste/d
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@/lib/prototype/record-visibility"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
+import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
 import { PLAN_AHEAD_DAYS_KEY, ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
@@ -89,6 +90,7 @@ import { create, get, listAll, patch, post, withQuery } from "../client"
 import {
   NO_PRESENTATION,
   isLocalRefusal,
+  moduleKeyOf,
   ofKind,
   stampFacts,
   statusLabel,
@@ -165,7 +167,7 @@ const MASTER_WORDS: Record<MasterDataKind, string> = { "waste-fraction": "waste 
  * chip read back unloaded — or a refusal at the form's field.
  */
 function masterId(context: MappingContext, kind: MasterDataKind, name: string, path: string, known: RuleMasterIds): string | LocalRefusal {
-  const row = context.resolve.find((record) => masterDataKindOf(record) === kind && record.name === name)
+  const row = context.resolve.find(moduleKeyOf(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId), (record) => masterDataKindOf(record) === kind && record.name === name)
   const id = row === undefined ? (known[kind]?.[name] ?? serverIdFor(context, MASTER_DATA_KIND_DETAILS[kind].prefix, name)) : context.resolve.serverIdOf(row.id)
   return id ?? refusal(path, `The API holds no ${MASTER_WORDS[kind]} named ${JSON.stringify(name)}`)
 }

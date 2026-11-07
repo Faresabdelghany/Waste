@@ -18,7 +18,7 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { allocationAdapter, allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, vehiclePlanningModule } from "../records/allocations"
 import { wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -83,11 +83,8 @@ const allocateRecord = (values: Record<string, string>): BusinessRecord => ({
 })
 
 describe("the vehicle planning module", () => {
-  test("is switched, after the master data, the places and the fleet its rows name", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("fleet", "vehicle-planning"))
-    for (const named of ["configure.master", "resources.depots", "fleet.vehicles", "fleet.drivers"]) {
-      assert.ok(SERVER_MODULE_KEYS.indexOf("fleet.vehicle-planning") > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
   })
 
   test("lists the allocations, every row allocation-<uuid>", async () => {

@@ -18,7 +18,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import {
   depotAdapter,
@@ -90,13 +90,9 @@ const made = (moduleId: string, recordKind: string, status: string, submittedVal
 })
 
 describe("the places modules", () => {
-  test("are switched: the depots and stations after the master data whose fractions a station names, the warehouses after the depots one may share a yard with", () => {
+  test("are switched: the depots and stations, and the warehouses", () => {
     assert.ok(isServerBacked("resources", "depots"))
     assert.ok(isServerBacked("resources", "warehouses"))
-    const at = (key: string) => SERVER_MODULE_KEYS.indexOf(key)
-    assert.ok(at("configure.organization") < at("resources.depots"))
-    assert.ok(at("configure.master") < at("resources.depots"))
-    assert.ok(at("resources.depots") < at("resources.warehouses"))
   })
 
   test("the depots module lists the depots and the stations together, each under its own prefix", async () => {

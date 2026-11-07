@@ -82,7 +82,7 @@ import {
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
-import { dayIn } from "./clock"
+import { todayIn } from "./clock"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -274,7 +274,7 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
   toRecord: (area, context) => {
     const project = context.resolve.byServerId(area.projectId)
     const projectWebId = project?.id ?? webIdOf("project", area.projectId)
-    const day = dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
+    const day = todayIn(context, project === undefined ? undefined : typed(project, "timezone"))
     const { status, version } = versionInForce(area.boundaries, day)
     const purpose = purposeLabel(area.purpose)
     const effectiveTo = version === null || version.validTo === null ? undefined : lastDayIn(version.validTo)
@@ -475,13 +475,11 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
 // The modules
 // ---------------------------------------------------------------------------
 
-/** Settings → Areas & Zones, and the map's outlines. */
-// The boundary version in force on the project's day is the one a record carries: read again once that day turns (#232).
+/** Settings → Areas & Zones, and the map's outlines: each carries the boundary version in force on the project's day (#232). */
 export const planningAreasModule: ServerModule = {
   workspaceId: PLANNING_AREAS_MODULE.workspaceId,
   moduleId: PLANNING_AREAS_MODULE.moduleId,
   resources: [planningAreaAdapter],
-  readsTheDay: true,
 }
 
 /**

@@ -17,7 +17,7 @@ import { NO_ONE } from "../../data/properties"
 import { createTicketTeamRecord, NO_TEAM, PICK_A_HELD_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, updateTicketTeamRecord } from "../../data/ticket-teams"
 import { ticketListReaders, updateTicketRecord } from "../../data/tickets"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { isTicketTeamRecord, ticketTeamAdapter, ticketTeamsModule } from "../records/ticket-teams"
@@ -56,11 +56,9 @@ const state: ServerRecordsState = new Map([...baseState, ["configure.templates",
 const withTeams: MappingContext = { ...context, resolve: resolverOver(state) }
 
 describe("a ticket team", () => {
-  test("is a record of Tickets & communication on the Pilot, loaded before the tickets that name it", () => {
+  test("is a record of Tickets & communication on the Pilot", () => {
     assert.ok(isServerBacked("configure", "templates"))
     assert.deepEqual(ticketTeamsModule.resources.map((adapter) => adapter.prefix), ["team", "ticket-type"], "the ticket types share the module (#545 of #544)")
-    assert.ok(SERVER_MODULE_KEYS.indexOf("configure.templates") < SERVER_MODULE_KEYS.indexOf("operate.tickets"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("configure.access") < SERVER_MODULE_KEYS.indexOf("configure.templates"))
   })
 
   test("reads its name, its status and its members by name, and carries the members by web id", () => {

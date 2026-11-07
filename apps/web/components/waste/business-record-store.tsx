@@ -25,22 +25,22 @@ import {
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf, type CommandInput, type Resolver, type ServerModule } from "@/lib/api/records/adapter"
-import { ME_PROJECTS, withMeProjects } from "@/lib/api/records/me-projects"
+import { ME_PROJECTS, withMeProjects, type MeProject } from "@/lib/api/records/me-projects"
 import { MODULES_WITHOUT_ME, SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
   adapterFor,
+  clocksRead,
   commandRecord,
   dayTurnRereads,
-  derivedFromChanged,
-  derivedSourcesNow,
   IDLE,
   KEPT_ON_API,
   paneAnswerOf,
   problemOfError,
-  projectTimezonesOf,
   readModuleInto,
+  readsChanged,
+  readSourcesNow,
   rereadRecord,
   rereadsOf,
   resolverOver,
@@ -208,6 +208,8 @@ export type BusinessRecordStores = {
    * read the session outlives is abandoned as the load is (Issue #198).
    */
   sessionSignal: ExternalStore<AbortSignal | null>
+  /** Whether the session's load is still reading its modules: a module read again for what it read waits for it, since a module the load has yet to read may answer what the mapping missed. */
+  loading: ExternalStore<boolean>
 }
 
 // The context carries the stable store handles, never the state itself — see
@@ -364,6 +366,7 @@ export function BusinessRecordStoreProvider({
     pendingReads: new Map(),
     generation: createExternalStore(0),
     sessionSignal: createExternalStore<AbortSignal | null>(null),
+    loading: createExternalStore(false),
   }))
   const client = useApiClient()
   const identity = useApiSessionIdentity()
@@ -394,7 +397,7 @@ export function BusinessRecordStoreProvider({
   // request in flight reads the current client from `stores.client` at the
   // moment it is sent. No session (signed out, adapter off, expired and not
   // refreshed) empties them. The switched modules load in SERVER_MODULES' order, one after the
-  // other, since a later module's mapping resolves the earlier ones' rows (a
+  // other, so a later module's mapping resolves the earlier ones' rows (a
   // user names its role and its projects); each lands as it arrives, and a
   // module that fails is reported once and shows no rows — unless the API
   // refused the account itself (Issue #150): the client has ended the
@@ -419,9 +422,10 @@ export function BusinessRecordStoreProvider({
     const initial = stores.client.getSnapshot()
     if (initial === null) return
     stores.sessionSignal.set(controller.signal)
+    stores.loading.set(true)
     const run = async () => {
       let modules = MODULES_WITHOUT_ME
-      let projects: readonly { id: string; name: string }[] | undefined
+      let projects: readonly MeProject[] | undefined
       try {
         const me = await loadMe()
         modules = viewableModules(me.role.grants, SERVER_MODULES, { provider: me.serviceProvider !== null })
@@ -455,23 +459,26 @@ export function BusinessRecordStoreProvider({
         reportRead(key, problem)
       }
     }
-    void run()
+    void run().finally(() => {
+      if (!controller.signal.aborted) stores.loading.set(false)
+    })
     return () => {
       controller.abort()
+      stores.loading.set(false)
     }
   }, [identity, stores, loadMe])
 
-  // A module read through others (`derivedFrom`, #232) is read again once
-  // one of them has new rows since its read began (`derivedFromChanged`),
-  // and a module read on the project's day once that day turns
-  // (`dayTurnRereads`), checked again when the page comes back, since a timer
-  // sleeps with the machine. A burst collapses into one read a second after
-  // its last change, after any write still out (its answer is the change
-  // that counts), queued as every read is (`rereadModule`). A read that
-  // failed is asked for again half a minute on, not at once. The write, read
-  // and command paths are as they were; this only watches what they leave.
+  // A module is read again once something its last read's mapping read has
+  // moved since that read began (`readsChanged`, #232): a row it named, a
+  // module it scanned, a module now holding a row it found nowhere; and once
+  // the project's day it read has turned (`dayTurnRereads`), checked again
+  // when the page comes back, since a timer sleeps with the machine. A burst
+  // collapses into one read a second after its last change, after any write
+  // still out (its answer is the change that counts) and after the session's
+  // load, queued as every read is (`rereadModule`). A read that failed is
+  // asked for again half a minute on, not at once. The write, read and
+  // command paths are as they were; this only watches what they leave.
   useEffect(() => {
-    const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
     const timers = new Set<ReturnType<typeof setTimeout>>()
     const after = (ms: number, run: () => void) => {
       const timer = setTimeout(() => {
@@ -482,7 +489,7 @@ export function BusinessRecordStoreProvider({
       return timer
     }
     const due = new Map<string, ReturnType<typeof setTimeout>>()
-    const asked = new Map<string, ReturnType<typeof derivedSourcesNow>>()
+    const asked = new Map<string, ReturnType<typeof readSourcesNow>>()
     const readAgain = (module: ServerModule) => {
       const key = moduleKey(module.workspaceId, module.moduleId)
       const pending = due.get(key)
@@ -491,7 +498,7 @@ export function BusinessRecordStoreProvider({
         timers.delete(pending)
       }
       const send = () => {
-        if (stores.pendingWrites.size > 0) {
+        if (stores.pendingWrites.size > 0 || stores.loading.getSnapshot()) {
           due.set(key, after(1_000, send))
           return
         }
@@ -513,17 +520,16 @@ export function BusinessRecordStoreProvider({
     let midnight: ReturnType<typeof setTimeout> | undefined
     const check = (dayToo: boolean) => {
       const state = stores.server.getSnapshot()
-      const timezones = projectTimezonesOf(state)
-      for (const module of derived) {
+      const timezones = clocksRead(state)
+      for (const module of SERVER_MODULES) {
         const key = moduleKey(module.workspaceId, module.moduleId)
-        const current = state.get(key)
-        if (derivedFromChanged(current, state).length === 0) continue
-        const sources = derivedSourcesNow(current, state)
+        if (readsChanged(state, key).length === 0) continue
+        const sources = readSourcesNow(state, key)
         if (sameSources(asked.get(key), sources)) continue
         asked.set(key, sources)
         readAgain(module)
       }
-      if (dayToo) for (const module of dayTurnRereads(state, SERVER_MODULES, Date.now(), timezones)) readAgain(module)
+      if (dayToo) for (const module of dayTurnRereads(state, SERVER_MODULES, Date.now())) readAgain(module)
       // The next turn of the projects' day, armed again whenever their clocks are first known or change.
       if (dayToo || timezones.join() !== zones) {
         zones = timezones.join()
@@ -883,6 +889,20 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
     stores.server.getServerSnapshot,
   )
   return switchedModuleState(serverModules, useApiConfigured(), workspaceId, moduleId)
+}
+
+/**
+ * Whether the store's read of a switched module is behind: something its
+ * last read's mapping read has moved since (`readsChanged`), so the store is
+ * about to read it again. False for a module on the browser's own path.
+ */
+export function useReadBehind(workspaceId: WorkspaceId, moduleId: string): boolean {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error("useReadBehind must be used within BusinessRecordStoreProvider")
+  }
+  const serverModules = useSyncExternalStore(stores.server.subscribe, stores.server.getSnapshot, stores.server.getServerSnapshot)
+  return useApiConfigured() && readsChanged(serverModules, moduleKey(workspaceId, moduleId)).length > 0
 }
 
 /**

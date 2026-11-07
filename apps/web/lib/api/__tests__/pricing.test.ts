@@ -21,7 +21,7 @@ import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "../../data/commercial"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { explainPrice, explainQuery, priceListAdapter, priceRowAdapter, priceRowsModule, productAdapter, productsModule, FREE_DAYS_REFUSAL, PRODUCT_TRANSITIONS, VAT_REFUSAL } from "../records/pricing"
 import { customerAdapter } from "../records/registry"
@@ -123,9 +123,8 @@ const PRODUCT_FORM = {
 }
 
 describe("the products module", () => {
-  test("is switched, after the organisation and the master data a product names", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("commercial", "products"))
-    for (const before of ["configure.organization", "configure.master"]) assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.products") > SERVER_MODULE_KEYS.indexOf(before), before)
     assert.deepEqual(productsModule.resources, [productAdapter])
     assert.deepEqual([productsModule.workspaceId, productsModule.moduleId], [PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId])
   })
@@ -287,9 +286,8 @@ describe("the products module", () => {
 })
 
 describe("the price rows module: the lists and their rows", () => {
-  test("is switched after the products, the master data, the customers and the planning areas its rows name, the lists before the rows", () => {
+  test("is switched, the lists before the rows", () => {
     assert.ok(isServerBacked("commercial", "price-rows"))
-    for (const before of ["commercial.products", "configure.master", "customers.contacts", "configure.areas"]) assert.ok(SERVER_MODULE_KEYS.indexOf("commercial.price-rows") > SERVER_MODULE_KEYS.indexOf(before), before)
     assert.deepEqual(priceRowsModule.resources, [priceListAdapter, priceRowAdapter])
     assert.deepEqual([priceRowsModule.workspaceId, priceRowsModule.moduleId], [PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId])
   })

@@ -108,7 +108,8 @@ function priceOnItsDay(record: Pick<BusinessRecord, "submittedValues">): { valid
  * on the project's day it was read on — an upcoming one too, since an index
  * applies inside its period — for an ended one is refused by the API (the
  * domain's `priceEndedBy`) and the price in force is the one to index. The
- * module reads the day (`readsTheDay`), so the offer turns with it.
+ * store reads the module again once that day turns, so the offer turns with
+ * it.
  */
 export function providerPriceIndexOffered(record: Pick<BusinessRecord, "submittedValues">): boolean {
   const read = priceOnItsDay(record)
@@ -251,7 +252,7 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
 }
 
 /** Price Engine › Service Provider Prices: read on the project's day, which a price's period reading and its Apply index are judged on. */
-export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, resources: [providerPriceAdapter], readsTheDay: true }
+export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, resources: [providerPriceAdapter] }
 
 // ---------------------------------------------------------------------------
 // Settlements
@@ -264,8 +265,8 @@ export const SETTLEMENT_DAY_KEY = "readOn"
  * The commands a settlement's details offer: those the machine moves it by
  * from its status, its period and the project's day it was read on — never a
  * stay or a refusal, so a period not begun offers no Calculate and one not
- * ended no Close (#260). The module reads the day (`readsTheDay`), so the
- * offer turns with it.
+ * ended no Close (#260). The store reads the module again once that day
+ * turns, so the offer turns with it.
  */
 export function settlementCommandsOffered(record: Pick<BusinessRecord, "name" | "submittedValues">): SettlementCommand[] {
   const read = settlementOnItsDay(record)
@@ -387,4 +388,4 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
 }
 
 /** Price Engine › Settlements: read on the project's day, which its offers are judged on. */
-export const settlementsModule: ServerModule = { workspaceId: SETTLEMENTS_MODULE.workspaceId, moduleId: SETTLEMENTS_MODULE.moduleId, resources: [settlementAdapter], readsTheDay: true }
+export const settlementsModule: ServerModule = { workspaceId: SETTLEMENTS_MODULE.workspaceId, moduleId: SETTLEMENTS_MODULE.moduleId, resources: [settlementAdapter] }

@@ -14,7 +14,7 @@ import { BOTH_GROSS_AND_TARE, SAY_WHY_REFUSED } from "@waste/domain/execution/un
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { differenceOf, REVIEW_LABELS, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
@@ -134,10 +134,8 @@ describe("an unload's transfer note (O18 of #290)", () => {
 })
 
 describe("the weights module", () => {
-  test("is switched after the routes, the stations and the fractions an unload names", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked("route-studio", "weights"))
-    const at = SERVER_MODULE_KEYS.indexOf("route-studio.weights")
-    for (const before of ["route-studio.routes", "resources.depots", "configure.master"]) assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
     assert.deepEqual(weightsModule.resources, [unloadAdapter])
   })
 

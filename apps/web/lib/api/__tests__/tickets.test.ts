@@ -16,7 +16,7 @@ import { NO_ONE } from "../../data/properties"
 import { replyWithEvidenceForm, ticketStopOptions } from "../../data/tickets"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { actOnRecord, commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import {
@@ -116,13 +116,8 @@ const record = ticketAdapter.toRecord(missed, context())
 const current = loaded({ records: [record], serverIds: new Map([[record.id, missed.id]]) }, 1)
 
 describe("the tickets module", () => {
-  test("is switched, after every module a ticket names a row of, and the alerts after it", () => {
+  test("is switched", () => {
     assert.ok(isServerBacked(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId))
-    const at = SERVER_MODULE_KEYS.indexOf("operate.tickets")
-    for (const named of ["configure.organization", "configure.access", "customers.contacts", "customers.properties", "customers.shared", "customers.agreements", "resources.containers", "fleet.drivers", "route-studio.routes", "route-studio.pickups"]) {
-      assert.ok(at > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
-    }
-    assert.ok(SERVER_MODULE_KEYS.indexOf("operate.exceptions") > at, "the alerts after the tickets they are linked to")
   })
 
   test("reads every ticket, page after page, each `ticket-<uuid>`: no fixture lends its id", async () => {

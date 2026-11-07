@@ -144,6 +144,18 @@ describe("the request path against the database", { skip: database.skip }, () =>
       assert.equal(body.serviceProvider, null)
     })
 
+    test("names each project's clock and currency, which a role that does not view the organisation reads its rows on", async () => {
+      const body = Me.parse(await (await get("/me", await tokenFor(a.users.olivia, a.companyId))).json())
+      assert.deepEqual(
+        body.projects.map((p) => [p.name, p.timezone, p.currency]),
+        [
+          ["Cairo Operations", "Africa/Cairo", "EGP"],
+          ["Copenhagen Central", "Europe/Copenhagen", "DKK"],
+          ["Harbor Commercial", "Europe/Copenhagen", "DKK"],
+        ],
+      )
+    })
+
     test("answers the other tenant's Olivia her own company: two tenants on one database never meet", async () => {
       const body = Me.parse(await (await get("/me", await tokenFor(b.users.olivia, b.companyId))).json())
       assert.equal(body.company.id, b.companyId)

@@ -21,7 +21,7 @@ import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
 import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { projectTimezoneOf, wallClockIn } from "./clock"
+import { projectTimezoneOf, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -37,7 +37,7 @@ const kept = "A credential's kind, number and holder are what it is: end it and 
 
 /** The project's today, on its own clock: the day a credential's status is read on. */
 const todayOf = (projectWebId: string, context: MappingContext): string =>
-  wallClockIn((context.now ?? new Date()).toISOString(), projectTimezoneOf({ projectIds: [projectWebId] }, context)).slice(0, 10)
+  todayIn(context, projectTimezoneOf({ projectIds: [projectWebId] }, context))
 
 export function toAccessCredentialRecord(credential: AccessCredential, context: MappingContext): BusinessRecord {
   const project = context.resolve.byServerId(credential.projectId)
@@ -170,10 +170,9 @@ export const accessCredentialAdapter: ResourceAdapter<AccessCredential> = {
   commands: ACCESS_CREDENTIAL_COMMANDS,
 }
 
-/** Customers › Site access: read after the customers, the properties and the agreements its rows name, and on the project's day its statuses are read on. */
+/** Customers › Site access: its statuses are read on the project's day. */
 export const siteAccessModule: ServerModule = {
   workspaceId: SITE_ACCESS_MODULE.workspaceId,
   moduleId: SITE_ACCESS_MODULE.moduleId,
   resources: [accessCredentialAdapter],
-  readsTheDay: true,
 }
