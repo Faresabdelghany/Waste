@@ -1,0 +1,27 @@
+name: Playwright's browser
+description: >-
+  The Chromium Playwright drives, cached under the @playwright/test version
+  pnpm install resolved — read from the installed package, not from the
+  specifier in apps/web/package.json, so a range or a lockfile bump can never
+  hit a cache holding the Chromium of an older Playwright while the install
+  step is skipped. A new Playwright wants a new Chromium build, nothing else
+  does. On a hit only the system libraries Chromium links against are
+  installed, since the cache holds the browser and not them. Every end-to-end
+  job shares the one key. Run after setup-workspace.
+runs:
+  using: composite
+  steps:
+    - id: playwright
+      shell: bash
+      run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: browser
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+    - if: steps.browser.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm --filter @waste/web exec playwright install --with-deps chromium
+    - if: steps.browser.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm --filter @waste/web exec playwright install-deps chromium

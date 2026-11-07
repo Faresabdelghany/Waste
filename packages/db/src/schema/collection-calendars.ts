@@ -17,6 +17,7 @@ import { text } from "drizzle-orm/pg-core"
 
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -32,3 +33,5 @@ export const collectionCalendar = wms.table(
   },
   (t) => [companyReference(t, company), tenantReference(t, [t.projectId], project), tenantUnique(t, t.projectId, t.name), projectKey(t), validPeriod(t)],
 )
+
+export const collectionCalendarPolicies = policies(collectionCalendar, { audited: {} })

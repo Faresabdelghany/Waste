@@ -35,6 +35,7 @@ import { id, projectScoped, tenant, timestamps } from "./columns"
 import { messageTemplate } from "./messaging"
 import { company, project } from "./organisation"
 import { planningArea } from "./planning-areas"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -59,6 +60,8 @@ export const notificationPreference = wms.table(
   ],
 )
 
+export const notificationPreferencePolicies = policies(notificationPreference, { audited: { parent: notificationPreference.userAccountId } })
+
 export const notificationRule = wms.table(
   "notification_rule",
   {
@@ -80,6 +83,8 @@ export const notificationRule = wms.table(
   ],
 )
 
+export const notificationRulePolicies = policies(notificationRule, { audited: { parent: notificationRule.projectId } })
+
 export const notificationRuleArea = wms.table(
   "notification_rule_area",
   {
@@ -98,3 +103,5 @@ export const notificationRuleArea = wms.table(
     tenantIndex(t, t.planningAreaId),
   ],
 )
+
+export const notificationRuleAreaPolicies = policies(notificationRuleArea, { audited: { parent: notificationRuleArea.projectId } })

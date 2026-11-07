@@ -5,13 +5,13 @@ import { after, describe, test } from "node:test"
 
 import { HealthResponse, WorkerReadinessResponse } from "@waste/contracts/health"
 import { createDb } from "@waste/db/client"
+import { probePoolOptions } from "@waste/db/probe"
+import { listen } from "@waste/server/listen"
+import { REFUSED_URL } from "@waste/tooling/unreachable"
 
 import { createApp } from "../app"
-import { listen } from "../listen"
 import type { BossProbe } from "../readiness"
-import { probePoolOptions } from "../readiness"
 import { databaseUnderTest } from "./database"
-import { REFUSED_URL } from "./unreachable"
 
 const database = databaseUnderTest()
 const loopback = { host: "127.0.0.1", port: 0 }

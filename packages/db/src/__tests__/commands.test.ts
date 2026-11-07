@@ -6,12 +6,14 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DrizzleQueryError } from "drizzle-orm/errors"
+
 import { Refused, refused, RefusedField, strengthFor } from "../commands/shared"
 import { product } from "../schema/catalogue"
 import { vehicle } from "../schema/fleet"
 import { company } from "../schema/organisation"
 import { depot } from "../schema/places"
-import { CHECK_VIOLATION, checkConstraintOf, DRIZZLE_QUERY, EXCLUSION_VIOLATION, exclusionConstraintOf, messageWithoutStatement, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
+import { CHECK_VIOLATION, checkConstraintOf, DRIZZLE_QUERY, EXCLUSION_VIOLATION, exclusionConstraintOf, loggable, messageWithoutStatement, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
 
 /** An error the way postgres.js raises one: the SQLSTATE as `code`, the constraint as `constraint_name`. */
 const postgresError = (code: string, constraint?: string) => Object.assign(new Error(`SQLSTATE ${code}`), { code, ...(constraint === undefined ? {} : { constraint_name: constraint }) })
@@ -65,6 +67,32 @@ describe("messageWithoutStatement", () => {
     assert.equal(messageWithoutStatement(drizzle), "Failed query")
     assert.equal(messageWithoutStatement('duplicate key value violates unique constraint "ticket_source_event_id_idx"'), 'duplicate key value violates unique constraint "ticket_source_event_id_idx"')
     assert.equal(messageWithoutStatement(""), "")
+  })
+})
+
+describe("loggable", () => {
+  const cause = postgresError("23503", "user_account_role_id_fk")
+  const failure = new DrizzleQueryError('insert into "wms"."user_account" ("email") values ($1)', ["lars.mikkelsen@nordren.example"], cause)
+
+  test("keeps who threw, what the database said, the SQLSTATE, the constraint and the stack, down the cause", () => {
+    const logged = loggable(failure) as Record<string, unknown>
+    assert.deepEqual(Object.keys(logged).sort(), ["cause", "message", "name", "stack"])
+    assert.deepEqual(logged.cause, { name: "Error", message: "SQLSTATE 23503", code: "23503", constraint_name: "user_account_role_id_fk", stack: cause.stack })
+  })
+
+  test("cuts the statement and its parameters from the wrapper's message and stack, and carries no other member", () => {
+    const logged = loggable(Object.assign(failure, { query: "select secret", parameters: ["also secret"] })) as Record<string, unknown>
+    assert.equal(logged.message, "Failed query")
+    assert.match(String(logged.stack), /^Error: Failed query\n {4}at /)
+    const printed = JSON.stringify(logged)
+    for (const kept of ["lars.mikkelsen", "insert into", "secret"]) assert.equal(printed.includes(kept), false, kept)
+  })
+
+  test("goes three causes deep, and hands back a value that is not an object as it is", () => {
+    const deep = { cause: { cause: { cause: { cause: { message: "four down" } } } } }
+    assert.deepEqual(loggable(deep), { cause: { cause: { cause: {} } } })
+    assert.equal(loggable("a string"), "a string")
+    assert.equal(loggable(null), null)
   })
 })
 

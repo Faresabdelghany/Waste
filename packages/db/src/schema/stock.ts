@@ -60,6 +60,7 @@ import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container, containerServicePlacement } from "./containers"
 import { company, project } from "./organisation"
 import { warehouse } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -82,6 +83,8 @@ export const decommissionReason = wms.table(
   },
   (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status, DECOMMISSION_REASON_STATUSES)],
 )
+
+export const decommissionReasonPolicies = policies(decommissionReason, { audited: {} })
 
 export const stockMovement = wms.table(
   "stock_movement",
@@ -180,3 +183,5 @@ export const stockMinimum = wms.table(
     tenantIndex(t, t.containerTypeId),
   ],
 )
+
+export const stockMinimumPolicies = policies(stockMinimum, { audited: { parent: stockMinimum.warehouseId } })

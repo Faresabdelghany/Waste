@@ -35,6 +35,7 @@ import { userAccount } from "./access"
 import { literal, oneOf, positive } from "./checks"
 import { id, recorded, tenant, timestamps } from "./columns"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -78,6 +79,10 @@ export const importRun = wms.table(
   ],
 )
 
+export const importRunPolicies = policies(importRun, {
+  exempt: "an import's own log, as a generation run is: who ran which file, and its counts, moved by the batches that wrote the rows the audit log records under the import's reason",
+})
+
 export const importRunRow = wms.table(
   "import_run_row",
   {
@@ -109,3 +114,7 @@ export const importRunRow = wms.table(
     ),
   ],
 )
+
+export const importRunRowPolicies = policies(importRunRow, {
+  exempt: "a ledger: each row of an import's outcome, appended once by the batch that wrote it and never rewritten",
+})

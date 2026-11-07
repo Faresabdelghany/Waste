@@ -32,6 +32,7 @@ import { oneOf } from "./checks"
 import { id, projectScoped, recorded, timestamps } from "./columns"
 import { customer, property, sharedCollectionPoint } from "./customers"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -75,6 +76,8 @@ export const application = wms.table(
     tenantIndex(t, t.subscriptionId),
   ],
 )
+
+export const applicationPolicies = policies(application, { audited: {} })
 
 export const applicationDecision = wms.table(
   "application_decision",

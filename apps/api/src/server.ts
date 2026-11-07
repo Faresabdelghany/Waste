@@ -3,8 +3,8 @@
 // behaviour lives in the modules this file composes, and is tested there.
 //
 // Two pools on the one connection string, both as the API role: the probe
-// pool /readyz uses (probePoolOptions in readiness.ts says why a probe gets
-// its own) and the request pool every authenticated request runs a
+// pool /readyz uses (@waste/db/probe says why a probe gets its own) and the
+// request pool every authenticated request runs a
 // transaction on (auth/principal.ts), sized by DATABASE_POOL_MAX where the
 // environment sets it (#149) and postgres.js's 10 otherwise. Opening them connects to nothing:
 // postgres.js dials on the first query, so the process starts whether or not
@@ -17,9 +17,12 @@
 // whose file says nothing usable stops before it binds.
 import { getConnInfo } from "@hono/node-server/conninfo"
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { probePoolOptions } from "@waste/db/probe"
 import { supabaseStorage } from "@waste/db/storage"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
+import { listen } from "@waste/server/listen"
 import type { Context } from "hono"
 import { createRemoteJWKSet } from "jose"
 
@@ -30,13 +33,11 @@ import { PREVIEW_CALLS_PER_MINUTE } from "./routes/routing-preview"
 import { createVerifier, supabaseAuth } from "./auth/verify"
 import { readBuildInfo } from "./build-info"
 import { parseEnv } from "./env"
-import { listen } from "./listen"
 import { ensureProofBucket } from "./proof-bucket"
-import { DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
 const build = readBuildInfo()
-const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
+const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
 // An unset knob is `max: undefined`, which createDb reads as its default.
 const pool = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX })
 const auth = supabaseAuth(env.SUPABASE_URL)
@@ -62,7 +63,7 @@ const listening = await listen(
     probe,
     pool,
     verifier,
-    databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS,
+    databaseTimeoutMs: CHECK_TIMEOUT_MS,
     build,
     routing: { name: routingEngine.name },
     routingEngine,

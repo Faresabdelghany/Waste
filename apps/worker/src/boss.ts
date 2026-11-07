@@ -73,6 +73,7 @@
 // idle egress gate 2 metered. Absent, every one of them is pg-boss's default.
 import { inTransaction } from "@waste/db/jobs"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
+import { JOB_STOP_MS } from "@waste/process/shutdown"
 import { PgBoss, type ConstructorOptions, type WorkOptions } from "pg-boss"
 
 import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"
@@ -155,9 +156,6 @@ export type Boss = {
   /** Stops the workers, lets handlers in flight finish within `timeoutMs`, and closes the pool. Idempotent. */
   stop: (timeoutMs?: number) => Promise<void>
 }
-
-/** How long stop() lets a handler in flight finish before it is failed and the pool closed. */
-export const STOP_TIMEOUT_MS = 10_000
 
 export function createBoss({ url, max = 3, log = (line) => console.error(line), ...intervals }: BossOptions): PgBoss {
   const boss = new PgBoss({
@@ -261,7 +259,7 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     boss,
     queues,
     published,
-    stop: (timeoutMs = STOP_TIMEOUT_MS) => (stopping ??= boss.stop({ graceful: true, timeout: timeoutMs, close: true })),
+    stop: (timeoutMs = JOB_STOP_MS) => (stopping ??= boss.stop({ graceful: true, timeout: timeoutMs, close: true })),
   }
 }
 

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AUDIT_ACTIONS } from "@waste/domain/audit/vocabulary"
+import { AUDIT_ACTIONS, AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
 
 import { AuditAction, AuditEvent, AuditEventListQuery, CHANGE_REASON_HEADER } from "../audit"
 
@@ -44,6 +44,19 @@ describe("the audit contract", () => {
     assert.deepEqual(half.error.issues.map((issue) => issue.path), [["rowId"]])
     assert.ok(!AuditEventListQuery.safeParse({ rowId: ROW }).success)
     assert.ok(!AuditEventListQuery.safeParse({}).success, "the company's whole history is not read")
+  })
+
+  test("a page names a table the audit trail keeps, as the domain names them; any other is not an audited table", () => {
+    for (const table of Object.keys(AUDITED_TABLES)) assert.ok(AuditEventListQuery.safeParse({ table, rowId: ROW }).success, table)
+    for (const table of ["route", "no_such_table", "constructor"]) {
+      const refused = AuditEventListQuery.safeParse({ table, rowId: ROW })
+      assert.ok(!refused.success, table)
+      assert.deepEqual(
+        refused.error.issues.map((issue) => [issue.path, issue.message]),
+        [[["table"], "Not an audited table"]],
+        table,
+      )
+    }
   })
 
   test("the reason's header is one name, lowercase as a header is read", () => {

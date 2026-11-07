@@ -38,6 +38,7 @@ import { id, orderedWindow, projectScoped, recorded, timestamps, window } from "
 import { driver, vehicle } from "./fleet"
 import { company, project } from "./organisation"
 import { depot } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -80,6 +81,8 @@ export const vehicleAllocation = wms.table(
     tenantIndex(t, t.projectId, t.plannedFrom),
   ],
 )
+
+export const vehicleAllocationPolicies = policies(vehicleAllocation, { exempt: "an allocation's history is its ledger, vehicle_allocation_event" })
 
 export const vehicleAllocationEvent = wms.table(
   "vehicle_allocation_event",

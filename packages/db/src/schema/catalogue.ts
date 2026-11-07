@@ -51,6 +51,7 @@ import { tableObjectName } from "../names"
 import { lowercase, oneOf, positive } from "./checks"
 import { id, projectScoped, tenant, timestamps } from "./columns"
 import { company, project } from "./organisation"
+import { IN_COMPANY, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -91,6 +92,14 @@ export const wasteFraction = wms.table(
   ],
 )
 
+export const wasteFractionPolicies = policies(wasteFraction, {
+  audited: {},
+  door: {
+    columns: [wasteFraction.id, wasteFraction.companyId, wasteFraction.key, wasteFraction.name],
+    rows: IN_COMPANY,
+  },
+})
+
 export const containerType = wms.table(
   "container_type",
   {
@@ -115,6 +124,8 @@ export const containerType = wms.table(
     ),
   ],
 )
+
+export const containerTypePolicies = policies(containerType, { audited: {} })
 
 export const serviceFrequency = wms.table(
   "service_frequency",
@@ -149,6 +160,8 @@ export const serviceFrequency = wms.table(
     ),
   ],
 )
+
+export const serviceFrequencyPolicies = policies(serviceFrequency, { audited: {} })
 
 export const product = wms.table(
   "product",
@@ -196,3 +209,5 @@ export const product = wms.table(
     uniqueIndex(tableObjectName(t.companyId.table, "invoice_code_idx", "product")).on(t.companyId, t.projectId, t.invoiceCode).where(sql`${t.invoiceCode} is not null`),
   ],
 )
+
+export const productPolicies = policies(product, { audited: {} })

@@ -20,9 +20,10 @@ import { after, before, describe, test } from "node:test"
 import { createDb, type Database } from "@waste/db/client"
 import { migrateDatabase } from "@waste/db/migrate"
 import { PGBOSS_SCHEMA, PGBOSS_SCHEMA_VERSION } from "@waste/db/sql/pgboss"
+import { REFUSED_URL } from "@waste/tooling/unreachable"
 import { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, STOP_TIMEOUT_MS, type Boss } from "../boss"
+import { createBoss, startBoss, type Boss } from "../boss"
 import { defineJob, JOBS, type JobContext } from "../jobs"
 import { heartbeat } from "../jobs/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
@@ -33,7 +34,6 @@ import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
 import { fakeRouting } from "./routing-context"
 import { until } from "./until"
-import { REFUSED_URL } from "./unreachable"
 
 const owner = ownerUnderTest()
 
@@ -404,7 +404,6 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.deepEqual(running.queues, [heartbeat.queue, relayOutbox.queue, ...recordBillableEvents.map((job) => job.queue)])
     const [skipped] = await boss.getQueues([consumerQueue("pickup-skipped", "resolution")])
     assert.equal(skipped?.retryDelay, OPEN_TICKETS_QUEUE_OPTIONS.retryDelay, "a queue the dropped consumer worked is left as it was")
-    assert.equal(STOP_TIMEOUT_MS, 10_000)
     await running.stop(2_000)
     assert.deepEqual(errors, [])
   })

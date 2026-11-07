@@ -33,6 +33,7 @@
 // for the API role, whose login carries the same path; without this it would
 // depend on the owner role's setting, which on Supabase happens to include
 // `extensions` and elsewhere does not.
+import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
 import type { Notice, ReservedSql } from "postgres"
@@ -56,8 +57,6 @@ export const OWNED_SCHEMAS: readonly string[] = [wms.schemaName, MIGRATIONS_SCHE
 const MIGRATION_LOCK = 0x77_6d_73
 /** How long to wait for another migrator before giving up; a real migration finishes well inside it. */
 const LOCK_TIMEOUT = "60s"
-/** Supabase's transaction pooler: one backend per statement, no session state. */
-const TRANSACTION_POOLER_PORT = "6543"
 /** What unqualified names in a migration resolve through: the API role's own path (see the foundation migration). */
 export const MIGRATION_SEARCH_PATH = "wms, extensions"
 

@@ -45,6 +45,7 @@ import { oneOf, positive } from "./checks"
 import { id, projectScoped, tenant, timestamps } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project, serviceProvider } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -90,6 +91,8 @@ export const depot = wms.table(
   ],
 )
 
+export const depotPolicies = policies(depot, { audited: {} })
+
 export const warehouse = wms.table(
   "warehouse",
   {
@@ -119,6 +122,8 @@ export const warehouse = wms.table(
     tenantIndex(t, t.depotId),
   ],
 )
+
+export const warehousePolicies = policies(warehouse, { audited: {} })
 
 export const unloadingStation = wms.table(
   "unloading_station",
@@ -158,6 +163,8 @@ export const unloadingStation = wms.table(
   ],
 )
 
+export const unloadingStationPolicies = policies(unloadingStation, { audited: {} })
+
 export const unloadingStationFraction = wms.table(
   "unloading_station_fraction",
   {
@@ -176,3 +183,7 @@ export const unloadingStationFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const unloadingStationFractionPolicies = policies(unloadingStationFraction, {
+  audited: { parent: unloadingStationFraction.unloadingStationId },
+})

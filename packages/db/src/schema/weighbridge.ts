@@ -24,6 +24,7 @@ import { route, unload } from "./execution"
 import { vehicle } from "./fleet"
 import { company, project } from "./organisation"
 import { unloadingStation } from "./places"
+import { policies } from "./policies"
 import { companyReference, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -94,3 +95,5 @@ export const weighbridgeTicket = wms.table(
     index(tableObjectName(t.companyId.table, "status_idx", "weighbridgeTicket")).on(t.companyId, t.status, t.id),
   ],
 )
+
+export const weighbridgeTicketPolicies = policies(weighbridgeTicket, { audited: {} })

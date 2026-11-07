@@ -7,8 +7,7 @@
 // migration backfills every invoice issued before it with — the parties as
 // they stood when it ran, the best the ledger knows of them — before the
 // column is made NOT NULL. finance.test.ts holds the two spellings to one
-// object; invoice-parties-rendering.test.ts pins the statements byte for byte
-// in the file.
+// object.
 
 /** The parties object from `company` aliased `c` and `customer` aliased `cu`, its keys `InvoiceParties`'s. */
 export const INVOICE_PARTIES_OBJECT =

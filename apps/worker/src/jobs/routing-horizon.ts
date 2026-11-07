@@ -50,6 +50,7 @@ import { projectToday } from "@waste/db/commands/project-clock"
 import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { plan } from "@waste/db/schema/routing"
+import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
@@ -60,7 +61,6 @@ import { DEFAULT_PROFILE } from "@waste/routing/provider"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
-import { loggable } from "./loggable"
 
 export const SWEEP_HORIZON_QUEUE = "routing.sweep-horizon"
 /** 03:30 UTC every day: half an hour after Plan Ahead (plan-ahead.ts), whose runs ask for their own routes first. */

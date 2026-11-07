@@ -58,9 +58,10 @@ import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary
 import { sql } from "drizzle-orm"
 import { boolean, check, date, integer, text, uuid } from "drizzle-orm/pg-core"
 
-import { tableObjectName } from "../names"
+import { quoted, tableObjectName } from "../names"
 import { oneOf, subsetOf } from "./checks"
 import { id, tenant, timestamps } from "./columns"
+import { IN_COMPANY, policies } from "./policies"
 import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
 
@@ -114,6 +115,16 @@ export const company = wms.table(
   ],
 )
 
+/** The company's document counters, one per series a document is numbered in (`nextNumber`, commands/shared.ts). */
+export const COMPANY_COUNTERS = {
+  nextRouteNumber: company.nextRouteNumber,
+  nextTicketNumber: company.nextTicketNumber,
+  nextInvoiceNumber: company.nextInvoiceNumber,
+  nextScaleTicketNumber: company.nextScaleTicketNumber,
+} as const
+
+export const companyPolicies = policies(company, { audited: {}, kept: true, counters: COMPANY_COUNTERS })
+
 /**
  * A Holiday List (Settings › Operations › Holiday lists, 2026-11-05): the
  * company's own named set of holidays for one country, which every Project
@@ -141,6 +152,20 @@ export const holidayList = wms.table(
   ],
 )
 
+/** A list some published project of the company rests on: the door reads its days and their names, and nothing of a list no published project names. */
+const ofListOfPublishedProject = (list: string, nameColumn: string) =>
+  `exists (select 1 from "wms"."project" "published" where "published"."company_id" = ${list}.${quoted("company_id")} and "published"."holiday_list" = ${nameColumn} and "published"."public_slug" is not null)`
+
+/** Kept by the reset, since a kept project names the list by key; its days are swept, and the seed writes its own back. */
+export const holidayListPolicies = policies(holidayList, {
+  audited: {},
+  kept: true,
+  door: {
+    columns: [holidayList.id, holidayList.companyId, holidayList.country, holidayList.name],
+    rows: `${IN_COMPANY} and ${ofListOfPublishedProject(quoted("holiday_list"), `${quoted("holiday_list")}.${quoted("name")}`)}`,
+  },
+})
+
 /** One day of a Holiday List, with the name a person gave it; null where nobody named it. The set is replaced whole with `PUT /holiday-lists/:id/holidays`. */
 export const holidayListHoliday = wms.table(
   "holiday_list_holiday",
@@ -156,6 +181,14 @@ export const holidayListHoliday = wms.table(
   },
   (t) => [companyReference(t, company), tenantReference(t, [t.holidayListId], holidayList), tenantUnique(t, t.holidayListId, t.day)],
 )
+
+export const holidayListHolidayPolicies = policies(holidayListHoliday, {
+  audited: { parent: holidayListHoliday.holidayListId },
+  door: {
+    columns: [holidayListHoliday.companyId, holidayListHoliday.holidayListId, holidayListHoliday.day, holidayListHoliday.name],
+    rows: `${IN_COMPANY} and exists (select 1 from "wms"."holiday_list" "list" where "list"."company_id" = ${quoted("holiday_list_holiday")}.${quoted("company_id")} and "list"."id" = ${quoted("holiday_list_holiday")}.${quoted("holiday_list_id")} and ${ofListOfPublishedProject('"list"', '"list"."name"')})`,
+  },
+})
 
 export const project = wms.table(
   "project",
@@ -245,6 +278,27 @@ export const project = wms.table(
   ],
 )
 
+export const projectPolicies = policies(project, {
+  audited: {},
+  kept: true,
+  door: {
+    columns: [
+      project.id,
+      project.companyId,
+      project.name,
+      project.language,
+      project.timezone,
+      project.publicSlug,
+      project.weekend,
+      project.holidayList,
+      project.brandColor,
+      project.logoUrl,
+      project.accessibilityStatementUrl,
+    ],
+    rows: `${quoted("public_slug")} is not null`,
+  },
+})
+
 export const serviceProvider = wms.table(
   "service_provider",
   {
@@ -260,3 +314,5 @@ export const serviceProvider = wms.table(
   },
   (t) => [companyReference(t, company), tenantUnique(t, t.country, t.registrationNumber), tenantKey(t)],
 )
+
+export const serviceProviderPolicies = policies(serviceProvider, { audited: {}, kept: true })

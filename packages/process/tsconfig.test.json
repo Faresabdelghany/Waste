@@ -1,0 +1,7 @@
+{
+  // The tests: same rules as shipping code.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {},
+  "include": ["src/**/__tests__/**/*.ts"],
+  "exclude": []
+}

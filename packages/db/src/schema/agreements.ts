@@ -47,6 +47,7 @@ import { customer, property, sharedCollectionPoint } from "./customers"
 // top level.
 import { priceList } from "./finance"
 import { company, project } from "./organisation"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -93,6 +94,8 @@ export const agreement = wms.table(
   ],
 )
 
+export const agreementPolicies = policies(agreement, { audited: {} })
+
 export const subscription = wms.table(
   "subscription",
   {
@@ -127,6 +130,14 @@ export const subscription = wms.table(
   ],
 )
 
+export const subscriptionPolicies = policies(subscription, {
+  audited: { parent: subscription.agreementId },
+  door: {
+    columns: [subscription.id, subscription.companyId, subscription.projectId, subscription.propertyId, subscription.validFrom, subscription.validTo],
+    rows: inPublishedProject("subscription"),
+  },
+})
+
 /**
  * A Subscription's pause (#291, slice 10, scenario 12.5): an effective-dated
  * suspension — a holiday, a season — through which no stop is generated for
@@ -155,3 +166,17 @@ export const subscriptionPause = wms.table(
     tenantIndex(t, t.subscriptionId),
   ],
 )
+
+export const subscriptionPausePolicies = policies(subscriptionPause, {
+  audited: { parent: subscriptionPause.subscriptionId },
+  door: {
+    columns: [
+      subscriptionPause.companyId,
+      subscriptionPause.projectId,
+      subscriptionPause.subscriptionId,
+      subscriptionPause.validFrom,
+      subscriptionPause.validTo,
+    ],
+    rows: inPublishedProject("subscription_pause"),
+  },
+})

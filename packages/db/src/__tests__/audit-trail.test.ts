@@ -1,7 +1,9 @@
 // The audit trail (#291, slice 9): every table of the schema is classified,
-// once, as audited or exempt with a reason; every audited table carries the
-// trigger in a migration and no exempt one does, the hot tables of execution
-// among them; and, against a fresh database, the trigger writes what the
+// once, as audited or exempt with a reason, each by its own declaration; every
+// audited table carries the trigger in a migration and no exempt one does,
+// the hot tables of execution among them; a migrated database carries each
+// audited table's trigger with the arguments its declaration gives, and no
+// other; and, against a fresh database, the trigger writes what the
 // schema says a row of the log is — the columns that moved and nothing for an
 // update that moved none, a set's row under its parent, the actor and the
 // reason the transaction carries, one transaction id per transaction, the
@@ -14,20 +16,21 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { after, before, describe, test } from "node:test"
 
-import { AUDITED_TABLES } from "@waste/contracts/audit"
-import { eq, getTableName, is, sql } from "drizzle-orm"
-import { PgTable } from "drizzle-orm/pg-core"
+import { eq, getTableName, sql } from "drizzle-orm"
+import type { PgTable } from "drizzle-orm/pg-core"
 
 import { createDb, type Database, type Tx } from "../client"
+import { nextNumber } from "../commands/shared"
 import { migrateDatabase } from "../migrate"
+import { columnName } from "../names"
 import { API_ROLE } from "../roles"
-import * as schema from "../schema"
 import { role, roleGrant, userAccount } from "../schema/access"
 import { auditEvent } from "../schema/audit"
 import { customer } from "../schema/customers"
 import { company, project } from "../schema/organisation"
-import { AUDIT_ROW_FUNCTION, AUDIT_TRAIL, AUDITED, auditTrail, EXEMPT } from "../sql/audit-trail"
+import { AUDIT_ROW_FUNCTION, AUDIT_TRAIL, auditTrail } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
+import { AUDITED, EXEMPT, TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack } from "./specimen"
 
@@ -37,14 +40,13 @@ const statements = new Set(
     .filter((file) => file.endsWith(".sql"))
     .flatMap((file) => statementsOf(readFileSync(path.join(MIGRATIONS, file), "utf8"))),
 )
-const tables = (Object.values(schema) as unknown[]).filter((value): value is PgTable => is(value, PgTable))
 const nameOf = (table: PgTable) => getTableName(table)
 
 describe("the audit trail's classification", () => {
   test("every table of the schema is audited or exempt, exactly once, and an exempt one says why", () => {
     const classified = [...AUDITED.map((entry) => nameOf(entry.table)), ...EXEMPT.map((entry) => nameOf(entry.table))]
     assert.equal(new Set(classified).size, classified.length, "a table is classified twice")
-    assert.deepEqual([...classified].sort(), tables.map(nameOf).sort(), "every table, and only the schema's")
+    assert.deepEqual([...classified].sort(), TABLES.map(nameOf).sort(), "every table, and only the schema's")
     for (const entry of EXEMPT) assert.ok(entry.why.length > 0, nameOf(entry.table))
   })
 
@@ -57,8 +59,13 @@ describe("the audit trail's classification", () => {
     }
   })
 
-  test("the contracts name the audited tables, in order, as the trail does: the list a client names a row's table from", () => {
-    assert.deepEqual(AUDITED.map((entry) => nameOf(entry.table)), [...AUDITED_TABLES])
+  test("a set's parent is at most one set away from a row that is no set's: the history read goes two levels down", () => {
+    const parentOf = new Map(AUDITED.map((entry) => [entry.table, entry.parent?.table]))
+    for (const entry of AUDITED) {
+      const chain = [entry.table]
+      for (let parent = parentOf.get(entry.table); parent !== undefined; parent = parentOf.get(parent)) chain.push(parent)
+      assert.ok(chain.length <= 3, chain.map(nameOf).join(" under "))
+    }
   })
 
   test("the hot tables are exempt: execution, generation, routing and the money the work makes", () => {
@@ -123,6 +130,24 @@ describe("the audit trigger against a fresh database", { skip: database.skip }, 
   after(async () => {
     await owner?.close()
     await fresh?.drop()
+  })
+
+  test("every audited table carries one trigger, with the parent and the ignored columns its declaration gives, and no other table carries one", async () => {
+    const triggers = await owner.sql<{ table: string; trigger: string; args: string }[]>`
+      select c.relname as table, t.tgname as trigger, encode(t.tgargs, 'escape') as args
+      from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+      join pg_proc p on p.oid = t.tgfoid
+      where n.nspname = 'wms' and p.proname = 'audit_row' and not t.tgisinternal
+      order by 1`
+    const argumentsOf = (args: string) => args.split("\\000").slice(0, -1)
+    assert.deepEqual(
+      triggers.map((row) => [row.table, row.trigger, argumentsOf(row.args)]),
+      AUDITED.map((entry) => [
+        nameOf(entry.table),
+        `${nameOf(entry.table)}_${AUDIT_TRAIL}`,
+        [entry.parent === undefined ? "" : nameOf(entry.parent.table), entry.parent === undefined ? "" : columnName(entry.parent.column), ...entry.ignored.map(columnName)],
+      ]).sort(([a], [b]) => String(a).localeCompare(String(b))),
+    )
   })
 
   test("a request's insert, update and delete are three rows: the values written, the columns that moved, the values it had — with the actor and the reason", async () => {
@@ -190,6 +215,17 @@ describe("the audit trigger against a fresh database", { skip: database.skip }, 
       await tx.update(company).set({ name: "Audit Renovation A/S", nextRouteNumber: sql`${company.nextRouteNumber} + 1` }).where(eq(company.id, ID.company))
       const [renamed] = await changesOf(tx, ID.company)
       assert.deepEqual(renamed.changed, { name: ["Audit A/S", "Audit Renovation A/S"] }, "the counter rode along unrecorded")
+    })
+  })
+
+  test("every series a document is numbered in is no history: numbering a route, a ticket, an invoice or a scale ticket writes nothing on the company", async () => {
+    await rolledBack(owner.db, async (tx) => {
+      await seed(tx)
+      await asRequest(tx)
+      for (const series of ["nextRouteNumber", "nextTicketNumber", "nextInvoiceNumber", "nextScaleTicketNumber"] as const) {
+        assert.equal(await nextNumber(tx, ID.company, series), 1000, series)
+      }
+      assert.deepEqual(await changesOf(tx, ID.company), [])
     })
   })
 

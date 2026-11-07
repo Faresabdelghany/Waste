@@ -14,11 +14,12 @@
 // was or as the seed says, never onto one half swept.
 //
 // What is swept and what is kept (the Logins question of #142): every row of
-// the company in every table but the nine of `KEPT_TABLES`: Organisation &
-// Access's eight — the company, its projects and service providers, its roles
-// with their grants, its User Accounts with their Project and Service
-// Provider Access — and its Holiday Lists. Those are kept,
-// and the seed writes each seeded one back to what it says (demo.ts: an
+// the company in every table but those whose declaration says `kept`
+// (schema/policies.ts) — Organisation & Access: the company, its projects and
+// service providers, its roles with their grants, its User Accounts with their
+// Project and Service Provider Access; and the Holiday Lists, which a kept
+// project names by key. Those are kept, and the seed writes each seeded one
+// back to what it says (demo.ts: an
 // edited name, a system role's scope, a grant a charter dropped, an access
 // row it does not name — but never a system role's name or description,
 // which are the tenant's once seeded, #291), so they return to the seed's
@@ -40,9 +41,9 @@
 // Everything else is swept whole rather than healed row by row, since a
 // tester's edit to a column the seed does not own would survive a heal: a
 // swept row comes back from the seed with every column as a fresh seed writes
-// it. The company's counters are not the seed's columns, so the reset puts
-// `next_route_number`, `next_ticket_number` and `next_invoice_number` back to
-// their column defaults — what a freshly seeded company holds — itself.
+// it. A table's document counters are not the seed's columns, so the reset
+// puts each counter a table declares back to its column default — what a
+// freshly seeded company holds — itself.
 //
 // The order is the schema's own: a table is swept before every table it
 // references (`sweepOrder`, over the foreign keys the Drizzle schema
@@ -62,27 +63,19 @@
 // reset counts both for the operator to read.
 import { isDeepStrictEqual } from "node:util"
 
-import { getTableName, is, sql } from "drizzle-orm"
-import { getTableConfig, PgTable, type PgColumn } from "drizzle-orm/pg-core"
+import { getTableName, sql } from "drizzle-orm"
+import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import { createDb, type Tx } from "./client"
 import { columnName } from "./names"
-import * as schema from "./schema"
-import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "./schema/access"
+import { userAccount } from "./schema/access"
 import { auditEvent } from "./schema/audit"
 import { outboxEvent } from "./schema/execution"
-import { company, holidayList, project, serviceProvider } from "./schema/organisation"
+import type { Counters } from "./schema/policies"
 import { applyDemo, DEMO_IDS } from "./seed/demo"
 import { DEMO_COMPANY_ID } from "./seed/ids"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
-
-/**
- * The nine tables the reset keeps: Organisation & Access's eight, what makes a
- * person able to sign in and be who they are; and the company's Holiday
- * Lists, which a kept project names by key. A list's days are swept, and the
- * seed writes its own back.
- */
-export const KEPT_TABLES: readonly PgTable[] = [company, project, serviceProvider, role, roleGrant, userAccount, projectAccess, serviceProviderAccess, holidayList]
+import { COUNTERS, KEPT_TABLES, TABLES } from "./table-policies"
 
 /** The names of the tables a table's foreign keys point at, itself left out. */
 function parentsOf(table: PgTable): Set<string> {
@@ -118,23 +111,22 @@ export function sweepOrder(tables: readonly PgTable[]): PgTable[] {
 
 /**
  * Every table the reset sweeps, children first: all of the schema's but the
- * kept nine — and the audit log last, whatever its keys say. The sweep's own
+ * kept ones — and the audit log last, whatever its keys say. The sweep's own
  * deletes of audited tables append to the log as they run, so a log swept in
  * its keys' place, first, would keep a row for every row the reset removed:
  * a reset leaves the tenant with no history but the seed's writing it back
  * (#291, slice 9).
  */
 export const SWEPT_TABLES: readonly PgTable[] = [
-  ...sweepOrder((Object.values(schema) as unknown[]).filter((value): value is PgTable => is(value, PgTable) && !KEPT_TABLES.includes(value) && value !== auditEvent)),
+  ...sweepOrder(TABLES.filter((table) => !KEPT_TABLES.includes(table) && table !== auditEvent)),
   auditEvent,
 ]
 
-/** The company's three counters. */
-const COUNTERS = { nextRouteNumber: company.nextRouteNumber, nextTicketNumber: company.nextTicketNumber, nextInvoiceNumber: company.nextInvoiceNumber }
-type Counters = Record<keyof typeof COUNTERS, number>
+/** What a freshly seeded company's counters hold, by key: the columns' own defaults, read off the schema. */
+const defaultsOf = (counters: Counters): Record<string, number> => Object.fromEntries(Object.entries(counters).map(([key, column]) => [key, column.default as number]))
 
-/** What a freshly seeded company's counters hold: the columns' own defaults, read off the schema. */
-export const COUNTER_DEFAULTS = Object.fromEntries(Object.entries(COUNTERS).map(([key, column]) => [key, column.default as number])) as Counters
+/** Every counter's default, by its field name (`nextRouteNumber`): what the reset puts back. */
+export const COUNTER_DEFAULTS: Readonly<Record<string, number>> = Object.fromEntries(COUNTERS.flatMap(({ counters }) => Object.entries(defaultsOf(counters))))
 
 export type ResetReport = {
   companyId: string
@@ -175,14 +167,33 @@ async function sweep(tx: Tx, companyId: string): Promise<ResetReport["swept"]> {
   return swept
 }
 
-/** Puts the counters back to their defaults where one moved; answers whether it did. */
+/** Puts every table's counters back to their defaults where one moved; answers whether any did. */
 async function resetCounters(tx: Tx, companyId: string): Promise<boolean> {
-  const moved = sql.join(
-    Object.entries(COUNTERS).map(([key, column]) => sql`${column} <> ${COUNTER_DEFAULTS[key as keyof Counters]}`),
-    sql` or `,
-  )
-  const written = await tx.update(company).set(COUNTER_DEFAULTS).where(sql`${company.id} = ${companyId} and (${moved})`).returning({ id: company.id })
-  return written.length > 0
+  let reset = false
+  for (const { table, counters } of COUNTERS) {
+    const moved = sql.join(
+      Object.values(counters).map((column) => sql`${column} <> ${column.default as number}`),
+      sql` or `,
+    )
+    const written = await tx
+      .update(table)
+      .set(defaultsOf(counters))
+      .where(sql`${companyColumnOf(table)} = ${companyId} and (${moved})`)
+      .returning({ one: sql<number>`1` })
+    reset ||= written.length > 0
+  }
+  return reset
+}
+
+/** The rows of a table whose counters are not their defaults after the reset: none, or the reset is rolled back. */
+async function countersOffDefault(tx: Tx, companyId: string): Promise<string[]> {
+  const off: string[] = []
+  for (const { table, counters } of COUNTERS) {
+    const rows = await tx.select(counters).from(table).where(sql`${companyColumnOf(table)} = ${companyId}`)
+    const defaults = defaultsOf(counters)
+    for (const row of rows) if (!isDeepStrictEqual(row, defaults)) off.push(`${getTableName(table)} ${JSON.stringify(row)}, not ${JSON.stringify(defaults)}`)
+  }
+  return off
 }
 
 /** The jobs waiting on pg-boss's queues whose data names the company: `created` and `retry` are the states before `active` in pg-boss's `job_state`. */
@@ -216,10 +227,8 @@ export async function resetToSeed(adminUrl: string, companyId: string = DEMO_COM
       // The postconditions: the seed, which has the last word, finds nothing left to change, and the counters are a fresh seed's.
       const again = await applyDemo(tx)
       if (again !== 0) throw new Error(`the seed found ${again} rows still to change after the reset, so the reset was rolled back`)
-      const [counters] = await tx.select(COUNTERS).from(company).where(sql`${company.id} = ${companyId}`)
-      if (!isDeepStrictEqual(counters, COUNTER_DEFAULTS)) {
-        throw new Error(`the counters read ${JSON.stringify(counters)} after the reset, not ${JSON.stringify(COUNTER_DEFAULTS)}, so the reset was rolled back`)
-      }
+      const off = await countersOffDefault(tx, companyId)
+      if (off.length > 0) throw new Error(`the counters read ${off.join("; ")} after the reset, so the reset was rolled back`)
 
       const seededAccounts = sql.join(
         Object.values(DEMO_IDS.users).map((id) => sql`${id}::uuid`),

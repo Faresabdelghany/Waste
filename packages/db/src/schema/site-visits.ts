@@ -38,6 +38,7 @@ import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { customer, property } from "./customers"
 import { dropOffPoint } from "./drop-off-points"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -85,6 +86,8 @@ export const accessCredential = wms.table(
     tenantIndex(t, t.propertyId),
   ],
 )
+
+export const accessCredentialPolicies = policies(accessCredential, { audited: {} })
 
 export const siteVisit = wms.table(
   "site_visit",
@@ -173,6 +176,8 @@ export const siteVisit = wms.table(
   ],
 )
 
+export const siteVisitPolicies = policies(siteVisit, { audited: {} })
+
 export const siteVisitFraction = wms.table(
   "site_visit_fraction",
   {
@@ -190,6 +195,8 @@ export const siteVisitFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const siteVisitFractionPolicies = policies(siteVisitFraction, { audited: { parent: siteVisitFraction.visitId } })
 
 export const visitRule = wms.table(
   "visit_rule",
@@ -226,6 +233,8 @@ export const visitRule = wms.table(
   ],
 )
 
+export const visitRulePolicies = policies(visitRule, { audited: {} })
+
 export const visitRuleStep = wms.table(
   "visit_rule_step",
   {
@@ -248,6 +257,8 @@ export const visitRuleStep = wms.table(
   ],
 )
 
+export const visitRuleStepPolicies = policies(visitRuleStep, { audited: { parent: visitRuleStep.ruleId } })
+
 export const visitRuleFreeFraction = wms.table(
   "visit_rule_free_fraction",
   {
@@ -265,3 +276,5 @@ export const visitRuleFreeFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const visitRuleFreeFractionPolicies = policies(visitRuleFreeFraction, { audited: { parent: visitRuleFreeFraction.ruleId } })

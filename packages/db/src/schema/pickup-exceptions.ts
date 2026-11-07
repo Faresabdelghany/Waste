@@ -34,6 +34,7 @@ import { lowercase, oneOf, positive } from "./checks"
 import { id, projectScoped, tenant, timestamps, validity, validPeriod } from "./columns"
 import { product, wasteFraction } from "./catalogue"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -50,6 +51,8 @@ export const contaminantCode = wms.table(
   },
   (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status, CONTAMINANT_CODE_STATUSES)],
 )
+
+export const contaminantCodePolicies = policies(contaminantCode, { audited: {} })
 
 export const contaminantCodeFraction = wms.table(
   "contaminant_code_fraction",
@@ -69,6 +72,8 @@ export const contaminantCodeFraction = wms.table(
     tenantIndex(t, t.wasteFractionId),
   ],
 )
+
+export const contaminantCodeFractionPolicies = policies(contaminantCodeFraction, { audited: { parent: contaminantCodeFraction.contaminantCodeId } })
 
 export const pickupExceptionRule = wms.table(
   "pickup_exception_rule",
@@ -110,6 +115,8 @@ export const pickupExceptionRule = wms.table(
   ],
 )
 
+export const pickupExceptionRulePolicies = policies(pickupExceptionRule, { audited: {} })
+
 export const pickupExceptionRuleStep = wms.table(
   "pickup_exception_rule_step",
   {
@@ -132,3 +139,5 @@ export const pickupExceptionRuleStep = wms.table(
     tenantIndex(t, t.productId),
   ],
 )
+
+export const pickupExceptionRuleStepPolicies = policies(pickupExceptionRuleStep, { audited: { parent: pickupExceptionRuleStep.ruleId } })

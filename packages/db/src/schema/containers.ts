@@ -42,6 +42,7 @@ import { exactlyOne, oneOf } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { sharedCollectionPoint } from "./customers"
 import { company, project } from "./organisation"
+import { inPublishedProject, policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -70,6 +71,8 @@ export const container = wms.table(
     tenantIndex(t, t.containerTypeId),
   ],
 )
+
+export const containerPolicies = policies(container, { audited: {} })
 
 export const containerServicePlacement = wms.table(
   "container_service_placement",
@@ -105,3 +108,19 @@ export const containerServicePlacement = wms.table(
     tenantIndex(t, t.serviceFrequencyId),
   ],
 )
+
+export const containerServicePlacementPolicies = policies(containerServicePlacement, {
+  audited: { parent: containerServicePlacement.containerId },
+  door: {
+    columns: [
+      containerServicePlacement.companyId,
+      containerServicePlacement.projectId,
+      containerServicePlacement.containerId,
+      containerServicePlacement.subscriptionId,
+      containerServicePlacement.wasteFractionId,
+      containerServicePlacement.validFrom,
+      containerServicePlacement.validTo,
+    ],
+    rows: inPublishedProject("container_service_placement"),
+  },
+})

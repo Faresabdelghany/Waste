@@ -792,6 +792,13 @@
       "when": 1793999801743,
       "tag": "0112_drop_powersync",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1794006194741,
+      "tag": "0113_company_counters_unaudited",
+      "breakpoints": true
     }
   ]
 }

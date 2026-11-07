@@ -43,6 +43,7 @@ import { tableObjectName } from "../names"
 import { lowercase } from "./checks"
 import { id, tenant, timestamps } from "./columns"
 import { company, project, serviceProvider } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, indexOn, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
 
@@ -62,6 +63,8 @@ export const role = wms.table(
   },
   (t) => [companyReference(t, company), tenantUnique(t, t.key), tenantUnique(t, t.name), tenantKey(t)],
 )
+
+export const rolePolicies = policies(role, { audited: {}, kept: true })
 
 export const userAccount = wms.table(
   "user_account",
@@ -96,6 +99,8 @@ export const userAccount = wms.table(
   ],
 )
 
+export const userAccountPolicies = policies(userAccount, { audited: {}, kept: true })
+
 export const roleGrant = wms.table(
   "role_grant",
   {
@@ -110,6 +115,8 @@ export const roleGrant = wms.table(
   },
   (t) => [tenantReference(t, [t.roleId], role), tenantUnique(t, t.roleId, t.moduleKey, t.action)],
 )
+
+export const roleGrantPolicies = policies(roleGrant, { audited: { parent: roleGrant.roleId }, kept: true })
 
 export const projectAccess = wms.table(
   "project_access",
@@ -128,6 +135,8 @@ export const projectAccess = wms.table(
   ],
 )
 
+export const projectAccessPolicies = policies(projectAccess, { audited: { parent: projectAccess.userAccountId }, kept: true })
+
 export const serviceProviderAccess = wms.table(
   "service_provider_access",
   {
@@ -143,3 +152,5 @@ export const serviceProviderAccess = wms.table(
     tenantUnique(t, t.userAccountId, t.serviceProviderId),
   ],
 )
+
+export const serviceProviderAccessPolicies = policies(serviceProviderAccess, { audited: { parent: serviceProviderAccess.userAccountId }, kept: true })

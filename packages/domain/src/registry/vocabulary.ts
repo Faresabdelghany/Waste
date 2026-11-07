@@ -10,9 +10,8 @@
 // A value is a kebab-case token, lowercase words joined by single hyphens: it
 // goes into a migration as a SQL literal and onto the wire as an enum member,
 // and those are the same string. Adding one is a code change and a migration,
-// since the table's check names its values; the rendering test says so by
-// failing when drizzle-kit's output for the schema no longer matches the
-// applied file.
+// since the table's check names its values; the schema-drift test says so by
+// failing while drizzle-kit has a statement to write for the schema.
 //
 // A list is exported as a `readonly` tuple with a type read off it, so a
 // column, a form field and a route parameter all narrow to the same union.

@@ -54,9 +54,9 @@
 // without the check, and is then not a reservation the gate asks a constraint
 // of.
 import { sql } from "drizzle-orm"
-import { check, date, timestamp, uuid, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
+import { check, date, timestamp, uuid, type CheckBuilder, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
-import { tableObjectName } from "../names"
+import { columnNamed, tableObjectName } from "../names"
 
 export const id = {
   id: uuid().primaryKey().default(sql`wms.uuidv7()`),
@@ -80,6 +80,9 @@ export const timestamps = {
 export const recorded = {
   recordedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 }
+
+/** Whether the table is a ledger: it spread `recorded`, so it carries `recorded_at`, and nothing may update a row. */
+export const isLedger = (table: PgTable): boolean => columnNamed(table, "recorded_at") !== undefined
 
 export const validity = {
   validFrom: date().notNull(),

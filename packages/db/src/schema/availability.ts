@@ -8,9 +8,8 @@
 // trailer. Each carries why (`reason`, a closed token of
 // @waste/domain/resources/vocabulary) and a free note, and nothing else: no
 // status, since a period entered wrongly is moved or deleted and the audit
-// trail keeps what it was (sql/audit-trail.ts names each a set of its
-// driver's or vehicle's, so their history reads the periods beside their
-// own). Recording one is never refused for the work already planned on its
+// trail keeps what it was (each is declared a set of its driver's or
+// vehicle's, so their history reads the periods beside their own). Recording one is never refused for the work already planned on its
 // days; the commands naming the driver or the vehicle afresh read these rows
 // (@waste/domain/resources/availability).
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
@@ -20,6 +19,7 @@ import { oneOf } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { driver, vehicle } from "./fleet"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
@@ -45,6 +45,8 @@ export const driverAbsence = wms.table(
   ],
 )
 
+export const driverAbsencePolicies = policies(driverAbsence, { audited: { parent: driverAbsence.driverId } })
+
 export const vehicleUnavailability = wms.table(
   "vehicle_unavailability",
   {
@@ -66,3 +68,5 @@ export const vehicleUnavailability = wms.table(
     tenantIndex(t, t.projectId, t.validFrom),
   ],
 )
+
+export const vehicleUnavailabilityPolicies = policies(vehicleUnavailability, { audited: { parent: vehicleUnavailability.vehicleId } })

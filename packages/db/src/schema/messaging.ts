@@ -36,6 +36,7 @@ import { id, projectScoped, timestamps } from "./columns"
 import { userAccount } from "./access"
 import { customer, customerContact } from "./customers"
 import { company, project } from "./organisation"
+import { policies } from "./policies"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -64,6 +65,8 @@ export const messageTemplate = wms.table(
     check(tableObjectName(t.id.table, "subject_shape", "messageTemplate"), sql`(${t.channel} = 'email') = (${t.subject} is not null)`),
   ],
 )
+
+export const messageTemplatePolicies = policies(messageTemplate, { audited: {} })
 
 export const message = wms.table(
   "message",
@@ -125,3 +128,7 @@ export const message = wms.table(
     check(tableObjectName(t.id.table, "sent_shape", "message"), sql`(${t.status} = 'sent') = (${t.sentAt} is not null and ${t.provider} is not null)`),
   ],
 )
+
+export const messagePolicies = policies(message, {
+  exempt: "the delivery log (#291 C15): written once by the office's request with what was rendered, then moved by the worker's sends; its status, attempts and stamps are its history",
+})

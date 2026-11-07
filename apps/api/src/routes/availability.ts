@@ -15,7 +15,7 @@
 // moves the period, the reason or the note and never whose it is; a period
 // entered wrongly is deleted, the only delete this API answers, since nothing
 // references a period and the audit trail keeps what it was, under its
-// driver's or vehicle's history (sql/audit-trail.ts, ABSENCES_AUDITED).
+// driver's or vehicle's history (each table's declaration, @waste/db/schema/availability).
 //
 // Every statement carries the tenant and `inProjects`; the grants are the
 // fleet's own — `fleet.drivers` for absences, `fleet.vehicles` for

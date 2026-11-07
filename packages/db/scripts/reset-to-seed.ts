@@ -14,6 +14,9 @@ import { expectPilot } from "../src/pilot/identity"
 import { COUNTER_DEFAULTS, resetToSeed } from "../src/reset-to-seed"
 import { required, step, summary } from "./step"
 
+/** `a, b and c`. */
+const listed = (items: readonly string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`)
+
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")
   expectPilot(url, process.env.PILOT_SUPABASE_REF)
@@ -28,9 +31,16 @@ await step(async () => {
     `Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; ` +
       `the seeded rows are back at the seed's word, and ${count(report.otherAccounts, "account")} the seed does not name ${report.otherAccounts === 1 ? "is" : "are"} as it was.`,
   )
-  const counters = `${COUNTER_DEFAULTS.nextRouteNumber}, ${COUNTER_DEFAULTS.nextTicketNumber} and ${COUNTER_DEFAULTS.nextInvoiceNumber}`
+  // A counter's series by its field: `nextScaleTicketNumber` is the scale-ticket counter.
+  const series = Object.keys(COUNTER_DEFAULTS).map((field) =>
+    field
+      .replace(/^next|Number$/g, "")
+      .replace(/(?<!^)([A-Z])/g, "-$1")
+      .toLowerCase(),
+  )
+  const values = Object.values(COUNTER_DEFAULTS).map(String)
   summary(
-    `The seed wrote ${count(report.written, "row")}; the route, ticket and invoice counters ${report.countersReset ? "were put back to" : "were already at"} ${counters}, as a fresh seed leaves them.`,
+    `The seed wrote ${count(report.written, "row")}; the ${listed(series)} counters ${report.countersReset ? "were put back to" : "were already at"} ${listed(values)}, as a fresh seed leaves them.`,
   )
   summary(`Audit history: the company's ${count(history, "row")} went with the sweep; the trail begins again with the seed writing the tenant back.`)
   summary(

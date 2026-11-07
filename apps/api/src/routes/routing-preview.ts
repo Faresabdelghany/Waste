@@ -35,6 +35,7 @@ import { RoutingPreview, RoutingPreviewRequest, type RoutingPreviewLeg } from "@
 import type { Position2D } from "@waste/contracts/geojson"
 import type { Database } from "@waste/db/client"
 import { quotaRows, recordQuota } from "@waste/db/commands/routing-quota"
+import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { distinctConsecutive, samePosition } from "@waste/domain/geo"
@@ -45,7 +46,7 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { describeProblem, loggable, problem, validate } from "../problem"
+import { describeProblem, problem, validate } from "../problem"
 import { describeJson } from "./shared"
 
 const MODULE = "route-studio.schemes"
