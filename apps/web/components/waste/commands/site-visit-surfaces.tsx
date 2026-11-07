@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useGrants } from "@/components/auth/use-grants"
 import { useApiClient } from "@/components/waste/api-session-store"
+import { moduleAt } from "@/lib/modules/keys"
 import { mayTake, type ModuleAction } from "@/lib/api/grants"
 import { useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
@@ -74,7 +75,7 @@ export function RegisterCredentialSurface({ label }: PrimarySurfaceProps) {
   const [refusal, setRefusal] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const customers = pickers.options(field("customerId", "Customer", { workspaceId: "customers", moduleId: "contacts" }), {})
+  const customers = pickers.options(field("customerId", "Customer", moduleAt("customers.contacts")), {})
   const customerAgreements = agreementsOfCustomer(agreements.records.filter(isAgreementRecord), customerId, (project) => dayIn(new Date(), pickers.timezoneOf(project)))
   const holderRecord = holder === "household" ? properties.records.find((record) => record.id === propertyId) : agreements.records.find((record) => record.id === agreementId)
   const projectId = holderRecord?.projectIds?.[0] ?? ""

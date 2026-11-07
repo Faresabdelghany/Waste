@@ -17,15 +17,15 @@ import { without } from "@waste/domain/lists"
 import { closesWith, KIND_WORDS, PROPOSAL_KINDS, type ActivityCommand, type ActivitySide } from "@waste/domain/service-providers/activities"
 import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES, type ServiceProviderActivityKind, type ServiceProviderActivityStatus } from "@waste/domain/service-providers/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import type { LocalRefusal } from "../api/records/adapter"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"
 
 /** Where the Activities live: the providers' workspace, the module the API's grant names. */
-export const PROVIDER_ACTIVITIES_MODULE: ModuleLocation = moduleAt("service-providers.activities")
+export const PROVIDER_ACTIVITIES_MODULE = moduleAt("service-providers.activities")
 
 export const ACTIVITY_PREFIX = "provider-activity"
 export const ACTIVITY_RECORD_KIND = "Service provider activity"

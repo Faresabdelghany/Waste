@@ -2,8 +2,9 @@
 // order, each at `/service-provider-workspace/<page>` and showing the modules
 // the manifest places on it (`providerPage`). The restricted shell, its
 // sidebar and the Active Routes' routes page read them here.
+import type { WorkspaceId } from "./keys"
 import { providerPageModules } from "./manifest"
-import type { ProviderPageId, WorkspaceId } from "./spec"
+import type { ProviderPageId } from "./spec"
 
 /** The workspace's own address, which lands on its first page. */
 export const PROVIDER_WORKSPACE_PATH = "/service-provider-workspace"

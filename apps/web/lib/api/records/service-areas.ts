@@ -334,6 +334,6 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment, Assignmen
 }
 
 /** Service providers › Service Areas: the awards, then their assignments, which name their area through the rows loaded just before them. */
-export const serviceAreasModule: ServerModule = { workspaceId: SERVICE_AREAS_MODULE.workspaceId, moduleId: SERVICE_AREAS_MODULE.moduleId, resources: [serviceAreaAdapter, assignmentAdapter] }
+export const serviceAreasModule = { ...SERVICE_AREAS_MODULE, resources: [serviceAreaAdapter, assignmentAdapter] } satisfies ServerModule
 
 export type { Client }

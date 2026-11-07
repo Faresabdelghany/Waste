@@ -14,7 +14,7 @@ import type { MaintenanceDueState, MaintenanceOrder, MaintenancePlan } from "@wa
 import { NAME_THE_ORDER, nextDueLine, planIssue } from "@waste/domain/resources/maintenance"
 import { isIsoDate } from "@waste/domain/days"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import { command, create, listAll, patch } from "../client"
 import { actionOf, said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"

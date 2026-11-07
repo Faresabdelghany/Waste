@@ -11,7 +11,7 @@
  * shape the Settings pane writes on create and edit.
  */
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { slugify } from "@/lib/utils"
 
 import { deriveFormRecord } from "./business-form-records"
@@ -29,7 +29,7 @@ import {
 } from "./business-modules"
 
 /** Where collection-calendar records live — every consumer resolves through this. */
-export const COLLECTION_CALENDARS_MODULE: ModuleLocation = moduleAt("configure.calendars")
+export const COLLECTION_CALENDARS_MODULE = moduleAt("configure.calendars")
 
 /** The module definition (label, copy, lifecycle, fixtures) — guaranteed by the registry. */
 export function collectionCalendarsModule(): ModuleDefinition {

@@ -117,4 +117,4 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
 }
 
 /** Route Studio › Weighbridge: the tickets, read after the stations, the routes, the vehicles and the fractions they name. */
-export const weighbridgeModule: ServerModule = { workspaceId: WEIGHBRIDGE_MODULE.workspaceId, moduleId: WEIGHBRIDGE_MODULE.moduleId, resources: [weighbridgeTicketAdapter] }
+export const weighbridgeModule = { ...WEIGHBRIDGE_MODULE, resources: [weighbridgeTicketAdapter] } satisfies ServerModule

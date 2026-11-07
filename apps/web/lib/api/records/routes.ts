@@ -59,8 +59,8 @@ import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopServic
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { moduleAt } from "@/lib/modules/keys"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
@@ -78,7 +78,7 @@ import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./ref
 import { shiftFact } from "./time-windows"
 
 /** The workspace module the routes are the rows of. */
-export const ROUTES_MODULE: ModuleLocation = moduleAt("route-studio.routes")
+export const ROUTES_MODULE = moduleAt("route-studio.routes")
 
 /**
  * How far back the routes and their stops are read: a window from this many
@@ -670,10 +670,9 @@ export const routeAdapter: ResourceAdapter<Route> = {
 }
 
 /** Route Studio › Routes: the dated routes generation wrote and the office's own, moved by the dispatcher's commands. */
-export const routesModule: ServerModule = {
-  workspaceId: ROUTES_MODULE.workspaceId,
-  moduleId: ROUTES_MODULE.moduleId,
+export const routesModule = {
+  ...ROUTES_MODULE,
   resources: [routeAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

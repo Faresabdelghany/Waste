@@ -6,19 +6,12 @@
 // until it is placed, and a module named here that the domain does not hold
 // is one too. The order a workspace's file writes its modules in is the
 // order its page offers them.
-import type { ModuleKey, WorkspaceKey } from "@waste/domain/access/modules"
+import type { WorkspaceKey } from "@waste/domain/access/modules"
 
 import type { SettingsPaneId } from "@/lib/data/settings-panes"
 import type { BusinessRecord } from "@/lib/prototype/prototype-record"
 
-/** Configure's Control Center module again as a workspace of its own, which no page shows: the registry's twin, whose form is the module's. */
-export const CONTROL_CENTER = "control-center"
-
-/** A workspace of the registry: the domain's, and Control Center's twin. */
-export type WorkspaceId = WorkspaceKey | typeof CONTROL_CENTER
-
-/** A module's id within its workspace: `tickets` of `operate.tickets`. */
-export type ModuleIdOf<W extends WorkspaceKey> = ModuleKey extends infer Key ? (Key extends `${W}.${infer Module}` ? Module : never) : never
+import type { ModuleIdOf, WorkspaceId } from "./keys"
 
 /**
  * Where the office shows a module: a tab of its workspace's page, under the

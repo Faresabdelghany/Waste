@@ -16,7 +16,7 @@ import type { BlockReason } from "@waste/domain/finance/vocabulary"
 import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DAYS } from "@waste/domain/visits/charges"
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { allows, type Grants } from "@/lib/api/grants"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 import { formatMinor } from "@/lib/commercial/money"

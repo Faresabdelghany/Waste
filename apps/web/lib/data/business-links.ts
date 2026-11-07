@@ -1,5 +1,5 @@
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import {
   businessWorkspaces,
   type BusinessRecord,

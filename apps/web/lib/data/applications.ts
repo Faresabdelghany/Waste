@@ -10,14 +10,14 @@ import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { isOneOf } from "@waste/domain/lists"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import type { LocalRefusal } from "../api/records/adapter"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 
 /** Where the Applications live: the customers' workspace, the module the API's grant names. */
-export const APPLICATIONS_MODULE: ModuleLocation = moduleAt("customers.applications")
+export const APPLICATIONS_MODULE = moduleAt("customers.applications")
 
 /** What a person calls each kind. */
 export const KIND_LABELS: Readonly<Record<ApplicationKind, string>> = {

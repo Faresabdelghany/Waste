@@ -7,7 +7,7 @@
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
 import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditApplication, type SchemeEditQuestion } from "@/lib/prototype/route-schemes/edit"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import { schemeGenerationRecorded } from "@/lib/prototype/route-schemes/lifecycle"

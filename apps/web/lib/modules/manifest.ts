@@ -16,19 +16,12 @@ import { PLAN } from "./plan"
 import { RESOURCES } from "./resources"
 import { ROUTE_STUDIO } from "./route-studio"
 import { SERVICE_PROVIDERS } from "./service-providers"
-import { CONTROL_CENTER, type ModuleSpec, type ProviderPageId, type WorkspaceId, type WorkspacePath } from "./spec"
+import { CONTROL_CENTER, type ModuleLocation, type WorkspaceId } from "./keys"
+import type { ModuleSpec, ProviderPageId, WorkspacePath } from "./spec"
 
-export type { ModuleIdOf, ModulePlacement, ModuleSpec, ModuleView, ProviderPageId, RichModuleTable, WorkspaceId } from "./spec"
-export { CONTROL_CENTER } from "./spec"
-
-/** Where a module lives: the `${workspaceId}.${moduleId}` pair every store, link, and relation uses. */
-export type ModuleLocation = {
-  workspaceId: WorkspaceId
-  moduleId: string
-}
-
-/** A key's location, its two halves typed as the key spells them. */
-export type LocationOf<Key extends ModuleKey> = Key extends `${infer Workspace}.${infer Module}` ? { readonly workspaceId: Workspace; readonly moduleId: Module } : never
+export type { LocationOf, ModuleIdOf, ModuleLocation, WorkspaceId } from "./keys"
+export { CONTROL_CENTER, moduleAt } from "./keys"
+export type { ModulePlacement, ModuleSpec, ModuleView, ProviderPageId, RichModuleTable } from "./spec"
 
 /** A workspace of the registry as the web reads it: its words, its page, and its modules by id in the order its page offers them. */
 export type Workspace<W extends WorkspaceId = WorkspaceId> = {
@@ -65,12 +58,6 @@ export const WORKSPACES: { readonly [W in WorkspaceId]: Workspace<W> } = {
 export const MODULES = Object.fromEntries(
   WORKSPACE_KEYS.flatMap((workspaceId) => Object.entries(WORKSPACES[workspaceId].modules).map(([moduleId, spec]) => [`${workspaceId}.${moduleId}`, spec])),
 ) as { readonly [Key in ModuleKey]: ModuleSpec }
-
-/** A module's location, by its key: the one way a module is named in code, so a key the domain does not hold is a compile error. */
-export function moduleAt<Key extends ModuleKey>(key: Key): LocationOf<Key> {
-  const dot = key.indexOf(".")
-  return { workspaceId: key.slice(0, dot), moduleId: key.slice(dot + 1) } as LocationOf<Key>
-}
 
 /** The spec of the module at a location, or undefined where the registry holds none. */
 export function moduleSpecOf({ workspaceId, moduleId }: ModuleLocation): ModuleSpec | undefined {

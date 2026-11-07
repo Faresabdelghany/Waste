@@ -14,7 +14,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useApiClient } from "@/components/waste/api-session-store"

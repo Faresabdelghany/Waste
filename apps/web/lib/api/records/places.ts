@@ -32,6 +32,7 @@
 // way.
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Depot, UnloadingStation, Warehouse } from "@waste/contracts/places"
+import { moduleAt } from "@/lib/modules/keys"
 import { splitList } from "@/lib/prototype/record-values"
 import { BOTH_HOURS_OR_NEITHER, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { DEPOT_OWNERSHIPS, DEPOT_STATUSES, UNLOADING_STATION_OWNERSHIPS, UNLOADING_STATION_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
@@ -604,17 +605,15 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
 // ---------------------------------------------------------------------------
 
 /** Resources → Depots & Unloading: the depots, then the stations. */
-export const placesModule: ServerModule = {
-  workspaceId: "resources",
-  moduleId: "depots",
+export const placesModule = {
+  ...moduleAt("resources.depots"),
   resources: [depotAdapter, unloadingStationAdapter],
-}
+} satisfies ServerModule
 
 /** Resources → Warehouses, after the depots one may share a yard with. */
-export const warehousesModule: ServerModule = {
-  workspaceId: "resources",
-  moduleId: "warehouses",
+export const warehousesModule = {
+  ...moduleAt("resources.warehouses"),
   resources: [warehouseAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

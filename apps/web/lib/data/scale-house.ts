@@ -13,7 +13,7 @@
 // reads, and the forms, are here.
 import type { ScaleTicketParty, ScaleTicketStatus, ScaleTicketVoidReason, TareSource, VehicleTareStatus } from "@waste/domain/scale-house/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
@@ -46,12 +46,12 @@ export const VOID_REASON_LABELS: Readonly<Record<ScaleTicketVoidReason, string>>
   other: "Another reason (say why)",
 }
 
-const projectRelation = { workspaceId: "configure", moduleId: "organization" } as const
-const customerRelation = { workspaceId: "customers", moduleId: "contacts" } as const
-const agreementRelation = { workspaceId: "customers", moduleId: "agreements" } as const
+const projectRelation = moduleAt("configure.organization")
+const customerRelation = moduleAt("customers.contacts")
+const agreementRelation = moduleAt("customers.agreements")
 /** The places module holds the depots and the stations; the window offers our own stations with a weighbridge alone. */
-const stationRelation = { workspaceId: "resources", moduleId: "depots" } as const
-const masterRelation = { workspaceId: "configure", moduleId: "master" } as const
+const stationRelation = moduleAt("resources.depots")
+const masterRelation = moduleAt("configure.master")
 
 /** Weigh in: the first pass, at the gross. The site's options are the surface's: our own stations with a weighbridge. */
 export const WEIGH_IN_FORM: BusinessFormSchema = {
@@ -101,7 +101,7 @@ export const WEIGH_IN_FORM: BusinessFormSchema = {
 }
 
 /** The window's products: those sold by the tonne or the cubic metre (M16b of #293). */
-const productRelation = { workspaceId: "commercial", moduleId: "products" } as const
+const productRelation = moduleAt("commercial.products")
 
 /** The fields of one line of the Weigh out form, numbered from 1; the first is required. A line sold by the cubic metre declares its volume. */
 const lineFields = (n: number) => [

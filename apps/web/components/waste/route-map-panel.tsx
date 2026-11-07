@@ -13,7 +13,7 @@ import { useTheme } from "next-themes"
 import { useEffect, useMemo, useState } from "react"
 import { CornersOut } from "@phosphor-icons/react/dist/ssr"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"

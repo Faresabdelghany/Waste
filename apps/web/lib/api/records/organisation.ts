@@ -28,6 +28,7 @@ import { SERVICE_DAYS } from "@waste/domain/days"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { BRANDING_KEY } from "@/lib/data/project-branding"
 import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
@@ -583,25 +584,22 @@ export const userAdapter: ResourceAdapter<User, UserInvite, UserPatch> = {
 // ---------------------------------------------------------------------------
 
 /** Settings → Company & Projects: the company row first, then the projects. */
-export const organisationModule: ServerModule = {
-  workspaceId: "configure",
-  moduleId: "organization",
+export const organisationModule = {
+  ...moduleAt("configure.organization"),
   resources: [companyAdapter, projectAdapter],
-}
+} satisfies ServerModule
 
 /** Service providers, the company's external haulers. */
-export const serviceProvidersModule: ServerModule = {
-  workspaceId: "service-providers",
-  moduleId: "service-providers",
+export const serviceProvidersModule = {
+  ...moduleAt("service-providers.service-providers"),
   resources: [serviceProviderAdapter],
-}
+} satisfies ServerModule
 
 /** Settings → Users, Roles & Teams: the roles first, so a user's mapping finds its role's name, then the users. */
-export const accessModule: ServerModule = {
-  workspaceId: "configure",
-  moduleId: "access",
+export const accessModule = {
+  ...moduleAt("configure.access"),
   resources: [roleAdapter, userAdapter],
-}
+} satisfies ServerModule
 
 /**
  * A Service Provider's team (#291 C24): the accounts of its provider and the
@@ -622,10 +620,9 @@ export const teamUserAdapter: ResourceAdapter<User> = {
 const teamRoleAdapter: ResourceAdapter<Role> = { ...roleAdapter, auditTable: undefined }
 
 /** Service Providers › Service Provider Workspace: the roles first, so a member's mapping finds its role's name, then the members. */
-export const teamModule: ServerModule = {
-  workspaceId: "service-providers",
-  moduleId: "service-provider-workspace",
+export const teamModule = {
+  ...moduleAt("service-providers.service-provider-workspace"),
   resources: [teamRoleAdapter, teamUserAdapter],
   // An office account's `/users` and `/roles` are `configure.access`'s, read by the access module: never twice, and never refused to a role without it.
   providersOnly: true,
-}
+} satisfies ServerModule

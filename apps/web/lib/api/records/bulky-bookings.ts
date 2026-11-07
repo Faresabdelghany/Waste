@@ -194,8 +194,7 @@ export const bulkyBookingAdapter: ResourceAdapter<BulkyBooking, BulkyBookingCrea
 }
 
 /** Operate › Bulky Bookings: read after the customers, the places, the agreements, the fractions and the routes their rows name. */
-export const bulkyBookingsModule: ServerModule = {
-  workspaceId: BULKY_BOOKINGS_MODULE.workspaceId,
-  moduleId: BULKY_BOOKINGS_MODULE.moduleId,
+export const bulkyBookingsModule = {
+  ...BULKY_BOOKINGS_MODULE,
   resources: [bulkyBookingAdapter],
-}
+} satisfies ServerModule

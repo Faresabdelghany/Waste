@@ -9,16 +9,16 @@
 // the adapter itself. The window is a wall-clock time on the project's clock,
 // the shape the scheme-save conflict check reads. A status is never a field of
 // a change: confirm and release are the row's commands.
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 
-export const VEHICLES_MODULE: ModuleLocation = moduleAt("fleet.vehicles")
-export const DRIVERS_MODULE: ModuleLocation = moduleAt("fleet.drivers")
-export const DEPOTS_MODULE: ModuleLocation = moduleAt("resources.depots")
+export const VEHICLES_MODULE = moduleAt("fleet.vehicles")
+export const DRIVERS_MODULE = moduleAt("fleet.drivers")
+export const DEPOTS_MODULE = moduleAt("resources.depots")
 
 /**
  * Whether a fleet row is a trailer: its typed kind, which the server's rows

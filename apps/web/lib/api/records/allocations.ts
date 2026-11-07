@@ -29,8 +29,8 @@
 import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
 import { formatDayMonth } from "@waste/domain/days"
 
-import { moduleAt } from "@/lib/modules/manifest"
-import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { moduleAt } from "@/lib/modules/keys"
+import { type BusinessRecord } from "@/lib/data/business-modules"
 import { masterDataKindOf } from "@/lib/data/master-data"
 
 import { command, create, listAll } from "../client"
@@ -41,7 +41,7 @@ import { depotAdapter, projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the allocations are the rows of. */
-export const VEHICLE_PLANNING_MODULE: ModuleLocation = moduleAt("fleet.vehicle-planning")
+export const VEHICLE_PLANNING_MODULE = moduleAt("fleet.vehicle-planning")
 
 /** The row's commands, by the names the dialogs send. */
 export const CONFIRM_ALLOCATION = "confirm"
@@ -246,8 +246,7 @@ export function allocationEvents(client: Client, serverId: string): Promise<Vehi
 }
 
 /** Fleet › Vehicle Planning: the allocations, after the fleet and the master data they name. */
-export const vehiclePlanningModule: ServerModule = {
-  workspaceId: VEHICLE_PLANNING_MODULE.workspaceId,
-  moduleId: VEHICLE_PLANNING_MODULE.moduleId,
+export const vehiclePlanningModule = {
+  ...VEHICLE_PLANNING_MODULE,
   resources: [allocationAdapter],
-}
+} satisfies ServerModule

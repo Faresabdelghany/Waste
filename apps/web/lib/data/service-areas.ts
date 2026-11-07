@@ -9,12 +9,11 @@ import {
   serviceAreaPolygonValue,
   type ServiceAreaSeed,
 } from "@/lib/prototype/map-planning/service-areas"
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import type { BusinessFormValues } from "./business-form-types"
-import type { ModuleLocation } from "./business-modules"
 
-export const SERVICE_AREAS_MODULE: ModuleLocation = moduleAt("service-providers.service-areas")
+export const SERVICE_AREAS_MODULE = moduleAt("service-providers.service-areas")
 
 /**
  * Where each field of the map's seed lands: the form's field ids for the

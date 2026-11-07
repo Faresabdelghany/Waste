@@ -21,17 +21,17 @@
 import { STOCK_PLACES, ADJUSTMENT_TARGETS } from "@waste/domain/resources/vocabulary"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import { AGREEMENTS_MODULE } from "./agreements"
-import { type BusinessRecord, type ModuleLocation } from "./business-modules"
+import { type BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
 
 /** Where the projects a form names live. */
-export const ORGANISATION_MODULE: ModuleLocation = moduleAt("configure.organization")
+export const ORGANISATION_MODULE = moduleAt("configure.organization")
 /** Where the warehouses a command names live (slice 5a). */
-export const WAREHOUSES_MODULE: ModuleLocation = moduleAt("resources.warehouses")
+export const WAREHOUSES_MODULE = moduleAt("resources.warehouses")
 
 /** The container's commands as the dialogs offer them, in the ledger's order: into stock, into service, back, between places, out, and the correction door. */
 export const CONTAINER_COMMANDS_OFFERED = ["receive", "issue", "return", "transfer", "decommission", "adjust"] as const

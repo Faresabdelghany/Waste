@@ -19,7 +19,7 @@ import { isOneOf } from "@waste/domain/lists"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { takesReference } from "@waste/domain/status-gates"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 

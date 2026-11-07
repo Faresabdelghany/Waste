@@ -12,6 +12,7 @@
 import type { ModuleKey } from "@waste/domain/access/modules"
 
 import type { WorkspaceId } from "@/lib/data/business-modules"
+import type { LocationOf } from "@/lib/modules/keys"
 
 import { viewedModules, type Grants } from "../grants"
 import { moduleKeyOf, type ServerModule } from "./adapter"
@@ -53,7 +54,9 @@ import { weightsModule } from "./weights"
 /**
  * Each switched module's adapter, by its key: the server half of the module
  * manifest (lib/modules/manifest.ts), which the store reads beneath the
- * workspace's surfaces. A mapping that names a row of a module read after it
+ * workspace's surfaces. Each adapter is built from its key's location
+ * (`moduleAt`), so one filed under another module's key is a compile error.
+ * A mapping that names a row of a module read after it
  * finds none yet, and the store reads it again once that module holds the row
  * (server-records.ts, `readsChanged`), so the order is the store's first read
  * and its rows are the same either way.
@@ -106,7 +109,7 @@ const ADAPTERS = {
   "route-studio.weights": weightsModule,
   "route-studio.weighbridge": weighbridgeModule,
   "operate.scale-house": scaleHouseModule,
-} as const satisfies { readonly [Key in ModuleKey]?: ServerModule }
+} as const satisfies { readonly [Key in ModuleKey]?: ServerModule & LocationOf<Key> }
 
 /** A module switched onto the API: one the store reads from the server. */
 export type SwitchedModuleKey = keyof typeof ADAPTERS

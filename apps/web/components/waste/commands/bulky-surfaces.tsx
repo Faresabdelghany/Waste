@@ -14,7 +14,7 @@ import { Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import type { BulkyAvailableDay } from "@waste/contracts/bulky"
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -73,7 +73,7 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
 
   const agreement = agreements.records.find((record) => record.id === agreementId)
   const projectId = agreement?.projectIds?.[0] ?? ""
-  const customers = pickers.options(field("customerId", "Customer", { workspaceId: "customers", moduleId: "contacts" }), {})
+  const customers = pickers.options(field("customerId", "Customer", moduleAt("customers.contacts")), {})
   const fractions = pickers.options(field("wasteFractionId", "Waste fraction"), {})
   // The places the agreement serves: a booking is collected where its agreement's subscriptions are.
   const served = placesOfAgreement(agreements.records.filter(isSubscriptionRecord), agreementId)

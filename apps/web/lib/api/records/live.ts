@@ -23,8 +23,7 @@ import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { LiveRoute } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
-import { moduleAt } from "@/lib/modules/manifest"
-import type { ModuleLocation } from "@/lib/data/business-modules"
+import { moduleAt } from "@/lib/modules/keys"
 
 import { get, listAll } from "../client"
 import { ofKind, typed, type Client, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -32,7 +31,7 @@ import { shownOn, timeOn } from "./clock"
 import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */
-export const LIVE_MODULE: ModuleLocation = moduleAt("route-studio.live")
+export const LIVE_MODULE = moduleAt("route-studio.live")
 
 /** How often the board is read again while a person watches it. */
 export const LIVE_BOARD_REFRESH_MS = 30_000
@@ -154,10 +153,9 @@ export const liveRouteAdapter: ResourceAdapter<LiveRoute> = {
 }
 
 /** Route Studio › Live Operations: the routes running or due today, after the routes whose rows they are. */
-export const liveModule: ServerModule = {
-  workspaceId: LIVE_MODULE.workspaceId,
-  moduleId: LIVE_MODULE.moduleId,
+export const liveModule = {
+  ...LIVE_MODULE,
   resources: [liveRouteAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

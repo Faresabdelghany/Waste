@@ -18,7 +18,7 @@ import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/d
 import { isIsoDate } from "@waste/domain/days"
 import { firstDayOut } from "@waste/domain/periods"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import { create, listAll, remove } from "../client"
 import { actionOf, said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"

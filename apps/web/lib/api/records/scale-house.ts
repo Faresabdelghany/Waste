@@ -334,7 +334,7 @@ export const vehicleTareAdapter: ResourceAdapter<VehicleTare, VehicleTareCreate>
 }
 
 /** Operate › Scale house: the tickets and the tares, read after the projects, the stations, the customers, the agreements, the vehicles, the routes and the fractions they name. */
-export const scaleHouseModule: ServerModule = { workspaceId: SCALE_HOUSE_MODULE.workspaceId, moduleId: SCALE_HOUSE_MODULE.moduleId, resources: [scaleTicketAdapter, vehicleTareAdapter] }
+export const scaleHouseModule = { ...SCALE_HOUSE_MODULE, resources: [scaleTicketAdapter, vehicleTareAdapter] } satisfies ServerModule
 
 /** `GET /scale-tickets/:id/amount-due` (M16b of #293): what a completed ticket comes to at the window, each line priced as Finance would price it. A read; nothing is stored or paid. */
 export function amountDueOf(client: ApiClient, serverId: string): Promise<ScaleTicketAmountDue> {

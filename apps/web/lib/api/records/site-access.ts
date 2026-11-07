@@ -168,8 +168,7 @@ export const accessCredentialAdapter: ResourceAdapter<AccessCredential, AccessCr
 }
 
 /** Customers › Site access: its statuses are read on the project's day. */
-export const siteAccessModule: ServerModule = {
-  workspaceId: SITE_ACCESS_MODULE.workspaceId,
-  moduleId: SITE_ACCESS_MODULE.moduleId,
+export const siteAccessModule = {
+  ...SITE_ACCESS_MODULE,
   resources: [accessCredentialAdapter],
-}
+} satisfies ServerModule

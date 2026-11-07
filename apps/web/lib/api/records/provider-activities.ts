@@ -303,8 +303,7 @@ export const activityAdapter: ResourceAdapter<ServiceProviderActivity, ServicePr
 }
 
 /** Service Providers › Activities: an open follow-up is overdue by its project's day. */
-export const providerActivitiesModule: ServerModule = {
-  workspaceId: PROVIDER_ACTIVITIES_MODULE.workspaceId,
-  moduleId: PROVIDER_ACTIVITIES_MODULE.moduleId,
+export const providerActivitiesModule = {
+  ...PROVIDER_ACTIVITIES_MODULE,
   resources: [activityAdapter],
-}
+} satisfies ServerModule

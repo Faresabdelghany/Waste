@@ -12,7 +12,7 @@
 
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import { slugify } from "@/lib/utils"
 
 import { deriveFormRecord } from "./business-form-records"
@@ -32,7 +32,7 @@ import {
 } from "./business-modules"
 
 /** Where planning-area records live — every consumer resolves through this. */
-export const PLANNING_AREAS_MODULE: ModuleLocation = moduleAt("configure.areas")
+export const PLANNING_AREAS_MODULE = moduleAt("configure.areas")
 
 const PURPOSES: ReadonlySet<string> = new Set<PlanningAreaPurpose>(PLANNING_AREA_PURPOSES)
 

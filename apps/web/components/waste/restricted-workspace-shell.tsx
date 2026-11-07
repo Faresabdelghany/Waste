@@ -25,6 +25,7 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
+import { moduleAt } from "@/lib/modules/keys"
 import { PROVIDER_PAGES } from "@/lib/modules/provider-pages"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
@@ -58,6 +59,9 @@ type RestrictedWorkspaceDefinition = {
   pages: readonly RestrictedWorkspacePage[]
 }
 
+/** The citizen's one page: the portal's module, its one property's records. */
+const CITIZEN_PORTAL = moduleAt("customers.citizen-portal")
+
 const restrictedWorkspaceDefinitions: Record<
   RestrictedPersona,
   RestrictedWorkspaceDefinition
@@ -68,9 +72,8 @@ const restrictedWorkspaceDefinitions: Record<
     pages: [
       {
         id: "portal",
-        workspaceId: "customers",
-        moduleId: "citizen-portal",
-        moduleIds: ["citizen-portal"],
+        ...CITIZEN_PORTAL,
+        moduleIds: [CITIZEN_PORTAL.moduleId],
         recordIds: ["portal-activity-parkvej"],
         workspaceLabel: "Citizen portal",
         navigationBasePath: "/portal",

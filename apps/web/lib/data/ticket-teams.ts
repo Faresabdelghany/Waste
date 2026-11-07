@@ -8,18 +8,18 @@
 import type { TicketTeamDefaults, TicketTeamDefaultsSet } from "@waste/contracts/ticket-teams"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 
 import { allows, type Grants } from "../api/grants"
 import { statusLabel } from "../api/records/adapter"
 import { accessModule } from "../api/records/organisation"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"
 import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } from "./ticket-scope"
 
 /** Configure › Tickets & communication: the module the teams are the records of on the Pilot. */
-export const TICKET_TEAMS_MODULE: ModuleLocation = moduleAt("configure.templates")
+export const TICKET_TEAMS_MODULE = moduleAt("configure.templates")
 
 export const TICKET_TEAM_PREFIX = "team"
 

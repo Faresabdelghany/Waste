@@ -493,10 +493,9 @@ export const subscriptionAdapter: ResourceAdapter<Subscription, SubscriptionWrit
 // ---------------------------------------------------------------------------
 
 /** Customers → Agreements and Subscriptions: the agreements before the subscriptions that name them. */
-export const agreementsModule: ServerModule = {
-  workspaceId: AGREEMENTS_MODULE.workspaceId,
-  moduleId: AGREEMENTS_MODULE.moduleId,
+export const agreementsModule = {
+  ...AGREEMENTS_MODULE,
   resources: [agreementAdapter, subscriptionAdapter],
-}
+} satisfies ServerModule
 
 export type { Client }

@@ -7,11 +7,10 @@
 // are added in the details while the inspection is open, and Close ends it.
 import { FIELD_INSPECTION_OUTCOMES, INSPECTION_FINDINGS, type FieldInspectionOutcome, type FieldInspectionStatus, type InspectionFinding } from "@waste/domain/inspections/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
-import type { ModuleLocation } from "@/lib/data/business-modules"
 
-export const INSPECTIONS_MODULE: ModuleLocation = moduleAt("operate.inspections")
+export const INSPECTIONS_MODULE = moduleAt("operate.inspections")
 export const INSPECTION_PREFIX = "field-inspection"
 export const INSPECTION_RECORD_KIND = "Field inspection"
 

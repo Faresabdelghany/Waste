@@ -8,12 +8,12 @@
 import { OUTBOUND_LOAD_COMMANDS, outboundLoadTransition, type OutboundLoadCommand } from "@waste/domain/execution/haul-out"
 import type { OutboundLoadStatus } from "@waste/domain/execution/vocabulary"
 
-import { moduleAt } from "@/lib/modules/manifest"
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessFormOption } from "@/lib/data/business-form-types"
-import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 
 /** Resources › Depots & Unloading, where a station is a record. */
-export const STATIONS_MODULE: ModuleLocation = moduleAt("resources.depots")
+export const STATIONS_MODULE = moduleAt("resources.depots")
 
 const typed = (record: Pick<BusinessRecord, "submittedValues">, key: string): unknown => record.submittedValues?.[key]
 
