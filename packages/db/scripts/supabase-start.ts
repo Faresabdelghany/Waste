@@ -10,11 +10,11 @@ import { spawnSync } from "node:child_process"
 import { constants } from "node:os"
 import { resolve } from "node:path"
 
-import { databaseVolume, readSupabaseConfig } from "../src/local-stack/config"
 import { startWithOneRetry, type SupabaseRunner } from "../src/local-stack/start"
+import { databaseVolume } from "../src/supabase-config"
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../../..")
-const DATABASE_VOLUME = databaseVolume(readSupabaseConfig())
+const DATABASE_VOLUME = databaseVolume()
 
 const run: SupabaseRunner = (args) => {
   const result = spawnSync("supabase", args, { cwd: REPOSITORY_ROOT, stdio: "inherit" })

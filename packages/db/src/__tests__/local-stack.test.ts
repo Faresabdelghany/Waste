@@ -5,11 +5,11 @@ import { tmpdir } from "node:os"
 import { dirname, join, relative } from "node:path"
 import { after, afterEach, describe, test } from "node:test"
 
-import { databaseVolume, readSupabaseConfig, SUPABASE_CONFIG_FILE } from "../local-stack/config"
 import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
 import { startWithOneRetry, type SupabaseRunner } from "../local-stack/start"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
+import { databaseVolume, minimumPasswordLength, postgresMajor, signingKeysPath, SUPABASE_CONFIG_FILE } from "../supabase-config"
 
 describe("generateSigningKey", () => {
   test("is a private ES256 JWK in the shape GoTrue reads: kid, alg, use and key_ops beside the P-256 pair", () => {
@@ -218,7 +218,7 @@ describe("startWithOneRetry", () => {
   })
 })
 
-describe("readSupabaseConfig", () => {
+describe("supabase/config.toml's values", () => {
   const scratch = mkdtempSync(join(tmpdir(), "waste-supabase-config-"))
   after(() => rmSync(scratch, { recursive: true, force: true }))
   const written = (text: string) => {
@@ -244,20 +244,19 @@ describe("readSupabaseConfig", () => {
         "enabled = true",
       ].join("\n"),
     )
-    const config = readSupabaseConfig(file)
-    assert.deepEqual(config, { projectId: "harbour", postgresMajor: 18, signingKeysPath: join(scratch, "keys.json"), minimumPasswordLength: 12 })
-    assert.equal(databaseVolume(config), "supabase_db_harbour")
+    assert.deepEqual([databaseVolume(file), postgresMajor(file), signingKeysPath(file), minimumPasswordLength(file)], ["supabase_db_harbour", 18, join(scratch, "keys.json"), 12])
   })
 
-  test("refuses a file that does not set a value it reads, naming the key", () => {
-    assert.throws(() => readSupabaseConfig(written('project_id = "harbour"\n[db]\nmajor_version = "seventeen"\n')), /db\.major_version is not a whole number/)
-    assert.throws(() => readSupabaseConfig(written('project_id = "harbour"\n[db]\nmajor_version = 17\n')), /sets no auth\.signing_keys_path/)
+  test("reads only the key asked for, and refuses one missing or not a whole number, naming it", () => {
+    const file = written('[db]\nmajor_version = 17\n[auth]\nminimum_password_length = "eight"\n')
+    assert.equal(postgresMajor(file), 17)
+    assert.throws(() => minimumPasswordLength(file), /auth\.minimum_password_length is not a whole number/)
+    assert.throws(() => signingKeysPath(file), /sets no auth\.signing_keys_path/)
   })
 
   test("the repository's own names the volume supabase_db_waste and keeps the signing key where .gitignore keeps it out of git", () => {
-    const config = readSupabaseConfig()
     const root = dirname(dirname(SUPABASE_CONFIG_FILE))
-    assert.equal(databaseVolume(config), "supabase_db_waste")
-    assert.ok(readFileSync(join(root, ".gitignore"), "utf8").split("\n").includes(relative(root, config.signingKeysPath)))
+    assert.equal(databaseVolume(), "supabase_db_waste")
+    assert.ok(readFileSync(join(root, ".gitignore"), "utf8").split("\n").includes(relative(root, signingKeysPath())))
   })
 })

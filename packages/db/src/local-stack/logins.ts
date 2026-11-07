@@ -17,7 +17,7 @@
 // `LOCAL_LOGIN_PASSWORD` or the public local default below. Idempotent: an
 // address Auth already knows is left as it is, password included.
 import { isLocalHost } from "../local-host"
-import { readSupabaseConfig } from "./config"
+import { minimumPasswordLength } from "../supabase-config"
 
 /**
  * The one password every local Login gets unless `LOCAL_LOGIN_PASSWORD` says
@@ -27,9 +27,6 @@ import { readSupabaseConfig } from "./config"
  * apps/web/e2e-api/env.ts spells the same value as the suite's default.
  */
 export const DEFAULT_LOCAL_LOGIN_PASSWORD = "local-waste-password"
-
-/** The shortest password local Auth accepts, as on the Pilot (#164). */
-export const MINIMUM_PASSWORD_LENGTH = readSupabaseConfig().minimumPasswordLength
 
 /**
  * The API e2e suite's tester (apps/web/e2e-api/env.ts spells the same
@@ -90,8 +87,9 @@ export function planLocalLogins({
     )
   }
   if (!secretKey) throw new Error("SECRET_KEY is not set: the stack's secret key from `supabase status -o env`")
-  if (password.length < MINIMUM_PASSWORD_LENGTH) {
-    throw new Error(`LOCAL_LOGIN_PASSWORD has ${password.length} characters; local Auth requires at least ${MINIMUM_PASSWORD_LENGTH}`)
+  const minimum = minimumPasswordLength()
+  if (password.length < minimum) {
+    throw new Error(`LOCAL_LOGIN_PASSWORD has ${password.length} characters; local Auth requires at least ${minimum}`)
   }
   const emails: string[] = []
   for (const address of [...seeded, E2E_TESTER_LOGIN, ...extra]) {

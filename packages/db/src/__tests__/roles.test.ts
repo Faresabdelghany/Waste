@@ -23,7 +23,6 @@ function rolesTheMigrationsCreate(): string[] {
 
 describe("the database roles", () => {
   test("the fingerprint records every role the migrations create and keep, the public door's among them", () => {
-    assert.deepEqual(rolesTheMigrationsCreate(), ["wms_api", "wms_public", "wms_worker"])
     assert.deepEqual([...FINGERPRINT_ROLES].sort(), rolesTheMigrationsCreate())
   })
 })

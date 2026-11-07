@@ -23,10 +23,10 @@ import { isDatabaseRequired } from "@waste/tooling/database-under-test"
 import { sql as drizzleSql } from "drizzle-orm"
 
 import { createDb } from "../client"
-import { readSupabaseConfig } from "../local-stack/config"
 import { migrateDatabase } from "../migrate"
 import { rehearsalTools, rehearseRestore } from "../pilot/rehearsal"
 import { seedDemo } from "../seed/demo"
+import { postgresMajor } from "../supabase-config"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, withDatabaseName } from "./database"
 
@@ -35,7 +35,7 @@ const missing = database.skip === false ? rehearsalTools() : undefined
 if (missing !== undefined && isDatabaseRequired(process.env)) {
   throw new Error(`REQUIRE_DATABASE is set, but the restore rehearsal cannot run: ${missing}`)
 }
-const major = readSupabaseConfig().postgresMajor
+const major = postgresMajor()
 const skip = database.skip || (missing === undefined ? false : `${missing}: the restore rehearsal needs PostgreSQL client ${major} and age`)
 
 describe("the Pilot's backup and restore, rehearsed", { skip }, () => {

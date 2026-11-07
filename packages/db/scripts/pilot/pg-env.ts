@@ -6,9 +6,9 @@
 // major the backup pins, supabase/config.toml's `[db] major_version`. Its
 // output holds the password: the scripts capture it into a shell variable and
 // evaluate it, and never print it or write it down.
-import { readSupabaseConfig } from "../../src/local-stack/config"
 import { PAUSED_HINT, targetOfUrl } from "../../src/pilot/identity"
 import { libpqEnvironment, shellExports } from "../../src/pilot/pg-env"
+import { postgresMajor } from "../../src/supabase-config"
 import { required } from "../step"
 
 const url = required("DATABASE_ADMIN_URL")
@@ -18,4 +18,4 @@ try {
 } catch {
   // A host that is neither a Supabase project nor the local stack: the connection attempt says so itself.
 }
-process.stdout.write(`${shellExports({ ...libpqEnvironment(url), PILOT_PAUSED_HINT: hint, PILOT_CLIENT_MAJOR: String(readSupabaseConfig().postgresMajor) })}\n`)
+process.stdout.write(`${shellExports({ ...libpqEnvironment(url), PILOT_PAUSED_HINT: hint, PILOT_CLIENT_MAJOR: String(postgresMajor()) })}\n`)

@@ -22,9 +22,9 @@ import { fileURLToPath } from "node:url"
 import { createDb } from "../client"
 import { compareFingerprints, fingerprintDatabase } from "../fingerprint"
 import { readAppliedMigrations } from "../journal-check"
-import { readSupabaseConfig } from "../local-stack/config"
 import { isLocalHost } from "../local-host"
 import { checkDatabaseJournal, OWNED_SCHEMAS } from "../migrate"
+import { postgresMajor } from "../supabase-config"
 import { checkRestoreTarget, DROP_OWNED_SCHEMAS, FINGERPRINT_COPY, majorOf, verifyBackup } from "./backup"
 import { requireBarrierOpen, closeBarrier, openLogins, planRecovery, readLogins, spellLogins } from "./barrier"
 import { databaseIdentity } from "./identity"
@@ -33,7 +33,7 @@ const SCRIPTS = fileURLToPath(new URL("../../scripts", import.meta.url))
 
 /** Whether this machine has what the backup and restore scripts need: the PostgreSQL client of the server's major (supabase/config.toml) and age. The reason when not. */
 export function rehearsalTools(): string | undefined {
-  const major = readSupabaseConfig().postgresMajor
+  const major = postgresMajor()
   const version = spawnSync("pg_dump", ["--version"], { encoding: "utf8" })
   if (version.status !== 0) return `pg_dump is not on PATH (install PostgreSQL client ${major})`
   if (majorOf(version.stdout.trim()) !== major) return `pg_dump is ${version.stdout.trim()}, not PostgreSQL client ${major}`

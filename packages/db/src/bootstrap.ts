@@ -9,7 +9,8 @@
 // by format(%L) inside the database, so no client-side quoting is involved.
 import { createDb } from "./client"
 import { isLocalHost } from "./local-host"
-import { GRANTED_ROLES, OWNER, passwordOf, PLAIN_ROLE } from "./roles"
+import { GRANTED_ROLES, OWNER, PLAIN_ROLE } from "./roles"
+import { passwordOf } from "./supabase"
 
 export type GrantLoginOptions = {
   /** A plain identifier: lowercase letters, digits and underscores. */

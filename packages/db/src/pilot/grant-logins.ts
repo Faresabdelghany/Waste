@@ -9,7 +9,8 @@
 // never printed. The grant itself is `grantLogin` (bootstrap.ts), the
 // statement the local bootstrap runs; the bootstrap plan keeps refusing any
 // host that is not this machine.
-import { GRANTED_ROLES, OWNER, passwordOf, type PilotTarget } from "../roles"
+import { GRANTED_ROLES, OWNER } from "../roles"
+import { passwordOf, type PilotTarget } from "../supabase"
 
 export type PilotLogin = { role: string; password: string }
 export type PilotLoginPlan = {
