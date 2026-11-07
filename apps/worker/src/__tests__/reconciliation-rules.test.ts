@@ -19,9 +19,9 @@ import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 
-import type { JobContext } from "../jobs/definition"
-import { runAlertRules } from "../jobs/alert-rules"
+import { runAlertRules } from "../resolution/alert-rules"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -42,7 +42,7 @@ describe("the disposal-site reconciliation", { skip: roles.skip }, () => {
   const loads = { unreceived: testId(), mismatched: testId(), overweight: testId() }
   /** Three hours after the routes ended. */
   let NOW = at("16:00")
-  const context = () => ({ api, worker, now: () => NOW, log: (line: string) => void line }) as JobContext
+  const context = () => jobContext({ api, worker, now: () => NOW })
 
   const ruleAlerts = () =>
     withCompany(api.db, tenant.companyId, (tx) =>

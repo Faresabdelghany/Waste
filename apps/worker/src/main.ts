@@ -4,7 +4,7 @@
 // and is tested there.
 //
 // Three pools. pg-boss's own, through `pg`, on the worker role's URL
-// (boss.ts). Then two of `@waste/db`'s on the two roles: the API role's, on
+// (runtime/boss.ts). Then two of `@waste/db`'s on the two roles: the API role's, on
 // which every job writes under `withCompany`, and the worker role's, on which
 // the sweeps read across tenants; both go into the context every handler
 // receives. A fourth, the probe pool /readyz uses, is one connection on the
@@ -43,12 +43,12 @@ import { providerFromEnv } from "@waste/routing/select"
 import { listen, type Listening } from "@waste/server/listen"
 
 import { createApp } from "./app"
-import { createBoss, startBoss, type Boss } from "./boss"
 import { parseEnv } from "./env"
-import { JOBS } from "./jobs"
-import { staleOutboxCount } from "./jobs/relay-outbox"
+import { JOBS, type WorkerContext } from "./jobs"
 import { messagingProviderFromEnv } from "./messaging/select"
-import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
+import { createBoss, startBoss, type Boss } from "./runtime/boss"
+import { OUTBOX_DEAD_QUEUE } from "./runtime/outbox"
+import { staleOutboxCount } from "./runtime/relay-outbox"
 
 const env = parseEnv(process.env)
 // The routing provider behind the quota engine (#171): one per process, so one key's quota is spent in one place; the reserves and the pace are the Pilot's knobs, the Standard plan's figures where unset.
@@ -60,7 +60,7 @@ const routing = new QuotaEngine(
 const messaging = messagingProviderFromEnv(env.MESSAGING_PROVIDER)
 // The Pilot's knobs (#149), each the code's default where the environment
 // leaves it unset: the two pools' sizes (an unset knob is `max: undefined`,
-// which createDb reads as its default), and the intervals boss.ts applies.
+// which createDb reads as its default), and the intervals runtime/boss.ts applies.
 // The proofs' Storage (O1 of #290), where both the project's URL and its service-role key are set: the purge's one door to the bytes.
 const proofStorage = env.SUPABASE_URL !== undefined && env.SUPABASE_SERVICE_ROLE_KEY !== undefined ? supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined
 const api = createDb(env.DATABASE_URL, { max: env.WORKER_API_POOL_MAX })
@@ -84,7 +84,7 @@ const made: { running?: Boss; listening?: Listening } = {}
 
 /** pg-boss started with every job, and the probes bound; a failure of either is the process's exit. */
 async function boot() {
-  const running = await startBoss(boss, JOBS, {
+  const running = await startBoss<WorkerContext>(boss, JOBS, {
     api,
     worker,
     now: () => new Date(),
@@ -94,8 +94,8 @@ async function boot() {
     routing,
     messaging,
     pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
-    ...(proofStorage === undefined ? {} : { proofStorage }),
-    ...(env.PROOF_RETENTION_DAYS === undefined ? {} : { proofRetentionDays: env.PROOF_RETENTION_DAYS }),
+    proofStorage,
+    proofRetentionDays: env.PROOF_RETENTION_DAYS,
   })
   made.running = running
   started = true

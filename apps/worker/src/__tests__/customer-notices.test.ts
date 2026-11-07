@@ -33,9 +33,9 @@ import { and, eq, sql } from "drizzle-orm"
 import { alertColumns, alertOf } from "@waste/db/shapes/alerts"
 import { eventColumns, eventOf, ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { noticeCustomerFor } from "../jobs/customer-notices"
-import type { JobContext } from "../jobs/definition"
-import type { RelayedEvent, RelayedJob } from "../outbox/subscribe"
+import { noticeCustomerFor } from "../notifications/customer-notices"
+import type { RelayedEvent, RelayedJob } from "../runtime/outbox"
+import { jobContext } from "./context"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "./finance-tenant"
 
@@ -53,7 +53,7 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
     sent.push({ name, data })
     return testId()
   }
-  const context = () => ({ api: pool, send, now: () => NOON, log: (line: string) => void lines.push(line) }) as unknown as JobContext
+  const context = () => jobContext({ api: pool, send, now: () => NOON, log: (line) => void lines.push(line) })
   const templates = { booked: testId(), collected: testId(), replied: testId(), completed: testId(), broadcast: testId() }
   const rules = { replied: testId(), completed: testId(), cancelled: testId(), late: testId() }
   const north = testId()

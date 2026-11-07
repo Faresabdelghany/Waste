@@ -16,7 +16,7 @@
 import { POSITION_RETENTION_DAYS } from "@waste/domain/execution/positions"
 import { sql } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export const PURGE_POSITIONS_QUEUE = "execution.purge-positions"
 /** 03:40 UTC every day: after Plan Ahead and the routing sweep, before the proofs' purge. */

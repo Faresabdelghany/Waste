@@ -33,11 +33,12 @@ import { KEY_REFUSED, QuotaEngine, RoutingRetryable, STANDARD_PLAN } from "@wast
 import { asc, eq } from "drizzle-orm"
 import type { Job, PgBoss } from "pg-boss"
 
-import { createBoss } from "../boss"
-import type { JobContext } from "../jobs/definition"
-import { routingMeasure } from "../jobs/routing-measure"
-import { routingOptimise } from "../jobs/routing-optimise"
+import { createBoss } from "../runtime/boss"
+import type { WorkerContext } from "../jobs"
+import { routingMeasure } from "../routing/measure"
+import { routingOptimise } from "../routing/optimise"
 import { FIXTURE_DAY, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { until } from "./until"
 
@@ -87,20 +88,16 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
     })
     return { fake, engine }
   }
-  const contextOf = (engine: QuotaEngine, overrides: Partial<JobContext> = {}): JobContext => ({
-    api,
-    worker: new Proxy({} as Database, {
-      get() {
-        throw new Error("a routing job never reads across tenants")
-      },
-    }),
-    now: () => clock.now,
-    log: (message) => void lines.push(message),
-    send: (queue, data, options) => boss.send(queue, data, options ?? {}),
-    complete: (queue, id, options) => boss.complete(queue, id, undefined, options),
-    routing: engine,
-    ...overrides,
-  })
+  const contextOf = (engine: QuotaEngine, overrides: Partial<WorkerContext> = {}) =>
+    jobContext({
+      api,
+      now: () => clock.now,
+      log: (message) => void lines.push(message),
+      send: (queue, data, options) => boss.send(queue, data, options ?? {}),
+      complete: (queue, id, options) => boss.complete(queue, id, undefined, options),
+      routing: engine,
+      ...overrides,
+    })
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })

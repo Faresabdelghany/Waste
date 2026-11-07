@@ -16,9 +16,10 @@ import type { ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
 import { objectKeyOf } from "@waste/domain/storage-objects"
 
-import type { JobContext } from "../jobs/definition"
-import { expiredProofObjects, purgeProofObjects } from "../jobs/purge-proof-objects"
+import type { WorkerContext } from "../jobs"
+import { expiredProofObjects, purgeProofObjects } from "../execution/purge-proof-objects"
 import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 
 const roles = rolesUnderTest()
@@ -52,7 +53,7 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
       return there.length
     },
   }
-  const context = (overrides: Partial<JobContext> = {}) => ({ api, worker, now: () => NOW, log: (line: string) => void lines.push(line), proofStorage: storage, proofRetentionDays: RETENTION_DAYS, ...overrides }) as JobContext
+  const context = (overrides: Partial<WorkerContext> = {}) => jobContext({ api, worker, now: () => NOW, log: (line) => void lines.push(line), proofStorage: storage, proofRetentionDays: RETENTION_DAYS, ...overrides })
 
   /** A proof with an object, of a stop or of the route itself, recorded by the office `days` ago; answers its key. */
   const proof = async (route: SeededRoute, pickupId: string | null, kind: "photo" | "signature", days: number): Promise<string> => {

@@ -85,7 +85,7 @@
 // Once the run's transaction has committed, and outside it (#124 §4), the
 // routes it created or reshaped — a stop inserted, moved, brought back or
 // skipped, the depot or the station changed — are handed to the horizon
-// (routing-horizon.ts, #172), which asks a Plan for each operating inside
+// (../routing/horizon.ts, #172), which asks a Plan for each operating inside
 // tomorrow…today + 7, one transaction per route. Generation never calls the
 // provider and never waits on it; a route whose ask fails is a line in the
 // log, never the run's failure, and waits for the night's sweep. A route
@@ -141,8 +141,9 @@ import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/days"
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
-import { planReshaped, type HorizonAsks, type ReshapedRoute } from "./routing-horizon"
+import { defineJob } from "../runtime/definition"
+import type { RoutingContext } from "../routing/engine"
+import { planReshaped, type HorizonAsks, type ReshapedRoute } from "../routing/horizon"
 import { daysWithBoundary, stopCandidatesByDay } from "./stop-matching"
 
 /** What one run did, as the run row records it. */
@@ -162,7 +163,7 @@ export const DRAFT_GENERATES_NOTHING = "The scheme is a draft; a draft generates
 /** What a run's transaction came to: the counts and the routes it created or reshaped, or that the run was already done. */
 type Generated = { kind: "succeeded"; counts: GenerationCounts; projectId: string; reshaped: ReshapedRoute[] } | { kind: "already-done"; status: string }
 
-/** What a run came to: the counts and the Plans the horizon asked for its routes (routing-horizon.ts), or that the run was already done. */
+/** What a run came to: the counts and the Plans the horizon asked for its routes (../routing/horizon.ts), or that the run was already done. */
 type Outcome = { kind: "succeeded"; counts: GenerationCounts; horizon: HorizonAsks } | { kind: "already-done"; status: string }
 
 /** The block of numbers the creates take: one `update … returning` under the company's row lock; the first number of the block. */
@@ -641,9 +642,9 @@ function crewOnRouteDay(periods: AwayPeriods) {
  * Runs one generation run to its end: succeeded with its counts, or failed
  * with the error on the row and rethrown for pg-boss to retry. Once the run
  * has committed, the horizon asks its created and reshaped routes their Plans
- * (routing-horizon.ts), which never fails the run.
+ * (../routing/horizon.ts), which never fails the run.
  */
-export async function runGeneration(data: GenerateRoutesData, jobId: string | null, context: JobContext): Promise<Outcome> {
+export async function runGeneration(data: GenerateRoutesData, jobId: string | null, context: RoutingContext): Promise<Outcome> {
   const { api, now, log } = context
   const startedAt = now()
   let generated: Generated
@@ -674,7 +675,7 @@ export async function runGeneration(data: GenerateRoutesData, jobId: string | nu
   return { kind: "succeeded", counts: generated.counts, horizon }
 }
 
-export const generateRoutes = defineJob<GenerateRoutesData>({
+export const generateRoutes = defineJob<GenerateRoutesData, RoutingContext>({
   queue: GENERATE_ROUTES_QUEUE,
   description: "Turns one validated route scheme's rules into dated routes and pickups over a window, idempotently by (scheme, group, service date), on the generation run the sender wrote.",
   // One job per scheme queued or active at a time: `singletonKey` is the scheme's id on every send, so a scheme mid-generation is not queued twice and the sender is told so (a null id) rather than given a second run. An hour to run: a large project over the full `WALK_CAP_DAYS` walk is one transaction, and a job pg-boss expired while it still ran would be retried into the run's own lock, to find it `succeeded` and log a retry nothing needed.

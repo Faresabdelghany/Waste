@@ -13,7 +13,7 @@
 // The connection must be a session: pg-boss keeps state on it (advisory locks
 // for its maintenance and its cron pass, the schedule's clock skew reading)
 // that a transaction pooler would spread over backends, so a URL on
-// Supabase's port 6543 is refused by env.ts before anything dials. pg-boss
+// Supabase's port 6543 is refused by ../env.ts before anything dials. pg-boss
 // dials its own pool through `pg`, not postgres.js; the two application pools
 // (`@waste/db/client`) are the jobs', not pg-boss's, and the process holds
 // three pools in all.
@@ -76,7 +76,7 @@ import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { JOB_STOP_MS } from "@waste/process/shutdown"
 import { PgBoss, type ConstructorOptions, type WorkOptions } from "pg-boss"
 
-import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"
+import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions, type PollingKnob } from "./definition"
 
 /** The knobs and the intervals a caller may name, all optional. */
 export type BossIntervals = {
@@ -97,7 +97,7 @@ export type BossIntervals = {
 }
 
 export type BossOptions = BossIntervals & {
-  /** The worker role's URL, a session connection; env.ts has refused the transaction pooler. */
+  /** The worker role's URL, a session connection; ../env.ts has refused the transaction pooler. */
   url: string
   /** pg-boss's pool size; three is one for the poll, one for a cron pass and one for maintenance. */
   max?: number
@@ -223,9 +223,11 @@ export async function drainInherited(boss: PgBoss, jobs: readonly AnyJob[], cont
  * fails here is the database: the schema missing or at another version
  * (`start()` says which), or the role unable to reach it. Every queue's poll
  * is raised to the context's polling knob (`workOptionsUnder`), so one knob
- * governs every poll this process makes.
+ * governs every poll this process makes. The context is the one every
+ * handler of the list is run with, and the call type-checks only where it
+ * has what each job's definition names.
  */
-export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext): Promise<Boss> {
+export async function startBoss<Context extends JobContext & PollingKnob>(boss: PgBoss, jobs: readonly AnyJob<NoInfer<Context>>[], context: Context): Promise<Boss> {
   await boss.start()
   const bring = async (queue: string, options: JobQueueOptions | undefined) => {
     await boss.createQueue(queue, options)

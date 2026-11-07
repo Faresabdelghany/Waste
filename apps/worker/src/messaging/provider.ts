@@ -31,3 +31,6 @@ export type MessagingProvider = {
   readonly name: string
   send(message: OutgoingMessage): Promise<SendReceipt>
 }
+
+/** What the send job adds to the core: the provider main.ts built from `MESSAGING_PROVIDER` (select.ts), the log-only sender until a card-free provider is verified. */
+export type MessagingDoor = { messaging: MessagingProvider }

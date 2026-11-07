@@ -48,8 +48,8 @@ import { CUSTOMER_NOTICE_KINDS, customerNoticeOf, type CustomerNoticeKind } from
 import type { CustomerNoticeEvent } from "@waste/domain/notifications/vocabulary"
 import { and, eq } from "drizzle-orm"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import type { JobContext } from "./definition"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import type { JobContext } from "../runtime/definition"
 
 /** What one event came to: the notice it is, the messages queued for it, and why any customer was not told. */
 export type Noticed = { event: string; kind: CustomerNoticeKind; notice: CustomerNoticeEvent | null; messageIds: string[]; why: string[] }
@@ -154,7 +154,7 @@ export async function noticeCustomerFor(event: RelayedEvent<CustomerNoticeKind>,
   return outcome
 }
 
-/** The registry entries, one per kind; spread into `OUTBOX_CONSUMERS`. */
+/** The registry entries, one per kind; spread into `CONSUMERS` (../jobs.ts). */
 export const noticeCustomers = defineOutboxConsumer({
   name: "customer-notices",
   kinds: CUSTOMER_NOTICE_KINDS,

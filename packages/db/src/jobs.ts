@@ -84,7 +84,7 @@ export type JobSender = {
 }
 
 /**
- * The queue is the worker's, made at its boot (apps/worker/src/boss.ts), so
+ * The queue is the worker's, made at its boot (apps/worker/src/runtime/boss.ts), so
  * a database no worker has started on has none and pg-boss refuses the send
  * by name. Told apart here, where pg-boss is known, so a caller asks
  * `instanceof` and never reads the library's sentence: the deployment's

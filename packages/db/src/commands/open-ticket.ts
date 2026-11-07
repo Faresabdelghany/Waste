@@ -3,7 +3,7 @@
 // `packages/db/src/commands/` since part B, the home §7.24 proposed for the
 // write statements both processes run: `POST /tickets` calls `openTicket`
 // with the caller's account inside the request's transaction, and the
-// worker's consumer (apps/worker/src/jobs/open-tickets.ts) calls it with
+// worker's consumer (apps/worker/src/resolution/open-tickets.ts) calls it with
 // `null` and the outbox event's id inside a job's transaction under
 // `withCompany`, so an office ticket and an event's ticket are one write
 // spelled in one place.

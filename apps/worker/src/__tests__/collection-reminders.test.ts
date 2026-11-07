@@ -18,8 +18,8 @@ import { notificationRule } from "@waste/db/schema/notifications"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
-import { collectionRemindersJob, REMINDER_CHUNK, remindProject, runCollectionReminders } from "../jobs/collection-reminders"
-import type { JobContext } from "../jobs/definition"
+import { collectionRemindersJob, REMINDER_CHUNK, remindProject, runCollectionReminders } from "../messaging/collection-reminders"
+import { jobContext } from "./context"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { at, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin } from "./finance-tenant"
 
@@ -38,7 +38,7 @@ describe("messaging.collection-reminders", { skip: roles.skip }, () => {
   const bins: Record<"housing" | "anna" | "bo" | "office", PlacedBin> = {} as never
   const lines: string[] = []
   let NOW = at(FIXTURE_DAY, "13:30")
-  const context = () => ({ api, worker, now: () => NOW, send: async () => testId(), log: (line: string) => void lines.push(line) }) as unknown as JobContext
+  const context = () => jobContext({ api, worker, now: () => NOW, send: async () => testId(), log: (line) => void lines.push(line) })
   const project = () => ({ companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, templateId, channel: "email" as const })
 
   /** A planned route of the scheme operating on `day`, its stops planned. */

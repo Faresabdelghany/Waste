@@ -11,6 +11,7 @@ import { after, before, describe, test } from "node:test"
 
 import type { Position2D } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { ROUTING_MEASURE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { pickup, route } from "@waste/db/schema/execution"
 import { property } from "@waste/db/schema/customers"
 import { depot, unloadingStation } from "@waste/db/schema/places"
@@ -19,11 +20,10 @@ import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { asc, eq } from "drizzle-orm"
 
-import type { JobContext } from "../jobs/definition"
-import { routingMeasure, ROUTING_MEASURE_QUEUE, type RoutingMeasureData } from "../jobs/routing-measure"
+import { routingMeasure } from "../routing/measure"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -41,19 +41,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
   let stationId: string
   const lines: string[] = []
 
-  const context = (): JobContext => ({
-    api,
-    worker: new Proxy({} as Database, {
-      get() {
-        throw new Error("routing.measure never reads across tenants")
-      },
-    }),
-    now: () => new Date("2026-10-05T04:00:00Z"),
-    log: (message) => void lines.push(message),
-    send: async () => null,
-    complete: settlesNothing,
-    routing: fakeRouting(),
-  })
+  const context = () => jobContext({ api, now: () => new Date("2026-10-05T04:00:00Z"), log: (message) => void lines.push(message), send: async () => null })
 
   before(async () => {
     api = createDb(database.url)
@@ -208,7 +196,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
       retryBackoff: true,
       retryDelayMax: 300,
     })
-    const data: RoutingMeasureData = { planId: "x", companyId: "y" }
+    const data: RoutingJobData = { planId: "x", companyId: "y" }
     assert.ok(data)
   })
 })

@@ -49,7 +49,7 @@ import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@was
 import type { AggregateOf, OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { eq } from "drizzle-orm"
 
-import type { RelayedEvent, RelayedJob } from "../outbox/subscribe"
+import type { RelayedEvent, RelayedJob } from "../runtime/outbox"
 
 /** Ids that count up from the wall clock: a UUIDv7 the contracts accept, one sequence for the suite. */
 export const testId = createIdMinter()

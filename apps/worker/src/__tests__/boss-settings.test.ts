@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { bossIntervals, workOptionsUnder } from "../boss"
+import { bossIntervals, workOptionsUnder } from "../runtime/boss"
 
 describe("bossIntervals", () => {
   test("names nothing when no knob and no option is set: pg-boss's defaults stand", () => {

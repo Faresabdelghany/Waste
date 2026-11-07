@@ -32,8 +32,8 @@ import { actAs, withCompany } from "@waste/db/tenant"
 import { pauseOfGrant } from "@waste/domain/registry/applications"
 import { and, eq } from "drizzle-orm"
 
-import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
-import type { JobContext } from "./definition"
+import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
+import type { JobContext } from "../runtime/definition"
 
 /** `EXCLUDE USING gist (company_id, subscription_id, daterange)`: one pause of a subscription in force at a time. */
 const PAUSED_ALREADY = "subscription_pause_no_overlap"
@@ -86,7 +86,7 @@ export async function applyPauseGrant(event: RelayedEvent<"application-decided">
   return outcome
 }
 
-/** The registry entry on `outbox.application-decided`; spread into `OUTBOX_CONSUMERS`. Starts fresh: the decisions before it are never applied. */
+/** The registry entry on `outbox.application-decided`; spread into `CONSUMERS` (../jobs.ts). Starts fresh: the decisions before it are never applied. */
 export const applyPauseGrants = defineOutboxConsumer({
   name: "registry",
   kinds: ["application-decided"],

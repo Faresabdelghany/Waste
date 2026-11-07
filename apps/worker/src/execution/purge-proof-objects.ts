@@ -17,7 +17,7 @@ import type { ProofStorage } from "@waste/db/storage"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export const PURGE_PROOF_OBJECTS_QUEUE = "execution.purge-proof-objects"
 /** 03:45 UTC every day: after Plan Ahead and the routing sweep, the quiet hour. */
@@ -26,6 +26,15 @@ export const PURGE_PROOF_OBJECTS_SCHEDULE = "45 3 * * *"
 export const PURGE_BATCH = 100
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * What the purge adds to the core: the proofs' Storage (O1 of #290), where
+ * the deployment holds Supabase's URL and service-role key, and the days a
+ * photo or a signature is kept (`PROOF_RETENTION_DAYS`) — each undefined
+ * where the deployment sets none, and then the purge removes nothing. main.ts
+ * builds them; a test hands in a fake.
+ */
+export type ProofRetention = { proofStorage: ProofStorage | undefined; proofRetentionDays: number | undefined }
 
 export type PurgeProofObjectsData = {
   /** Where the purge came from: the schedule, or a caller who sent one by hand. */
@@ -68,8 +77,8 @@ export async function expiredProofObjects(worker: JobContext["worker"], at: Date
 /** What a night came to: the objects Storage removed, or why none could be. */
 export type PurgeOutcome = { removed: number } | { skipped: "no-storage" | "no-retention" }
 
-export async function purgeProofObjects(context: JobContext): Promise<PurgeOutcome> {
-  const storage: ProofStorage | undefined = context.proofStorage
+export async function purgeProofObjects(context: Pick<JobContext, "worker" | "now" | "log"> & ProofRetention): Promise<PurgeOutcome> {
+  const storage = context.proofStorage
   if (storage === undefined) {
     context.log("proofs: no Storage key on this deployment; no photo or signature is purged")
     return { skipped: "no-storage" }
@@ -89,7 +98,7 @@ export async function purgeProofObjects(context: JobContext): Promise<PurgeOutco
   return { removed }
 }
 
-export const purgeProofObjectsJob = defineJob<PurgeProofObjectsData>({
+export const purgeProofObjectsJob = defineJob<PurgeProofObjectsData, JobContext & ProofRetention>({
   queue: PURGE_PROOF_OBJECTS_QUEUE,
   description: "Removes from Storage the photos and signatures older than the retention days whose stop no open ticket names (O1 of #290).",
   handler: async (_jobs, context) => await purgeProofObjects(context),

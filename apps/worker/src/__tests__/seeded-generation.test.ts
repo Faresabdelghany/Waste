@@ -22,11 +22,10 @@ import { generationRun } from "@waste/db/schema/generation"
 import { DEMO_IDS, seedDemo } from "@waste/db/seed/demo"
 import { asc, eq, inArray } from "drizzle-orm"
 
-import type { JobContext } from "../jobs"
-import { runGeneration } from "../jobs/generate-routes"
-import { planAhead } from "../jobs/plan-ahead"
+import { runGeneration } from "../planning/generate-routes"
+import { planAhead } from "../planning/plan-ahead"
 import { databaseUnderTest, ownerUnderTest, withDatabaseName, workerUnderTest } from "./database"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()
@@ -47,7 +46,7 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
   let trailAfterSeed = 0
   const trailLength = async () => (await ownerPool.sql<{ rows: number }[]>`select count(*)::int as rows from wms.audit_event`)[0].rows
 
-  const context = (): JobContext => ({ api, worker, now: () => NOW, log: (message) => void lines.push(message), send: async () => `sent-${lines.length}`, complete: settlesNothing, routing: fakeRouting() })
+  const context = () => jobContext({ api, worker, now: () => NOW, log: (message) => void lines.push(message), send: async () => `sent-${lines.length}` })
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })

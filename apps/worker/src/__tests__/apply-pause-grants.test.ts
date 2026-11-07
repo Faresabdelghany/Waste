@@ -14,12 +14,11 @@ import { subscriptionPause } from "@waste/db/schema/agreements"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
-import type { JobContext } from "../jobs"
-import { applyPauseGrant, grantReason } from "../jobs/apply-pause-grants"
-import type { RelayedEvent } from "../outbox/subscribe"
+import { applyPauseGrant, grantReason } from "../registry/apply-pause-grants"
+import type { RelayedEvent } from "../runtime/outbox"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropFinanceTenant, placeBin, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { fakeRouting, settlesNothing } from "./routing-context"
+import { jobContext } from "./context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -32,7 +31,7 @@ describe("registry.apply-pause-grants against Postgres (M11 of #293)", { skip: d
   let admin: Database
   let tenant: FinanceTenant
   const lines: string[] = []
-  const context = (): JobContext => ({ api: pool, worker: pool, now: () => NOON, log: (message) => void lines.push(message), send: async () => null, complete: settlesNothing, routing: fakeRouting() })
+  const context = () => jobContext({ api: pool, worker: pool, now: () => NOON, log: (message) => void lines.push(message), send: async () => null })
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })

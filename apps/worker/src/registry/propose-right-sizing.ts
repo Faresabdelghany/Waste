@@ -17,7 +17,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext } from "../runtime/definition"
 
 export type ProposeRightSizingData = {
   /** Where the run came from: the schedule, or a caller who sent one by hand. */

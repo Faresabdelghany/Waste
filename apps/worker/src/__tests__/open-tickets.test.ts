@@ -39,8 +39,8 @@ import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, type OpenTicketsOutcome } from "../jobs/open-tickets"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUE_OPTIONS, outboxQueue, relayedEventOf } from "../outbox/subscribe"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, type OpenTicketsOutcome } from "../resolution/open-tickets"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUE_OPTIONS, outboxQueue, relayedEventOf } from "../runtime/outbox"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, proofPayload, receiptPayload, routePayload, seedConsumerTenant, seedReceipt, seedRoute, testId, type ConsumerTenant } from "./consumer-fixtures"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
