@@ -124,16 +124,16 @@ describe("the job registry", () => {
   })
 
   test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>.resolution, not route-cancelled, with its retry policy over the seam's", () => {
-    assert.deepEqual([...RESOLUTION_EVENT_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual([...RESOLUTION_EVENT_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"])
     assert.deepEqual(
       openTickets.map((job) => job.queue),
-      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.command-rejected.resolution"],
+      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.route-problem-reported.resolution", "outbox.command-rejected.resolution"],
     )
     for (const job of openTickets) {
       assert.ok(JOBS.includes(job), job.queue)
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS })
       assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
-      assert.match(job.description, /^Opens a Ticket .* \((pickup-failed|pickup-skipped|pickup-problem-reported|command-rejected)\)$/)
+      assert.match(job.description, /^Opens a Ticket .* \((pickup-failed|pickup-skipped|pickup-problem-reported|route-problem-reported|command-rejected)\)$/)
     }
     assert.ok(!openTickets.some((job) => job.inherits === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
   })
@@ -380,7 +380,8 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.equal(RelayedJob.safeParse({ ...event, kind: "pickup.failed" }).success, false)
     const relayed = relayedEventOf(event)
     assert.deepEqual(relayed, event)
-    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "ticket" }), /a pickup-failed event is about pickup, never a ticket/)
+    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "ticket" }), /a pickup-failed event is about a pickup, never a ticket/)
+    assert.throws(() => relayedEventOf({ ...event, kind: "pickup-problem-reported", aggregateKind: "route" }), /a pickup-problem-reported event is about a pickup, never a route/, "a problem on the route is its own kind")
     if (relayed.kind !== "pickup-failed") assert.fail("the kind relayed")
     assert.throws(() => payloadOf(relayed), /Invalid|expected/i, "a stop's event carries the whole Pickup, not three of its fields")
   })

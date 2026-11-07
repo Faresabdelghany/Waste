@@ -21,7 +21,7 @@
 // resource as the write left it — plus `companyId`, the tenant, since a
 // consumer opens its writes with `withCompany(context.api.db, event.companyId,
 // …)` and no request carries the claim for it. A consumer reads `payload`
-// through `payloadOf`, the schema its kind and aggregate promise
+// through `payloadOf`, the schema its kind promises
 // (`OUTBOX_PAYLOADS`, @waste/contracts/outbox, which the writer's `emit` is
 // typed by), and is idempotent by `event.id`: pg-boss delivers at least
 // once, and a job that fails is retried under the queue's policy and then
@@ -101,18 +101,19 @@ export const RelayedJob = OutboxEvent.extend({
 })
 export type RelayedJob = z.infer<typeof RelayedJob>
 
-/** A relayed job as a consumer reads it: an event of one of the kinds, about one of the aggregates its kind is about, its payload as the write left it for `payloadOf` to read. */
-export type RelayedEvent<Kind extends OutboxKind = OutboxKind> = Kind extends OutboxKind ? { [A in AggregateOf<Kind>]: Omit<RelayedJob, "kind" | "aggregateKind"> & { kind: Kind; aggregateKind: A } }[AggregateOf<Kind>] : never
+/** A relayed job as a consumer reads it: an event of one of the kinds, about the aggregate its kind is about, its payload as the write left it for `payloadOf` to read. */
+export type RelayedEvent<Kind extends OutboxKind = OutboxKind> = Kind extends OutboxKind ? Omit<RelayedJob, "kind" | "aggregateKind"> & { kind: Kind; aggregateKind: AggregateOf<Kind> } : never
 
-/** A job's data as a relayed event: the row parsed with the contracts, about an aggregate its kind is about. */
+/** A job's data as a relayed event: the row parsed with the contracts, about the aggregate its kind is about. */
 export function relayedEventOf(data: unknown): RelayedEvent {
   const job = RelayedJob.parse(data)
-  aggregateOf(job.kind, job.aggregateKind)
+  const about = aggregateOf(job.kind)
+  if (job.aggregateKind !== about) throw new Error(`a ${job.kind} event is about a ${about}, never a ${job.aggregateKind}`)
   return job as RelayedEvent
 }
 
-/** An event's payload read as the resource its kind carries for its aggregate (`OUTBOX_PAYLOADS`); throws where it is not, failing the job. */
-export const payloadOf = <Kind extends OutboxKind, A extends AggregateOf<Kind>>(event: { kind: Kind; aggregateKind: A; payload: unknown }): OutboxPayload<Kind, A> => outboxPayloadOf(event.kind, event.aggregateKind, event.payload)
+/** An event's payload read as the resource its kind carries (`OUTBOX_PAYLOADS`); throws where it is not, failing the job. */
+export const payloadOf = <Kind extends OutboxKind>(event: { kind: Kind; payload: unknown }): OutboxPayload<Kind> => outboxPayloadOf(event.kind, event.payload)
 
 /** How long a job waits on a queue no consumer works yet: ninety days, so the consumer a kind is waiting for starts from the queue and not blind. */
 export const UNCONSUMED_RETENTION_SECONDS = 90 * 24 * 60 * 60
@@ -175,7 +176,7 @@ export type OutboxConsumer<Kind extends OutboxKind, Context extends JobContext =
  *
  *     export const openTickets = defineOutboxConsumer({
  *       name: "resolution",
- *       kinds: ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"],
+ *       kinds: ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"],
  *       description: "Opens a ticket where nobody decided about the address.",
  *       handler: async (event, { api }) => withCompany(api.db, event.companyId, (tx) => ...),
  *     })

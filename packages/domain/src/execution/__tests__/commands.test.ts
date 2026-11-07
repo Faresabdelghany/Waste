@@ -324,14 +324,14 @@ describe("decide: the pickup", () => {
     assert.equal(rejected(decide(scanned, mads, running(), clock))?.detail, noContainerToConfirm(12), "nothing read for the confirmation is no confirmation")
   })
 
-  test("report-problem moves no status: a problem proof, and an event about the pickup, or about the route when none is named", () => {
+  test("report-problem moves no status: a problem proof, and the stop's problem event, or the route's when no stop is named", () => {
     assert.deepEqual(applied(decide(command("report-problem", { pickupId: PICKUP, reason: "safety", note: "Dog loose" }), mads, running({ pickup: pickup({ status: "completed" }) }), clock)), [
       { kind: "append-proof", proof: { id: COMMAND, kind: "problem", pickupId: PICKUP, occurredAt: EARLIER, reason: "safety", note: "Dog loose", weightKg: null, volumeLitres: null, objectKey: null, location: null, locationAccuracyM: null } },
       { kind: "event", event: { kind: "pickup-problem-reported", aggregate: "pickup", aggregateId: PICKUP } },
     ])
     const onRoute = applied(decide(command("report-problem", { reason: "other", note: "Road closed" }), mads, running(), clock))
     assert.equal((onRoute[0] as { proof: { pickupId: string | null } }).proof.pickupId, null)
-    assert.deepEqual(onRoute[1], { kind: "event", event: { kind: "pickup-problem-reported", aggregate: "route", aggregateId: ROUTE } })
+    assert.deepEqual(onRoute[1], { kind: "event", event: { kind: "route-problem-reported", aggregate: "route", aggregateId: ROUTE } })
   })
 
   test("weight, signature and note are proofs and nothing else; a note or a photo may stand on the route", () => {

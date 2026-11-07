@@ -16,6 +16,7 @@ import {
   type EventFacts,
   type PickupEventFacts,
   type PickupEventKind,
+  type RouteProblemFacts,
 } from "../from-event"
 import { LABEL_MAX, PARAGRAPH_MAX } from "../../text"
 
@@ -46,6 +47,9 @@ const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = 
   customerId: CUSTOMER,
   ...values,
 })
+
+/** A problem reported on the route, naming no stop: the problem proof's reason and note, and Mads, who ran it. */
+const routeProblem = (values: Partial<RouteProblemFacts> = {}): RouteProblemFacts => ({ kind: "route-problem-reported", routeId: ROUTE, reason: null, note: null, actualDriverId: MADS, ...values })
 
 const rejection = (values: Partial<CommandRejectedFacts> = {}): CommandRejectedFacts => ({ kind: "command-rejected", routeId: ROUTE, pickupId: PICKUP, driverId: MADS, detail: "Pickup 12 is already completed", ...values })
 
@@ -125,7 +129,7 @@ describe("ticketFor", () => {
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: "route-ended", plannedDriverId: KAREN }))?.links.driverId, MADS)
   })
 
-  test("a reported problem is a medium reported-problem, on the stop it named or on the route alone, with the reason and the note", () => {
+  test("a reported problem is a medium reported-problem, on the stop it named or on the route, with the reason and the note", () => {
     for (const reason of PICKUP_REASONS) {
       assert.deepEqual(ticketFor(pickupEvent("pickup-problem-reported", { reason, note: "Road closed" })), {
         kind: "reported-problem",
@@ -136,10 +140,16 @@ describe("ticketFor", () => {
         links: stopLinks(MADS),
       })
     }
-    // On the route alone: no stop, so no container and no place either — §3's "container and place then" — even where the facts carry them, and the subject says where only if the worker found an address.
-    const onRoute = ticketFor(pickupEvent("pickup-problem-reported", { pickupId: null, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: "point", containerLabel: null, address: null, reason: "safety", note: "Road closed" }))
-    assert.deepEqual(onRoute?.links, { routeId: ROUTE, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS, customerId: null, agreementId: null }, "no stop, so no customer or agreement either")
-    assert.equal(onRoute?.subject, "Problem reported: safety")
+    // On the route: no stop, so no container and no place either — §3's "container and place then" — and no customer or agreement, and the subject names no place.
+    assert.deepEqual(ticketFor(routeProblem({ reason: "safety", note: "Road closed" })), {
+      kind: "reported-problem",
+      priority: "medium",
+      source: "driver-app",
+      subject: "Problem reported: safety",
+      description: "The driver reported a problem. Reason: safety. Note: Road closed",
+      links: { routeId: ROUTE, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS, customerId: null, agreementId: null },
+    })
+    assert.equal(ticketFor(routeProblem({ actualDriverId: null }))?.links.driverId, null, "a route nobody started has nobody's problem")
     // Named a stop, the three travel with it.
     assert.deepEqual(ticketFor(pickupEvent("pickup-problem-reported", { sharedCollectionPointId: "point" }))?.links, { ...stopLinks(MADS), sharedCollectionPointId: "point" })
   })
@@ -166,10 +176,12 @@ describe("ticketFor", () => {
         ? pickupEvent(kind as PickupEventKind, { reason: "route-ended", note: "x" })
         : kind === "command-rejected"
           ? rejection()
-          : ({ kind } as EventFacts)
+          : kind === "route-problem-reported"
+            ? routeProblem()
+            : ({ kind } as EventFacts)
       ;(ticketFor(event) === undefined ? news : cases).push(kind)
     }
-    assert.deepEqual(cases, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual(cases, ["route-problem-reported", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
     assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-corrected", "unload-recorded", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
     // A completed or corrected pickup answers nothing whatever its reason.
     for (const kind of ["pickup-completed", "pickup-corrected"] as const) {

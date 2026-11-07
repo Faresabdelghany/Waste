@@ -15,7 +15,7 @@
 // The events a test hands the job are built here too, as the applier would
 // have emitted them (apps/api/src/routes/driver.ts): a `pickup-failed` or
 // `pickup-skipped` carries the `Pickup` with the proof the command made, a
-// route-level `pickup-problem-reported` the `Route` with `proofs`, a
+// `route-problem-reported` the `Route` with `proofs`, a
 // `command-rejected` the `DriverCommandReceipt` — the contracts' shapes,
 // which the consumer parses, so a shape the applier does not write does not
 // pass here either.

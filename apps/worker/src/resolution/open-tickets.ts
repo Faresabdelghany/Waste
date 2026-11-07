@@ -1,9 +1,9 @@
-// The outbox's first consumer (Issue #109 part B, §3, ADR-0004): the four
+// The outbox's first consumer (Issue #109 part B, §3, ADR-0004): the five
 // `outbox.<kind>` queues of the kinds Resolution reads — `pickup-failed`,
-// `pickup-skipped`, `pickup-problem-reported` and `command-rejected` — taken
-// through `defineOutboxConsumer` (../runtime/outbox.ts), one registry entry
-// per kind, whose handler turns an execution event into a Ticket, or into
-// nothing. `route-cancelled` is not among them on purpose (§7.10): a
+// `pickup-skipped`, `pickup-problem-reported`, `route-problem-reported` and
+// `command-rejected` — taken through `defineOutboxConsumer`
+// (../runtime/outbox.ts), one registry entry per kind, whose handler turns an
+// execution event into a Ticket, or into nothing. `route-cancelled` is not among them on purpose (§7.10): a
 // cancellation makes no ticket of its own, since each stop it closed arrives
 // as its own `pickup-skipped · route-cancelled`. The relay (#104 part C)
 // sends each `outbox_event` row to its kind's queue and stamps `published_at`
@@ -15,7 +15,7 @@
 // as its kind's resource: a `Pickup` with the proof the command made
 // (the proofs optional since the office's cancellation writes
 // a bare `Pickup`), a `Route` with its `proofs` for a problem reported on the
-// route alone, a `DriverCommandReceipt` for a rejection — and a payload that
+// route, a `DriverCommandReceipt` for a rejection — and a payload that
 // does not parse is thrown, so pg-boss retries and, after its retries, fails
 // the job for `/readyz` to count: a contract drift between the API and the
 // worker is a bug and not a fact to swallow. Then one transaction as
@@ -32,8 +32,8 @@
 // is emitted inside it, as for the office's. `occurredAt` is the event's
 // instant, `dueAt` the project's SLA target of the kind and priority counted
 // from that instant (`BY_SLA`, O4 of #290), and the draft's links are what the
-// event named — a problem on the route alone names no stop and so no
-// container and no place, whatever was read. An address-only stop the office
+// event named — a problem on the route names no stop and so no container and
+// no place, and reads only the route's driver. An address-only stop the office
 // added (#111) names no container either: it reads no label and no
 // placement, so its ticket names the stop and its place, and no agreement.
 //
@@ -96,7 +96,7 @@
 // parse — the first is over in seconds and the second is a failed job after
 // a minute, which is what the readiness count is for. Each queue's jobs are
 // worked one at a time — a batch would put two events in one handler and
-// their failures together — and each of the four queues has a loop of its
+// their failures together — and each of the five queues has a loop of its
 // own, so events of one stop on two queues can meet: the key above is for
 // that.
 import { routeLabel } from "@waste/domain/numbering"
@@ -210,7 +210,8 @@ async function stopReads(tx: Tx, event: RelayedEvent<ResolutionEventKind>, picku
  * kind's contract, and what was read beside it. A pickup's reason is the
  * pickup's and the note the pickup's or, where the pickup carries none, the
  * proof's the command made, which is where a device's note lands; a problem's
- * reason and note are the problem proof's, on the stop or on the route.
+ * reason and note are the problem proof's, on the stop or on the route, and a
+ * problem on the route reads the route's driver beside it and nothing else.
  */
 async function factsOf(tx: Tx, event: RelayedEvent<ResolutionEventKind>): Promise<EventFacts> {
   const { companyId } = event
@@ -235,13 +236,13 @@ async function factsOf(tx: Tx, event: RelayedEvent<ResolutionEventKind>): Promis
         ...(await stopReads(tx, event, pickup, opensCase)),
       }
     }
+    case "route-problem-reported": {
+      const found = payloadOf(event)
+      const problem = found.proofs[0]
+      const { actualDriverId } = await routeOf(tx, companyId, found.id)
+      return { kind: event.kind, routeId: found.id, reason: problem?.reason ?? null, note: problem?.note ?? null, actualDriverId }
+    }
     case "pickup-problem-reported": {
-      if (event.aggregateKind === "route") {
-        const found = payloadOf(event)
-        const problem = found.proofs[0]
-        const { actualDriverId, plannedDriverId } = await routeOf(tx, companyId, found.id)
-        return { kind: event.kind, routeId: found.id, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: problem?.reason ?? null, note: problem?.note ?? null, containerLabel: null, address: null, actualDriverId, plannedDriverId, ...NOBODY }
-      }
       const pickup = payloadOf(event)
       const problem = pickup.proofs?.[0]
       return {
@@ -436,10 +437,10 @@ export async function openTicketFor(event: RelayedEvent<ResolutionEventKind>, { 
   }
 }
 
-/** The consumer's queue options: three retries with a short backoff, written over the relay's defaults on the four queues at every start. */
+/** The consumer's queue options: three retries with a short backoff, written over the relay's defaults on the five queues at every start. */
 export const OPEN_TICKETS_QUEUE_OPTIONS = { retryLimit: 3, retryDelay: 5, retryBackoff: true } as const
 
-/** The four registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
+/** The five registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const openTickets = defineOutboxConsumer({
   name: "resolution",
   kinds: RESOLUTION_EVENT_KINDS,

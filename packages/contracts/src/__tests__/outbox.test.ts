@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_AGGREGATES, OUTBOX_EVENTS, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
+import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
 import * as z from "zod"
 
 import { OUTBOX_PAYLOADS, OutboxAggregate, OutboxEvent, OutboxKind, outboxPayloadOf, RouteEvent } from "../outbox"
@@ -68,20 +68,18 @@ describe("OutboxEvent", () => {
 })
 
 describe("OUTBOX_PAYLOADS", () => {
-  test("names one schema for each aggregate a kind is about, and nothing else", () => {
+  test("names one schema for each kind, and nothing else", () => {
     assert.deepEqual(Object.keys(OUTBOX_PAYLOADS), [...OUTBOX_KINDS])
-    for (const kind of OUTBOX_KINDS) {
-      assert.deepEqual(Object.keys(OUTBOX_PAYLOADS[kind]), [...OUTBOX_EVENTS[kind]], kind)
-      for (const schema of Object.values(OUTBOX_PAYLOADS[kind])) assert.ok(schema instanceof z.ZodType, kind)
-    }
+    for (const kind of OUTBOX_KINDS) assert.ok(OUTBOX_PAYLOADS[kind] instanceof z.ZodType, kind)
   })
 
-  test("reads a payload through its kind's schema for the aggregate, and refuses another resource or an aggregate the kind is never about", () => {
-    const route = outboxPayloadOf("route-cancelled", "route", routeBefore209)
+  test("reads a payload through its kind's schema, and refuses another resource", () => {
+    const route = outboxPayloadOf("route-cancelled", routeBefore209)
     assert.deepEqual([route.heldAt, route.cancelReasonCode], [null, null], "a route cancelled before the hold and the codes reads as neither")
     assert.deepEqual(RouteEvent.parse(routeBefore209), route)
-    assert.throws(() => outboxPayloadOf("route-cancelled", "route", { id: THIRD }))
-    assert.throws(() => outboxPayloadOf("pickup-problem-reported", "unload" as "route", routeBefore209), /is about pickup or route, never a unload/)
-    assert.equal(outboxPayloadOf("pickup-problem-reported", "route", { ...routeBefore209, proofs: [] }).id, THIRD)
+    assert.throws(() => outboxPayloadOf("route-cancelled", { id: THIRD }))
+    assert.equal(outboxPayloadOf("route-problem-reported", { ...routeBefore209, proofs: [] }).id, THIRD, "a problem on the route is the route with its problem proof")
+    assert.throws(() => outboxPayloadOf("route-problem-reported", routeBefore209), z.ZodError, "and never without the proofs")
+    assert.throws(() => outboxPayloadOf("pickup-problem-reported", { ...routeBefore209, proofs: [] }), z.ZodError, "a problem on a stop is the stop's Pickup, never the route")
   })
 })

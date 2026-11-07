@@ -883,7 +883,7 @@ describe("GET /openapi.json", () => {
     assert.match(door, /`replayed` with the first outcome for an id this driver's devices already sent \(nothing written/)
     assert.match(door, /An id that another device's command already holds .* is refused \(409, `That command id belongs to another device's command`\) and never replayed/)
     assert.match(door, /two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index/)
-    assert.match(door, /a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs`/)
+    assert.match(door, /a route-level `report-problem`'s `route-problem-reported` the route with its problem proof as `proofs`/)
     assert.match(door, /assigned to another driver names that route — which `GET \/driver\/routes\/:id` still answers 404 for — and no session and no pickup/)
     assert.match(door, /A body that fails its kind's schema is one command's rejection, never the batch's/)
     assert.match(door, /at most five minutes ahead of the request's clock \(400, `Recorded after it happened`\)/)

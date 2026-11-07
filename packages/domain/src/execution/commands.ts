@@ -231,8 +231,8 @@ export type Effect =
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxSubject<DriverEventKind> }
 
-/** The outbox events a driver's command writes: the route started or completed, a stop's outcome or problem, a problem on the route alone, an unload. */
-export type DriverEventKind = "route-started" | "route-completed" | "pickup-completed" | "pickup-skipped" | "pickup-failed" | "pickup-problem-reported" | "unload-recorded"
+/** The outbox events a driver's command writes: the route started or completed, a stop's outcome or problem, a problem on the route naming no stop, an unload. */
+export type DriverEventKind = "route-started" | "route-completed" | "route-problem-reported" | "pickup-completed" | "pickup-skipped" | "pickup-failed" | "pickup-problem-reported" | "unload-recorded"
 
 /** The effects to run — with a note for the log where applying nothing is the right answer — or the rejection to record. */
 export type Decision = { apply: Effect[]; note?: string } | { reject: Rejection }
@@ -314,7 +314,7 @@ function proof(command: Command, kind: ProofKind, fields: Partial<Omit<ProofDraf
   }
 }
 
-const event = (kind: Exclude<DriverEventKind, "pickup-problem-reported">, aggregateId: string): Effect => ({ kind: "event", event: subjectOf(kind, aggregateId) })
+const event = (kind: DriverEventKind, aggregateId: string): Effect => ({ kind: "event", event: subjectOf(kind, aggregateId) })
 
 /**
  * The decision: the effects to run, or the rejection to record. Judged in
@@ -377,7 +377,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
       return {
         apply: [
           { kind: "append-proof", proof: proof(command, "problem", { pickupId: pickup?.id, reason: command.body.reason, note: command.body.note, location: command.body.location, accuracyM: command.body.accuracyM }) },
-          { kind: "event", event: pickup === undefined ? { kind: "pickup-problem-reported", aggregate: "route", aggregateId: route.id } : { kind: "pickup-problem-reported", aggregate: "pickup", aggregateId: pickup.id } },
+          pickup === undefined ? event("route-problem-reported", route.id) : event("pickup-problem-reported", pickup.id),
         ],
       }
     case "add-photo":

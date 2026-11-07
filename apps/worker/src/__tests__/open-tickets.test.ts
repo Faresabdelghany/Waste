@@ -77,10 +77,10 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
   const ticketById = async (id: string) => withCompany(pool.db, tenant.companyId, async (tx) => (await tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, id))))[0])
 
   test("is in the registry, one entry per kind Resolution reads on its own queue of the kind (#339) and none for route-cancelled, with a retry policy", () => {
-    assert.deepEqual(RESOLUTION_EVENT_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual(RESOLUTION_EVENT_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"])
     assert.deepEqual(
       openTickets.map((job) => job.queue),
-      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.command-rejected.resolution"],
+      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.route-problem-reported.resolution", "outbox.command-rejected.resolution"],
     )
     for (const job of openTickets) {
       assert.ok(JOBS.includes(job), job.queue)
@@ -292,7 +292,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual(await ticketsFrom(removed.id), [])
   })
 
-  test("a pickup-problem-reported on a stop is a medium reported-problem naming the stop; on the route alone it names the route and the driver and no container and no place, whatever the route's stops have", async () => {
+  test("a pickup-problem-reported is a medium reported-problem naming the stop; a route-problem-reported names the route and the driver and no container and no place, whatever the route's stops have", async () => {
     const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "planned" }, { container: "bin2", status: "planned" }] })
     const [stop] = seeded.pickupIds
     const onStop = outboxJob(tenant, {
@@ -309,7 +309,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     )
 
     const onRoute = outboxJob(tenant, {
-      kind: "pickup-problem-reported",
+      kind: "route-problem-reported",
       aggregateKind: "route",
       aggregateId: seeded.id,
       payload: { ...routePayload(tenant, seeded), proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Road closed at the harbour", recordedBy: testId() })] },
@@ -319,7 +319,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual(
       [routeTicket.kind, routeTicket.subject, routeTicket.routeId, routeTicket.pickupId, routeTicket.containerId, routeTicket.propertyId, routeTicket.sharedCollectionPointId, routeTicket.driverId],
       ["reported-problem", "Problem reported: safety", seeded.id, null, null, null, null, tenant.driverId],
-      "on the route alone: no stop, so no container and no place",
+      "on the route: no stop, so no container and no place",
     )
     assert.deepEqual([routeTicket.customerId, routeTicket.agreementId], [null, null], "nor a customer or an agreement")
     assert.deepEqual(
@@ -332,7 +332,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     // A payload the outbox took before the route had its hold (#209) carries no `heldAt`, and is still a ticket rather than a dead letter.
     const { heldAt: _heldAt, ...before209 } = routePayload(tenant, seeded)
     const older = outboxJob(tenant, {
-      kind: "pickup-problem-reported",
+      kind: "route-problem-reported",
       aggregateKind: "route",
       aggregateId: seeded.id,
       payload: { ...before209, proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Bridge closed", recordedBy: testId() })] },
@@ -341,7 +341,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     // Nor one taken before the cancel's reason code (O5 of #290), which carries no `cancelReasonCode`.
     const { cancelReasonCode: _code, ...beforeCodes } = routePayload(tenant, seeded)
     const uncoded = outboxJob(tenant, {
-      kind: "pickup-problem-reported",
+      kind: "route-problem-reported",
       aggregateKind: "route",
       aggregateId: seeded.id,
       payload: { ...beforeCodes, proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Ferry delayed", recordedBy: testId() })] },
@@ -735,6 +735,6 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual(await ticketsFrom(event.id), [])
     assert.throws(() => relayedEventOf({ ...event, companyId: "nobody" }), /Invalid|invalid/i, "a job without its tenant is a contract drift, not a fact")
     assert.throws(() => relayedEventOf({ kind: "pickup-failed" }), /Invalid|invalid|expected/i, "and so is a job that is not an outbox row")
-    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "route" }), /about pickup, never a route/, "and so is an event about an aggregate its kind is never about")
+    assert.throws(() => relayedEventOf({ ...event, aggregateKind: "route" }), /about a pickup, never a route/, "and so is an event about an aggregate its kind is never about")
   })
 })

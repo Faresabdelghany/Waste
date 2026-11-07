@@ -13,8 +13,9 @@
 // deviation, a complaint and a request are kinds of one Ticket and none is a
 // table (`TICKET_KINDS`: the prototype's five types, its repair ticket on a
 // defective container, the glossary's complaint and task, and the two the
-// outbox's consumer writes — `reported-problem` for a `pickup-problem-reported`
-// and `rejected-command` for a `command-rejected`, ADR-0004). `TICKET_STATUSES`
+// outbox's consumer writes — `reported-problem` for a problem reported on a
+// stop or the route and `rejected-command` for a `command-rejected`,
+// ADR-0004). `TICKET_STATUSES`
 // is the prototype's seven less `Created`, which folds into `open` the way
 // `Draft` folded into `planned` (#104 §2): a ticket is created for zero
 // seconds, and `created_at` says when; `pending` is waiting on the customer,
