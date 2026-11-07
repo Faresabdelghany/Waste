@@ -16,7 +16,7 @@
 // office's correction to completed service the ticket, a correction away from
 // completed comments on it. Misses reach it through Resolution's consumer.
 import type { Tx } from "@waste/db/client"
-import { bookedStopUncompleted, bookingTicket, bookTicket as bookTicketStop, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
+import { bookedStopUncompleted, bookingTicket, bookTicket as bookTicketStop, plannedStopAnswering, serveBookedTicket, type BookedStop } from "@waste/db/commands/ticket-stops"
 import type { Send } from "@waste/db/jobs"
 import { labelOf as ticketLabelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -70,15 +70,8 @@ export async function requireBookableTicket(tx: Tx, scope: Scope, row: TicketRow
   const mismatch = stopMismatch({ containerId: row.containerId, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId }, stop)
   if (mismatch !== undefined) throw invalidRequest("body", [mismatch])
   if (!(OPEN_TICKET_STATUSES as readonly string[]).includes(row.status)) throw problem(409, { detail: onlyAnOpenTicket(ticketLabelOf(row), row.status) })
-  if (row.bookedPickupId !== null) {
-    const [booked] = await tx
-      .select({ status: pickup.status, position: pickup.position, number: route.number })
-      .from(pickup)
-      .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-      .where(and(eq(pickup.companyId, scope.companyId), eq(pickup.id, row.bookedPickupId)))
-      .limit(1)
-    if (booked?.status === "planned") throw problem(409, { detail: answeredAlready(ticketLabelOf(row), { position: booked.position, route: routeLabel(booked.number) }) })
-  }
+  const answering = await plannedStopAnswering(tx, scope.companyId, row)
+  if (answering !== undefined) throw problem(409, { detail: answeredAlready(ticketLabelOf(row), answering) })
   return row
 }
 

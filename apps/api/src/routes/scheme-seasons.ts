@@ -14,7 +14,7 @@ import type { StoredSeason } from "@waste/domain/planning/generation"
 import type { SeasonFrequency, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
-import { newId } from "../ids"
+import { newId } from "@waste/db/ids"
 import type { Scope } from "./references"
 
 /** Every season of the schemes, by scheme, each scheme's by the day it starts; a scheme with none is absent. */

@@ -8,7 +8,7 @@
 //
 // The ids. A command's id is its idempotency key and the id of the row it
 // makes, minted at the tap as a UUIDv7 through @waste/domain/ids over the
-// browser's clock and `crypto.getRandomValues`, the way apps/api/src/ids.ts
+// browser's clock and `crypto.getRandomValues`, the way packages/db/src/ids.ts
 // supplies them for the server. Each id follows the last (`nextId`), and the
 // minter starts after the newest id the queue already holds, so the queue's
 // key order is the order of the taps even when the phone's clock ran

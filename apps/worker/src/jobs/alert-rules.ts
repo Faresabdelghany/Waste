@@ -102,8 +102,7 @@
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
-import { emit } from "@waste/db/commands/outbox"
-import { alertColumns, alertOf } from "@waste/db/commands/resolution-rows"
+import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { MAINTENANCE_WARNING_DAYS, MAINTENANCE_WARNING_HOURS, MAINTENANCE_WARNING_KM } from "@waste/domain/resources/maintenance"
@@ -487,20 +486,15 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
       for (const { projectId, occurrence, books } of occurrences) {
         told.push(books === undefined || occurrence.rule !== "fill-threshold" ? occurrence : { ...occurrence, emptying: await bookFillEmptying(tx, { companyId, projectId }, books.containerId, books.today, books.note) })
       }
-      const written = await tx
-        .insert(alert)
-        .values(
-          occurrences.map(({ projectId, ruleKey }, index) => {
-            const occurrence = told[index]!
-            const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = alertOfRule(occurrence)
-            return { companyId, projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId, raisedBy: null }
-          }),
-        )
-        // A tick that overlapped this one raised the occurrence already: the key is its word.
-        .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
-        .returning(alertColumns)
-      for (const row of written) await emit(tx, { companyId }, { aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: at })
-      return written
+      // A tick that overlapped this one raised the occurrence already: the key is its word.
+      return await raiseAlerts(
+        tx,
+        companyId,
+        occurrences.map(({ projectId, ruleKey }, index) => {
+          const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = alertOfRule(told[index]!)
+          return { projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId, raisedBy: null }
+        }),
+      )
     })
     raised += rows.length
   }

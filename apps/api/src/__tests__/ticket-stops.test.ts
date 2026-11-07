@@ -30,6 +30,7 @@ import { answeredAlready, bookedFor, correctedAway, notAnsweredBy, onlyAnOpenTic
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
+import { bookedAlready } from "../routes/pickups"
 import { NOT_A_TICKET } from "../routes/ticket-stops"
 import { NOT_A_COMPANY_VEHICLE } from "../routes/ticket-types"
 import { callingAs, type Call } from "./calls"
@@ -186,7 +187,10 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       const route = await running()
       const placed = await inService()
       const first = await added(route.id, { containerId: placed.id, ticketId: overflow.id })
-      // Another of the place's bins: the same work on the same container would meet the route's own refusal first.
+      // The same work on the same container meets the route's own refusal first, before the ticket's.
+      const same = await refused(await add(route.id, { containerId: placed.id, ticketId: overflow.id }), 409)
+      assert.equal(same.detail, bookedAlready(placed.label, "empty", route.label))
+      // Another of the place's bins meets the ticket's.
       const twice = await refused(await add(route.id, { containerId: (await inService()).id, ticketId: overflow.id }), 409)
       assert.equal(twice.detail, answeredAlready(overflow.label, { position: first.position, route: route.label }))
       assert.equal((await olivia(`/pickups/${first.id}/remove`, { method: "POST", body: { reason: "Booked on the wrong day" } })).status, 200)

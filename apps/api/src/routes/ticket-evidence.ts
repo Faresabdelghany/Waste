@@ -26,10 +26,10 @@ import type { TicketKind, TicketStatus } from "@waste/domain/resolution/vocabula
 import { timeInTimezone } from "@waste/domain/clock"
 import { and, eq } from "drizzle-orm"
 
-import { emit } from "../outbox"
+import { emit } from "@waste/db/commands/outbox"
+import { appendTicketEvent, type TicketRef } from "@waste/db/commands/open-ticket"
 import { pickupColumns, proofOf, proofsOfPickup } from "./execution-shapes"
 import { eventOf, type TicketRow } from "./resolution-shapes"
-import { appendTicketEvent, type TicketRef } from "./ticket-writes"
 
 /** An instant as the reply quotes it, on the project's clock: `07:42 on Saturday 24 October`. */
 export function whenOn(instant: string, timezone: string): string {

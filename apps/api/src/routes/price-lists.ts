@@ -46,7 +46,7 @@
 // area's, a container type's, a fraction's and a customer's name), read in
 // one statement per kind and only where something names one. The read looks
 // at no agreement: which list an agreement is priced under is the event's
-// question (routes/billable-writes.ts), and here the office asks what a list would say.
+// question (@waste/db/commands/billable-writes), and here the office asks what a list would say.
 //
 // `POST /price-lists/:id/index` is Apply index over the list (#291 C8, rows
 // 13.5 and 13.6): a percent from a day, judged row by row by the domain's
@@ -99,11 +99,11 @@ import { resolvePrice, type PriceInput, type PriceLabels } from "@waste/domain/f
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"

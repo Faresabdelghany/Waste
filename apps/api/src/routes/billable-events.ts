@@ -12,7 +12,7 @@
 //
 // The manual create is one of the three doors, the others being the
 // consumer's (part B, through the same `recordBillableEvent` in
-// routes/billable-writes.ts): an agreement and a product of the project, a
+// @waste/db/commands/billable-writes): an agreement and a product of the project, a
 // quantity, a service date, a note, and either the resolver's price —
 // `priceDraft`, the list valid on the day, the row that wins, the product's
 // VAT, or the block reason that stands in the way — or the person's
@@ -68,15 +68,15 @@ import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
+import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
+import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "@waste/db/commands/billable-writes"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
-import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
 import { eventColumns, eventOf, eventScope, eventsFrom, findEvent, noSuchEvent, statusIs, statusOf, UNNAMED, type EventReading } from "./billing-shapes"
 import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"

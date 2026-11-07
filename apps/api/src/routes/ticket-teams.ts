@@ -34,14 +34,15 @@ import type { Tx } from "@waste/db/client"
 import { team, teamMember, ticketTeamDefault } from "@waste/db/schema/resolution"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { advisoryLock } from "@waste/db/commands/shared"
+import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
 import { allows, requireGrant, requireGrantOf } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
@@ -347,7 +348,7 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-team-defaults:${principal.companyId}:${id}`}, 0))`)
+        await advisoryLock(tx, `ticket-team-defaults:${principal.companyId}:${id}`)
         const current = new Map((await defaultsOf(tx, principal.companyId, id)).map((row) => [kindOrTypeKey(row), row]))
         // The 400s — the types', then the teams' — then the 409s on what is new: a team a row already names stands whatever its status, as a type the set already names does.
         const refuseRetiredTypes = await requireSetTypes(tx, principal.companyId, defaults, "defaults", new Set([...current.values()].flatMap((row) => (row.ticketTypeId === null ? [] : [row.ticketTypeId]))))

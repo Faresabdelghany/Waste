@@ -4,9 +4,10 @@
 // (`POST /route-schemes/:id/generate`), written in the request's transaction
 // beside the `generation_run` it carries, so a run without a job or a job
 // without its run is not a state the database can be left in — the rule the
-// nightly plan-ahead sweep already follows. What the job is called and what
-// it carries are `commands/generation.ts`'s; what is here is how a job is
-// sent, so the two spell it the same:
+// nightly plan-ahead sweep already follows. What a job is called, what it
+// carries and how its run is started are its command's (`commands/generation.ts`,
+// `commands/messaging.ts`, `commands/plans.ts`); what is here is how a job
+// is sent, so every sender spells it the same, and it imports no command:
 //
 //   the adapter    — pg-boss's own `fromDrizzle(tx, sql)`: its `IDatabase`
 //                    is one method, `executeSql(text, values)`, whose text
@@ -25,13 +26,9 @@
 //                    instance (manager.js, `createJob`). Nothing dials on
 //                    construction, nothing is started or stopped per
 //                    request, and no connection is held beyond the pool's;
-//   the generation — the one job the API sends, under the scheme's id as
-//                    `singletonKey`, which pg-boss answers null for instead
-//                    of a second job while one of the scheme is queued or
-//                    active (`policy: "exclusive"` on the queue,
-//                    generate-routes.ts); and the question a sender asks
-//                    afterwards, whether a run's job is still pg-boss's to
-//                    run, spelled here beside the states that mean so.
+//   the question  — whether a job a sender sent is still pg-boss's to run
+//                    (`jobHeld`), spelled here beside the states that mean
+//                    so.
 //
 // What this needs of the database is what migration 0011 granted: `USAGE` on
 // `pgboss`, `SELECT, INSERT, UPDATE, DELETE` on its tables and `EXECUTE` on
@@ -42,7 +39,6 @@ import { sql, type SQL } from "drizzle-orm"
 import { fromDrizzle, PgBoss, type Db, type SendOptions } from "pg-boss"
 
 import type { Database, Tx } from "./client"
-import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "./commands/generation"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
 /** `boss.send(name, data, options)`: the worker's is its started instance's, the API's a sender's below. */
@@ -140,17 +136,6 @@ export function createJobSender(pool: Database): JobSender {
       }
     },
   }
-}
-
-/**
- * Sends the generation of one run inside `tx`, under the scheme's id as
- * `singletonKey`: null when a job of that scheme is already queued or
- * active, in which case the caller writes no run — the run whose job pg-boss
- * holds covers it.
- */
-export function sendGenerateRoutes(send: Send, tx: Tx, run: GenerateRoutesData & { routeSchemeId: string }): Promise<string | null> {
-  const data: GenerateRoutesData = { generationRunId: run.generationRunId, companyId: run.companyId }
-  return sendInTransaction(send, tx, GENERATE_ROUTES_QUEUE, data, { singletonKey: run.routeSchemeId })
 }
 
 /**

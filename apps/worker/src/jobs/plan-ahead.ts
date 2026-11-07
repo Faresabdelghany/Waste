@@ -8,9 +8,9 @@
 // #290), today's routes being already operating (the domain's rule,
 // planning/lifecycle.ts). An archived scheme has Plan Ahead off by the
 // database's shape; the sweep asks for both all the same. Every row is written as `wms_api` under `withCompany`, the
-// run and its job in one transaction through `sendGenerateRoutes`
-// (`@waste/db/jobs`, the spelling the API's trigger shares, Issue #168), so
-// neither is left without the other.
+// run and its job in one transaction through `startGenerationRun`
+// (`@waste/db/commands/generation`, the start the API's trigger shares,
+// Issue #168), so neither is left without the other.
 //
 // The sweep is the one statement in the system that reads across tenants,
 // and the reason `wms_worker` has BYPASSRLS: one `select` over route_scheme
@@ -23,16 +23,14 @@
 // an `exclusive` queue and every send carries the scheme's id as
 // `singletonKey`, so a send while a job of that scheme is queued or active
 // answers null, and the sweep then writes no run for it — the run that is
-// queued or running will cover the week. The run row is inserted before the
-// send and rolled back with it when the send answers null, so a null never
-// leaves a `queued` run nobody will pick up.
+// queued or running will cover the week. The job is sent before the run is
+// written, so a null never leaves a `queued` run nobody will pick up.
 //
 // The handler answers what it did, and logs one line per sweep; a failure of
 // one company's transaction is logged and the sweep goes on to the next,
 // since one tenant's trouble is not another's, and the job then fails so the
 // count shows on /readyz.
-import { sendGenerateRoutes } from "@waste/db/jobs"
-import { generationRun } from "@waste/db/schema/generation"
+import { startGenerationRun } from "@waste/db/commands/generation"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
@@ -87,39 +85,21 @@ export async function planAhead({ api, worker, now, log, send }: JobContext, job
   const outcome: PlanAheadOutcome = { eligible: schemes.length, queued: [], alreadyQueued: [], failed: [] }
   for (const scheme of schemes) {
     try {
-      const sent = await withCompany(api.db, scheme.companyId, async (tx) => {
-        const window = planAheadRunWindow(scheme.today, scheme.planAheadDays)
-        const [run] = await tx
-          .insert(generationRun)
-          .values({ companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", windowFrom: window.from, windowTo: window.to, status: "queued" })
-          .returning({ id: generationRun.id })
-        const sentJobId = await sendGenerateRoutes(send, tx, { generationRunId: run.id, companyId: scheme.companyId, routeSchemeId: scheme.routeSchemeId })
-        if (sentJobId === null) {
-          // A job of this scheme is queued or active: the run is rolled back with the send, and that run covers the week.
-          throw new AlreadyQueued()
-        }
-        await tx.update(generationRun).set({ jobId: sentJobId }).where(sql`${generationRun.id} = ${run.id}`)
-        return run.id
-      })
-      outcome.queued.push(sent)
-    } catch (error) {
-      if (error instanceof AlreadyQueued) {
+      const window = planAheadRunWindow(scheme.today, scheme.planAheadDays)
+      const runId = await withCompany(api.db, scheme.companyId, (tx) => startGenerationRun(tx, send, { companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", window }))
+      if (runId === null) {
+        // A job of this scheme is queued or active: no run is written, and that run covers the week.
         outcome.alreadyQueued.push(scheme.routeSchemeId)
         continue
       }
+      outcome.queued.push(runId)
+    } catch (error) {
       log(`${PLAN_AHEAD_QUEUE}: company ${scheme.companyId}, scheme ${scheme.routeSchemeId} failed: ${JSON.stringify(loggable(error))}`)
       outcome.failed.push(scheme.routeSchemeId)
     }
   }
   log(`${PLAN_AHEAD_QUEUE}: ${at.toISOString()} swept ${outcome.eligible} eligible ${outcome.eligible === 1 ? "scheme" : "schemes"}: ${outcome.queued.length} queued, ${outcome.alreadyQueued.length} already queued, ${outcome.failed.length} failed${jobId === null ? "" : ` (job ${jobId})`}`)
   return outcome
-}
-
-/** Thrown inside the fenced transaction to roll the run back when its job was not sent; caught by the sweep. */
-class AlreadyQueued extends Error {
-  constructor() {
-    super("a generation job of this scheme is already queued or active")
-  }
 }
 
 export const planAheadJob = defineJob<PlanAheadData>({

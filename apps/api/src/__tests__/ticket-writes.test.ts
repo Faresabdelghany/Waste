@@ -13,8 +13,8 @@ import { describe, test } from "node:test"
 import type { Tx } from "@waste/db/client"
 import { getTableName, type Table } from "drizzle-orm"
 
-import { createIdMinter } from "../ids"
-import { appendTicketEvent, openTicket, type TicketDraft } from "../routes/ticket-writes"
+import { createIdMinter } from "@waste/db/ids"
+import { appendTicketEvent, openTicket, type TicketDraft } from "@waste/db/commands/open-ticket"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

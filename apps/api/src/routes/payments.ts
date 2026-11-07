@@ -64,11 +64,11 @@ import { bankLineKey, bankLineLabels, bankLineReference, matchBankLine, minorDig
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, sum, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { invoiceColumns, invoiceScope, labelOf, standingsOf, type InvoiceRow, type InvoiceStanding } from "./billing-shapes"

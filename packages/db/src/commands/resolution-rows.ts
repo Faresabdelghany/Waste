@@ -91,6 +91,9 @@ export const linksOf = (row: Pick<TicketRow, keyof TicketLinks>): TicketLinks =>
   parentTicketId: row.parentTicketId,
 })
 
+/** The nine links, none named: what a writer spreads its own links over. */
+export const NO_TICKET_LINKS: TicketLinks = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
+
 /** The ticket on the wire. */
 export function ticketOf(row: TicketRow): Ticket {
   return {

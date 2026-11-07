@@ -21,7 +21,8 @@
 // the command.
 //
 // The office's correction of the stop's outcome follows the same rule
-// (`correctLedgerWork`): a correction to completed makes the movements as
+// (`ledgerHearsOfStop`, which every outcome's door calls through
+// stop-outcomes.ts): a correction to completed makes the movements as
 // the completion would have, dated by the correction, and one away from
 // completed leaves them standing — the ledger is appended to, never taken
 // back — and tells the office so (`ledgerMovedThenCorrected`).
@@ -34,17 +35,18 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { validOn } from "@waste/db/query/valid-on"
 import type { Send } from "@waste/db/jobs"
 import { Refused } from "@waste/db/commands/shared"
+import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
 import { isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, type LedgerService } from "@waste/domain/execution/work-orders"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, desc, eq } from "drizzle-orm"
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
+import { newId } from "@waste/db/ids"
+import { openTicket } from "@waste/db/commands/open-ticket"
 
 import type { Principal } from "../auth/principal"
-import { newId } from "../ids"
 import { ProblemError } from "../problem"
 import { issueContainer } from "./containers"
 import { move, type ContainerRef } from "./lifecycle"
-import { openTicket } from "./ticket-writes"
 
 /** The stop a completion just closed, as the ledger work reads it. */
 type CompletedStop = {
@@ -115,7 +117,7 @@ async function moveFor(tx: Tx, driver: Principal, stop: CompletedStop & { servic
 }
 
 /** Who completed the stop: the driver on the route, or the office correcting its outcome; the ticket's source and its sentence say which. */
-type CompletedBy = "driver" | "office"
+export type CompletedBy = "driver" | "office"
 const SOURCE_OF: Readonly<Record<CompletedBy, "driver-app" | "dispatch">> = { driver: "driver-app", office: "dispatch" }
 
 /** The stop as its ledger work reads it, with its project's timezone; undefined for a stop whose service moves nothing. */
@@ -151,7 +153,7 @@ async function ledgerStop(tx: Tx, companyId: string, pickupId: string): Promise<
  * completion's; `at` the request's clock, which the ledger holds the instant
  * to; `by` who completed it; `send` what the task's automation queues with.
  */
-export async function recordLedgerWork(tx: Tx, actor: Principal, send: Send, pickupId: string, occurredAt: string, at: Date, by: CompletedBy): Promise<void> {
+async function recordLedgerWork(tx: Tx, actor: Principal, send: Send, pickupId: string, occurredAt: string, at: Date, by: CompletedBy): Promise<void> {
   const work = await ledgerStop(tx, actor.companyId, pickupId)
   if (work === undefined) return
   // The driver acts on the route's project: the ledger's fences read the principal's projects.
@@ -171,21 +173,22 @@ export async function recordLedgerWork(tx: Tx, actor: Principal, send: Send, pic
 }
 
 /**
- * The office's correction of a stop's outcome, for its ledger work: to
- * completed from a miss, the movements as a completion makes them, dated by
- * the correction; from completed to a miss, the office's task saying the
- * movements stand. Nothing for a stop whose service moves nothing.
+ * A stop's outcome, for its ledger work: to completed — the driver's
+ * completion, or the office's correction from a miss — the movements as a
+ * completion makes them, dated by `occurredAt`; from completed to a miss, the
+ * office's task saying the movements stand. Nothing for any other move, or a
+ * stop whose service moves nothing.
  */
-export async function correctLedgerWork(tx: Tx, office: Principal, send: Send, pickupId: string, outcome: { from: PickupStatus; to: PickupStatus }, at: Date): Promise<void> {
+export async function ledgerHearsOfStop(tx: Tx, actor: Principal, send: Send, pickupId: string, outcome: { from: PickupStatus; to: PickupStatus; occurredAt: string; by: CompletedBy }, at: Date): Promise<void> {
   if (outcome.to === "completed" && outcome.from !== "completed") {
-    await recordLedgerWork(tx, office, send, pickupId, at.toISOString(), at, "office")
+    await recordLedgerWork(tx, actor, send, pickupId, outcome.occurredAt, at, outcome.by)
     return
   }
   if (outcome.from !== "completed" || (outcome.to !== "skipped" && outcome.to !== "failed")) return
-  const work = await ledgerStop(tx, office.companyId, pickupId)
+  const work = await ledgerStop(tx, actor.companyId, pickupId)
   if (work === undefined) return
-  const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, office.companyId, work)), outcome: outcome.to, correctedAt: timeInTimezone(at, work.timezone) })
-  await openLedgerTask(tx, office, send, work, words, "dispatch", at)
+  const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, actor.companyId, work)), outcome: outcome.to, correctedAt: timeInTimezone(at, work.timezone) })
+  await openLedgerTask(tx, actor, send, work, words, "dispatch", at)
 }
 
 /** The work as a ticket names it: its containers by label and its place by address. */
@@ -217,17 +220,7 @@ async function openLedgerTask(tx: Tx, actor: Principal, send: Send, stop: Comple
       occurredAt: at,
       dueAt: null,
       assigneeUserAccountId: null,
-      links: {
-        routeId: stop.routeId,
-        pickupId: stop.id,
-        containerId: stop.containerId,
-        propertyId: stop.propertyId,
-        sharedCollectionPointId: stop.sharedCollectionPointId,
-        customerId: null,
-        agreementId: null,
-        driverId: null,
-        parentTicketId: null,
-      },
+      links: { ...NO_TICKET_LINKS, routeId: stop.routeId, pickupId: stop.id, containerId: stop.containerId, propertyId: stop.propertyId, sharedCollectionPointId: stop.sharedCollectionPointId },
       alertId: null,
     },
     createdBy: actor.user.id,

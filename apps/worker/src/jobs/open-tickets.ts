@@ -101,11 +101,10 @@
 // that.
 import { routeLabel } from "@waste/contracts/execution"
 import type { Database, Tx } from "@waste/db/client"
-import { appendTicketEvent, BY_SLA, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
-import { runTicketAutomation } from "@waste/db/commands/ticket-automation"
+import { appendTicketEvent, BY_SLA, openTicket, ticketRefOf, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
+import { moveTicket } from "@waste/db/commands/ticket-automation"
 import { bookedTicket } from "@waste/db/commands/ticket-stops"
-import { emit } from "@waste/db/commands/outbox"
-import { labelOf, ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
+import { labelOf, ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
 import type { Send } from "@waste/db/jobs"
 import { tableObjectName } from "@waste/db/names"
@@ -121,6 +120,7 @@ import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, t
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { RESOLUTION_EVENT_KINDS, ticketFor, type EventFacts, type ResolutionEventKind, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
 import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../outbox/subscribe"
@@ -280,7 +280,7 @@ const asTicketDraft = (event: RelayedEvent<ResolutionEventKind>, draft: DomainDr
 
 /** The rule's key, held to the end of the transaction: the events of one driver or one stop meet their case one at a time. */
 async function serialise(tx: Tx, rule: CaseRule): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`resolution.open-tickets:${rule.by}:${rule.id}`}, 0))`)
+  await advisoryLock(tx, `resolution.open-tickets:${rule.by}:${rule.id}`)
 }
 
 /** The open case of `kinds` that is the rule's — the driver's, or the stop's — in the event's project, the first kind listed first and then the oldest, under its row lock. */
@@ -328,8 +328,6 @@ const commentOn = (row: TicketRow, body: string, sourceEventId: string | null): 
   sourceEventId,
 })
 
-const refOf = (companyId: string, row: TicketRow) => ({ companyId, projectId: row.projectId, id: row.id })
-
 /**
  * A stop's new missed collection over the stop's open reported problem: the
  * problem completed as its duplicate while nobody has touched it — the row,
@@ -347,26 +345,14 @@ async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: 
       .from(ticketEvent)
       .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, problem.id), eq(ticketEvent.kind, "comment"), isNotNull(ticketEvent.sourceEventId)))
       .orderBy(asc(ticketEvent.id))
-    const [completed] = await tx
-      .update(ticket)
-      .set({ status: "completed", resolution: "duplicate", closedAt: at, parentTicketId: missed.id })
-      .where(and(eq(ticket.companyId, companyId), eq(ticket.id, problem.id)))
-      .returning(ticketColumns)
-    await appendTicketEvent(
-      tx,
-      refOf(companyId, completed),
-      { kind: "status-changed", status: "completed", assigneeUserAccountId: completed.assigneeUserAccountId, resolution: "duplicate", body: supersededNote(how, labelOf(missed)), visibility: "internal", objectKey: null, recordedBy: null, sourceEventId: null },
-      newId,
-    )
-    await emit(tx, { companyId }, { aggregateId: completed.id, kind: "ticket-completed", payload: ticketOf(completed), projectId: completed.projectId, occurredAt: at })
-    await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
-    for (const { body } of folded) if (body !== null) await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, copiedNote(labelOf(problem), body), null), newId)
     // A completion as the system's own: the duplicate's type's completion actions run (#546 of #544).
-    await runTicketAutomation(tx, { send, by: null, companyId, newId, now: () => at }, completed.id, "completed")
+    await moveTicket(tx, { send, by: null, companyId, newId, now: () => at }, problem, { to: "completed", set: { resolution: "duplicate", parentTicketId: missed.id }, note: supersededNote(how, labelOf(missed)), recordedBy: null, at })
+    await appendTicketEvent(tx, ticketRefOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
+    for (const { body } of folded) if (body !== null) await appendTicketEvent(tx, ticketRefOf(companyId, missed), commentOn(missed, copiedNote(labelOf(problem), body), null), newId)
     return how
   }
-  await appendTicketEvent(tx, refOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
-  await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
+  await appendTicketEvent(tx, ticketRefOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
+  await appendTicketEvent(tx, ticketRefOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
   return how
 }
 
@@ -403,7 +389,7 @@ async function consume(api: Database, event: RelayedEvent<ResolutionEventKind>, 
     if (booked !== undefined) {
       const before = await handled(tx, companyId, event.id)
       if (before !== undefined) return { outcome: "replayed", ticketId: before }
-      await appendTicketEvent(tx, refOf(companyId, booked.row), commentOn(booked.row, booked.missed, event.id), newId)
+      await appendTicketEvent(tx, ticketRefOf(companyId, booked.row), commentOn(booked.row, booked.missed, event.id), newId)
       return { outcome: "commented", ticketId: booked.row.id }
     }
     const facts = await factsOf(tx, event)
@@ -416,7 +402,7 @@ async function consume(api: Database, event: RelayedEvent<ResolutionEventKind>, 
     if (rule !== undefined) {
       const open = await openCaseOf(tx, companyId, projectId, rule, rule.foldsInto)
       if (open !== undefined) {
-        await appendTicketEvent(tx, refOf(companyId, open), commentOn(open, draft.description, event.id), newId)
+        await appendTicketEvent(tx, ticketRefOf(companyId, open), commentOn(open, draft.description, event.id), newId)
         return { outcome: "commented", ticketId: open.id }
       }
     }

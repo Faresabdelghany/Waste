@@ -63,13 +63,12 @@
 // The grant is `route-studio.schemes`: `delete` to archive, `create` for a
 // successor. Both take the scheme's row lock first, as a patch does, so an
 // edit or a generation run in flight is waited for.
-import { RouteSchemeArchive, RouteSchemeArchived, RouteSchemeSuccession, RouteSchemeSuccessorCreate, type RouteScheme, type RouteSchemeCreate, type SchemeEndingCounts } from "@waste/contracts/route-schemes"
+import { RouteSchemeArchive, RouteSchemeArchived, RouteSchemeSuccession, RouteSchemeSuccessorCreate, type RouteScheme, type RouteSchemeCreate } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
-import { cancelRoutesByGeneration, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
-import { pickup, route } from "@waste/db/schema/execution"
+import { endSchemeRoutes } from "@waste/db/commands/scheme-routes"
+import { route } from "@waste/db/schema/execution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { firstEndingDay, routesEndedFrom, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
+import { firstEndingDay, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
 import { routeLabel } from "@waste/contracts/execution"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { addDays } from "@waste/domain/days"
@@ -93,56 +92,6 @@ export const endsTomorrowAtTheEarliest = (tomorrow: string): string => `Today's 
 /** What a successor's day outside the predecessor's period is refused with, at `validFrom`. */
 export const successorStartsInside = (scheme: { validFrom: string; validTo: string | null }): string =>
   scheme.validTo === null ? `The next version starts after this one does, on ${scheme.validFrom}` : `The next version starts after this one does, on ${scheme.validFrom}, and before it ends, on ${scheme.validTo}`
-
-/**
- * Ends the scheme's routes from `from`: each planned one cancelled or
- * trimmed as the domain decides, the dispatched and running ones counted.
- * Under the routes' row locks, in id order.
- */
-export async function endSchemeRoutes(tx: Tx, companyId: string, schemeId: string, from: string, note: string, at: Date): Promise<SchemeEndingCounts> {
-  const routes = await tx
-    .select({ id: route.id, collectionGroupId: route.collectionGroupId, serviceDate: route.serviceDate, operatingDate: route.operatingDate, status: route.status, cancelledByGeneration: route.cancelledByGeneration, heldAt: route.heldAt })
-    .from(route)
-    .where(and(eq(route.companyId, companyId), eq(route.routeSchemeId, schemeId), gte(route.serviceDate, from)))
-    .orderBy(asc(route.id))
-    .for("update")
-  const plannedIds = routes.filter((row) => row.status === "planned").map((row) => row.id)
-  // The planned routes' open stops, the office's among them: which routes carry one decides cancel or trim.
-  const open =
-    plannedIds.length === 0
-      ? []
-      : await tx
-          .select({ id: pickup.id, routeId: pickup.routeId, origin: pickup.origin })
-          .from(pickup)
-          .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, plannedIds), eq(pickup.status, "planned")))
-  const officeStops = new Set(open.filter((row) => row.origin === "office").map((row) => row.routeId))
-  const ending = routesEndedFrom(
-    routes.map((row) => ({
-      id: row.id,
-      // A scheme's route always carries its group (`route_scheme_shape`); only the office's ad-hoc route has none, and it has no scheme.
-      collectionGroupId: row.collectionGroupId ?? "",
-      serviceDate: row.serviceDate,
-      operatingDate: row.operatingDate,
-      status: row.status as RouteStatus,
-      cancelledByGeneration: row.cancelledByGeneration,
-      held: row.heldAt !== null,
-      officeStops: officeStops.has(row.id),
-    })),
-    from,
-    note,
-  )
-
-  const cancelled = ending.decisions.filter((decision) => decision.kind === "cancel").map((decision) => decision.routeId)
-  const trimmed = ending.decisions.filter((decision) => decision.kind === "trim").map((decision) => decision.routeId)
-  await cancelRoutesByGeneration(tx, companyId, cancelled, note, at)
-  if (trimmed.length > 0) await tx.update(route).set({ note }).where(and(eq(route.companyId, companyId), inArray(route.id, trimmed)))
-  // A cancelled route's every open stop, a trimmed one's own: the office's stops on a trimmed route stand.
-  const cancelledSet = new Set(cancelled)
-  const trimmedSet = new Set(trimmed)
-  const skipped = open.filter((row) => cancelledSet.has(row.routeId) || (trimmedSet.has(row.routeId) && row.origin === "generation")).map((row) => row.id)
-  await skipStopsByGeneration(tx, companyId, skipped, note, at)
-  return { cancelled: cancelled.length, trimmed: trimmed.length, kept: ending.kept }
-}
 
 /** The scheme the path names, locked and read again under the lock, refused when it is not here or is archived. */
 async function lockedScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow> {

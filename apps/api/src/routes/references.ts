@@ -36,7 +36,8 @@ import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from
 import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
-import { projectAccess, userAccount } from "@waste/db/schema/access"
+import { assigneeOf } from "@waste/db/commands/ticket-assignment"
+import { userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
@@ -51,11 +52,11 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { team, ticket } from "@waste/db/schema/resolution"
 import { decommissionReason } from "@waste/db/schema/stock"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
-import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
+import { findAlert, NOT_AN_ALERT } from "@waste/db/commands/alert-links"
 
 import { invalidRequest } from "../problem"
-import { findAlert, NOT_AN_ALERT } from "./alert-links"
 import type { AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 import { refuseRetiredReason, refuseRetiredTeam } from "./statuses"
@@ -458,7 +459,7 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 // names it whatever state either is in. The alert's check answers the row and
 // not only its existence, since what names an alert judges it next: the one
 // function `POST /tickets` and `POST /alerts/:id/link-ticket` share
-// (routes/alert-links.ts) reads its status and the ticket it already names
+// (@waste/db/commands/alert-links) reads its status and the ticket it already names
 // under the alert's lock, and one statement that says all three is better
 // than three. An id that is null or absent names nothing and is no issue, as
 // everywhere here; the overloads say so to the type checker, so a caller with
@@ -498,7 +499,7 @@ export async function requireTeam(tx: Tx, companyId: string, id: string, path = 
 
 /**
  * An Alert a body names: the project's. Answers the row whole, as the link
- * rule reads it (routes/alert-links.ts: its status, and the one ticket it is
+ * rule reads it (@waste/db/commands/alert-links: its status, and the one ticket it is
  * linked to or null) and as the link command answers it once linked, so the
  * proof it is there is the one read; undefined for an id that named nothing.
  */
@@ -526,35 +527,17 @@ export async function requireSubscription(tx: Tx, scope: Scope, id: string | nul
 }
 
 /**
- * A user account a body names as a ticket's assignee: this company's and not
- * deactivated (`requireUserAccount`, the company half and its sentence), and
- * working in the ticket's project — `all_projects`, or a Project Access row
- * naming it. Two statements, the company's first, so an account that is not
- * here at all is told that and not that it works elsewhere.
+ * A user account a body names as a ticket's assignee, as the ticket's every
+ * door judges it (`assigneeOf`): this company's and not deactivated
+ * (`NOT_A_USER_ACCOUNT`), and working in the ticket's project — `all_projects`,
+ * or a Project Access row naming it — so an account that is not here at all
+ * is told that and not that it works elsewhere.
  */
 export async function requireAccountInProject(tx: Tx, scope: Scope, id: string | null | undefined, path = "assigneeUserAccountId"): Promise<void> {
   if (id == null) return
-  await requireUserAccount(tx, scope.companyId, id, path)
-  const [found] = await tx
-    .select({ id: userAccount.id })
-    .from(userAccount)
-    .where(
-      and(
-        eq(userAccount.companyId, scope.companyId),
-        eq(userAccount.id, id),
-        or(
-          eq(userAccount.allProjects, true),
-          exists(
-            tx
-              .select({ one: sql`1` })
-              .from(projectAccess)
-              .where(and(eq(projectAccess.companyId, scope.companyId), eq(projectAccess.userAccountId, id), eq(projectAccess.projectId, scope.projectId))),
-          ),
-        ),
-      ),
-    )
-    .limit(1)
-  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_WORKING_IN_PROJECT }])
+  const found = await assigneeOf(tx, scope, id)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_USER_ACCOUNT }])
+  if (!found.worksInProject) throw invalidRequest("body", [{ path, message: NOT_WORKING_IN_PROJECT }])
 }
 
 // Finance & Contracting (Issue #112): what a money row names. Every Finance

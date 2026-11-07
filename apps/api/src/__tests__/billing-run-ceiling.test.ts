@@ -9,7 +9,7 @@ import { billableEvent, billingRun, invoiceLine } from "@waste/db/schema/finance
 import { withCompany } from "@waste/db/tenant"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
 
-import { newId, type IdMinter } from "../ids"
+import { newId, type IdMinter } from "@waste/db/ids"
 import { notCancelled } from "../routes/billable-events"
 import { BILLING_RUN_MAX_EVENTS, previewBilling, runBilling, type Transact } from "../routes/billing-runs"
 import { type BillingFixtures } from "./billing-fixtures"
