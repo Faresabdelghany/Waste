@@ -11,7 +11,7 @@
 //   `route-planning` area, as its context ("Planning area · …") reads.
 //
 //   Boundaries. Derived, not authored: the outline the prototype's map draws
-//   around an area (`planningAreaOutline`, @waste/fixtures/areas,
+//   around an area (`planningAreaOutline`, @waste/domain/map-planning/geo,
 //   the helper the map itself calls — the convex hull pushed 80 m out, or a
 //   box 120 m past one or two spots) over the same containers — every one
 //   the fixtures file under the area and the map places (in storage, in
@@ -86,10 +86,9 @@
 //   counts, and the prototype's `lastGeneratedAt` stamp on RS-Central, which
 //   on the server is a generation run's own record.
 import type { Polygon, Position } from "@waste/contracts/geojson"
-import type { LngLat } from "@waste/domain/map-planning/geo"
+import { planningAreaOutline, type LngLat } from "@waste/domain/map-planning/geo"
 import type { PlanningAreaPurpose, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { firstDayOut } from "@waste/domain/periods"
-import { planningAreaOutline } from "@waste/fixtures/areas"
 
 import type { Tx } from "../client"
 import { collectionCalendar } from "../schema/collection-calendars"

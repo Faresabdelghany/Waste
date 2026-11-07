@@ -5,14 +5,13 @@
 // containers has no geometry and cannot be shown or zoomed to. Pure data
 // logic; the map draws the polygons, the panel lists the rows.
 //
-// The outline itself is `planningAreaOutline` (@waste/fixtures/areas), which
-// the database seed stores as each demo area's boundary.
+// The outline itself is `planningAreaOutline` (@waste/domain/map-planning/geo),
+// which the database seed stores as each demo area's boundary.
 
 import type { BusinessRecord } from "../prototype-record"
 import { isSoftDeleted } from "../record-visibility"
 import { containerAreaRefs } from "../route-schemes/matching"
-import { planningAreaOutline } from "@waste/fixtures/areas"
-import { boundsFromPolygon, type LngLat, type LngLatBounds } from "@waste/domain/map-planning/geo"
+import { boundsFromPolygon, planningAreaOutline, type LngLat, type LngLatBounds } from "@waste/domain/map-planning/geo"
 import type { Gazetteer } from "@waste/fixtures/positions"
 import { containerLocation } from "./positions"
 

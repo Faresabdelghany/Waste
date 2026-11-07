@@ -12,11 +12,11 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { resolvePrice, type PriceRow } from "@waste/domain/finance/pricing"
+import { planningAreaOutline } from "@waste/domain/map-planning/geo"
 import { groupDriverIssue, schemeLicenceDay, schemeStructureIssues } from "@waste/domain/planning/checks"
 import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import type { LicenceClass } from "@waste/domain/resources/vocabulary"
 import { holidayNamesFor } from "@waste/domain/planning/holiday-names"
-import { planningAreaOutline } from "@waste/fixtures/areas"
 import { CONTAINER_VEHICLE_COMPATIBILITY } from "@waste/fixtures/taxonomy"
 import { and, eq } from "drizzle-orm"
 

@@ -2,9 +2,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { planningAreaOutline } from "@waste/fixtures/areas"
 import { AREA_LAYER_PALETTE, PLANNING_AREA_GEOMETRY_KEY, planningAreaGeometry, planningAreaLayers } from "../areas"
-import { pointInPolygon } from "@waste/domain/map-planning/geo"
+import { planningAreaOutline, pointInPolygon } from "@waste/domain/map-planning/geo"
 import { containerLocation } from "../positions"
 import { TEST_GAZETTEER } from "./gazetteer-fixture"
 
