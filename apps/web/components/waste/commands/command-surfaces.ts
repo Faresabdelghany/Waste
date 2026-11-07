@@ -32,7 +32,7 @@ import { applicationCorrectable } from "@/lib/data/applications"
 import { inspectionOpen } from "@/lib/data/inspections"
 import { isTeamMember } from "@/lib/data/provider-workspace"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
-import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
+import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { ActivityCommandsSurface, LogActivitySurface } from "./activity-surfaces"

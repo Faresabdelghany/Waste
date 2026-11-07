@@ -1,5 +1,5 @@
-// Whether a driver may take a vehicle out (Issue #101): the rule
-// route-schemes/fleet-profiles.ts's `driverHoldsLicence` reads for the web,
+// Whether a driver may take a vehicle out (Issue #101): the rule the web
+// prototype's `driverHoldsLicence` reads,
 // spelled once here over the vocabulary's tokens and with a day, since a
 // licence that has run out by the day asked does not hold. The web's module
 // delegates to `coversClass` through one case mapping (`B` ↔ `b`), so the

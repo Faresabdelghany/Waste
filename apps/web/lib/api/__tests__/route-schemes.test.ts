@@ -22,13 +22,12 @@ import {
   type RouteScheme,
 } from "@waste/contracts/route-schemes"
 import type { VehicleType } from "@waste/contracts/vehicle-types"
-import { containerDriftBetween, generationMatchHistoryOf } from "@waste/domain/route-schemes/container-drift"
-import { draftGroups } from "@waste/domain/route-schemes/draft"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
-import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
+import { containerDriftBetween, generationMatchHistoryOf } from "@/lib/prototype/route-schemes/container-drift"
+import { draftGroups } from "@/lib/prototype/route-schemes/draft"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
+import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@/lib/prototype/route-schemes/groups"
+import { effectiveSchemeStatus, schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { schemeValuesOfDraft } from "../../data/route-schemes"
@@ -42,6 +41,7 @@ import { PLAN_AHEAD_DAYS_KEY } from "../../data/route-schemes"
 import { ARCHIVE_SCHEME, PLAN_AHEAD_DAYS_REFUSAL, routeSchemeAdapter, routeSchemesModule, schemeOccurrences, SERVER_GROUP_IDS_KEY, SUCCEED_SCHEME } from "../records/route-schemes"
 import { loaded, loadModule, resolverOver, writeRecord, type ModuleState, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted, type Call } from "./scripted-fetch"
+import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const TODAY = "2026-09-30"

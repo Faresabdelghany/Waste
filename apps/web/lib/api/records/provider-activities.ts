@@ -18,7 +18,7 @@ import type { ServiceProviderActivity, ServiceProviderActivityCreate, ServicePro
 import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { activityLabel, activityReading } from "@waste/domain/service-providers/activities"
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ACTIVITY_KIND_KEY, ACTIVITY_PREFIX, ACTIVITY_RECORD_KIND, ACTIVITY_STATUS_KEY, closeBodyOf, daysText, kindLabel, PROVIDER_ACTIVITIES_MODULE, rejectBodyOf } from "@/lib/data/provider-activities"

@@ -32,7 +32,7 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "@/lib/data/portals"
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 
 export function PortalsSettingsOnApi() {

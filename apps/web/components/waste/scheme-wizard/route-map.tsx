@@ -23,8 +23,8 @@ import { RoutingAttribution } from "@/components/waste/routing/routing-attributi
 import type { BaseMapId } from "@/lib/map-planning/base-maps"
 import { roadOverlay, roadOverlayPath, roadPath } from "@/lib/map-planning/road-geometry"
 import type { LngLatBounds } from "@waste/domain/map-planning/geo"
-import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
-import type { PreviewStop, RoutePreview } from "@waste/domain/map-planning/route-preview"
+import { COPENHAGEN_CENTER } from "@waste/fixtures/positions"
+import type { PreviewStop, RoutePreview } from "@/lib/prototype/map-planning/route-preview"
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 
 import type { WizardRoute } from "./wizard-model"

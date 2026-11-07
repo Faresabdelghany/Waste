@@ -18,7 +18,7 @@
 // Draft with none — no status is on the wire, so the store refuses every
 // move. Only the version in force lends the record its geometry (a GeoJSON
 // Polygon under `PLANNING_AREA_GEOMETRY_KEY`, which the map draws as it
-// stands: @waste/domain/map-planning/areas), since the map shows what is in
+// stands: lib/prototype/map-planning/areas), since the map shows what is in
 // force today; an upcoming or ended version keeps its dates and its id for
 // the form. A period's end is spelled two ways: the wire's `validTo` is the
 // first day out of force (half-open, ADR-0005), the form's "Effective to"
@@ -60,7 +60,7 @@
 import type { CollectionCalendar } from "@waste/contracts/collection-calendars"
 import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
-import { PLANNING_AREA_GEOMETRY_KEY } from "@waste/domain/map-planning/areas"
+import { PLANNING_AREA_GEOMETRY_KEY } from "@/lib/prototype/map-planning/areas"
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 import { firstDayOut, inForceOn, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 

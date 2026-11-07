@@ -30,10 +30,10 @@
 // (`@waste/db/query/collection-days`), so a resident and a customer are told
 // one thing. A day's key — the group and the service date — is a route's
 // identity (ADR-0002), stable across reads.
-import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
+import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "./occurrences"
 import { addDays, formatShortDay, serviceDayOf } from "../days"
 import { inForceOn, type Period } from "../periods"
-import type { SchemeRecurrence } from "../route-schemes/recurrence"
+import type { SchemeRecurrence } from "./recurrence"
 import { planRoutes, skippedHoliday, type ExistingRoute, type GenerationGroup, type GenerationWindow } from "./generation"
 import type { CollectionDayStatus } from "./public-days"
 

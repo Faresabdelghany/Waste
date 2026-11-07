@@ -37,7 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { routeEstimateAdapter } from "@waste/domain/route-schemes/estimates"
+import { routeEstimateAdapter } from "@/lib/prototype/route-schemes/estimates"
 import {
   driverEligibility,
   driverOptionLabel,
@@ -45,18 +45,18 @@ import {
   vehicleOptionLabel,
   type DriverProfile,
   type VehicleProfile,
-} from "@waste/domain/route-schemes/fleet-profiles"
-import type { CollectionGroup } from "@waste/domain/route-schemes/groups"
+} from "@/lib/prototype/route-schemes/fleet-profiles"
+import type { CollectionGroup } from "@/lib/prototype/route-schemes/groups"
 import {
   CONTAINER_TYPE_VOCABULARY,
   containerMatchProfile,
   containerTypeShortLabel,
   resolveStopMatches,
   type StopMatchResult,
-} from "@waste/domain/route-schemes/matching"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { allowedContainerTypes } from "@waste/domain/route-schemes/scope"
-import { sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/route-schemes/matching"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
+import { allowedContainerTypes } from "@/lib/prototype/route-schemes/scope"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_LABELS, SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { licenceDayOf, timezoneOfProject } from "@/lib/data/route-schemes"
 import { cn } from "@/lib/utils"

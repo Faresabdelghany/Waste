@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import type { Plan, PlanDetail } from "@waste/contracts/plans"
-import type { AreaRoute } from "@waste/domain/map-planning/routes"
+import type { AreaRoute } from "@/lib/prototype/map-planning/routes"
 import { useApiClient } from "@/components/waste/api-session-store"
 import { useServerModuleState } from "@/components/waste/business-record-store"
 import { useMinuteClock } from "@/components/waste/routing/use-routing-quota"

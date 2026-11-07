@@ -12,7 +12,7 @@ import { PRICE_ROWS_MODULE } from "@/lib/data/commercial"
 import { SETTLEMENTS_MODULE } from "@/lib/data/provider-money"
 import { SITE_VISITS_MODULE } from "@/lib/data/site-visits"
 import type { Action } from "@waste/domain/access/modules"
-import { emptyBusinessFilters } from "@waste/domain/business-filters"
+import { emptyBusinessFilters } from "@/lib/prototype/business-filters"
 
 import type { Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"

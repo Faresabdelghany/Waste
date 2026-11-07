@@ -21,7 +21,7 @@
 // them.
 import { holidayListOf, schemeRecurrenceOf, type ExistingRoute, type GenerationWindow } from "@waste/domain/planning/generation"
 import { lookbackOf, type ServedContainer, type ServingGroup, type ServingScheme } from "@waste/domain/planning/collection-days"
-import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { addDays } from "@waste/domain/days"
 import { and, arrayOverlaps, asc, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"

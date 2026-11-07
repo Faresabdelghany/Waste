@@ -10,7 +10,7 @@
 import type { MoveCreate, MoveOutcome } from "@waste/contracts/moves"
 import { ANOTHER_CUSTOMER_MOVES_IN } from "@waste/domain/registry/moves"
 import { PROPERTY_PARTY_ROLES } from "@waste/domain/registry/vocabulary"
-import { splitList } from "@waste/domain/record-values"
+import { splitList } from "@/lib/prototype/record-values"
 import { lastDayIn } from "@waste/domain/periods"
 
 import { command, type ApiClient } from "../api/client"

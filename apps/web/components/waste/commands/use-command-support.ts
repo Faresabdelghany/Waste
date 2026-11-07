@@ -34,7 +34,7 @@ import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOpt
 import { recordsForProject } from "@/lib/data/project-scope"
 import { SERVICE_PROVIDERS_MODULE } from "@/lib/data/provider-money"
 import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 import { useApiClient } from "../api-session-store"
 import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved, type SavedOutcome } from "../business-record-store"

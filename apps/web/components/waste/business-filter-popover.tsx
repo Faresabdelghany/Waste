@@ -40,8 +40,8 @@ import {
   type BusinessFilterKey,
   type BusinessFilters,
   type FilterValueReaders,
-} from "@waste/domain/business-filters"
-import { serviceFrequencyOfRecord } from "@waste/domain/service-frequencies"
+} from "@/lib/prototype/business-filters"
+import { serviceFrequencyOfRecord } from "@/lib/prototype/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -52,7 +52,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// The filter shape lives in the pure lib (@waste/domain/business-filters) so
+// The filter shape lives in the pure lib (lib/prototype/business-filters) so
 // non-workspace surfaces filter through the same model; re-exported for the
 // existing component importers.
 export type { BusinessFilters }
@@ -70,7 +70,7 @@ type FilterDefinition = {
 
 // The legacy-name fold moved to the pure lib (issue #30) so derived list
 // cells share it; re-exported here for the existing component importers.
-import { canonicalCalendarName } from "@waste/domain/route-schemes/calendar"
+import { canonicalCalendarName } from "@/lib/prototype/route-schemes/calendar"
 export { canonicalCalendarName }
 
 /** One icon per category, whichever surface offers it. */

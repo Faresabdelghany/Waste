@@ -8,19 +8,19 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { SCHEME_EDIT_POLICIES } from "@waste/domain/planning/vocabulary"
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
-  SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
   type SchemeEditPolicy,
-} from "@waste/domain/route-schemes/creation"
-import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
+} from "@/lib/prototype/route-schemes/creation"
+import { CONTAINER_TYPE_VOCABULARY } from "@/lib/prototype/route-schemes/matching"
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
   seedSchemeEditValues,
-} from "@waste/domain/route-schemes/quick-create"
-import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
+} from "@/lib/prototype/route-schemes/quick-create"
+import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@/lib/prototype/route-schemes/scope"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
 

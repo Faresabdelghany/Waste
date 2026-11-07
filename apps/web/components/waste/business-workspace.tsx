@@ -62,22 +62,22 @@ import {
   calendarRowSummary,
   withDerivedCalendarValue,
   type CalendarRowSummary,
-} from "@waste/domain/route-schemes/calendar-list"
-import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
+} from "@/lib/prototype/route-schemes/calendar-list"
+import { SCHEME_EDIT_POLICY_LABELS } from "@/lib/prototype/route-schemes/creation"
 import type { Action } from "@waste/domain/access/modules"
-import { draftGroups } from "@waste/domain/route-schemes/draft"
+import { draftGroups } from "@/lib/prototype/route-schemes/draft"
 import { driverFormOptions } from "@/lib/data/driver-form-options"
-import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
-import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
+import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
+import { HOLIDAY_POLICY_LABELS } from "@waste/domain/planning/occurrences"
 import {
   schemeAttention,
   schemeCanGenerateRoutes,
   withEffectiveSchemeStatus,
-} from "@waste/domain/route-schemes/lifecycle"
+} from "@/lib/prototype/route-schemes/lifecycle"
 import {
   isPlanAheadEnabled,
   setPlanAhead,
-} from "@waste/domain/route-schemes/plan-ahead"
+} from "@/lib/prototype/route-schemes/plan-ahead"
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
@@ -85,7 +85,7 @@ import {
   quickDriverIssue,
   quickSchemeDraftFromValues,
   seedSchemeEditValues,
-} from "@waste/domain/route-schemes/quick-create"
+} from "@/lib/prototype/route-schemes/quick-create"
 import {
   collectionGroupSummary,
   collectionGroupsOf,
@@ -93,13 +93,13 @@ import {
   hasExplicitCollectionGroups,
   sharedServiceProvider,
   type CollectionGroup,
-} from "@waste/domain/route-schemes/groups"
+} from "@/lib/prototype/route-schemes/groups"
 import {
   schemeRowSummary,
   withDerivedSchemeContext,
   type SchemeRowSummary,
-} from "@waste/domain/route-schemes/scheme-list"
-import { recurrenceFromValues, recurrenceSentence, serviceDaysFromValues, todayIso } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/route-schemes/scheme-list"
+import { recurrenceSentence, todayIso } from "@waste/domain/planning/recurrence"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { formatShortDay, SERVICE_DAY_SHORT_LABELS } from "@waste/domain/days"
 import {
@@ -107,15 +107,15 @@ import {
   matchPlansFromValues,
   stopRuleSummary,
   stopSelectionMode,
-} from "@waste/domain/route-schemes/matching"
-import { dayPlanCountSummary } from "@waste/domain/route-schemes/validation"
+} from "@/lib/prototype/route-schemes/matching"
+import { dayPlanCountSummary } from "@/lib/prototype/route-schemes/validation"
 import type {
   BusinessFormField,
   BusinessFormOption,
   BusinessFormSchema,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
-import { isSoftDeleted, softDeletedRecord } from "@waste/domain/record-visibility"
+import { isSoftDeleted, softDeletedRecord } from "@/lib/prototype/record-visibility"
 import { resolveBusinessRelation } from "@/lib/data/business-links"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import {
@@ -197,12 +197,12 @@ import {
   removeBusinessFilterValue,
   type BusinessFilterKey,
   type BusinessFilters,
-} from "@waste/domain/business-filters"
+} from "@/lib/prototype/business-filters"
 import { RecordHistory } from "@/components/waste/record-history"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import {
   canonicalServiceFrequencyName,
-} from "@waste/domain/service-frequencies"
+} from "@/lib/prototype/service-frequencies"
 import {
   BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
@@ -262,6 +262,7 @@ import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-liv
 import { useGrants } from "@/components/auth/use-grants"
 import { mayOn } from "@/lib/api/grants"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -2803,7 +2804,7 @@ export function BusinessWorkspace({
 
     // A scheme's recurrence is machine-readable in submittedValues (frequency,
     // serviceDays, weekRotation, effectiveFrom/To, plannedStartTime — the shape
-    // @waste/domain/route-schemes/recurrence reads); the facts get the one-line summary
+    // @waste/domain/planning/recurrence reads); the facts get the one-line summary
     // the record detail shows.
     const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
       let nextFacts = { ...record.facts }

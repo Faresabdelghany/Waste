@@ -6,9 +6,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
-import { SERVING_KEY } from "@waste/domain/route-schemes/matching"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { validateGuidedScheme } from "@/lib/prototype/route-schemes/draft"
+import { SERVING_KEY } from "@/lib/prototype/route-schemes/matching"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"

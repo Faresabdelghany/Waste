@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { SchemeCalendar } from "../../route-schemes/occurrences"
-import type { SchemeRecurrence } from "../../route-schemes/recurrence"
+import type { SchemeCalendar } from "../occurrences"
+import type { SchemeRecurrence } from "../recurrence"
 import { collectionDaysOf, type ServingGroup, type ServingScheme } from "../collection-days"
 import type { ExistingRoute } from "../generation"
 

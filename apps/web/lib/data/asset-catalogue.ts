@@ -4,7 +4,7 @@
 // display type the registry seeds is weighed here for every fraction the
 // fixtures put in it, and timed, because the guided setup's estimates read
 // this catalogue first and fall back to the prototype's table only for a
-// pair it does not weigh (@waste/domain/route-schemes/estimates) — before
+// pair it does not weigh (lib/prototype/route-schemes/estimates) — before
 // Issue #39 the 140 L bin, the igloo and the underground unit were not here
 // at all, and the four that were weighed one to three fractions each, so
 // most groups carried "Fallback weight". Weights are one emptying of the

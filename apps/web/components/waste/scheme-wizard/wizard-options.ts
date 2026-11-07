@@ -2,15 +2,15 @@
 // opens with. The frequency options are the product's four cadences mapped
 // onto the engine's (frequency, weekRotation) pair.
 
+import { HOLIDAY_POLICIES, SCHEME_EDIT_POLICIES } from "@waste/domain/planning/vocabulary"
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
-  SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
-} from "@waste/domain/route-schemes/creation"
-import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { SCHEME_SERVICE_TYPES } from "@waste/domain/route-schemes/scope"
-import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, isRecurrenceFrequency, isoWeekRotation, todayIso, type RecurrenceFrequency } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/route-schemes/creation"
+import { HOLIDAY_POLICY_LABELS } from "@waste/domain/planning/occurrences"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
+import { SCHEME_SERVICE_TYPES } from "@/lib/prototype/route-schemes/scope"
+import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, isRecurrenceFrequency, isoWeekRotation, todayIso, type RecurrenceFrequency } from "@waste/domain/planning/recurrence"
 import { isIsoDate, SERVICE_DAYS } from "@waste/domain/days"
 
 import type { SelectOption } from "./wizard-fields"

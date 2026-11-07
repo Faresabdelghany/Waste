@@ -43,16 +43,17 @@ import {
   resolveCollectionGroupPlans,
   type CollectionGroup,
   type CollectionGroupResolution,
-} from "@waste/domain/route-schemes/groups"
-import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
+} from "@/lib/prototype/route-schemes/groups"
+import { schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"
 import {
-  STOP_MATCH_VEHICLE_TYPES,
   resolveStopMatches,
   type StopMatchRule,
-} from "@waste/domain/route-schemes/matching"
-import { serviceDaysFromValues, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/route-schemes/matching"
+import { STOP_MATCH_VEHICLE_TYPES } from "@waste/fixtures/taxonomy"
+import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { SERVICE_DAY_SHORT_LABELS, type ServiceDay } from "@waste/domain/days"
 import { cn } from "@/lib/utils"
+import { serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** The planning area picker's value for a rule group matching within the scheme's area. */
 const SCHEME_AREA = "__scheme-area__"

@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { VehicleAllocationChange, VehicleAllocationConfirm, VehicleAllocationCreate, VehicleAllocationRelease, type VehicleAllocation, type VehicleAllocationEvent } from "@waste/contracts/allocations"
 import type { WasteFraction } from "@waste/contracts/catalogue"
 import type { Project } from "@waste/contracts/organisation"
-import { allocationConflictSourceFromValues } from "@waste/domain/route-schemes/validation"
+import { allocationConflictSourceFromValues } from "@/lib/prototype/route-schemes/validation"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"

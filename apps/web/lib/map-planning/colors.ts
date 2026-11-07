@@ -6,7 +6,7 @@
 // is not offered and the fractions are master data carrying no colour (#181),
 // the colours stay the Settings store's defaults. Pure data logic.
 
-import { avalancheHash } from "@waste/domain/route-schemes/hash"
+import { avalancheHash } from "@waste/domain/hash"
 
 export type ConfiguredFractionColor = { name: string; color: string }
 

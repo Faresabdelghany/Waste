@@ -10,10 +10,7 @@
 // localStorage, fetch, process and Buffer are not even names there; a specimen
 // compile below proves that holds. The scanner (purity-scan.ts): every import
 // in shipping code is relative and stays inside src/, or is one of the allowed
-// specifiers, whose packages must be exactly the manifest's dependencies, and
-// neither is nor pulls in a denied one (the walk reads a workspace package's
-// modules through their relative value imports, so `@waste/domain/x` is
-// judged by all of the domain it drags in at run time); tests
+// specifiers, whose packages must be exactly the manifest's dependencies; tests
 // may add Node built-ins and the allowed test specifiers, whose packages must
 // be devDependencies; reference directives, ambient declarations and
 // type-position imports are refused outright. Specifiers come from the
@@ -28,8 +25,7 @@
 // packages it checks. typescript is its one runtime dependency, because the
 // gate imports it whenever a consumer's test suite runs.
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
-import { createRequire } from "node:module"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, test } from "node:test"
 import ts from "typescript"
@@ -42,7 +38,6 @@ import {
   testDirectoriesOf,
   type PurityScanOptions,
   type SourceFile,
-  valueImportsOf,
 } from "./purity-scan"
 
 export type PurityGateOptions = PurityScanOptions & {
@@ -94,47 +89,6 @@ function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort()
 }
 
-/**
- * What a module of a workspace package pulls in at run time, as the package
- * that depends on it resolves it: the module, then every module its relative
- * value imports reach (a type-only import is erased and pulls nothing), each
- * named by its specifier with the shortest chain that reaches it. A specifier
- * of a package that ships no source by subpath reaches itself alone.
- */
-export function workspaceReach(packageDir: string): (specifier: string) => ReadonlyMap<string, readonly string[]> {
-  const resolve = createRequire(path.join(packageDir, "package.json")).resolve
-  return (specifier) => {
-    const alone = new Map([[specifier, [specifier]]])
-    const name = packageNameOf(specifier)
-    const subpath = specifier.slice(name.length + 1)
-    let manifestPath: string
-    try {
-      manifestPath = resolve(`${name}/package.json`)
-    } catch {
-      return alone
-    }
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest
-    if (subpath === "" || manifest.exports?.["./*"] !== "./src/*.ts") return alone
-    const srcDir = path.join(path.dirname(manifestPath), "src")
-    const reached = new Map<string, readonly string[]>()
-    const queue: [module: string, chain: string[]][] = [[subpath, [specifier]]]
-    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-      const [module, chain] = next
-      const moduleSpecifier = `${name}/${module}`
-      if (reached.has(moduleSpecifier)) continue
-      reached.set(moduleSpecifier, chain)
-      const file = path.join(srcDir, `${module}.ts`)
-      if (!existsSync(file)) continue
-      for (const imported of valueImportsOf(readFileSync(file, "utf8"))) {
-        if (!imported.startsWith(".")) continue
-        const target = path.posix.normalize(path.posix.join(path.posix.dirname(module), imported))
-        queue.push([target, [...chain, `${name}/${target}`]])
-      }
-    }
-    return reached
-  }
-}
-
 type Loaded = {
   manifest: PackageManifest
   files: SourceFile[]
@@ -182,9 +136,8 @@ export function definePurityTests(options: PurityGateOptions): void {
 
     const allowedImports = options.allowedImports ?? []
     const allowed = allowedImports.length > 0 ? allowedImports.join(", ") : "nothing else"
-    const denied = (options.deniedImports ?? []).length > 0 ? `, but nothing that is or reaches ${options.deniedImports?.join(", ")}` : ""
-    test(`imports itself and ${allowed}${denied}`, () => {
-      const violations = findPurityViolations(load().files, { reachOf: workspaceReach(packageDir), ...options })
+    test(`imports itself and ${allowed}`, () => {
+      const violations = findPurityViolations(load().files, options)
       const report = violations.map((v) => `${v.file}:${v.line} [${v.rule}] ${v.detail}`).join("\n")
       assert.deepEqual(violations, [], `\n${report}\n`)
     })

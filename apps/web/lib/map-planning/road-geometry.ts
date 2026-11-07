@@ -12,8 +12,8 @@
 // Everything here is pure; lib/api/routing.ts makes the calls.
 
 import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
-import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
-import { avalancheHash } from "@waste/domain/route-schemes/hash"
+import { COPENHAGEN_CENTER } from "@waste/fixtures/positions"
+import { avalancheHash } from "@waste/domain/hash"
 import type { LineString, Position } from "@waste/contracts/geojson"
 
 /** Vertices closer than this to the line between their neighbours are dropped. */

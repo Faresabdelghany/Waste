@@ -34,14 +34,14 @@ import {
   businessFilterChips,
   emptyBusinessFilters,
   type BusinessFilters,
-} from "@waste/domain/business-filters"
+} from "@/lib/prototype/business-filters"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { planningAreaLayers, type PlanningAreaLayer } from "@waste/domain/map-planning/areas"
+import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
+import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { planningAreaLayers, type PlanningAreaLayer } from "@/lib/prototype/map-planning/areas"
 import {
   defaultBaseMapForTheme,
   isBaseMapId,
@@ -51,23 +51,23 @@ import { persistedStore } from "@/lib/persisted-store"
 import { BASE_MAP_STORAGE_KEY } from "@/lib/storage-keys"
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
-import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
-import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@waste/domain/map-planning/coverage-gaps"
-import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@waste/domain/map-planning/scheme-compare"
-import { mapFilterReaders } from "@waste/domain/map-planning/filters"
+import { serviceAreasForSelection } from "@/lib/prototype/map-planning/coverage"
+import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@/lib/prototype/map-planning/coverage-gaps"
+import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@/lib/prototype/map-planning/scheme-compare"
+import { mapFilterReaders } from "@/lib/prototype/map-planning/filters"
 import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
-import { containerPoints, type MapPoint } from "@waste/domain/map-planning/points"
-import { containerLocation } from "@waste/domain/map-planning/positions"
+import { containerPoints, type MapPoint } from "@/lib/prototype/map-planning/points"
+import { containerLocation } from "@/lib/prototype/map-planning/positions"
 import { advancePlayback, playbackFrame } from "@/lib/map-planning/playback"
-import { routesInSelection, routesInWindow, type AreaRoute } from "@waste/domain/map-planning/routes"
+import { routesInSelection, routesInWindow, type AreaRoute } from "@/lib/prototype/map-planning/routes"
 import type { SavedSelection } from "@/lib/map-planning/saved-selections"
 import {
   serviceAreaLayers,
   serviceAreaSeedFromSelection,
   type ServiceAreaLayer,
   type ServiceAreaSeed,
-} from "@waste/domain/map-planning/service-areas"
+} from "@/lib/prototype/map-planning/service-areas"
 import {
   COLLECTION_WINDOW_LABELS,
   DEFAULT_COLLECTION_WINDOW,
@@ -77,16 +77,16 @@ import {
   routeSchemeIndex,
   routeStopIndex,
   type CollectionWindow,
-} from "@waste/domain/map-planning/schedule"
+} from "@/lib/prototype/map-planning/schedule"
 import type { SearchHit } from "@/lib/map-planning/search"
 import {
   schemeDraftFromSelection,
   selectedContainerRows,
   type SelectionShape,
-} from "@waste/domain/map-planning/selection"
-import { selectionStatistics } from "@waste/domain/map-planning/statistics"
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+} from "@/lib/prototype/map-planning/selection"
+import { selectionStatistics } from "@/lib/prototype/map-planning/statistics"
+import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
+import { todayIso } from "@waste/domain/planning/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"

@@ -7,7 +7,7 @@
 // same way a place does.
 //
 // A vehicle record spells what the fixtures spelled and what the wizard's
-// fleet readers read (@waste/domain/route-schemes/fleet-profiles): the name
+// fleet readers read (lib/prototype/route-schemes/fleet-profiles): the name
 // is `callsign · plate`, the context `type tonnage · depot` ("Rear loader 18
 // t · Nordhavn Depot", the canonical type first so `vehicleTypeOfRecord`
 // finds it), the Capacity fact "18 t", the typed `requiredLicenceClass` in

@@ -21,7 +21,7 @@ import type { CountingRule, CountingSimulation } from "@waste/contracts/counting
 import type { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
 import type { Team } from "@waste/contracts/ticket-teams"
 import type { TicketType } from "@waste/contracts/ticket-types"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { todayIso } from "@waste/domain/planning/recurrence"
 import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"

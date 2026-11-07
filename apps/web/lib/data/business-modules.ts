@@ -1,5 +1,5 @@
 import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
-import type { BusinessRecord } from "@waste/domain/prototype-record"
+import type { BusinessRecord } from "@/lib/prototype/prototype-record"
 
 // The registry of workspaces and modules, and the fixture records of the
 // modules still on the browser's path. A switched module (SERVER_MODULES,
@@ -442,7 +442,7 @@ const plan: WorkspaceDefinition = {
       description: "Effective-dated recurring templates for generating executable routes.",
       entityLabel: "Route scheme",
       // Rendered as the derived "project · area · service days" context (issue
-      // #30, D15; #254) — see @waste/domain/route-schemes/scheme-list.
+      // #30, D15; #254) — see lib/prototype/route-schemes/scheme-list.
       contextLabel: "Project · area · service days",
       valueLabel: "Demand",
       primaryAction: "New route scheme",

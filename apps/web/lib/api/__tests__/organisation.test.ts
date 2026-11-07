@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 
 import { RoleCreate, RolePatch, UserInvite, UserPatch, type Role, type User } from "@waste/contracts/access"
 import { CompanyPatch, ProjectCreate, ProjectPatch, ServiceProviderCreate, ServiceProviderPatch, type Company, type Project, type ServiceProvider } from "@waste/contracts/organisation"
-import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
+import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope, isProjectRecordId, projectRecordsOf, type ProjectRecordId } from "../../data/project-scope"

@@ -22,15 +22,15 @@ import {
   removeBusinessFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
-} from "@waste/domain/business-filters"
+} from "@/lib/prototype/business-filters"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { MAP_FILTER_READERS } from "@waste/domain/map-planning/filters"
+import { MAP_FILTER_READERS } from "@/lib/prototype/map-planning/filters"
 import {
   COLLECTION_WINDOWS,
   COLLECTION_WINDOW_LABELS,
   isCollectionWindow,
   type CollectionWindow,
-} from "@waste/domain/map-planning/schedule"
+} from "@/lib/prototype/map-planning/schedule"
 import { cn } from "@/lib/utils"
 
 export type MapToolbarProps = {

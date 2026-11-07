@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAILY_HAS_NO_SEASONS, WEEK_ROTATION_WITH_FORTNIGHTLY } from "@waste/domain/planning/schemes"
-import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
+import { AT_MOST_SEASONS, EACH_SEASON_NAME_ONCE, MONTH_DAY_SHAPE, SEASON_PART_OF_YEAR, SEASONS_KEEP_APART, SEASONS_MAX } from "@waste/domain/planning/seasons"
 
 import { Occurrence, RouteSchemeCreate, RouteSchemePatch, SchemeSeason, SchemeSeasons } from "../route-schemes"
 import { refusal } from "./expect"

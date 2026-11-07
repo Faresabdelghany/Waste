@@ -3,15 +3,15 @@
 // grant key for `/holiday-lists`, beside the per-year calendars. A list is
 // `holiday-list-<uuid>` from the start, named, of one country, its days
 // spelled as a calendar's are — `holidayDates` and `holidayNames` — so
-// `resolveProjectCalendar` (@waste/domain/route-schemes/project-calendar)
+// `resolveProjectCalendar` (lib/prototype/route-schemes/project-calendar)
 // reads a project's holidays from the list it names. A list's days travel
 // with it and are replaced whole through their own route; an edit that moves
 // the name or the country and the days is two requests, the list first.
 // Removing a list is an action (`REMOVE_HOLIDAY_LIST`), since the store has
 // no delete: the API refuses a list a project still names, in its sentence.
 import type { HolidayList, HolidayListHoliday } from "@waste/contracts/holiday-lists"
-import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, HOLIDAY_LIST_PREFIX, holidayListEntries } from "@waste/domain/route-schemes/holiday-list-records"
-import { holidayEntryValues } from "@waste/domain/route-schemes/holiday-lists"
+import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, HOLIDAY_LIST_PREFIX, holidayListEntries } from "@/lib/prototype/route-schemes/holiday-list-records"
+import { holidayEntryValues } from "@/lib/prototype/route-schemes/holiday-lists"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"

@@ -10,10 +10,10 @@ import {
   BUSINESS_FILTER_KEYS,
   emptyBusinessFilters,
   type BusinessFilters,
-} from "@waste/domain/business-filters"
+} from "@/lib/prototype/business-filters"
 import type { LngLat } from "@waste/domain/map-planning/geo"
-import { isCollectionWindow, type CollectionWindow } from "@waste/domain/map-planning/schedule"
-import type { SelectionShape } from "@waste/domain/map-planning/selection"
+import { isCollectionWindow, type CollectionWindow } from "@/lib/prototype/map-planning/schedule"
+import type { SelectionShape } from "@/lib/prototype/map-planning/selection"
 
 export type SavedSelection = {
   id: string
