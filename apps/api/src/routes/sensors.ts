@@ -61,6 +61,7 @@ import {
 } from "@waste/contracts/sensors"
 import type { Tx } from "@waste/db/client"
 import { dayInTimezone } from "@waste/domain/clock"
+import { aheadOfClock } from "@waste/domain/execution/commands"
 import { project } from "@waste/db/schema/organisation"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
@@ -80,7 +81,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
 import { Allowance } from "../auth/public-door"
-import { aheadOfClock, created, describeCreated, describeJson, IdParam } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.sensors"
 

@@ -1,75 +1,14 @@
 // The container's lifecycle as commands (Issue #101, ADR-0003): the Stock
-// Movement ledger's writes, the two reads over it, and the seam into the
-// Registry. A container is received from a supplier into a warehouse, issued
-// into service (which is `POST /containers/:id/placements`, the Registry's
-// route in containers.ts — one action, one command), returned into stock or
-// into maintenance, transferred between the two, decommissioned to scrap, or
-// adjusted when the ledger is wrong. Each command appends one row and, where
-// the container enters or leaves service, writes or ends the Registry's
-// placement in the same transaction. Either both change or neither.
-//
-// `move` is the one function the six commands call. The order inside it is
-// the rule the ledger holds — a container is in one place at a time and every
-// movement leaves from where the container is — and it holds it under the
-// container's row lock:
-//
-//   lock        — `lockRow(container)` before anything is read, so two
-//                 commands on one container take turns and the chain never
-//                 forks: the second sees what the first wrote and is refused
-//                 by it. The container's lock comes before the subscription's
-//                 (return, decommission and the issue all take both), top
-//                 down, so no two requests hold half of each other's pair
-//                 (routes/shared.ts);
-//   read        — the container's reading, its latest movement in recording
-//                 order (@waste/db/query/asset-state says why not
-//                 `occurred_at`), read for this one container and folded onto
-//                 the glossary's state by the domain;
-//   departure   — the state rule of the command, a 409 with the container's
-//                 label and a sentence per state spelled once below: a
-//                 receipt wants no record, an issue and a transfer want stock,
-//                 a return wants service, a decommission wants a record that
-//                 is not scrap, an adjustment wants anything but service.
-//                 Where the intent passes, the movement's `from` is where the
-//                 reading says the container is (a supplier when there is
-//                 none);
-//   hold        — the row's two rules, where they can first be judged and
-//                 before any Registry statement runs: the shape
-//                 (`movementShape`, the domain's table of pairs each kind
-//                 allows, over where the movement leaves from and the kind of
-//                 place the intent arrives at, which the body says before any
-//                 warehouse is looked up — a 400 on the field the intent
-//                 carried its `to` in, one door before the database's
-//                 `stock_movement_kind_shape` would answer a code) and the
-//                 clock (`occurredAt` may run ahead of the request's clock by
-//                 `OCCURRED_AT_SKEW_MS`, a device's clock being a device's,
-//                 and no further: 400 on `occurredAt`). A body that says
-//                 something the ledger cannot take is refused with nothing to
-//                 roll back;
-//   arrival     — what the body named, held to the container's project
-//                 (`requireWarehouse`, 400 on the field) and to a warehouse
-//                 that takes stock (routes/statuses.ts, a 409 naming the
-//                 status: a closed or draft warehouse takes no new movement,
-//                 while what stands there stands — #79's rule), and the
-//                 Registry half where service opens or ends: the issue's
-//                 placement is written by the route that owns those
-//                 statements (containers.ts, handed in as `open`), and a
-//                 return's or a decommission's placement is ended here by
-//                 `endPlacement` — the Registry's placement in force for the
-//                 container, not the issue's (#291) — under the
-//                 subscription's lock and inside its period, with the
-//                 sentences the placement patch answers;
-//   append      — the row, `id: newId()`, `recordedBy` the caller's account,
-//                 `occurredAt` the instant `hold` settled. Nothing is read
-//                 back from the projection: the row just written is, by
-//                 construction, the latest. The transaction is the request's,
-//                 so a refusal anywhere above leaves no placement behind, and
-//                 that is the proof the suite runs.
-//
-// Postgres's shape checks (23514) are the backstop and, unnamed, a 500 — the
-// signal that a sentence is missing here. The exclusion constraint on the
-// placement (23P01) still answers behind the state rule, and answers a race
-// the lock lets through only in theory: two issues of one container serialise
-// on the lock and the second reads the first's service.
+// Movement ledger's doors and the two reads over it. A container is received
+// from a supplier into a warehouse, issued into service (which is
+// `POST /containers/:id/placements`, the Registry's route in containers.ts —
+// one action, one command), returned into stock or into maintenance,
+// transferred between the two, decommissioned to scrap, or adjusted when the
+// ledger is wrong. The commands' statements and rules are the ledger's,
+// `move` in `@waste/db/commands/stock-ledger`, which a work order's completion
+// runs too; a route finds the container under the caller's scope (its 404),
+// validates the body, and answers what `move` appended, or the problem its
+// refusal names.
 //
 // The reads: `GET /containers/:id/movements` is one container's ledger and
 // `GET /stock-movements` the ledger across containers, both oldest first — a
@@ -80,57 +19,32 @@
 // inventory's question, while a command on a container is
 // `resources.containers`'.
 //
-// This module cannot import containers.ts, which imports `move`, so the two
-// things both need of a container — its scope and its 404 — are spelled here
-// and read from there: `containerScope`, `noSuchContainer`, and the two
-// sentences a placement's end can earn, `OUTSIDE_SUBSCRIPTION`, which a
-// return's end here and the patch there both answer, and `alreadyPlaced`, the
-// patch's. A warehouse a body or a query names is `requireWarehouse` in
-// routes/references.ts, the containers list's helper too.
+// The two things a command on a container needs of it here and in
+// containers.ts — its scope and its 404 — are spelled here. A warehouse a
+// query names is `requireWarehouse` in routes/references.ts, the containers
+// list's helper too.
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import {
-  Adjust,
-  Decommission,
-  Receive,
-  Return,
-  StockMovement,
-  StockMovementListQuery,
-  Transfer,
-  type AdjustmentTarget,
-  type StockPlace,
-} from "@waste/contracts/stock"
-import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
+import { Adjust, Decommission, Receive, Return, StockMovement, StockMovementListQuery, Transfer } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
-import { ASSET_STATE_COLUMNS } from "@waste/db/query/asset-state"
-import { subscription } from "@waste/db/schema/agreements"
-import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { sharedCollectionPoint } from "@waste/db/schema/customers"
-import { warehouse } from "@waste/db/schema/places"
+import { move, type ContainerRef } from "@waste/db/commands/stock-ledger"
+import { container } from "@waste/db/schema/containers"
 import { stockMovement } from "@waste/db/schema/stock"
-import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
-import type { AssetStatus, StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
-import { and, asc, desc, eq, gt, gte, lt, lte, or } from "drizzle-orm"
+import { stockMovementColumns, stockMovementOf } from "@waste/db/shapes/stock-movements"
+import { and, asc, eq, gt, gte, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
-import { newId } from "@waste/db/ids"
-import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { requireWithin } from "./periods"
-import { requireDecommissionReason, requireWarehouse, type Scope } from "./references"
-import { describeJson, IdParam, requireNotAhead } from "./shared"
-import { requireWarehouseTakesStock } from "./statuses"
+import { describeProblem, problem, validate } from "../problem"
+import { requireWarehouse } from "./references"
+import { describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.containers"
 const INVENTORY = "resources.inventory"
 const MovementPage = Page(StockMovement)
-
-/** The container a command moves: what the route found under the caller's scope, and what every sentence below names it by. */
-export type ContainerRef = { id: string; projectId: string; label: string }
 
 /** The rows of this company, in the projects the caller works in: what every container statement is bounded by, here and in containers.ts. */
 export const containerScope = (principal: Principal) => and(eq(container.companyId, principal.companyId), inProjects(container.projectId, principal))
@@ -145,435 +59,6 @@ async function findContainerRef(tx: Tx, principal: Principal, id: string): Promi
     .where(and(containerScope(principal), eq(container.id, id)))
     .limit(1)
   return row
-}
-
-// The two sentences a placement's end can earn, spelled once for the return
-// and the decommission here and the patch in containers.ts.
-
-/** What a bound outside the subscription's period is told. */
-export const OUTSIDE_SUBSCRIPTION = "Outside the subscription's period"
-
-/** `EXCLUDE USING gist (company_id, container_id, daterange)`: a container serves in one place at a time. */
-export const ALREADY_PLACED = "container_service_placement_no_overlap"
-export const alreadyPlaced = (label: string) => `Container ${label} is already placed over part of that period; end that placement first`
-
-// The state sentences, one per state a command can be refused by, each naming
-// the container as a person reads it off the bin.
-
-const noRecord = (label: string) => `Container ${label} has no stock record; receive it first`
-const inService = (label: string) => `Container ${label} is in service; return it first`
-const inServiceElsewhere = (label: string) => `Container ${label} is in service at another placement; return it first`
-const isRetired = (label: string) => `Container ${label} is retired`
-const neverComesBack = (label: string) => `Container ${label} is retired; a scrapped container does not come back — register a new one`
-const alreadyInStock = (label: string, warehouseName: string) => `Container ${label} is already in stock (${warehouseName})`
-const notInService = (label: string) => `Container ${label} is not in service`
-const alreadyRetired = (label: string) => `Container ${label} is already retired`
-const noAdjustmentInService = (label: string) =>
-  `Container ${label} is in service; return or decommission it, an adjustment does not touch a placement`
-/**
- * A return or a decommission ending service before a placement of the
- * container that begins later — a change of service planned for that day —
- * which would then stand after the container had left (#291). The later
- * placement is the Registry's to end first; the body is fine, so a 409 like
- * the other states.
- */
-export const placedAgainFrom = (label: string, day: string) => `Container ${label} is placed again from ${day}; end that placement before returning it earlier`
-
-// The 400s: a body that says something the ledger cannot take.
-
-/** A transfer to the place the container already stands in. */
-export const ALREADY_THERE = "Already there"
-/** A decommission of a container in service that names no end for its placement. */
-export const GIVE_VALID_TO = "The container is in service; give validTo, the first day it no longer serves"
-/** A decommission of a container out of service that names one. */
-export const VALID_TO_SAYS_NOTHING = "Not in service; validTo says nothing"
-/** An adjustment correcting a movement that is not one of this container's. */
-export const NOT_A_MOVEMENT_OF_THIS_CONTAINER = "Not a movement of this container"
-/** A pair the domain's shape table forbids; the database's `stock_movement_kind_shape` would say 23514. */
-const noSuchShape = (kind: StockMovementKind, from: StockPlaceKind, to: StockPlaceKind) => `A ${kind} does not go from ${from} to ${to}`
-
-/** A place a movement leaves from or arrives at: a kind, and the warehouse when the kind is at one. */
-type Place = { kind: StockPlaceKind; warehouseId: string | null }
-
-/** A place in stock as a body names it: a warehouse, or maintenance at one. */
-export type StockPlaceRef = { kind: StockPlace; warehouseId: string }
-
-const SUPPLIER: Place = { kind: "supplier", warehouseId: null }
-const SERVICE: Place = { kind: "service", warehouseId: null }
-const SCRAP: Place = { kind: "scrap", warehouseId: null }
-
-/** What every command may say beside its own: when it happened, why, what paper it quotes — and the request's clock, which `occurredAt` defaults to and may not pass. */
-type Says = { occurredAt?: string; reason?: string; reference?: string; at: Date }
-
-/**
- * What a command intends. The kind is the route's, the destination is the
- * body's where the body has one, and the Registry half is either handed in
- * (`open`, the issue's placement written by containers.ts and its id
- * answered) or asked for (`validTo`, the day a return or a decommission ends
- * the placement the container is in service at).
- */
-export type Intent = Says &
-  (
-    | { kind: "receipt"; to: StockPlaceRef }
-    | { kind: "issue"; open: () => Promise<string> }
-    | { kind: "return"; to: StockPlaceRef; validTo: string }
-    | { kind: "transfer"; to: StockPlaceRef }
-    | { kind: "decommission"; validTo?: string; decommissionReasonId: string }
-    | { kind: "adjustment"; to: { kind: AdjustmentTarget; warehouseId: string | null }; correctsMovementId?: string }
-  )
-
-/** The ledger's reading of one container: its latest movement, where that left it, and the state that is. */
-type Reading = {
-  movementId: string
-  toKind: StockPlaceKind
-  warehouseId: string | null
-  placementId: string | null
-  occurredAt: Date
-  status: AssetStatus
-}
-
-/**
- * Takes the container's row lock and reads where the ledger says it is: the
- * first two steps of every command, in this order, so the reading is the one
- * the command's write will follow. Null for a container with no movement yet.
- */
-export async function lockedReading(tx: Tx, principal: Principal, subject: ContainerRef): Promise<Reading | null> {
-  await lockRow(tx, container, { companyId: principal.companyId, id: subject.id })
-  const [row] = await tx
-    .select(ASSET_STATE_COLUMNS)
-    .from(stockMovement)
-    .where(and(eq(stockMovement.companyId, principal.companyId), eq(stockMovement.containerId, subject.id)))
-    .orderBy(desc(stockMovement.id))
-    .limit(1)
-  if (row === undefined) return null
-  const toKind = row.toKind as StockPlaceKind
-  const status = stateAfter({ toKind })
-  // The kind check keeps every arrival at a place with a state; a row without one is a broken invariant, not a client's doing.
-  if (status === null) throw new Error(`stock_movement ${row.movementId} arrived at a place with no asset state`)
-  return { movementId: row.movementId, toKind, warehouseId: row.toWarehouseId, placementId: row.placementId, occurredAt: row.occurredAt, status }
-}
-
-/** Where the reading says the container stands: the place its latest movement arrived at. */
-const placeOf = (reading: Reading): Place => ({ kind: reading.toKind, warehouseId: reading.warehouseId })
-
-/** The name of the warehouse a refusal names, so "already in stock" says where; the id when the row is somehow gone. */
-async function warehouseName(tx: Tx, companyId: string, id: string | null): Promise<string> {
-  if (id === null) return "in stock"
-  const [row] = await tx
-    .select({ name: warehouse.name })
-    .from(warehouse)
-    .where(and(eq(warehouse.companyId, companyId), eq(warehouse.id, id)))
-    .limit(1)
-  return row?.name ?? id
-}
-
-/**
- * The state rule of each command, as a sentence, and where the movement
- * leaves from when the rule passes. The reading is what the container is
- * refused by, so every sentence names its label and the state it is in.
- */
-async function departure(tx: Tx, principal: Principal, subject: ContainerRef, reading: Reading | null, kind: Intent["kind"]): Promise<Place> {
-  const { label } = subject
-  switch (kind) {
-    case "receipt":
-      if (reading === null) return SUPPLIER
-      if (reading.status === "in-service") throw problem(409, { detail: inService(label) })
-      if (reading.status === "retired") throw problem(409, { detail: neverComesBack(label) })
-      throw problem(409, { detail: alreadyInStock(label, await warehouseName(tx, principal.companyId, reading.warehouseId)) })
-    case "issue":
-    case "transfer":
-      if (reading === null) throw problem(409, { detail: noRecord(label) })
-      if (reading.status === "in-service") throw problem(409, { detail: kind === "issue" ? inServiceElsewhere(label) : inService(label) })
-      if (reading.status === "retired") throw problem(409, { detail: isRetired(label) })
-      return placeOf(reading)
-    case "return":
-      if (reading === null || reading.status !== "in-service") throw problem(409, { detail: notInService(label) })
-      return placeOf(reading)
-    case "decommission":
-      if (reading === null) throw problem(409, { detail: noRecord(label) })
-      if (reading.status === "retired") throw problem(409, { detail: alreadyRetired(label) })
-      return placeOf(reading)
-    case "adjustment":
-      if (reading === null) return SUPPLIER
-      if (reading.status === "in-service") throw problem(409, { detail: noAdjustmentInService(label) })
-      return placeOf(reading)
-  }
-}
-
-/**
- * Whether the container may leave where it stands as an issue or a return
- * would — the command's state rule under the container's lock, its 409 with
- * the sentence spelled above — writing nothing: a ledger work order's booking
- * (O3b of #290) holds the container to the move its completion will make.
- */
-export async function requireDeparture(tx: Tx, principal: Principal, subject: ContainerRef, kind: "issue" | "return"): Promise<void> {
-  await departure(tx, principal, subject, await lockedReading(tx, principal, subject), kind)
-}
-
-/**
- * Ends the container's placement in force on `validTo`: the Registry half of
- * a return and of a decommission in service. The placement is the
- * Registry's — the container's latest to begin before `validTo` — and never
- * the one the ledger's issue named (#291, slice 10): a change of service
- * hands a container on to the subscription replacing its own without a
- * movement, since nothing moved, and a termination ends the placement while
- * the bin stays where it is until someone removes it. Under its
- * subscription's lock, taken after the container's (top down), and read again
- * underneath it — once more should a change have handed the container on
- * meanwhile, whose replacement's lock is then taken too. One that already
- * ended on or before `validTo` — a terminated agreement's, an import's — ends
- * nothing more, and the movement records it. Otherwise the new end is held
- * inside the subscription's period (400 on `validTo`, naming the bound; the
- * ordering rule with it, routes/periods.ts). A placement of the container
- * beginning on or after `validTo` — a change planned for a later day — would
- * stand after the container had left it, and is refused (409, naming its
- * day), after the body's 400s as on every route. An end on or before every
- * placement's start is the ordering 400; a container the ledger has in
- * service with no placement at all is a broken invariant, not a client's
- * doing, and is thrown. Answers the placement the movement records.
- */
-async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, validTo: string): Promise<string> {
-  const { companyId } = principal
-  const ofContainer = and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.containerId, subject.id))
-  const inForce = async () => {
-    const [row] = await tx
-      .select({
-        id: containerServicePlacement.id,
-        subscriptionId: containerServicePlacement.subscriptionId,
-        sharedCollectionPointId: containerServicePlacement.sharedCollectionPointId,
-        validFrom: containerServicePlacement.validFrom,
-        validTo: containerServicePlacement.validTo,
-        subscriptionValidFrom: subscription.validFrom,
-        subscriptionValidTo: subscription.validTo,
-      })
-      .from(containerServicePlacement)
-      .leftJoin(subscription, and(eq(subscription.companyId, companyId), eq(subscription.id, containerServicePlacement.subscriptionId)))
-      .where(and(ofContainer, lt(containerServicePlacement.validFrom, validTo)))
-      .orderBy(desc(containerServicePlacement.validFrom))
-      .limit(1)
-    return row
-  }
-
-  let current = await inForce()
-  const locked = new Set<string>()
-  // A public placement (M12 of #293) is held under its point's lock, as a subscribed one is under its subscription's.
-  while (current !== undefined) {
-    const id = current.subscriptionId ?? current.sharedCollectionPointId
-    if (id === null || locked.has(id)) break
-    await lockRow(tx, current.subscriptionId !== null ? subscription : sharedCollectionPoint, { companyId, id })
-    locked.add(id)
-    current = await inForce()
-  }
-  if (current === undefined) {
-    const [any] = await tx.select({ id: containerServicePlacement.id }).from(containerServicePlacement).where(ofContainer).limit(1)
-    if (any === undefined) throw new Error(`container ${subject.id} is in service at no placement`)
-    throw invalidRequest("body", [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
-  }
-
-  const ends = current.validTo === null || current.validTo > validTo
-  // The body's 400s first — the end after the start, and inside the subscription's period — then the state's 409, the order every route keeps.
-  // A public placement has no subscription's period to stay inside.
-  if (ends && current.subscriptionValidFrom !== null) requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
-  const [later] = await tx
-    .select({ validFrom: containerServicePlacement.validFrom })
-    .from(containerServicePlacement)
-    .where(and(ofContainer, gte(containerServicePlacement.validFrom, validTo)))
-    .orderBy(asc(containerServicePlacement.validFrom))
-    .limit(1)
-  if (later !== undefined) throw problem(409, { detail: placedAgainFrom(subject.label, later.validFrom) })
-  if (ends) {
-    await tx
-      .update(containerServicePlacement)
-      .set({ validTo })
-      .where(and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.id, current.id)))
-  }
-  return current.id
-}
-
-/** The movement an adjustment says it corrects: one of this container's, or a 400 naming the field. */
-async function requireMovementOf(tx: Tx, principal: Principal, subject: ContainerRef, id: string | undefined): Promise<void> {
-  if (id === undefined) return
-  const [row] = await tx
-    .select({ id: stockMovement.id })
-    .from(stockMovement)
-    .where(and(eq(stockMovement.companyId, principal.companyId), eq(stockMovement.containerId, subject.id), eq(stockMovement.id, id)))
-    .limit(1)
-  if (row === undefined) throw invalidRequest("body", [{ path: "correctsMovementId", message: NOT_A_MOVEMENT_OF_THIS_CONTAINER }])
-}
-
-/**
- * The warehouse a movement arrives at: the container's project's (400 on the
- * field) and one that takes stock (409 naming the status, routes/statuses.ts).
- * The gate is on the arrival only — a transfer out of a closed warehouse is a
- * movement into somewhere else, and the stock standing in one stands.
- */
-async function arrivalWarehouse(tx: Tx, within: Scope, id: string | null): Promise<void> {
-  const found = await requireWarehouse(tx, within, id)
-  if (found !== undefined) requireWarehouseTakesStock(found)
-}
-
-/** Where the intent arrives, held to the container's project, and the Registry half where service opens or ends. */
-async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, from: Place, intent: Intent): Promise<{ to: Place; placementId: string | null }> {
-  const within = { companyId: principal.companyId, projectId: subject.projectId }
-  switch (intent.kind) {
-    case "receipt":
-      await arrivalWarehouse(tx, within, intent.to.warehouseId)
-      return { to: intent.to, placementId: null }
-    case "issue":
-      return { to: SERVICE, placementId: await intent.open() }
-    case "return":
-      await arrivalWarehouse(tx, within, intent.to.warehouseId)
-      // `departure` let a return through only in service, and service is a placement.
-      return { to: intent.to, placementId: await endPlacement(tx, principal, subject, intent.validTo) }
-    case "transfer":
-      await arrivalWarehouse(tx, within, intent.to.warehouseId)
-      if (intent.to.kind === from.kind && intent.to.warehouseId === from.warehouseId) {
-        throw invalidRequest("body", [{ path: "warehouseId", message: ALREADY_THERE }])
-      }
-      return { to: intent.to, placementId: null }
-    case "decommission":
-      if (from.kind === "service") {
-        if (intent.validTo === undefined) throw invalidRequest("body", [{ path: "validTo", message: GIVE_VALID_TO }])
-        return { to: SCRAP, placementId: await endPlacement(tx, principal, subject, intent.validTo) }
-      }
-      if (intent.validTo !== undefined) throw invalidRequest("body", [{ path: "validTo", message: VALID_TO_SAYS_NOTHING }])
-      return { to: SCRAP, placementId: null }
-    case "adjustment":
-      await requireMovementOf(tx, principal, subject, intent.correctsMovementId)
-      await arrivalWarehouse(tx, within, intent.to.warehouseId)
-      return { to: intent.to, placementId: null }
-  }
-}
-
-const columns = {
-  id: stockMovement.id,
-  recordedAt: stockMovement.recordedAt,
-  projectId: stockMovement.projectId,
-  containerId: stockMovement.containerId,
-  kind: stockMovement.kind,
-  fromKind: stockMovement.fromKind,
-  fromWarehouseId: stockMovement.fromWarehouseId,
-  toKind: stockMovement.toKind,
-  toWarehouseId: stockMovement.toWarehouseId,
-  placementId: stockMovement.placementId,
-  occurredAt: stockMovement.occurredAt,
-  recordedBy: stockMovement.recordedBy,
-  reason: stockMovement.reason,
-  decommissionReasonId: stockMovement.decommissionReasonId,
-  reference: stockMovement.reference,
-  correctsMovementId: stockMovement.correctsMovementId,
-}
-
-type Row = Pick<typeof stockMovement.$inferSelect, keyof typeof columns>
-
-/** The row on the wire. The three coded fields are text with a CHECK in the database and enums here; the vocabulary holds the two in lockstep. */
-function movementOf(row: Row): StockMovement {
-  return {
-    id: row.id,
-    recordedAt: row.recordedAt.toISOString(),
-    projectId: row.projectId,
-    containerId: row.containerId,
-    kind: row.kind as StockMovementKind,
-    fromKind: row.fromKind as StockPlaceKind,
-    fromWarehouseId: row.fromWarehouseId,
-    toKind: row.toKind as StockPlaceKind,
-    toWarehouseId: row.toWarehouseId,
-    placementId: row.placementId,
-    occurredAt: row.occurredAt.toISOString(),
-    recordedBy: row.recordedBy,
-    reason: row.reason,
-    decommissionReasonId: row.decommissionReasonId,
-    reference: row.reference,
-    correctsMovementId: row.correctsMovementId,
-  }
-}
-
-/** Where a body carries the destination a refused shape is answered on; the body as a whole where the route fixed it. */
-const toKindPath = (kind: StockMovementKind): string => (kind === "return" || kind === "transfer" || kind === "adjustment" ? "toKind" : "")
-
-/** The kind of place the intent arrives at, known from the body alone: the issue's is service, the decommission's scrap, the rest name theirs. */
-const destinationKind = (intent: Intent): StockPlaceKind => (intent.kind === "issue" ? "service" : intent.kind === "decommission" ? "scrap" : intent.to.kind)
-
-/**
- * The row's two rules, held as soon as `departure` has said where the
- * movement leaves from and before any Registry statement runs: the shape
- * table over the kind, the place left and the kind of place arrived at (a
- * 400 on the field the intent carried its `to` in), and the clock — the
- * body's instant may run ahead of the request's by `OCCURRED_AT_SKEW_MS` and
- * no further (`requireNotAhead`, routes/shared.ts: 400 on `occurredAt`).
- * Answers the instant the row will carry.
- */
-function hold(kind: StockMovementKind, from: Place, toKind: StockPlaceKind, says: Says): Date {
-  if (!movementShape(kind, from.kind, toKind)) {
-    throw invalidRequest("body", [{ path: toKindPath(kind), message: noSuchShape(kind, from.kind, toKind) }])
-  }
-  const occurredAt = says.occurredAt === undefined ? says.at : new Date(says.occurredAt)
-  requireNotAhead(occurredAt, says.at)
-  return occurredAt
-}
-
-/** Appends the row `hold` settled and `arrival` completed. `recordedAt` is the database's now. */
-async function append(
-  tx: Tx,
-  principal: Principal,
-  subject: ContainerRef,
-  movement: { kind: StockMovementKind; from: Place; to: Place; placementId: string | null; occurredAt: Date; correctsMovementId?: string; decommissionReasonId?: string },
-  says: Says,
-): Promise<StockMovement> {
-  const { kind, from, to } = movement
-  const [row] = await tx
-    .insert(stockMovement)
-    .values({
-      id: newId(),
-      companyId: principal.companyId,
-      projectId: subject.projectId,
-      containerId: subject.id,
-      kind,
-      fromKind: from.kind,
-      fromWarehouseId: from.warehouseId,
-      toKind: to.kind,
-      toWarehouseId: to.warehouseId,
-      placementId: movement.placementId,
-      occurredAt: movement.occurredAt,
-      recordedBy: principal.user.id,
-      reason: says.reason ?? null,
-      reference: says.reference ?? null,
-      correctsMovementId: movement.correctsMovementId ?? null,
-      decommissionReasonId: movement.decommissionReasonId ?? null,
-    })
-    .returning(columns)
-  return movementOf(row)
-}
-
-/**
- * The one function the commands call: lock, read, departure, hold, arrival,
- * append (the header says why in that order). The route has found the
- * container under the caller's scope; everything else the command does
- * happens here, inside the request's transaction, so a refusal at any step
- * leaves nothing behind.
- */
-export async function move(tx: Tx, principal: Principal, subject: ContainerRef, intent: Intent): Promise<StockMovement> {
-  const reading = await lockedReading(tx, principal, subject)
-  const from = await departure(tx, principal, subject, reading, intent.kind)
-  const occurredAt = hold(intent.kind, from, destinationKind(intent), intent)
-  // A decommission's reason (O30 of #290) is the body's field: judged after the container's own state, before the placement is touched.
-  if (intent.kind === "decommission") await requireDecommissionReason(tx, principal.companyId, intent.decommissionReasonId)
-  const { to, placementId } = await arrival(tx, principal, subject, from, intent)
-  return await append(
-    tx,
-    principal,
-    subject,
-    {
-      kind: intent.kind,
-      from,
-      to,
-      placementId,
-      occurredAt,
-      ...(intent.kind === "adjustment" ? { correctsMovementId: intent.correctsMovementId } : {}),
-      ...(intent.kind === "decommission" ? { decommissionReasonId: intent.decommissionReasonId } : {}),
-    },
-    intent,
-  )
 }
 
 /** The rows of this company, in the projects the caller works in: what every ledger statement is bounded by. */
@@ -619,7 +104,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const principal = c.get("principal")
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
-        return c.json(await move(tx, principal, subject, { kind: "receipt", to: { kind: "warehouse", warehouseId }, ...says, at: now() }), 201)
+        return c.json(await move(tx, actorOf(principal), subject, { kind: "receipt", to: { kind: "warehouse", warehouseId }, ...says, at: now() }), 201)
       },
     )
     .post(
@@ -650,7 +135,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const principal = c.get("principal")
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
-        return c.json(await move(tx, principal, subject, { kind: "return", to: { kind: toKind, warehouseId }, validTo, ...says, at: now() }), 201)
+        return c.json(await move(tx, actorOf(principal), subject, { kind: "return", to: { kind: toKind, warehouseId }, validTo, ...says, at: now() }), 201)
       },
     )
     .post(
@@ -679,7 +164,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const principal = c.get("principal")
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
-        return c.json(await move(tx, principal, subject, { kind: "transfer", to: { kind: toKind, warehouseId }, ...says, at: now() }), 201)
+        return c.json(await move(tx, actorOf(principal), subject, { kind: "transfer", to: { kind: toKind, warehouseId }, ...says, at: now() }), 201)
       },
     )
     .post(
@@ -710,7 +195,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const principal = c.get("principal")
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
-        return c.json(await move(tx, principal, subject, { kind: "decommission", decommissionReasonId, ...(validTo === undefined ? {} : { validTo }), ...says, at: now() }), 201)
+        return c.json(await move(tx, actorOf(principal), subject, { kind: "decommission", decommissionReasonId, ...(validTo === undefined ? {} : { validTo }), ...says, at: now() }), 201)
       },
     )
     .post(
@@ -742,7 +227,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
         return c.json(
-          await move(tx, principal, subject, {
+          await move(tx, actorOf(principal), subject, {
             kind: "adjustment",
             to: { kind: toKind, warehouseId: warehouseId ?? null },
             ...(correctsMovementId === undefined ? {} : { correctsMovementId }),
@@ -781,12 +266,12 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         const principal = c.get("principal")
         if ((await findContainerRef(tx, principal, id)) === undefined) throw noSuchContainer(id)
         const rows = await tx
-          .select(columns)
+          .select(stockMovementColumns)
           .from(stockMovement)
           .where(and(scope(principal), eq(stockMovement.containerId, id), after === undefined ? undefined : gt(stockMovement.id, after)))
           .orderBy(asc(stockMovement.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(movementOf), limit))
+        return c.json(pageOf(rows.map(stockMovementOf), limit))
       },
     )
     .get(
@@ -818,7 +303,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           await requireWarehouse(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, warehouseId, "warehouseId", "query")
         }
         const rows = await tx
-          .select(columns)
+          .select(stockMovementColumns)
           .from(stockMovement)
           .where(
             and(
@@ -834,7 +319,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           )
           .orderBy(asc(stockMovement.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(movementOf), limit))
+        return c.json(pageOf(rows.map(stockMovementOf), limit))
       },
     )
 }

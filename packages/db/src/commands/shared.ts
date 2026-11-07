@@ -57,6 +57,9 @@ import type { Tx } from "../client"
 import { company, COMPANY_COUNTERS } from "../schema/organisation"
 import { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
 
+/** Who a shared statement acts for: the company it writes in, and the account its rows and events are recorded by. */
+export type Actor = { companyId: string; userAccountId: string }
+
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
 

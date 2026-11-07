@@ -17,6 +17,7 @@ import { DriverCommandBatchOutcome, type CommandOutcomeRow } from "@waste/contra
 import { PickupDetail } from "@waste/contracts/pickups"
 import { RouteDetail } from "@waste/contracts/routes"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { containerServicePlacement } from "@waste/db/schema/containers"
@@ -27,7 +28,6 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { OUTSIDE_SUBSCRIPTION } from "../routes/lifecycle"
 import { bookedAlready, heldBy } from "../routes/pickups"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -299,6 +299,22 @@ describe("the ledger's work orders", { skip: database.skip || owner.skip }, () =
       assert.deepEqual([task.kind, task.priority, task.source, task.createdBy], ["internal-task", "high", "driver-app", ex.logins.mads.id])
       assert.equal(task.subject, `Swap of ${placed.label} for ${replacement.label} at Parkvej 18, 2100 København Ø not recorded`)
       assert.match(task.description, new RegExp(`The driver completed the stop at 10:12, but the ledger refused the swap: Container ${replacement.label} is in service at another placement; return it first\\. Record it through the container's commands\\.`))
+    })
+
+    test("a swap whose container's placement ended by the day: the return is rolled back with the issue, and the office is told there is no placement for the replacement to take over", async () => {
+      const own = await ownAgreement()
+      const placed = await inService(own.subscriptionId)
+      const replacement = await inStock()
+      const route = await running()
+      const stop = await added(route.id, { service: "swap", containerId: placed.id, replacementContainerId: replacement.id, warehouseId })
+      const terminated = await olivia(`/agreements/${own.agreementId}/terminate`, { method: "POST", body: { on: DAY } })
+      assert.equal(terminated.status, 200, JSON.stringify(await terminated.clone().json()))
+      await startRoute(route.id)
+      await complete(route.id, stop.id)
+      assert.deepEqual((await movementsOf(placed.id)).map((movement) => movement.kind), ["receipt", "issue"], "no half-swap: the return went with the refused issue")
+      assert.deepEqual(await placementsOf(replacement.id), [])
+      const [task] = await ticketsOf(stop.id)
+      assert.match(task.description, new RegExp(`refused the swap: Container ${placed.label} has no placement in force on ${DAY} for its replacement to take over\\. Record it`))
     })
 
     test("a refusal the ledger gives at a field is told in the field's own sentence", async () => {
