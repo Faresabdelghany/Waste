@@ -29,7 +29,7 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // Since O23 of #290 a route's open stops move onto another route of its
 // project, split off onto a new one of its day, or come over from a route
 // merged into it: the other route is one `routesToJoin` offers.
-import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
+import { MISSED_PICKUP_STATUSES, OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { statusLabel } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
@@ -198,7 +198,7 @@ export function createRouteRecord(values: BusinessFormValues, { now }: { now: nu
   return mintedRecord({ id: `routes-route-${now}`, name: day === "" ? "New route" : `Route on ${day}`, status: "Planned", recordKind: "Route", values })
 }
 
-const MISSED = { fieldId: "outcome", oneOf: ["skipped", "failed"] } as const
+const MISSED = { fieldId: "outcome", oneOf: MISSED_PICKUP_STATUSES } as const
 /** A stop's reason in the Driver App's words ("Over capacity" for `capacity`, lib/driver/route-view.ts); the system's four as any token is spelled. */
 export const pickupReasonLabel = (reason: string) => (DRIVER_REASON_LABELS as Readonly<Record<string, string>>)[reason] ?? statusLabel(reason)
 

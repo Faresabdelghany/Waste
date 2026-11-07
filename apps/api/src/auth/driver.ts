@@ -24,7 +24,8 @@
 import type { Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
-import type { DriverStatus, LicenceClass } from "@waste/domain/resources/vocabulary"
+import { ACTIVE_DRIVER_STATUSES, type DriverStatus, type LicenceClass } from "@waste/domain/resources/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 import { and, eq, or, type SQL } from "drizzle-orm"
 
 import { problem } from "../problem"
@@ -58,9 +59,8 @@ export async function resolveDriver(tx: Tx, principal: Principal): Promise<Drive
     .from(driver)
     .where(and(eq(driver.companyId, principal.companyId), eq(driver.userAccountId, principal.user.id)))
     .limit(1)
-  if (row === undefined || row.status !== "active") throw problem(403, { detail: NOT_A_DRIVERS_LOGIN })
-  // The coded columns are text with a CHECK in the database and a vocabulary here.
-  return { ...row, status: row.status as DriverStatus, licenceClass: row.licenceClass }
+  if (row === undefined || !takesReference(row.status, ACTIVE_DRIVER_STATUSES)) throw problem(403, { detail: NOT_A_DRIVERS_LOGIN })
+  return row
 }
 
 /**

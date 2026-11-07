@@ -66,8 +66,7 @@ import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolut
 import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
 import { closedTicket, ticketTransition } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand } from "@waste/domain/resolution/vocabulary"
-import { LIVE_STOP_STATUSES } from "@waste/domain/execution/bulky"
-import { OPEN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { OPEN_ROUTE_STATUSES, pickupMissed } from "@waste/domain/execution/vocabulary"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
@@ -243,7 +242,7 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
   if (pickupId !== undefined && stop === undefined) throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
   if (stop !== undefined && stop.service !== "empty") throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_AN_EMPTYING }])
   refuseUnless(found.status, OPEN_ROUTE_STATUSES, (status) => routeHasEnded(routeLabelOf(found), status))
-  if (stop !== undefined) refuseUnless(stop.status, LIVE_STOP_STATUSES, (status) => stopWasMissed(stop.position, routeLabelOf(found), status))
+  if (stop !== undefined && pickupMissed(stop.status)) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
 /** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */

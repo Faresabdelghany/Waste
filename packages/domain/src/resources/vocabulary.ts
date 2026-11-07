@@ -148,7 +148,7 @@ export const ACTIVE_VEHICLE_STATUSES = ["active"] as const satisfies readonly Ve
 export const ACTIVE_DRIVER_STATUSES = ["active"] as const satisfies readonly DriverStatus[]
 /** A warehouse a stock movement arrives at or leaves. */
 export const STOCKING_WAREHOUSE_STATUSES = without(WAREHOUSE_STATUSES, "draft", "closed")
-/** An allocation that reserves its vehicle, trailer and driver; `released` reserves nothing. */
+/** An allocation that reserves its vehicle, trailer and driver; `released` reserves nothing, and the exclusion constraints leave out what this leaves out (packages/db `hand-written.test.ts` holds them to it). */
 export const LIVE_ALLOCATION_STATUSES = without(ALLOCATION_STATUSES, "released")
 /** A decommission reason a new decommission gives. */
 export const ACTIVE_DECOMMISSION_REASON_STATUSES = ["active"] as const satisfies readonly DecommissionReasonStatus[]

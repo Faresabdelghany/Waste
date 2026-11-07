@@ -9,12 +9,13 @@
 // lib/api/records/bulky-bookings.ts.
 import type { BulkyAvailableDay, BulkySchedule, BulkyScheduleCreate, BulkySchedulePatch } from "@waste/contracts/bulky"
 import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX, isBulkyProductUnit } from "@waste/domain/execution/bulky"
-import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
+import { NOT_STARTED_ROUTE_STATUSES, type BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { OFFERED_PRODUCT_STATUSES, type ProductStatus, type ProductUnit } from "@waste/domain/registry/vocabulary"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS } from "@waste/domain/route-schemes/recurrence"
 import { addDays, formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAYS } from "@waste/domain/days"
+import { isOneOf } from "@waste/domain/lists"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { takesReference } from "@waste/domain/status-gates"
 
@@ -143,7 +144,7 @@ export function placesOfAgreement(subscriptions: readonly BusinessRecord[], agre
 export function routesForBooking<T extends BusinessRecord>(routes: readonly T[], booking: BusinessRecord): T[] {
   const projectId = valueOf(booking, "projectId")
   const day = valueOf(booking, BULKY_DAY_KEY)
-  return routes.filter((route) => valueOf(route, "projectId") === projectId && valueOf(route, "operatingDate") === day && ["planned", "ready"].includes(valueOf(route, "status")))
+  return routes.filter((route) => valueOf(route, "projectId") === projectId && valueOf(route, "operatingDate") === day && isOneOf(valueOf(route, "status"), NOT_STARTED_ROUTE_STATUSES))
 }
 
 /** The bookings a route's Add stop may collect: booked ones of its project for the day it runs, as the picker offers them. */
