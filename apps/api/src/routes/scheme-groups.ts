@@ -102,10 +102,10 @@ import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditP
 import { firstRunDay } from "@waste/domain/resources/availability"
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
-import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
 import { driverColumns, findDriver, findVehicle, vehicleColumns, vehicleLabel, type DriverRow, type Today, type VehicleRow } from "./fleet-lookups"
 import {

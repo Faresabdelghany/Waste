@@ -2,7 +2,7 @@
 // `ticket_event` and `alert` on the wire, the office's scope every statement
 // is bounded by — the tenant and `inProjects` — the two reads a ticket's
 // detail carries (its history in recording order, the alerts naming it), and
-// the family's 404s, so routes/tickets.ts, routes/ticket-writes.ts and
+// the family's 404s, so routes/tickets.ts, @waste/db/commands/open-ticket and
 // routes/alerts.ts each say only which route does what, the way
 // routes/execution-shapes.ts holds Execution's shapes for its modules.
 //

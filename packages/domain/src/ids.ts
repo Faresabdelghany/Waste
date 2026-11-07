@@ -9,7 +9,7 @@
 //
 // Pure, like everything here: the clock and the randomness are arguments, so
 // the layout can be proved bit by bit and a million ids can be walked with a
-// fixed clock. apps/api/src/ids.ts is the one place that supplies `Date.now`
+// fixed clock. packages/db/src/ids.ts is the one place that supplies `Date.now`
 // and `crypto.getRandomValues`.
 //
 // The layout, RFC 9562 §5.7, over the sixteen bytes:

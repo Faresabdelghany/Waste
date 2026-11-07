@@ -169,7 +169,10 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
   }
 
   test("a click answers at once, 202, with the run queued and on-demand over the window and nothing generated yet; the worker's job waits on the queue, keyed by the scheme, carrying the run and the company", async () => {
-    const run = await answered(await generate(olivia, scheme.id), 202)
+    const response = await generate(olivia, scheme.id)
+    const raw = (await response.clone().json()) as object
+    const run = await answered(response, 202)
+    assert.deepEqual(Object.keys(raw).sort(), Object.keys(GenerationRun.shape).sort(), "the 202 carries the run's wire members alone: no tenant, no job id")
     assert.deepEqual(
       { ...run, id: undefined, createdAt: undefined, updatedAt: undefined },
       {

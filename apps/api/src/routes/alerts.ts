@@ -39,7 +39,7 @@
 // words, and has no lower bound, since the office records a condition seen
 // yesterday. The link to a ticket is the one column `ticket_id`, set on the
 // create by naming a ticket of the project and afterwards through
-// routes/alert-links.ts's `linkAlert`, the function `POST /tickets` runs too.
+// @waste/db/commands/alert-links's `linkAlert`, the function `POST /tickets` runs too.
 // A raised alert writes `alert-raised` to the outbox (O16 of #290), the
 // `Alert` as answered, for the staff notices' consumer to tell the people who
 // asked to hear of one that severe; the three commands write nothing, since a
@@ -53,21 +53,21 @@
 import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertListQuery, AlertResolve } from "@waste/contracts/alerts"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
+import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
 import { ALERT_DOES_NOT_CHANGE, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
+import { linkAlert } from "@waste/db/commands/alert-links"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { linkAlert } from "./alert-links"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
 import { alertColumns, alertOf, alertScope, noSuchAlert, type AlertRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
@@ -213,16 +213,13 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         await requireDriver(tx, scope, values.driverId)
         await requireContainer(tx, scope, values.containerId)
         await requireTicket(tx, scope, values.ticketId)
-        const [row] = await tx
-          .insert(alert)
-          .values({
+        const [row] = await raiseAlerts(tx, principal.companyId, [
+          {
             id: newId(),
-            companyId: principal.companyId,
             projectId: values.projectId,
             kind: values.kind,
             severity: values.severity,
             source: "manual",
-            status: "new",
             title: values.title,
             details: values.details,
             detectedAt,
@@ -232,10 +229,9 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             containerId: values.containerId ?? null,
             ticketId: values.ticketId ?? null,
             raisedBy: principal.user.id,
-          })
-          .returning(alertColumns)
+          },
+        ])
         const answered = alertOf(row)
-        await emit(tx, principal, { aggregateId: row.id, kind: "alert-raised", payload: answered, projectId: row.projectId, occurredAt: detectedAt })
         return created(c, "/alerts", answered)
       },
     )

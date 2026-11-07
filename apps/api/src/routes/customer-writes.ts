@@ -11,9 +11,9 @@ import type { Customer, CustomerCreate, CustomerKind, CustomerPatch, CustomerSta
 import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { and, asc, count, eq } from "drizzle-orm"
+import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
-import { newId } from "../ids"
 import { problem } from "../problem"
 import { lockRow, refuseDuplicate, stampsOf } from "./shared"
 

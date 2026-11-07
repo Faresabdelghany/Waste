@@ -26,14 +26,15 @@ import type { Tx } from "@waste/db/client"
 import { ticketSla } from "@waste/db/schema/resolution"
 import { slaTargetKey } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketKind, type TicketPriority } from "@waste/domain/resolution/vocabulary"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { advisoryLock } from "@waste/db/commands/shared"
+import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { describeProblem, problem, validate } from "../problem"
 import { describeJson, IdParam } from "./shared"
 import { requireSetTypes } from "./ticket-type-rules"
@@ -121,7 +122,7 @@ export function ticketSlaRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireOwnProject(principal, id)
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-sla:${principal.companyId}:${id}`}, 0))`)
+        await advisoryLock(tx, `ticket-sla:${principal.companyId}:${id}`)
         const current = new Map((await targetsOf(tx, principal.companyId, id)).map((row) => [slaTargetKey(row), row]))
         const refuseRetiredTypes = await requireSetTypes(tx, principal.companyId, targets, "targets", new Set([...current.values()].flatMap((row) => (row.ticketTypeId === null ? [] : [row.ticketTypeId]))))
         refuseRetiredTypes()

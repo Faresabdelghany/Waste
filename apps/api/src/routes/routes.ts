@@ -66,7 +66,7 @@
 // Every command runs under the route's row lock, taken before the read, so
 // two commands on one route take turns; and every command that changes what
 // another context hears about writes its outbox event in the same
-// transaction (outbox.ts), the payload being the route as this module
+// transaction (@waste/db/commands/outbox), the payload being the route as this module
 // answers it. The grant is `route-studio.routes` throughout, `view` to read
 // and `edit` to command. Every command carries the tenant and `inProjects`;
 // the reads — the list, a route's read and its device log — carry the tenant
@@ -103,20 +103,20 @@ import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
+import { emit } from "@waste/db/commands/outbox"
+import { QueueMissing, type JobSender } from "@waste/db/jobs"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows, requireGrant } from "../auth/require"
-import { newId } from "../ids"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
 import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
-import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGeneration } from "./generation"

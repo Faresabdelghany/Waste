@@ -34,14 +34,15 @@ import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermissi
 import { notPlannable, plannedService } from "@waste/domain/resolution/automation"
 import { TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { TICKET_ACTION_TRIGGERS, type TicketActionCommand, type TicketActionKind, type TicketActionTrigger, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient, type TicketPriority, type TicketResolution, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { advisoryLock } from "@waste/db/commands/shared"
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { allows, requireGrant, requireGrantOf } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NOT_A_TEAM, NOT_A_USER_ACCOUNT } from "./references"
@@ -131,7 +132,7 @@ const typeOf = async (tx: Tx, companyId: string, row: Row): Promise<TicketType> 
 
 /** Makes the kind's default this type alone: the default that was is unmade first, under the kind's lock, so the index holding one default per kind never meets two. */
 async function unmakeDefaults(tx: Tx, companyId: string, kind: string, except?: string): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-type-default:${companyId}:${kind}`}, 0))`)
+  await advisoryLock(tx, `ticket-type-default:${companyId}:${kind}`)
   await tx
     .update(ticketType)
     .set({ isDefault: false })

@@ -51,7 +51,7 @@ import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { groupRuns, isParked } from "@waste/domain/planning/checks"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
-import { newId } from "../ids"
+import { newId } from "@waste/db/ids"
 import { invalidRequest, problem } from "../problem"
 import { NO_POSITION_LEFT } from "./collection-groups"
 import type { Today } from "./fleet-lookups"

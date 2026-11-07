@@ -40,12 +40,12 @@ import { PROVIDER_ROLE_SCOPE, systemRoleKept, systemRoleScopeKept } from "@waste
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { grantsOfRows, normalisedGrants } from "../access-shape"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf } from "../auth/provider"
 import { requireGrant, requireGrantOf } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"

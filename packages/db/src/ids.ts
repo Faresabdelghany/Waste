@@ -24,8 +24,7 @@
 // write statements (src/commands/* — `openTicket`, `recordBillableEvent`,
 // `issueInvoice`, `runBilling`, the outbox's `emit`) mint their ids here, and
 // `newId` is the one sequence of whichever process imports it, so a route and
-// the command it calls count up from the same last id. apps/api/src/ids.ts
-// re-exports it, so a route reads `newId` where it always did.
+// the command it calls count up from the same last id.
 import { ID_RANDOM_BYTES, mintId, nextId } from "@waste/domain/ids"
 
 /** Mints the next id of a sequence. */

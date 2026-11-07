@@ -6,7 +6,7 @@
 // a row disappearing (the statuses grow when the product needs them to).
 //
 // This is the first route that writes, so it is the first that mints an id
-// (ids.ts, ADR-0004): the server owns identity, the body may not carry an
+// (@waste/db/ids, ADR-0004): the server owns identity, the body may not carry an
 // `id`, and the id is on the row before the insert. And it is the first that
 // pages: ordered by id, which for a version 7 id is the order the projects
 // were made in, with the cursor of pagination.ts.
@@ -31,10 +31,10 @@ import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { requireHolidayList } from "./holiday-lists"

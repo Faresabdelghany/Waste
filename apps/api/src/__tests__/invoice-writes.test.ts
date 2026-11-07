@@ -12,8 +12,8 @@ import { describe, test } from "node:test"
 import type { Tx } from "@waste/db/client"
 import { getTableName, type Table } from "drizzle-orm"
 
-import { createIdMinter } from "../ids"
-import { invoiceLineShapeIssue, issueInvoice, type InvoiceDraft, type LineDraft } from "../routes/invoice-writes"
+import { createIdMinter } from "@waste/db/ids"
+import { invoiceLineShapeIssue, issueInvoice, type InvoiceDraft, type LineDraft } from "@waste/db/commands/invoice-writes"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

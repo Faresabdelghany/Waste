@@ -24,11 +24,11 @@ import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabula
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { newId } from "@waste/db/ids"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { describeProblem, invalidRequest, validate } from "../problem"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { describeJson, lockRow } from "./shared"

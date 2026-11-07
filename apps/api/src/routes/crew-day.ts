@@ -35,6 +35,7 @@ import { project } from "@waste/db/schema/organisation"
 import { allocatedWithOthers, overlappingRoute, sameDayClash, sameDayUnconfirmed, spanOf, type DaySpan } from "@waste/domain/execution/crew-day"
 import { formatShortDay } from "@waste/domain/days"
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
+import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm"
 
 import { problem } from "../problem"
@@ -56,7 +57,7 @@ export type RouteCrew = { vehicleId: string | null; driverId: string | null; tra
  */
 export async function lockCrew(tx: Tx, companyId: string, crew: RouteCrew): Promise<void> {
   const ids = [...new Set([crew.vehicleId, crew.trailerId, crew.driverId].filter((id): id is string => id !== null))].sort()
-  for (const id of ids) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`crew-day:${companyId}:${id}`}, 0))`)
+  for (const id of ids) await advisoryLock(tx, `crew-day:${companyId}:${id}`)
 }
 
 /** An allocation's window as a person reads it on the project's clock: "Mon 5 Oct 06:00–14:00", "Mon 5 Oct 06:00 – Tue 6 Oct 02:00". */

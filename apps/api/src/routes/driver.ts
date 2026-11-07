@@ -83,7 +83,7 @@
 //                   the problem on a rejection, the body verbatim but a
 //                   `record-positions`'s, whose points it never keeps —
 //                   `bodyKept`), and the
-//                   outbox events last (outbox.ts), each with the resource the
+//                   outbox events last (@waste/db/commands/outbox), each with the resource the
 //                   route would answer at that instant as its payload — a
 //                   pickup's event the pickup with the proofs this command
 //                   made, a route-level `report-problem`'s the route with its
@@ -159,6 +159,7 @@ import type { PickupDetail } from "@waste/contracts/pickups"
 import type { Problem } from "@waste/contracts/problem"
 import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import { recordUnload, stationTakes } from "@waste/db/commands/unloads"
 import type { JobSender, Send } from "@waste/db/jobs"
 import { bulkyItemsOf } from "@waste/db/commands/bulky-bookings"
 import { tableObjectName } from "@waste/db/names"
@@ -182,11 +183,11 @@ import { alias } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
+import { emit } from "@waste/db/commands/outbox"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problemBody, uniqueConstraintOf, validate } from "../problem"
 import { namedByCode } from "./container-identity"
@@ -222,9 +223,8 @@ import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
-import { ticketHearsOfStop } from "./ticket-stops"
-import { stationTakes, tellOfficeNotTaken } from "./unload-writes"
-import { recordLedgerWork } from "./work-orders"
+import { tellOfficeNotTaken } from "./unload-writes"
+import { stopOutcomeChanged } from "./stop-outcomes"
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -906,16 +906,13 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .update(pickup)
           .set({ status: effect.status, reason: effect.reason, outcomeAt: new Date(effect.at) })
           .where(and(eq(pickup.companyId, companyId), eq(pickup.id, effect.pickupId)))
-        // A delivery, a removal or a swap moves its container as the stop completes (O3b of #290): in a savepoint, a refusal becoming the office's task and never the driver's rejection.
-        if (effect.status === "completed") await recordLedgerWork(tx, applier.principal, applier.send, effect.pickupId, effect.at, applier.now, "driver")
-        // A stop booked to answer a ticket services it as it completes (O3c of #290); a miss reaches the ticket through Resolution's consumer.
-        if (effect.status === "completed") await ticketHearsOfStop(tx, applier.principal, applier.send, effect.pickupId, { from: "planned", to: "completed" }, new Date(effect.at))
+        // What the outcome sets going: a work order's ledger movements and the booked ticket's service as the stop completes (O3b, O3c of #290); a miss reaches the ticket through Resolution's consumer.
+        await stopOutcomeChanged(tx, applier.principal, applier.send, effect.pickupId, { from: "planned", to: effect.status, occurredAt: effect.at, by: "driver" }, applier.now)
         break
       case "append-unload": {
         const { unload: draft } = effect
-        await tx.insert(unload).values({
+        await recordUnload(tx, companyId, {
           id: draft.id,
-          companyId,
           projectId,
           routeId: routeRow.id,
           sessionId: made.sessionId,

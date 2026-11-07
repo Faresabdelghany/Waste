@@ -51,7 +51,7 @@
 //
 // A command answers the pickup with its proofs, the resource the read
 // answers, and writes its outbox event in the same transaction with that
-// same shape as payload (outbox.ts). Every answer, the list's included,
+// same shape as payload (@waste/db/commands/outbox). Every answer, the list's included,
 // carries the stop's `sequence` (#219): its place in its route's execution
 // order, the one the route's detail gives it, read through plan-shapes.ts's
 // `sequencesOfRoutes` — for a page, over the page's routes at once — so a
@@ -66,7 +66,8 @@ import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import type { JobSender } from "@waste/db/jobs"
-import { placementStopOn } from "@waste/db/commands/fill-emptying"
+import { addOfficeStop as addStop, officeStopPlanned } from "@waste/db/commands/office-stops"
+import { placementInForce, type PlacementStop } from "@waste/db/query/placement-in-force"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -79,30 +80,29 @@ import { pickupCorrection, pickupTransition } from "@waste/domain/execution/tran
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import type { OfficeStopService, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerService } from "@waste/domain/execution/work-orders"
-import { and, asc, desc, eq, gt, gte, inArray, lte, max } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { inForceOn } from "@waste/domain/periods"
+import { newId } from "@waste/db/ids"
+import { emit } from "@waste/db/commands/outbox"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
-import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { routeLabel } from "@waste/contracts/execution"
-import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupReach, pickupScope, proofOf, proofsOfPickup, requireReachedRoute, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
+import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupReach, pickupScope, proofOf, proofsOfPickup, requireReachedRoute, type PickupRow, type RouteRow } from "./execution-shapes"
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
 import { requireDeparture, type ContainerRef } from "./lifecycle"
 import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stamp } from "./shared"
-import { bookTicket, requireBookableTicket, requireTicketForStop, ticketHearsOfStop } from "./ticket-stops"
-import { correctLedgerWork } from "./work-orders"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate } from "./shared"
+import { bookTicket, requireBookableTicket, requireTicketForStop } from "./ticket-stops"
+import { stopOutcomeChanged } from "./stop-outcomes"
 import { requireTag } from "./pickup-exceptions"
-import { pickupFitStops, refuseMisfit } from "./fleet-fit"
 import { placeOf, refuseUnservedPlace, requireWarehouseTakesStock, type Place } from "./statuses"
 
 const MODULE = "route-studio.pickups"
@@ -120,7 +120,7 @@ export const notPlacedOn = (container: string): string => `Container ${container
 
 
 /** Where and what a stop the office adds collects: the place, one of the two, and the fraction. */
-type StopPlace = { propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string }
+type StopPlace = PlacementStop
 
 /**
  * The place and the fraction of a container's stop on the route's service
@@ -139,7 +139,7 @@ async function containerStop(tx: Tx, scope: Scope, containerId: string, serviceD
     .where(and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId), eq(container.id, containerId)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "containerId", message: NOT_A_CONTAINER }])
-  const place = await placementStopOn(tx, scope, containerId, serviceDate)
+  const place = await placementInForce(tx, scope, containerId, serviceDate)
   return { label: found.label, place }
 }
 
@@ -351,29 +351,22 @@ export const heldBy = (label: string, holder: { service: PickupService; route: s
   `Container ${label} is held for a ${SERVICE_NOUNS[holder.service]} on route ${holder.route}, stop ${holder.position}; take that stop off first`
 
 /**
- * The office's stop written, a held container answered: the insert runs in a
- * savepoint, so a booking that meets a hold's index can read the stop holding
- * the container and name it — the index decides, never a read before the
- * write.
+ * A held container answered: the stop's insert met a hold's index (the
+ * shared write takes the stop back in its savepoint), so the stop holding the
+ * container is read and named — the index decides, never a read before the
+ * write. Anything else is thrown on.
  */
-async function insertHolding(tx: Tx, principal: Principal, values: typeof pickup.$inferInsert, held: readonly Held[]): Promise<PickupRow> {
-  try {
-    return await tx.transaction(async (savepoint) => {
-      const [row] = await savepoint.insert(pickup).values(values).returning(pickupColumns)
-      return row
-    })
-  } catch (error) {
-    const hold = held.find((candidate) => candidate.index === uniqueConstraintOf(error))
-    if (hold === undefined) throw error
-    const [holder] = await tx
-      .select({ service: pickup.service, number: route.number, position: pickup.position })
-      .from(pickup)
-      .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-      .where(and(pickupScope(principal), eq(pickup[HOLDS[hold.index]], hold.id)))
-      .limit(1)
-    if (holder === undefined) throw error
-    throw problem(409, { detail: heldBy(hold.label, { service: holder.service as PickupService, route: routeLabel(holder.number), position: holder.position }) })
-  }
+async function refuseHeld(tx: Tx, principal: Principal, error: unknown, held: readonly Held[]): Promise<never> {
+  const hold = held.find((candidate) => candidate.index === uniqueConstraintOf(error))
+  if (hold === undefined) throw error
+  const [holder] = await tx
+    .select({ service: pickup.service, number: route.number, position: pickup.position })
+    .from(pickup)
+    .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+    .where(and(pickupScope(principal), eq(pickup[HOLDS[hold.index]], hold.id)))
+    .limit(1)
+  if (holder === undefined) throw error
+  throw problem(409, { detail: heldBy(hold.label, { service: holder.service as PickupService, route: routeLabel(holder.number), position: holder.position }) })
 }
 
 /** What the same work booked twice on a route is told: an office stop of the container for that service is planned there already. A double-sent Add stop meets it; a second visit is booked once the first is done or taken off. */
@@ -429,8 +422,9 @@ async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{
  * The office's stop put on a route that has not started, judged as Add stop
  * judges it — the ticket it answers, the bulky booking it collects, a ledger
  * work order's bookings, a container's placement or an address on the
- * route's service date, the same work booked twice, a held container — and
- * written after the route's last position: what `POST /routes/:id/pickups`
+ * route's service date, the same work booked twice, a held container, the
+ * route's planned vehicle — and written as every office stop is
+ * (`@waste/db/commands/office-stops`): what `POST /routes/:id/pickups`
  * answers, and what a stop moved onto the route becomes (routes/stop-moves.ts,
  * O23 of #290), naming the stop it was moved from. The caller holds the
  * route's lock and has judged its state.
@@ -447,19 +441,6 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
       : isLedgerService(body.service)
         ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate)
         : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
-  const [last] = await tx
-    .select({ position: max(pickup.position) })
-    .from(pickup)
-    .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id)))
-  // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this. Under the route's lock nobody adds one meanwhile.
-  if (stop.label !== null && stop.at.containerId !== null) {
-    const [booked] = await tx
-      .select({ id: pickup.id })
-      .from(pickup)
-      .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId), eq(pickup.origin, "office"), eq(pickup.service, body.service), eq(pickup.status, "planned")))
-      .limit(1)
-    if (booked !== undefined) throw problem(409, { detail: bookedAlready(stop.label, body.service, labelOf(parent)) })
-  }
   // What the stop holds back from another booking: the delivery's container or the swap's replacement, and the container a removal or a swap takes away.
   const planned = { service: body.service, status: "planned" as const, containerId: stop.at.containerId, replacementContainerId: stop.booking.replacementContainerId }
   const reserved = reservedContainerOf(planned)
@@ -468,27 +449,27 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
     ...(reserved === null ? [] : [{ index: "pickup_reserved_container_id_key" as const, id: reserved, label: (reserved === stop.at.containerId ? stop.label : stop.replacementLabel) ?? reserved }]),
     ...(taken === null ? [] : [{ index: "pickup_taken_container_id_key" as const, id: taken, label: stop.label ?? taken }]),
   ]
-  // And held to the stop's place, open, and answered by no other planned stop.
+  // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this, before the ticket's refusals. Under the route's lock nobody adds one meanwhile.
+  if (stop.at.containerId !== null && (await officeStopPlanned(tx, principal.companyId, parent.id, { containerId: stop.at.containerId, service: body.service }))) {
+    throw problem(409, { detail: bookedAlready(stop.label ?? stop.at.containerId, body.service, labelOf(parent)) })
+  }
+  // And the ticket held to the stop's place, open, and answered by no other planned stop.
   const answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
-  const row = await insertHolding(
-    tx,
-    principal,
-    {
-      id: newId(),
-      ...scope,
-      routeId: parent.id,
-      position: (last?.position ?? 0) + 1,
-      origin: "office",
-      service: body.service,
-      note: body.note ?? bulky?.note ?? null,
-      ...stop.at,
-      ...stop.booking,
-      bulkyBookingId: bulky?.bulkyBookingId ?? null,
-      movedFromRouteId: movedFrom?.routeId ?? null,
-      movedFromPickupId: movedFrom?.pickupId ?? null,
-    },
-    held,
-  )
+  const added = await addStop(tx, principal.companyId, parent, {
+    id: newId(),
+    service: body.service,
+    note: body.note ?? bulky?.note ?? null,
+    ...stop.at,
+    ...stop.booking,
+    bulkyBookingId: bulky?.bulkyBookingId ?? null,
+    movedFromRouteId: movedFrom?.routeId ?? null,
+    movedFromPickupId: movedFrom?.pickupId ?? null,
+  }).catch((error: unknown) => refuseHeld(tx, principal, error, held))
+  // The same work was refused above; the route's planned vehicle serves the stop (O7 of #290).
+  if (added.kind === "booked-already") throw new Error(`route ${parent.id} took the same work of container ${stop.at.containerId} under its lock`)
+  if (added.kind === "misfit") throw problem(409, { detail: added.sentence })
+  const [row] = await tx.select(pickupColumns).from(pickup).where(and(pickupScope(principal), eq(pickup.id, added.id))).limit(1)
+  if (row === undefined) throw new Error(`pickup ${added.id} added to route ${parent.id} and then not there`)
   if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
   return row
 }
@@ -637,12 +618,6 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const parent = await lockedRoute(tx, principal, id)
         requireNotStarted(parent, ORDER_IS_FROZEN)
         const row = await addOfficeStop(tx, principal, parent, body)
-        // The route's planned vehicle serves the stop (O7 of #290); the request's transaction takes the row back where it does not.
-        if (parent.plannedVehicleId !== null) await refuseMisfit(tx, principal.companyId, parent.plannedVehicleId, await pickupFitStops(tx, principal.companyId, [row.id]))
-        await tx
-          .update(route)
-          .set(stamp())
-          .where(and(routeScope(principal), eq(route.id, parent.id)))
         return created(c, "/pickups", await detailOf(tx, principal, row))
       },
     )
@@ -739,10 +714,8 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           outcome,
           contaminantCodeId: tagged,
         })
-        // A ledger work order's movements follow its completion (O3b of #290): a correction to completed makes them, one away from completed tells the office they stand.
-        await correctLedgerWork(tx, principal, jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to }, at)
-        // And so does the ticket a stop is booked to answer (O3c of #290): serviced by a correction to completed, told of one away from it.
-        await ticketHearsOfStop(tx, principal, jobs.send, row.id, { from: current.status, to: transition.to, note }, at)
+        // What the outcome sets going (O3b, O3c of #290): a correction to completed makes a work order's movements and services its booked ticket, one away from completed tells the office the movements stand and tells the ticket.
+        await stopOutcomeChanged(tx, principal, jobs.send, row.id, { from: current.status as PickupStatus, to: transition.to, note, occurredAt: at.toISOString(), by: "office" }, at)
         const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)
