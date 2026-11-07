@@ -9,12 +9,11 @@ import { describe, test, type TestContext } from "node:test"
 import type { Property } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { watchReads, type BusinessRecordStores } from "@/components/waste/business-record-store"
-
 import { createExternalStore } from "../../external-store"
 import type { ApiClient } from "../client"
 import { projectAdapter } from "../records/organisation"
 import { propertiesModule } from "../records/properties"
+import { watchReads, type RecordStoreContext } from "../records/record-store"
 import { loaded, readModuleInto, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, problem } from "./scripted-fetch"
 
@@ -41,12 +40,10 @@ function propertiesApi() {
 }
 
 /** The store as a session holds it once its load has read the organisation and the properties, the watcher's to watch. */
-async function storesAfterTheLoad(client: ApiClient): Promise<BusinessRecordStores> {
+async function storesAfterTheLoad(client: ApiClient): Promise<RecordStoreContext> {
   const server = createExternalStore<ServerRecordsState>(new Map([["configure.organization", organisation("Copenhagen Central")]]))
   await readModuleInto(server, client, propertiesModule, { alive: () => true })
   return {
-    records: createExternalStore({}),
-    hydrated: createExternalStore(true),
     server,
     client: createExternalStore<ApiClient | null>(client),
     pendingWrites: new Map(),
@@ -54,6 +51,7 @@ async function storesAfterTheLoad(client: ApiClient): Promise<BusinessRecordStor
     generation: createExternalStore(0),
     sessionSignal: createExternalStore<AbortSignal | null>(new AbortController().signal),
     loading: createExternalStore(false),
+    notices: { refused: () => {}, landed: () => {}, landedCommand: () => {}, unsent: () => {} },
   }
 }
 
@@ -62,7 +60,7 @@ const settled = async () => {
   for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve))
 }
 
-const renamed = (stores: BusinessRecordStores, name: string) => stores.server.set((state) => new Map(state).set("configure.organization", organisation(name)))
+const renamed = (stores: RecordStoreContext, name: string) => stores.server.set((state) => new Map(state).set("configure.organization", organisation(name)))
 
 async function watching(t: TestContext, options: Parameters<typeof watchReads>[1] = {}) {
   const { api, client } = propertiesApi()
