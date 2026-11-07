@@ -47,18 +47,14 @@ import {
   VehicleTarePatch,
   ScaleTicketAmountDue,
   type AmountDueLine,
-  type ScaleTicketParty,
-  type ScaleTicketStatus,
-  type ScaleTicketVoidReason,
-  type TareSource,
   type VehicleTareStatus,
 } from "@waste/contracts/scale-house"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { notTaken, stationTakes } from "@waste/db/commands/unloads"
+import { notTaken, stationTakes, writeUnload } from "@waste/db/commands/unloads"
 import { dayInTimezone } from "@waste/domain/clock"
 import { projectTimezone } from "@waste/db/commands/project-clock"
-import { nextNumber, refuseDuplicate } from "@waste/db/commands/shared"
+import { lockRow, nextNumber, refuseDuplicate } from "@waste/db/commands/shared"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { product } from "@waste/db/schema/catalogue"
 import { agreement } from "@waste/db/schema/agreements"
@@ -72,11 +68,13 @@ import { matchTicket, plateKey } from "@waste/domain/execution/weighbridge"
 import { CUBIC_METRE_UNIT, soldAtTheWindow } from "@waste/domain/finance/window"
 import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import { linesIssue, netOf, registeredTare, tareKeyOf } from "@waste/domain/scale-house/rules"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
+import { scaleLineColumns, scaleTicketColumns, scaleTicketOf, scaleTicketsOf, type ScaleTicketRow } from "@waste/db/shapes/scale-tickets"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -86,8 +84,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NOT_AN_UNLOADING_STATION, requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
 import { refuseUnofferedProduct } from "./statuses"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead, stampsOf } from "./shared"
-import { writeUnload } from "./unload-writes"
+import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { routesOf } from "./weighbridge"
 
 const MODULE = "operate.scale-house"
@@ -166,115 +163,13 @@ async function findTare(tx: Tx, principal: Principal, id: string): Promise<TareR
 
 // --- The tickets -------------------------------------------------------------
 
-const ticketColumns = {
-  id: scaleTicket.id,
-  projectId: scaleTicket.projectId,
-  createdAt: scaleTicket.createdAt,
-  updatedAt: scaleTicket.updatedAt,
-  number: scaleTicket.number,
-  unloadingStationId: scaleTicket.unloadingStationId,
-  vehiclePlate: scaleTicket.vehiclePlate,
-  trailerPlate: scaleTicket.trailerPlate,
-  containerRef: scaleTicket.containerRef,
-  vehicleId: scaleTicket.vehicleId,
-  party: scaleTicket.party,
-  customerId: scaleTicket.customerId,
-  agreementId: scaleTicket.agreementId,
-  visitorName: scaleTicket.visitorName,
-  grossKg: scaleTicket.grossKg,
-  weighedInAt: scaleTicket.weighedInAt,
-  tareKg: scaleTicket.tareKg,
-  tareSource: scaleTicket.tareSource,
-  vehicleTareId: scaleTicket.vehicleTareId,
-  weighedOutAt: scaleTicket.weighedOutAt,
-  netKg: scaleTicket.netKg,
-  status: scaleTicket.status,
-  routeId: scaleTicket.routeId,
-  unloadId: scaleTicket.unloadId,
-  unmatchedReason: scaleTicket.unmatchedReason,
-  voidReason: scaleTicket.voidReason,
-  voidNote: scaleTicket.voidNote,
-  voidedAt: scaleTicket.voidedAt,
-  note: scaleTicket.note,
-  recordedBy: scaleTicket.recordedBy,
-}
-
-type TicketRow = Pick<typeof scaleTicket.$inferSelect, keyof typeof ticketColumns>
-
-const lineColumns = {
-  id: scaleTicketLine.id,
-  ticketId: scaleTicketLine.ticketId,
-  position: scaleTicketLine.position,
-  wasteFractionId: scaleTicketLine.wasteFractionId,
-  originMunicipality: scaleTicketLine.originMunicipality,
-  netKg: scaleTicketLine.netKg,
-  productId: scaleTicketLine.productId,
-  volumeLitres: scaleTicketLine.volumeLitres,
-}
-
-type LineRow = Pick<typeof scaleTicketLine.$inferSelect, keyof typeof lineColumns>
-
-const ticketOf = (row: TicketRow, lines: readonly LineRow[]): ScaleTicket => ({
-  id: row.id,
-  ...stampsOf(row),
-  projectId: row.projectId,
-  number: row.number,
-  unloadingStationId: row.unloadingStationId,
-  vehiclePlate: row.vehiclePlate,
-  trailerPlate: row.trailerPlate,
-  containerRef: row.containerRef,
-  vehicleId: row.vehicleId,
-  party: row.party as ScaleTicketParty,
-  customerId: row.customerId,
-  agreementId: row.agreementId,
-  visitorName: row.visitorName,
-  grossKg: row.grossKg,
-  weighedInAt: row.weighedInAt.toISOString(),
-  tareKg: row.tareKg,
-  tareSource: row.tareSource as TareSource | null,
-  vehicleTareId: row.vehicleTareId,
-  weighedOutAt: row.weighedOutAt?.toISOString() ?? null,
-  netKg: row.netKg,
-  status: row.status as ScaleTicketStatus,
-  lines: lines.map((line) => ({ id: line.id, position: line.position, wasteFractionId: line.wasteFractionId, originMunicipality: line.originMunicipality, netKg: line.netKg, productId: line.productId, volumeLitres: line.volumeLitres })),
-  routeId: row.routeId,
-  unloadId: row.unloadId,
-  unmatchedReason: row.unmatchedReason as WeighbridgeUnmatchedReason | null,
-  voidReason: row.voidReason as ScaleTicketVoidReason | null,
-  voidNote: row.voidNote,
-  voidedAt: row.voidedAt?.toISOString() ?? null,
-  note: row.note,
-  recordedBy: row.recordedBy,
-})
-
-/** The tickets with their lines, in position order, read in one statement. */
-async function ticketsOf(tx: Tx, companyId: string, rows: readonly TicketRow[]): Promise<ScaleTicket[]> {
-  if (rows.length === 0) return []
-  const lines = await tx
-    .select(lineColumns)
-    .from(scaleTicketLine)
-    .where(
-      and(
-        eq(scaleTicketLine.companyId, companyId),
-        inArray(
-          scaleTicketLine.ticketId,
-          rows.map((row) => row.id),
-        ),
-      ),
-    )
-    .orderBy(asc(scaleTicketLine.ticketId), asc(scaleTicketLine.position))
-  const byTicket = new Map<string, LineRow[]>()
-  for (const line of lines) byTicket.set(line.ticketId, [...(byTicket.get(line.ticketId) ?? []), line])
-  return rows.map((row) => ticketOf(row, byTicket.get(row.id) ?? []))
-}
-
 const ticketScope = (principal: Principal) => and(eq(scaleTicket.companyId, principal.companyId), inProjects(scaleTicket.projectId, principal))
 
 const noSuchTicket = (id: string) => problem(404, { detail: `No scale ticket ${id} in the projects this account works in` })
 
-async function findTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
+async function findTicket(tx: Tx, principal: Principal, id: string): Promise<ScaleTicketRow | undefined> {
   const [row] = await tx
-    .select(ticketColumns)
+    .select(scaleTicketColumns)
     .from(scaleTicket)
     .where(and(ticketScope(principal), eq(scaleTicket.id, id)))
     .limit(1)
@@ -528,7 +423,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
           const after = afterCursor(cursor)
           const tx = c.get("tx")
           const rows = await tx
-            .select(ticketColumns)
+            .select(scaleTicketColumns)
             .from(scaleTicket)
             .where(
               and(
@@ -544,7 +439,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .orderBy(asc(scaleTicket.id))
             .limit(fetchLimit(limit))
           const page = pageOf(rows, limit)
-          return c.json({ ...page, items: await ticketsOf(tx, principal.companyId, page.items) })
+          return c.json({ ...page, items: await scaleTicketsOf(tx, principal.companyId, page.items) })
         },
       )
       .post(
@@ -609,8 +504,8 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
               note: body.note ?? null,
               recordedBy: principal.user.id,
             })
-            .returning(ticketColumns)
-          return created(c, "/scale-tickets", ticketOf(row!, []))
+            .returning(scaleTicketColumns)
+          return created(c, "/scale-tickets", scaleTicketOf(row!, []))
         },
       )
       .get(
@@ -636,7 +531,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
           const tx = c.get("tx")
           const row = await findTicket(tx, principal, id)
           if (row === undefined) throw noSuchTicket(id)
-          const [answer] = await ticketsOf(tx, principal.companyId, [row])
+          const [answer] = await scaleTicketsOf(tx, principal.companyId, [row])
           return c.json(answer!)
         },
       )
@@ -673,8 +568,8 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .update(scaleTicket)
             .set(patch)
             .where(and(eq(scaleTicket.companyId, principal.companyId), eq(scaleTicket.id, id)))
-            .returning(ticketColumns)
-          return c.json(ticketOf(row!, []))
+            .returning(scaleTicketColumns)
+          return c.json(scaleTicketOf(row!, []))
         },
       )
       .post(
@@ -798,12 +693,12 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .update(scaleTicket)
             .set({ status: "completed", tareKg, tareSource: body.tare.source, vehicleTareId, weighedOutAt, netKg, ...match })
             .where(and(eq(scaleTicket.companyId, principal.companyId), eq(scaleTicket.id, id)))
-            .returning(ticketColumns)
+            .returning(scaleTicketColumns)
           const written = await tx
             .insert(scaleTicketLine)
             .values(lines.map((line, index) => ({ id: newId(), companyId: principal.companyId, projectId: ticket.projectId, ticketId: id, position: index + 1, ...line })))
-            .returning(lineColumns)
-          const answered = ticketOf(row!, written)
+            .returning(scaleLineColumns)
+          const answered = scaleTicketOf(row!, written)
           // Finance's news, after the rows it describes: an account's lines are charged by its consumer.
           await emit(tx, principal, { aggregateId: id, kind: "scale-ticket-completed", payload: answered, projectId: ticket.projectId, occurredAt: weighedOutAt })
           return c.json(answered)
@@ -849,8 +744,8 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             .update(scaleTicket)
             .set({ status: "voided", voidReason: body.reason, voidNote: body.note ?? null, voidedAt: now(), voidedBy: principal.user.id })
             .where(and(eq(scaleTicket.companyId, principal.companyId), eq(scaleTicket.id, id)))
-            .returning(ticketColumns)
-          const [answer] = await ticketsOf(tx, principal.companyId, [row!])
+            .returning(scaleTicketColumns)
+          const [answer] = await scaleTicketsOf(tx, principal.companyId, [row!])
           // A completed ticket's charges are Finance's to undo; an open one was never charged.
           if (ticket.status === "completed") await emit(tx, principal, { aggregateId: id, kind: "scale-ticket-voided", payload: answer!, projectId: ticket.projectId, occurredAt: now() })
           return c.json(answer!)

@@ -76,7 +76,6 @@ import {
   type TicketLinksSet,
 } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
-import { NO_TICKET_LINKS } from "@waste/db/commands/resolution-rows"
 import { assignTicket } from "@waste/db/commands/ticket-assignment"
 import { moveTicket, type TicketMoveColumns } from "@waste/db/commands/ticket-automation"
 import type { JobSender } from "@waste/db/jobs"
@@ -91,6 +90,10 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { appendTicketEvent, BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
+import { alertOf } from "@waste/db/shapes/alerts"
+import { eventColumns, eventOf, labelOf, linksOf, NO_TICKET_LINKS, ticketColumns, ticketOf, type TicketRow } from "@waste/db/shapes/tickets"
+import { labelOf as routeLabelOf } from "@waste/db/shapes/routes"
+import { lockRow } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
@@ -98,7 +101,7 @@ import { providerIdOf, providerNameOf } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { findReachedRoute, labelOf as routeLabelOf } from "./execution-shapes"
+import { findReachedRoute } from "./execution-shapes"
 import { partyInForce } from "./property-writes"
 import {
   NOT_A_PICKUP,
@@ -116,9 +119,9 @@ import {
   requireTicket,
   type Scope,
 } from "./references"
-import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findReachedTicket, findTicket, historyReadable, labelOf, linksOf, noSuchTicket, PROVIDER_THREAD, ticketColumns, ticketOf, ticketReach, ticketScope, type TicketRow } from "./resolution-shapes"
+import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
+import { created, dayWindow, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"

@@ -10,7 +10,7 @@
 // The office's capture is `source = dispatch`, `recordedBy` the caller,
 // `sessionId` null (a session is named by every driver-recorded row and by
 // no office row, `unload_session_shape`), the id server-minted — the
-// statements of routes/unload-writes.ts, which the correction writes through
+// statements of @waste/db/commands/unloads, which the correction writes through
 // too. It is made on a route that ran, `active` or `completed` (#104 §7.21:
 // the office may capture on a completed route where the device may not after
 // `end-route`) — a route that has not is refused (409), and a cancelled one
@@ -29,16 +29,16 @@
 // The weighbridge in the office (O9 of #290): the capture may say the station
 // refused the load (`refusal`, a reason and a note, which `other` needs); an
 // accepted load's fraction is one the station takes, a 400 at
-// `wasteFractionId` in the station's sentence otherwise (routes/unload-writes.ts,
+// `wasteFractionId` in the station's sentence otherwise (@waste/db/commands/unloads,
 // `stationTakes`), and a refused one's any. Every unload answered carries
 // `load`, what the stops of its fraction weighed on board since the route's
 // last accepted unload of it against its net, within the project's tolerance
 // or above it, null where no stop was weighed (`unloadsAnswered`,
-// routes/execution-shapes.ts).
+// @waste/db/shapes/unloads).
 //
 // Every Unload answered here carries `weightReview`, the review ledger's
 // reading (Issue #112 §5): the list, the read and the capture go through
-// `unloadsFrom` (routes/execution-shapes.ts), one LATERAL probe per row for
+// `unloadsFrom` (@waste/db/shapes/unloads), one LATERAL probe per row for
 // the latest review, and the list takes `?reviewStatus=` over the same fold,
 // so the queue the weights desk works ("Needs review" is `captured`) is a
 // filter and never a column.
@@ -56,25 +56,26 @@ import { createHash } from "node:crypto"
 import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { reviewStatus } from "@waste/db/query/weight-review"
-import { notTaken, stationTakes } from "@waste/db/commands/unloads"
+import { notTaken, recordOfficeUnload, stationTakes } from "@waste/db/commands/unloads"
 import { route, unload } from "@waste/db/schema/execution"
 import { transferNoteOf } from "@waste/domain/execution/transfer-note"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { lockRow } from "@waste/db/commands/shared"
+import { unloadAnswered, unloadsAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, validate } from "../problem"
-import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadAnswered, unloadScope, unloadsAnswered, unloadsFrom } from "./execution-shapes"
+import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadScope } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
+import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { noteRefusal, transferNoteInputOf } from "./transfer-notes"
-import { recordOfficeUnload } from "./unload-writes"
 
 const MODULE = "route-studio.weights"
 

@@ -46,8 +46,7 @@
 //                  API's routes and the statements here go through the same
 //                  doors.
 //
-// The API's routes/shared.ts re-exports `lockRow`, `lockRows` and
-// `nextNumber` from here, so a route reads them where it always did. Nothing
+// A route imports `lockRow`, `lockRows` and `nextNumber` from here. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
 import { Refused, type Refusal } from "@waste/domain/refusal"
@@ -57,12 +56,6 @@ import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core
 import type { Tx } from "../client"
 import { company, COMPANY_COUNTERS } from "../schema/organisation"
 import { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
-
-// The SQLSTATE readers live in ../sqlstate, where the API's problem.ts and
-// the worker's consumers read them too; they are re-exported here as well,
-// since a duplicate met inside a command is read the same way as one met by
-// a route, and a consumer that imports the commands has them in one place.
-export { checkConstraintOf, constraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
 
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }

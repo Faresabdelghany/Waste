@@ -7,7 +7,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, count, eq, inArray } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"
-import { nextBatch, runBilling, runUnderWay, type Transact } from "../routes/billing-runs"
+import { nextBatch, runBilling, runUnderWay, type Transact } from "@waste/db/commands/billing-runs"
 import { type BillingFixtures } from "./billing-fixtures"
 import { billingRunCalls, NOON, setUpBillingRuns, tearDownBillingRuns, type BillingRunSuite } from "./billing-run-suite"
 import { type Call } from "./calls"

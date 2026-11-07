@@ -27,6 +27,8 @@ import { changesTheProduct } from "@waste/domain/inspections/right-sizing"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
+import { lockRow } from "@waste/db/commands/shared"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -34,7 +36,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { changeSubscription } from "./agreements"
-import { describeJson, IdParam, instantOf, lockRow, stampsOf } from "./shared"
+import { describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.right-sizing"
 /** The grant a subscription's change asks, which an approve of a size asks too. */

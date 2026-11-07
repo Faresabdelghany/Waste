@@ -17,15 +17,13 @@
 // once a sentence needs them.
 //
 // The statements are `@waste/db/commands/fleet-fit`'s since O26 of #290,
-// which the worker's fill-driven emptying reads too; this module re-exports
-// them and answers a misfit as the 409.
+// which the worker's fill-driven emptying reads too; this module answers a
+// misfit as the 409.
 import type { Tx } from "@waste/db/client"
 import { misfitOf } from "@waste/db/commands/fleet-fit"
 import type { FitStop } from "@waste/domain/resources/fleet-fit"
 
 import { problem } from "../problem"
-
-export { fitsOf, pickupFitStops, routeFitStops, type FitRow } from "@waste/db/commands/fleet-fit"
 
 /**
  * The vehicle serves the stops (`firstMisfit`): a 409 in the first broken

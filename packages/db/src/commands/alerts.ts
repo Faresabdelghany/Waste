@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm"
 import type { Tx } from "../client"
 import { alert } from "../schema/resolution"
 import { emit } from "./outbox"
-import { alertColumns, alertOf, type AlertRow } from "./resolution-rows"
+import { alertColumns, alertOf, type AlertRow } from "../shapes/alerts"
 
 /** An alert as its door raises it: what it is about, when it was seen, and who raised it — a person, or a rule with its occurrence's key. */
 export type AlertDraft = {

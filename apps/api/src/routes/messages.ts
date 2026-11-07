@@ -30,13 +30,14 @@ import { and, desc, eq, isNotNull, lt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
-import { created, describeCreated, describeJson, IdParam, instantOf, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
 const MessagePage = Page(Message)

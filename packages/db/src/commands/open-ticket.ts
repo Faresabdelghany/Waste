@@ -61,10 +61,10 @@ import { newId as processId, type IdMinter } from "../ids"
 import { team, ticket, ticketEvent, ticketSla, ticketTeamDefault } from "../schema/resolution"
 import { linkAlert } from "./alert-links"
 import { emit } from "./outbox"
-import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-rows"
 import { nextNumber } from "./shared"
 import { runTicketAutomation, type AutomationCause } from "./ticket-automation"
 import { defaultTicketTypeOf } from "./ticket-types"
+import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "../shapes/tickets"
 
 /** A draft's due date that is the project's SLA target of the ticket's kind and priority, from when its issue or request happened. */
 export const BY_SLA = "sla"

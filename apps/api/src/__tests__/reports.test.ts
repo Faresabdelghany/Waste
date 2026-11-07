@@ -48,9 +48,9 @@ import { WASTE_DATA_COLUMNS, wasteDataWarningSentence, type WasteDataRow as Doma
 import { csvRecords } from "@waste/domain/imports/csv"
 import type { TicketKind, TicketResolution, TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
+import { nextNumber } from "@waste/db/commands/shared"
 
 import { createApp } from "../app"
-import { nextNumber } from "../routes/shared"
 import { seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"

@@ -1,5 +1,5 @@
 // Resources' rows as the routes that name them read them (Issue #101, slice
-// 6): a vehicle of one kind, a driver, and the project's clock. Two callers
+// 6): a vehicle of one kind and a driver. Two callers
 // and one spelling — the allocation commands (routes/vehicle-allocations.ts)
 // and Planning's group writes (routes/scheme-groups.ts) — so a driver's
 // licence is read the same way for a reservation and for a Collection Group.
@@ -23,15 +23,6 @@
 // column sets are exported so routes/scheme-groups.ts reads a body's whole
 // fleet in one statement per table and gets the same rows.
 //
-// The project's clock is read from here too — `projectTimezone`,
-// `projectCurrency` and `projectToday`, the app's `now` rendered as a day on
-// it — since a Collection Group's licence day, a billing run's `issuedOn` and
-// a credit note's are one question asked by three contexts (Issue #112, its
-// review). The three moved to `@waste/db/commands/project-clock` with the
-// commands the worker runs (part B: the scheduled billing run asks the same
-// question with no request in hand) and are re-exported here, so the routes
-// read them from the path they did.
-//
 // A Service Provider's account crews the routes it runs with its own fleet
 // (#291 slice 23b): `ownedBy` holds a row read for it to its provider as
 // well, refused in the provider's words (`notOwnFleet`), at the same field.
@@ -47,8 +38,6 @@ import { NOT_A_DRIVER, notAVehicleOf, type Scope } from "./references"
 /** The provider a provider's account's fleet must belong to, and the name its sentences call it by. */
 export type OwnedBy = { serviceProviderId: string; provider: string }
 
-export { projectCurrency, projectTimezone, projectToday, type Today } from "@waste/db/commands/project-clock"
-
 /** What a sentence and a licence check read of a vehicle. */
 export type VehicleRow = {
   id: string
@@ -60,9 +49,6 @@ export type VehicleRow = {
   /** Its `vehicle_type`: what a group's stop rule asks for (O7 of #290). */
   vehicleTypeId: string
 }
-
-/** How a person names a vehicle: the yard's callsign (`WH-24`) where it has one, the plate otherwise. */
-export { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
 /** The columns a `VehicleRow` is read from. */
 export const vehicleColumns = {

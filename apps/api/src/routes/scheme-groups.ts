@@ -59,7 +59,7 @@
 // judged on the day the scheme's period starts or today on the project's
 // clock, whichever is later (#101 §6.18) — today being the app's injected
 // `now` rendered in `project.timezone`, read once per request through
-// `projectToday` (routes/fleet-lookups.ts) and only when a group asks — a 400 at `driverId` in the
+// `projectToday` (@waste/db/commands/project-clock) and only when a group asks — a 400 at `driverId` in the
 // words an allocation refuses with, whatever the scheme's status; a scheme
 // patch that moves the start later judges its stored groups the same way,
 // over rows `fleetOf` reads in one statement each. And on a `validated`
@@ -104,11 +104,14 @@ import { firstRunDay } from "@waste/domain/resources/availability"
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
+import type { Today } from "@waste/db/commands/project-clock"
+import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
+import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { invalidRequest, problem, refusalProblem } from "../problem"
-import { driverColumns, findDriver, findVehicle, vehicleColumns, vehicleLabel, type DriverRow, type Today, type VehicleRow } from "./fleet-lookups"
+import { driverColumns, findDriver, findVehicle, vehicleColumns, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import {
   requireContainer,
   requireContainerType,
@@ -123,7 +126,7 @@ import {
 import { schemeWarningsOf } from "./scheme-reconciliation"
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
 import { seasonsOf } from "./scheme-seasons"
-import { instantOf, stamp, stampsOf, timeOf } from "./shared"
+import { stamp } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 import { oneDay, refuseCrewsAway } from "./availability-rules"
 
@@ -217,7 +220,7 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
     frequency: row.frequency as RecurrenceFrequency,
     serviceDays: row.serviceDays as ServiceDay[],
     weekRotation: row.weekRotation as WeekRotation | null,
-    // Postgres spells the start with seconds; the wire does not (routes/shared.ts).
+    // Postgres spells the start with seconds; the wire does not (`timeOf`).
     plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),
     holidayPolicy: row.holidayPolicy as HolidayPolicy,
     editPolicy: row.editPolicy as SchemeEditPolicy,

@@ -1,54 +1,27 @@
-// What the Execution route modules share (Issue #104): the rows of `route`,
-// `pickup`, `session`, `proof_of_service`, `unload` and `driver_command` on
-// the wire, the scopes every route statement is bounded by — the office's,
-// the tenant and `inProjects`, which every command carries; the reach of the
-// routes' and the pickups' reads, the tenant and `reachesRoute`, which is the
-// office's fence for an office account and `servesRoute` for a Service
-// Provider's (auth/provider.ts, #291 slice 23); the driver door's, the tenant
-// and the assignment — the two page-wide reads a route carries, its progress and
-// its open session, and the route's detail (`detailOf`, and
+// What the Execution route modules share (Issue #104) beside the rows on the
+// wire, which are `@waste/db/shapes/`' (routes, pickups, proofs, unloads,
+// driver commands), since the commands and the outbox answer them too: the
+// scopes every route statement is bounded by — the office's, the tenant and
+// `inProjects`, which every command carries; the reach of the routes' and the
+// pickups' reads, the tenant and `reachesRoute`, which is the office's fence
+// for an office account and `servesRoute` for a Service Provider's
+// (auth/provider.ts, #291 slice 23); the driver door's, the tenant and the
+// assignment — the session on the wire, the open session of every route on a
+// page in one statement, over the partial unique index that holds one live
+// session per route, and the route's detail (`detailOf`, and
 // `routeWithSessions` underneath it, which the driver's read adds its own
 // pickups to), so routes/routes.ts, routes/pickups.ts, routes/live.ts,
-// routes/unloads.ts and routes/driver.ts each say only which route does what,
-// the way routes/scheme-groups.ts holds Planning's shapes for its two modules.
-//
-// A route's `progress` is derived and never stored (#104 §2): one aggregate
-// over the page's ids, grouped by route and status, folded by the domain's
-// `progressOf`, so a page of fifty routes costs one statement and not fifty,
-// and the list, the single read and the live read all answer the same fold.
-// The open session of every route on a page is one statement too, over the
-// partial unique index that holds one live session per route.
-//
-// The route's `label` is `routeLabel(number)`, the contracts' one spelling of
-// `RC-1042`, and every sentence of the four modules names a route by it.
-// `generationRunId` is the column since migration 0012 (#97 part B): the run
-// that last wrote the route, null on one no run has — every route of part A's
-// fixtures, and the office's ad-hoc route. `heldAt` is the column since 0015
-// (#209): the hold `assign` and `reschedule` put on a planned route, which
-// generation's refresh keeps (routes/route-holds.ts). Since 0016 (#111) a
-// route's scheme and group are null together on an ad-hoc route, and a
-// pickup carries its `origin` and may name no container.
-import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
-import { routeLabel } from "@waste/contracts/execution"
-import type { WeightReviewState } from "@waste/contracts/finance"
-import type { FlatPoint } from "@waste/contracts/geojson"
-import type { Pickup } from "@waste/contracts/pickups"
-import type { Problem } from "@waste/contracts/problem"
-import type { ProofOfService } from "@waste/contracts/proofs"
-import type { Route, RouteDetail, RouteProgress } from "@waste/contracts/routes"
+// routes/unloads.ts and routes/driver.ts each say only which route does what.
+import type { RouteDetail } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
-import type { LoadReading, Unload } from "@waste/contracts/unloads"
 import type { Tx } from "@waste/db/client"
-import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
-import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
-import { project } from "@waste/db/schema/organisation"
+import { pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
+import { routeColumns, routeWithProgress, type RouteRow } from "@waste/db/shapes/routes"
+import { instantOf, stampsOf } from "@waste/db/shapes/times"
+import { unloadsAnswered, unloadsFrom, unloadsOfRoute, type UnloadRow } from "@waste/db/shapes/unloads"
+import { pickup, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
-import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import { loadReading, onBoardByUnload } from "@waste/domain/execution/unloads"
-import { possibleDuplicates } from "@waste/domain/execution/weighbridge"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, FillLevel, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
-import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
-import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 
 import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
@@ -58,86 +31,12 @@ import { problem } from "../problem"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
 import { NOT_A_ROUTE } from "./references"
-import { instantOf, requireRow, stampsOf, timeOf } from "./shared"
+import { requireRow } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })
 export const noSuchSession = (id: string) => problem(404, { detail: `No session ${id} in the projects this account works in` })
 export const noSuchUnload = (id: string) => problem(404, { detail: `No unload ${id} in the projects this account works in` })
-
-export const routeColumns = {
-  id: route.id,
-  projectId: route.projectId,
-  routeSchemeId: route.routeSchemeId,
-  collectionGroupId: route.collectionGroupId,
-  serviceDate: route.serviceDate,
-  operatingDate: route.operatingDate,
-  number: route.number,
-  status: route.status,
-  note: route.note,
-  cancelReasonCode: route.cancelReasonCode,
-  cancelledByGeneration: route.cancelledByGeneration,
-  generationRunId: route.generationRunId,
-  activePlanId: route.activePlanId,
-  plannedStartTime: route.plannedStartTime,
-  plannedVehicleId: route.plannedVehicleId,
-  plannedDriverId: route.plannedDriverId,
-  plannedTrailerId: route.plannedTrailerId,
-  depotId: route.depotId,
-  plannedServiceProviderId: route.plannedServiceProviderId,
-  unloadingStationId: route.unloadingStationId,
-  heldAt: route.heldAt,
-  actualVehicleId: route.actualVehicleId,
-  actualDriverId: route.actualDriverId,
-  actualTrailerId: route.actualTrailerId,
-  dispatchedAt: route.dispatchedAt,
-  startedAt: route.startedAt,
-  completedAt: route.completedAt,
-  cancelledAt: route.cancelledAt,
-  createdAt: route.createdAt,
-  updatedAt: route.updatedAt,
-}
-
-export type RouteRow = Pick<typeof route.$inferSelect, keyof typeof routeColumns>
-
-/** How every sentence names a route: `RC-1042`. */
-export const labelOf = (row: { number: number }): string => routeLabel(row.number)
-
-/** The row on the wire with the progress read for it. The status is text with a CHECK in the database and an enum here; the start drops Postgres's seconds. */
-export function routeOf(row: RouteRow, progress: RouteProgress): Route {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    routeSchemeId: row.routeSchemeId,
-    collectionGroupId: row.collectionGroupId,
-    serviceDate: row.serviceDate,
-    operatingDate: row.operatingDate,
-    number: row.number,
-    label: labelOf(row),
-    status: row.status as RouteStatus,
-    note: row.note,
-    cancelReasonCode: row.cancelReasonCode as RouteCancelReasonCode | null,
-    cancelledByGeneration: row.cancelledByGeneration,
-    generationRunId: row.generationRunId,
-    plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),
-    planned: {
-      vehicleId: row.plannedVehicleId,
-      driverId: row.plannedDriverId,
-      trailerId: row.plannedTrailerId,
-      serviceProviderId: row.plannedServiceProviderId,
-      depotId: row.depotId,
-      unloadingStationId: row.unloadingStationId,
-    },
-    heldAt: instantOf(row.heldAt),
-    actual: { vehicleId: row.actualVehicleId, driverId: row.actualDriverId, trailerId: row.actualTrailerId },
-    dispatchedAt: instantOf(row.dispatchedAt),
-    startedAt: instantOf(row.startedAt),
-    completedAt: instantOf(row.completedAt),
-    cancelledAt: instantOf(row.cancelledAt),
-    progress,
-    ...stampsOf(row),
-  }
-}
 
 /** The routes of this company, in the projects the caller works in: what every route command, and every route statement outside the routes' and the pickups' reads, is bounded by. */
 export const routeScope = (principal: Principal): SQL | undefined => and(eq(route.companyId, principal.companyId), inProjects(route.projectId, principal))
@@ -175,105 +74,6 @@ export async function requireReachedRoute(tx: Tx, principal: Principal, id: stri
   await requireRow(tx, route, { companyId: principal.companyId, id, also: and(reachesRoute(tx, principal), projectId === undefined ? undefined : eq(route.projectId, projectId)) }, { path, message: NOT_A_ROUTE }, "query")
 }
 
-/**
- * The progress of every route asked for, by route: one aggregate over the
- * page's ids grouped by route and status, folded by the domain. A route with
- * no pickups is absent from the counts and reads as done at zero, so a caller
- * reads through `progressFor`.
- */
-export async function progressByRoute(tx: Tx, companyId: string, routeIds: readonly string[]): Promise<Map<string, RouteProgress>> {
-  const byRoute = new Map<string, Record<PickupStatus, number>>()
-  if (routeIds.length === 0) return new Map()
-  const rows = await tx
-    .select({ routeId: pickup.routeId, status: pickup.status, n: count() })
-    .from(pickup)
-    .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, [...routeIds])))
-    .groupBy(pickup.routeId, pickup.status)
-  for (const row of rows) {
-    const counts = byRoute.get(row.routeId) ?? { planned: 0, completed: 0, skipped: 0, failed: 0 }
-    counts[row.status as PickupStatus] = row.n
-    byRoute.set(row.routeId, counts)
-  }
-  return new Map(routeIds.map((id) => [id, progressOf(byRoute.get(id) ?? {})] as const))
-}
-
-/** The progress of one route out of a page's, or the empty fold for a route the aggregate did not mention. */
-export const progressFor = (progress: ReadonlyMap<string, RouteProgress>, routeId: string): RouteProgress => progress.get(routeId) ?? progressOf({} as Partial<PickupCounts>)
-
-/** The routes on the wire, their progress read in one statement. */
-export async function routesOf(tx: Tx, companyId: string, rows: readonly RouteRow[]): Promise<Route[]> {
-  const progress = await progressByRoute(
-    tx,
-    companyId,
-    rows.map((row) => row.id),
-  )
-  return rows.map((row) => routeOf(row, progressFor(progress, row.id)))
-}
-
-/** One route on the wire, its progress read the way a page reads it, so what a write answers is what the next read says. */
-export async function routeWithProgress(tx: Tx, companyId: string, row: RouteRow): Promise<Route> {
-  const [answered] = await routesOf(tx, companyId, [row])
-  return answered
-}
-
-export const pickupColumns = {
-  id: pickup.id,
-  projectId: pickup.projectId,
-  routeId: pickup.routeId,
-  containerId: pickup.containerId,
-  position: pickup.position,
-  status: pickup.status,
-  origin: pickup.origin,
-  service: pickup.service,
-  reason: pickup.reason,
-  contaminantCodeId: pickup.contaminantCodeId,
-  note: pickup.note,
-  propertyId: pickup.propertyId,
-  sharedCollectionPointId: pickup.sharedCollectionPointId,
-  wasteFractionId: pickup.wasteFractionId,
-  arrivedAt: pickup.arrivedAt,
-  outcomeAt: pickup.outcomeAt,
-  subscriptionId: pickup.subscriptionId,
-  warehouseId: pickup.warehouseId,
-  replacementContainerId: pickup.replacementContainerId,
-  bulkyBookingId: pickup.bulkyBookingId,
-  movedFromPickupId: pickup.movedFromPickupId,
-  fillLevel: pickup.fillLevel,
-  createdAt: pickup.createdAt,
-  updatedAt: pickup.updatedAt,
-}
-
-export type PickupRow = Pick<typeof pickup.$inferSelect, keyof typeof pickupColumns>
-
-/** The pickup on the wire. */
-export function pickupOf(row: PickupRow): Pickup {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    routeId: row.routeId,
-    containerId: row.containerId,
-    position: row.position,
-    status: row.status as PickupStatus,
-    origin: row.origin as PickupOrigin,
-    service: row.service as PickupService,
-    reason: row.reason as PickupReason | null,
-    contaminantCodeId: row.contaminantCodeId,
-    note: row.note,
-    propertyId: row.propertyId,
-    sharedCollectionPointId: row.sharedCollectionPointId,
-    wasteFractionId: row.wasteFractionId,
-    arrivedAt: instantOf(row.arrivedAt),
-    outcomeAt: instantOf(row.outcomeAt),
-    subscriptionId: row.subscriptionId,
-    warehouseId: row.warehouseId,
-    replacementContainerId: row.replacementContainerId,
-    bulkyBookingId: row.bulkyBookingId,
-    movedFromPickupId: row.movedFromPickupId,
-    fill: row.fillLevel as FillLevel | null,
-    ...stampsOf(row),
-  }
-}
-
 /** The pickups of this company, in the projects the caller works in: what a pickup command is bounded by. */
 export const pickupScope = (principal: Principal): SQL | undefined => and(eq(pickup.companyId, principal.companyId), inProjects(pickup.projectId, principal))
 
@@ -285,15 +85,6 @@ export const pickupScope = (principal: Principal): SQL | undefined => and(eq(pic
  * over that join rather than a second read of the same route.
  */
 export const pickupReach = (tx: Tx, principal: Principal, joined?: ReachedRouteColumns): SQL | undefined => and(eq(pickup.companyId, principal.companyId), reachesThroughRoute(tx, principal, pickup, joined))
-
-/** One route's pickups, by position and then by id: the stop list in order. */
-export async function pickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<PickupRow[]> {
-  return await tx
-    .select(pickupColumns)
-    .from(pickup)
-    .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
-    .orderBy(asc(pickup.position), asc(pickup.id))
-}
 
 export const sessionColumns = {
   id: session.id,
@@ -355,242 +146,6 @@ export async function openSessionsByRoute(tx: Tx, companyId: string, routeIds: r
   return new Map(rows.map((row) => [row.routeId, row] as const))
 }
 
-export const proofColumns = {
-  id: proofOfService.id,
-  recordedAt: proofOfService.recordedAt,
-  projectId: proofOfService.projectId,
-  routeId: proofOfService.routeId,
-  pickupId: proofOfService.pickupId,
-  sessionId: proofOfService.sessionId,
-  kind: proofOfService.kind,
-  source: proofOfService.source,
-  occurredAt: proofOfService.occurredAt,
-  recordedBy: proofOfService.recordedBy,
-  deviceId: proofOfService.deviceId,
-  location: proofOfService.location,
-  locationAccuracyM: proofOfService.locationAccuracyM,
-  reason: proofOfService.reason,
-  note: proofOfService.note,
-  weightKg: proofOfService.weightKg,
-  volumeLitres: proofOfService.volumeLitres,
-  objectKey: proofOfService.objectKey,
-  outcome: proofOfService.outcome,
-  contaminantCodeId: proofOfService.contaminantCodeId,
-}
-
-export type ProofRow = Pick<typeof proofOfService.$inferSelect, keyof typeof proofColumns>
-
-/** The proof on the wire. The point is the contracts' `FlatPoint`, since the column is flat and refuses a third ordinate on write. */
-export function proofOf(row: ProofRow): ProofOfService {
-  return {
-    id: row.id,
-    recordedAt: row.recordedAt.toISOString(),
-    projectId: row.projectId,
-    routeId: row.routeId,
-    pickupId: row.pickupId,
-    sessionId: row.sessionId,
-    kind: row.kind as ProofKind,
-    source: row.source as ExecutionSource,
-    occurredAt: row.occurredAt.toISOString(),
-    recordedBy: row.recordedBy,
-    deviceId: row.deviceId,
-    location: row.location as FlatPoint | null,
-    locationAccuracyM: row.locationAccuracyM,
-    reason: row.reason as PickupReason | null,
-    note: row.note,
-    weightKg: row.weightKg,
-    volumeLitres: row.volumeLitres,
-    objectKey: row.objectKey,
-    outcome: row.outcome as PickupOutcome | null,
-    contaminantCodeId: row.contaminantCodeId,
-  }
-}
-
-/** One pickup's proofs in recording order: a cursor over time-ordered ids is a cursor over recording order. */
-export async function proofsOfPickup(tx: Tx, companyId: string, pickupId: string): Promise<ProofRow[]> {
-  return await tx
-    .select(proofColumns)
-    .from(proofOfService)
-    .where(and(eq(proofOfService.companyId, companyId), eq(proofOfService.pickupId, pickupId)))
-    .orderBy(asc(proofOfService.id))
-}
-
-export const unloadColumns = {
-  id: unload.id,
-  recordedAt: unload.recordedAt,
-  projectId: unload.projectId,
-  routeId: unload.routeId,
-  sessionId: unload.sessionId,
-  unloadingStationId: unload.unloadingStationId,
-  wasteFractionId: unload.wasteFractionId,
-  source: unload.source,
-  occurredAt: unload.occurredAt,
-  recordedBy: unload.recordedBy,
-  deviceId: unload.deviceId,
-  location: unload.location,
-  grossKg: unload.grossKg,
-  tareKg: unload.tareKg,
-  netKg: unload.netKg,
-  weighbridgeTicket: unload.weighbridgeTicket,
-  objectKey: unload.objectKey,
-  note: unload.note,
-  refusalReason: unload.refusalReason,
-  refusalNote: unload.refusalNote,
-}
-
-// Weight control's reading beside every Unload (Issue #112, §5): the latest
-// `weight_review` of the row — its decision folded onto the status, its id,
-// and the new Unload a correction wrote — joined LATERAL through
-// `weightReviewOf` (@waste/db/query/weight-review, the `assetStateOf` shape:
-// one backward probe per row into `weight_review_unload_id_idx`, never a
-// fold of the whole ledger), so a page, a single read, the route's detail,
-// the driver door's replay and the answer to a capture all say the same thing
-// about an unload's weight. A row just appended has no review by
-// construction and reads through `NO_REVIEW` instead of a join.
-
-/** The reading's columns beside the unload's own, as the one statement below selects them; null on a LATERAL left join that found no review, `captured` from the fold either way. */
-const reviewColumns = (review: ReturnType<typeof weightReviewOf>) => ({
-  reviewStatus: reviewStatus(review.decision),
-  reviewId: review.reviewId,
-  reviewCorrectionUnloadId: review.correctionUnloadId,
-})
-
-/** What the reading adds to a row: the fold, the latest review's id, the correction it wrote. */
-export type ReviewRead = { reviewStatus: WeightReviewStatus; reviewId: string | null; reviewCorrectionUnloadId: string | null }
-
-export type UnloadRow = Pick<typeof unload.$inferSelect, keyof typeof unloadColumns> & ReviewRead
-
-/** The reading an unload has before anybody looks: what a capture and a correction answer, since a row just made has none by construction. */
-export const NO_REVIEW: ReviewRead = { reviewStatus: "captured", reviewId: null, reviewCorrectionUnloadId: null }
-
-/**
- * The one statement every unload is read through: the row with the review
- * ledger's reading joined LATERAL — one probe per row for its latest review
- * (`weightReviewOf`). The subquery is handed back beside the query for a
- * filter over it (`GET /unloads?reviewStatus=`).
- */
-export function unloadsFrom(tx: Tx, companyId: string) {
-  const review = weightReviewOf(tx, companyId, unload.id)
-  return { review, query: tx.select({ ...unloadColumns, ...reviewColumns(review) }).from(unload).leftJoinLateral(review, sql`true`) }
-}
-
-/** The reading as the wire spells it: `captured` with two nulls where no review exists, else the latest decision with its review and, on a correction, the new row. */
-export const weightReviewOfRow = (row: ReviewRead): WeightReviewState => ({ status: row.reviewStatus, latestReviewId: row.reviewId, correctionUnloadId: row.reviewCorrectionUnloadId })
-
-/** The unload on the wire, its review reading beside it, and the load on board where `unloadsAnswered` read one. */
-export function unloadOf(row: UnloadRow, load: LoadReading | null = null, possibleDuplicates: readonly string[] = []): Unload {
-  return {
-    id: row.id,
-    recordedAt: row.recordedAt.toISOString(),
-    projectId: row.projectId,
-    routeId: row.routeId,
-    sessionId: row.sessionId,
-    unloadingStationId: row.unloadingStationId,
-    wasteFractionId: row.wasteFractionId,
-    source: row.source as ExecutionSource,
-    occurredAt: row.occurredAt.toISOString(),
-    recordedBy: row.recordedBy,
-    deviceId: row.deviceId,
-    location: row.location as FlatPoint | null,
-    grossKg: row.grossKg,
-    tareKg: row.tareKg,
-    netKg: row.netKg,
-    weighbridgeTicket: row.weighbridgeTicket,
-    objectKey: row.objectKey,
-    note: row.note,
-    weightReview: weightReviewOfRow(row),
-    refusal: row.refusalReason === null ? null : { reason: row.refusalReason as UnloadRefusalReason, note: row.refusalNote },
-    load,
-    possibleDuplicates: [...possibleDuplicates],
-  }
-}
-
-/**
- * Each unload's load on board against its weighbridge net (O9 of #290): what
- * the stops of its fraction weighed since the route's last accepted unload of
- * it (`onBoardByUnload`), read against the project's tolerance
- * (`loadReading`). The window needs every unload of the route, not only the
- * rows answered, and each stop's latest weight — the tonnage report's reading
- * of a stop's weight — at the instant the stop was first weighed, so a weight
- * corrected after the truck tipped stays with the load it was tipped in. A row
- * with no stop weighed before it is absent.
- */
-async function loadsOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Map<string, LoadReading>> {
-  if (rows.length === 0) return new Map()
-  const routeIds = [...new Set(rows.map((row) => row.routeId))]
-  const projectIds = [...new Set(rows.map((row) => row.projectId))]
-  const unloads = await tx
-    .select({ id: unload.id, routeId: unload.routeId, wasteFractionId: unload.wasteFractionId, occurredAt: unload.occurredAt, refusalReason: unload.refusalReason })
-    .from(unload)
-    .where(and(eq(unload.companyId, companyId), inArray(unload.projectId, projectIds), inArray(unload.routeId, routeIds)))
-  const weights = await tx
-    .select({
-      routeId: proofOfService.routeId,
-      wasteFractionId: pickup.wasteFractionId,
-      occurredAt: sql<Date>`min(${proofOfService.occurredAt})`.mapWith(proofOfService.occurredAt),
-      weightKg: sql<number | null>`(array_agg(${proofOfService.weightKg} order by ${proofOfService.id} desc))[1]`,
-    })
-    .from(proofOfService)
-    .innerJoin(pickup, and(eq(pickup.companyId, proofOfService.companyId), eq(pickup.id, proofOfService.pickupId)))
-    .where(and(eq(proofOfService.companyId, companyId), inArray(proofOfService.projectId, projectIds), inArray(proofOfService.routeId, routeIds), eq(proofOfService.kind, "weight")))
-    .groupBy(proofOfService.pickupId, proofOfService.routeId, pickup.wasteFractionId)
-  const tolerances = new Map(
-    (await tx.select({ id: project.id, tolerance: project.weightTolerancePercent }).from(project).where(and(eq(project.companyId, companyId), inArray(project.id, projectIds)))).map((row) => [row.id, row.tolerance]),
-  )
-  // Each route's unloads and weights, gathered in one pass.
-  type UnloadAt = Parameters<typeof onBoardByUnload>[0][number]
-  type WeightAt = Parameters<typeof onBoardByUnload>[1][number]
-  const byRoute = new Map<string, { unloads: UnloadAt[]; weights: WeightAt[] }>(routeIds.map((routeId) => [routeId, { unloads: [], weights: [] }]))
-  for (const row of unloads) byRoute.get(row.routeId)?.unloads.push({ id: row.id, wasteFractionId: row.wasteFractionId, occurredAt: row.occurredAt.toISOString(), refused: row.refusalReason !== null })
-  for (const row of weights) if (row.weightKg !== null) byRoute.get(row.routeId)?.weights.push({ wasteFractionId: row.wasteFractionId, occurredAt: row.occurredAt.toISOString(), weightKg: row.weightKg })
-  const onBoard = new Map<string, number>()
-  for (const ofRoute of byRoute.values()) for (const [id, kg] of onBoardByUnload(ofRoute.unloads, ofRoute.weights)) onBoard.set(id, kg)
-  const loads = new Map<string, LoadReading>()
-  for (const row of rows) {
-    const onBoardKg = onBoard.get(row.id)
-    const tolerance = tolerances.get(row.projectId)
-    const reading = onBoardKg === undefined || tolerance === undefined ? null : loadReading({ netKg: row.netKg, onBoardKg }, tolerance)
-    if (reading !== null) loads.set(row.id, reading)
-  }
-  return loads
-}
-
-/**
- * Each unload's possible duplicates (O27 of #290): a weighbridge's Unload and
- * one recorded by hand on the same route and fraction, both taken and both
- * still open to review (`possibleDuplicates`). Read over every unload of the
- * rows' routes, not only the rows answered, with each one's review reading, so
- * the pair is told on whichever of the two a page holds.
- */
-async function duplicatesOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Map<string, string[]>> {
-  if (rows.length === 0) return new Map()
-  const routeIds = [...new Set(rows.map((row) => row.routeId))]
-  const projectIds = [...new Set(rows.map((row) => row.projectId))]
-  const siblings = await unloadsFrom(tx, companyId).query.where(and(eq(unload.companyId, companyId), inArray(unload.projectId, projectIds), inArray(unload.routeId, routeIds)))
-  return possibleDuplicates(
-    siblings.map((sibling) => ({
-      id: sibling.id,
-      routeId: sibling.routeId,
-      wasteFractionId: sibling.wasteFractionId,
-      source: sibling.source as ExecutionSource,
-      refused: sibling.refusalReason !== null,
-      settled: sibling.reviewStatus === "rejected" || sibling.reviewStatus === "corrected",
-    })),
-  )
-}
-
-/** Unloads as every door answers them: each with its review reading, its load on board (`loadsOf`) and its possible duplicates (`duplicatesOf`), in the rows' order. */
-export async function unloadsAnswered(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Unload[]> {
-  const [loads, duplicates] = await Promise.all([loadsOf(tx, companyId, rows), duplicatesOf(tx, companyId, rows)])
-  return rows.map((row) => unloadOf(row, loads.get(row.id) ?? null, duplicates.get(row.id) ?? []))
-}
-
-/** One unload as every door answers it: `unloadsAnswered` of the one row. */
-export async function unloadAnswered(tx: Tx, companyId: string, row: UnloadRow): Promise<Unload> {
-  const [answered] = await unloadsAnswered(tx, companyId, [row])
-  return answered
-}
-
 /** The unloads of this company, in the projects the caller works in. */
 export const unloadScope = (principal: Principal): SQL | undefined => and(eq(unload.companyId, principal.companyId), inProjects(unload.projectId, principal))
 
@@ -600,13 +155,6 @@ export async function findUnload(tx: Tx, principal: Principal, id: string): Prom
     .query.where(and(unloadScope(principal), eq(unload.id, id)))
     .limit(1)
   return row
-}
-
-/** One route's unloads, oldest first, each with its reading. */
-export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<UnloadRow[]> {
-  return await unloadsFrom(tx, companyId)
-    .query.where(and(eq(unload.companyId, companyId), eq(unload.routeId, routeId)))
-    .orderBy(asc(unload.id))
 }
 
 /**
@@ -634,53 +182,6 @@ export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promis
   const [answered, pickups, workloads] = await Promise.all([routeWithSessions(tx, companyId, row), pickupsOfRoute(tx, companyId, row.id), workloadsByRoute(tx, companyId, [row])])
   const [context, shifts] = await Promise.all([planContextOf(tx, companyId, row, pickups), shiftsByRoute(tx, companyId, [row], workloads)])
   return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan, workload: workloads.get(row.id) ?? NO_WORKLOAD, shift: shifts.get(row.id) ?? NO_SHIFT }
-}
-
-export const receiptColumns = {
-  id: driverCommand.id,
-  recordedAt: driverCommand.recordedAt,
-  projectId: driverCommand.projectId,
-  routeId: driverCommand.routeId,
-  sessionId: driverCommand.sessionId,
-  pickupId: driverCommand.pickupId,
-  driverId: driverCommand.driverId,
-  deviceId: driverCommand.deviceId,
-  kind: driverCommand.kind,
-  occurredAt: driverCommand.occurredAt,
-  body: driverCommand.body,
-  outcome: driverCommand.outcome,
-  problem: driverCommand.problem,
-}
-
-export type ReceiptRow = Pick<typeof driverCommand.$inferSelect, keyof typeof receiptColumns>
-
-/**
- * The receipt on the wire: the command as received and what became of it.
- * The two `jsonb` columns are kept verbatim — the body as the device sent it,
- * the problem as the applier answered it. `routeId` is null on a rejection
- * for a route the driver does not reach (another company's, another
- * project's, or none), which routes/driver.ts records in the driver's project
- * with the claimed id kept beside the body as `{ routeId, body }`; the
- * contract carries the null, so a route's log (`GET /routes/:id/commands`),
- * which never meets one, and the driver's receipts page, which does, both
- * answer `DriverCommandReceipt`.
- */
-export function receiptOf(row: ReceiptRow): DriverCommandReceipt {
-  return {
-    id: row.id,
-    recordedAt: row.recordedAt.toISOString(),
-    projectId: row.projectId,
-    routeId: row.routeId,
-    sessionId: row.sessionId,
-    pickupId: row.pickupId,
-    driverId: row.driverId,
-    deviceId: row.deviceId,
-    kind: row.kind as DriverCommandKind,
-    occurredAt: row.occurredAt.toISOString(),
-    body: row.body as DriverCommandReceipt["body"],
-    outcome: row.outcome as CommandOutcome,
-    problem: row.problem as Problem | null,
-  }
 }
 
 // The driver door's scope (routes/driver.ts): the tenant and the assignment,

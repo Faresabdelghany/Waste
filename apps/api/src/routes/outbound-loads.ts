@@ -78,6 +78,8 @@ import type { PgColumn } from "drizzle-orm/pg-core"
 import { Hono, type Context, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { lockRow } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
@@ -85,7 +87,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireServiceProvider, requireUnloadingStation, requireVehicle, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 
 const MODULE = "route-studio.weights"
 

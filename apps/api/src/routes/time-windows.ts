@@ -5,9 +5,6 @@
 // shift is always written whole and never left half another's. A read spells
 // Postgres's `HH:MM:SS` as the wire's `HH:MM`.
 import type { DriverShift, TimeWindow } from "@waste/contracts/shifts"
-import { shiftOf } from "@waste/db/commands/stop-timing"
-
-export { shiftOf }
 
 /** The two columns of a stored window as the wire's, or null where they hold none. */
 export const serviceWindowOf = (row: { serviceWindowStart: string | null; serviceWindowEnd: string | null }): TimeWindow | null =>

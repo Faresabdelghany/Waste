@@ -69,7 +69,8 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
+import { lockRow, refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/commands/shared"
+import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
@@ -79,7 +80,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
 import { Allowance } from "../auth/public-door"
-import { aheadOfClock, created, describeCreated, describeJson, IdParam, lockRow, stampsOf, strengthFor } from "./shared"
+import { aheadOfClock, created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.sensors"
 

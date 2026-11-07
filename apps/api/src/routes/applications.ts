@@ -23,7 +23,7 @@
 // most of all (statuses.ts records the exemption). What it names hangs
 // together instead (`subjectRefusal`): the customer a party of the property,
 // the subscription one of the customer's agreements at the place named.
-import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch, DecisionHistory, ONE_PLACE, type Decision } from "@waste/contracts/applications"
+import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch, DecisionHistory, ONE_PLACE } from "@waste/contracts/applications"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { application, applicationDecision } from "@waste/db/schema/applications"
@@ -31,107 +31,37 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { propertyParty } from "@waste/db/schema/customers"
 import { company } from "@waste/db/schema/organisation"
 import { moveOf, moveRefusal, type ApplicationCommand } from "@waste/domain/registry/applications"
-import type { ApplicationChannel, ApplicationKind, ApplicationStatus, DecisionOutcome } from "@waste/domain/registry/vocabulary"
-import { and, asc, desc, eq, gt, inArray, max, sql } from "drizzle-orm"
+import type { ApplicationStatus } from "@waste/domain/registry/vocabulary"
+import { and, asc, eq, gt, max, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
+import { lockRow } from "@waste/db/commands/shared"
+import { projectToday } from "@waste/db/commands/project-clock"
+import { applicationColumns, applicationOf, decisionColumns, decisionOf, labelOf, latestDecisions, type ApplicationRow } from "@waste/db/shapes/applications"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { projectToday } from "./fleet-lookups"
 import { partyInForce } from "./property-writes"
 import { requireCustomer, requireProperty, requireSharedCollectionPoint, requireSubscription } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 import type { ClockOptions } from "./scheme-groups"
 
 const MODULE = "customers.applications"
 const ApplicationPage = Page(Application)
 
-const columns = {
-  id: application.id,
-  projectId: application.projectId,
-  number: application.number,
-  kind: application.kind,
-  status: application.status,
-  channel: application.channel,
-  receivedOn: application.receivedOn,
-  customerId: application.customerId,
-  propertyId: application.propertyId,
-  sharedCollectionPointId: application.sharedCollectionPointId,
-  subscriptionId: application.subscriptionId,
-  statement: application.statement,
-  createdAt: application.createdAt,
-  updatedAt: application.updatedAt,
-}
-type Row = Pick<typeof application.$inferSelect, keyof typeof columns>
-
-const decisionColumns = {
-  id: applicationDecision.id,
-  applicationId: applicationDecision.applicationId,
-  outcome: applicationDecision.outcome,
-  conditions: applicationDecision.conditions,
-  grantedFrom: applicationDecision.grantedFrom,
-  grantedTo: applicationDecision.grantedTo,
-  appealText: applicationDecision.appealText,
-  decidedBy: applicationDecision.decidedBy,
-  recordedAt: applicationDecision.recordedAt,
-}
-type DecisionRow = Pick<typeof applicationDecision.$inferSelect, keyof typeof decisionColumns>
-
-const decisionOf = (row: DecisionRow): Decision => ({
-  id: row.id,
-  applicationId: row.applicationId,
-  outcome: row.outcome as DecisionOutcome,
-  conditions: row.conditions,
-  validFrom: row.grantedFrom,
-  validTo: row.grantedTo,
-  appealText: row.appealText,
-  decidedBy: row.decidedBy,
-  decidedAt: row.recordedAt.toISOString(),
-})
-
-const applicationOf = (row: Row, decision: DecisionRow | undefined): Application => ({
-  id: row.id,
-  projectId: row.projectId,
-  number: row.number,
-  kind: row.kind as ApplicationKind,
-  status: row.status as ApplicationStatus,
-  channel: row.channel as ApplicationChannel,
-  receivedOn: row.receivedOn,
-  customerId: row.customerId,
-  propertyId: row.propertyId,
-  sharedCollectionPointId: row.sharedCollectionPointId,
-  subscriptionId: row.subscriptionId,
-  statement: row.statement,
-  decision: decision === undefined ? null : decisionOf(decision),
-  ...stampsOf(row),
-})
-
-/** Each Application's latest Decision, by application id, in one statement. */
-async function latestDecisions(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, DecisionRow>> {
-  if (ids.length === 0) return new Map()
-  const rows = await tx
-    .selectDistinctOn([applicationDecision.applicationId], decisionColumns)
-    .from(applicationDecision)
-    .where(and(eq(applicationDecision.companyId, companyId), inArray(applicationDecision.applicationId, [...ids])))
-    .orderBy(applicationDecision.applicationId, desc(applicationDecision.id))
-  return new Map(rows.map((row) => [row.applicationId, row]))
-}
-
 /** The rows of the caller's projects: what every Application statement is bounded by. */
 const scope = (principal: Principal) => and(eq(application.companyId, principal.companyId), inProjects(application.projectId, principal))
 
 const noSuchApplication = (id: string) => problem(404, { detail: `No application ${id} in the projects this account works in` })
-const labelOf = (row: Pick<Row, "number">) => `Application ${row.number}`
 
-async function findApplication(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+async function findApplication(tx: Tx, principal: Principal, id: string): Promise<ApplicationRow | undefined> {
   const [row] = await tx
-    .select(columns)
+    .select(applicationColumns)
     .from(application)
     .where(and(scope(principal), eq(application.id, id)))
     .limit(1)
@@ -139,7 +69,7 @@ async function findApplication(tx: Tx, principal: Principal, id: string): Promis
 }
 
 /** One Application on the wire, with its latest Decision. */
-async function answer(tx: Tx, companyId: string, row: Row): Promise<Application> {
+async function answer(tx: Tx, companyId: string, row: ApplicationRow): Promise<Application> {
   return applicationOf(row, (await latestDecisions(tx, companyId, [row.id])).get(row.id))
 }
 
@@ -151,7 +81,7 @@ async function requireSubject(tx: Tx, principal: Principal, projectId: string, b
   await requireSubscription(tx, subject, body.subscriptionId)
 }
 
-type Subject = Pick<Row, "customerId" | "propertyId" | "sharedCollectionPointId" | "subscriptionId">
+type Subject = Pick<ApplicationRow, "customerId" | "propertyId" | "sharedCollectionPointId" | "subscriptionId">
 
 export const NOT_A_PARTY = "The customer is not a party of this property"
 export const NOT_THE_CUSTOMERS = "Not a subscription of this customer's agreements"
@@ -196,7 +126,7 @@ const commonProblems = (action: "view" | "edit" | "create") => ({
 })
 
 /** A command's route: the row locked, its move judged by the domain, and the status written; `decide` appends its Decision first. */
-async function moved(tx: Tx, principal: Principal, id: string, command: ApplicationCommand): Promise<Row> {
+async function moved(tx: Tx, principal: Principal, id: string, command: ApplicationCommand): Promise<ApplicationRow> {
   await lockRow(tx, application, { companyId: principal.companyId, id })
   const current = await findApplication(tx, principal, id)
   if (current === undefined) throw noSuchApplication(id)
@@ -208,7 +138,7 @@ async function moved(tx: Tx, principal: Principal, id: string, command: Applicat
     .update(application)
     .set({ status: next })
     .where(and(eq(application.companyId, principal.companyId), eq(application.id, id)))
-    .returning(columns)
+    .returning(applicationColumns)
   return row
 }
 
@@ -259,7 +189,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             ? undefined
             : sql`exists (select 1 from ${applicationDecision} where ${applicationDecision.id} = ${latestId} and ${applicationDecision.outcome} <> 'refused' and ${applicationDecision.grantedFrom} <= ${inForceOn}::date and (${applicationDecision.grantedTo} is null or ${applicationDecision.grantedTo} > ${inForceOn}::date))`
         const rows = await tx
-          .select(columns)
+          .select(applicationColumns)
           .from(application)
           .where(
             and(
@@ -321,7 +251,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             companyId: principal.companyId,
             number: (highest ?? 0) + 1,
           })
-          .returning(columns)
+          .returning(applicationColumns)
         return created(c, "/applications", applicationOf(row, undefined))
       },
     )
@@ -398,7 +328,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           .update(application)
           .set(patch)
           .where(and(eq(application.companyId, principal.companyId), eq(application.id, id)))
-          .returning(columns)
+          .returning(applicationColumns)
         return c.json(await answer(tx, principal.companyId, row))
       },
     )

@@ -32,7 +32,7 @@ import { pickup, route } from "../schema/execution"
 import { ticket, ticketBooking } from "../schema/resolution"
 import { appendTicketEvent, ticketRefOf } from "./open-ticket"
 import { moveTicket, type AutomationCause } from "./ticket-automation"
-import { labelOf, ticketColumns, type TicketRow } from "./resolution-rows"
+import { labelOf, ticketColumns, type TicketRow } from "../shapes/tickets"
 
 /** The stop as a ticket's words name it: its position on its route, the route's label, its service; and its route, which a ticket it services names with it. */
 export type BookedStop = { pickupId: string; routeId: string; position: number; routeLabel: string; service: PickupService }

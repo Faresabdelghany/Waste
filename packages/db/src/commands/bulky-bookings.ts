@@ -290,16 +290,3 @@ export async function replaceBulkyItems(tx: Tx, scope: Scope, bookingId: string,
   if (items.length > 0) await tx.insert(bulkyBookingItem).values(items.map((item, index) => ({ ...scope, bookingId, position: index + 1, description: item.description, quantity: item.quantity })))
 }
 
-/** Each booking's items in the order listed. */
-export async function bulkyItemsOf(tx: Tx, companyId: string, bookingIds: readonly string[]): Promise<Map<string, { description: string; quantity: number }[]>> {
-  const items = new Map<string, { description: string; quantity: number }[]>()
-  if (bookingIds.length === 0) return items
-  const rows = await tx
-    .select({ bookingId: bulkyBookingItem.bookingId, description: bulkyBookingItem.description, quantity: bulkyBookingItem.quantity })
-    .from(bulkyBookingItem)
-    .where(and(eq(bulkyBookingItem.companyId, companyId), inArray(bulkyBookingItem.bookingId, [...bookingIds])))
-    .orderBy(asc(bulkyBookingItem.bookingId), asc(bulkyBookingItem.position))
-  for (const row of rows) items.set(row.bookingId, [...(items.get(row.bookingId) ?? []), { description: row.description, quantity: row.quantity }])
-  return items
-}
-

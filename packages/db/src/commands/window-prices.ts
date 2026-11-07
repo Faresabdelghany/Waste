@@ -18,8 +18,8 @@ import { billableEvent } from "../schema/finance"
 import { scaleTicketLine } from "../schema/scale-house"
 import { listInForce, priceDraft, rowsOn } from "./billable-writes"
 import type { Scope } from "./project-clock"
-import { eventsFrom, type EventReading } from "./billing-shapes"
 import { lockRow } from "./shared"
+import { eventsFrom, type EventReading } from "../shapes/billable-events"
 
 /** One line of a ticket as the window prices it: its measure and the product it is sold by, with that product's unit and rate. */
 export type WindowLine = {

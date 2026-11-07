@@ -5,7 +5,7 @@
 // — a ledger, `recorded` and `appendOnly`, one row per decision — and the
 // unload's status is the latest row's decision, or `captured` when nobody has
 // looked: the reading every `Unload` carries as `weightReview`
-// (routes/execution-shapes.ts, over @waste/db/query/weight-review) and the
+// (@waste/db/shapes/unloads, over @waste/db/query/weight-review) and the
 // list filters by. Nothing here is updated: an approval is taken back by a
 // rejection appended after it, a wrong weight by a correction.
 //
@@ -20,7 +20,7 @@
 // appends a new `unload` — the same route, station, fraction and instant,
 // `source = dispatch`, the caller as its recorder, no session, the body's
 // weights, ticket and note — through the statements the office's capture
-// runs (routes/unload-writes.ts), and then a `corrected` review naming both;
+// runs (@waste/db/commands/unloads), and then a `corrected` review naming both;
 // the new row is `captured` and may be reviewed and corrected in its turn.
 // The correction emits no `unload-recorded` (#112 §7.26): the outbox carries
 // what another context acts on, and the reader of a weight is Finance itself.
@@ -65,45 +65,21 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { emit } from "@waste/db/commands/outbox"
 import { newId } from "@waste/db/ids"
+import type { UnloadRow } from "@waste/db/shapes/unloads"
+import { reviewColumns, reviewOf, type ReviewRow } from "@waste/db/shapes/weight-reviews"
+import { lockRow } from "@waste/db/commands/shared"
+import { appendUnload } from "@waste/db/commands/unloads"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { findUnload, noSuchUnload, type UnloadRow } from "./execution-shapes"
-import { describeJson, IdParam, lockRow } from "./shared"
-import { appendUnload } from "./unload-writes"
+import { findUnload, noSuchUnload } from "./execution-shapes"
+import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.weights"
 
 const ReviewPage = Page(WeightReview)
-
-const reviewColumns = {
-  id: weightReview.id,
-  recordedAt: weightReview.recordedAt,
-  projectId: weightReview.projectId,
-  unloadId: weightReview.unloadId,
-  decision: weightReview.decision,
-  note: weightReview.note,
-  correctionUnloadId: weightReview.correctionUnloadId,
-  reviewedBy: weightReview.reviewedBy,
-}
-
-type ReviewRow = Pick<typeof weightReview.$inferSelect, keyof typeof reviewColumns>
-
-/** The review on the wire. The decision is text with a CHECK in the database and an enum here. */
-function reviewOf(row: ReviewRow): WeightReview {
-  return {
-    id: row.id,
-    recordedAt: row.recordedAt.toISOString(),
-    projectId: row.projectId,
-    unloadId: row.unloadId,
-    decision: row.decision as WeightReviewDecision,
-    note: row.note,
-    correctionUnloadId: row.correctionUnloadId,
-    reviewedBy: row.reviewedBy,
-  }
-}
 
 /**
  * The unload the path names, locked and read: once unlocked, to learn its

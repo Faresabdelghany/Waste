@@ -43,8 +43,8 @@
 import type { Tx } from "@waste/db/client"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import type { TenantTable } from "@waste/db/commands/shared"
 
-import type { TenantTable } from "./shared"
 
 /** One entry of a body as the plural check sees it: the id it names and the path it named it at. */
 export type Named = { id: string; path: string }

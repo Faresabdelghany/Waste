@@ -49,7 +49,7 @@ import { STATUS_CODES } from "node:http"
 
 import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
 import { QueueMissing } from "@waste/db/jobs"
-import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, loggable, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
+import { EXCLUSION_VIOLATION, loggable, sqlstate, UNIQUE_VIOLATION } from "@waste/db/sqlstate"
 import { Refused, type Refusal } from "@waste/domain/refusal"
 import type { ErrorHandler, NotFoundHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
@@ -144,9 +144,7 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
 // `checkConstraintOf` to answer that same 400 on the field (routes/shared.ts,
 // `refuseCheck`). It is not in CONFLICTS below: a check nobody foresaw is
 // ours to have prevented, so it stays a 500, which is the signal that a
-// sentence is missing. The three readers are re-exported under the names the
-// routes and their tests always used.
-export { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf }
+// sentence is missing.
 
 /** What a conflict says when no route foresaw it; the constraint's name is appended where Postgres gave one. */
 const CONFLICTS: Readonly<Record<string, string>> = {

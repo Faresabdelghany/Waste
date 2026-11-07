@@ -54,10 +54,10 @@ import { holidayReleases, WALK_CAP_DAYS } from "@waste/domain/planning/generatio
 import { addDays } from "@waste/domain/days"
 import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { timeOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { routeScope } from "./execution-shapes"
-import { timeOf } from "./shared"
 
 /** The scheme's fields a hold covers, as the stored row carries them: the start as Postgres spells a time. */
 type SchemeCovered = { plannedStartTime: string | null; depotId: string | null; unloadingStationId: string | null; serviceDays: readonly string[] }

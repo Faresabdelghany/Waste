@@ -114,14 +114,15 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
-import { refuseOverlap } from "@waste/db/commands/shared"
+import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { projectToday } from "@waste/db/commands/project-clock"
+import { timeOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireAllowed, requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import { projectCalendarOf, releaseHolds, releaseHolidayHolds, schemeReleases } from "./route-holds"
@@ -153,7 +154,7 @@ import {
   writeGroupSets,
   type ClockOptions,
 } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)
