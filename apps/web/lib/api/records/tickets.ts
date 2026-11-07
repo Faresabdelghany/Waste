@@ -49,7 +49,7 @@ import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { fieldValuesFromForm, TICKET_TYPE_PREFIX } from "@/lib/data/ticket-types"
 
 import { command, create, get, listAll, patch } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, patchOf, said, statusLabel, statusToken, typed, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter } from "./fleet"
@@ -136,7 +136,7 @@ function projectOf(projectId: string, context: MappingContext): { webId: string;
   return { webId, name, timezone: record === undefined ? undefined : typed(record, "timezone") }
 }
 
-export function toTicketRecord(ticket: Ticket, context: MappingContext): BusinessRecord {
+export function toTicketRecord(ticket: Ticket, context: MappingContext): RecordFields {
   const project = projectOf(ticket.projectId, context)
   const assignee = ticket.assigneeUserAccountId === null ? undefined : nameVia(context, "user", ticket.assigneeUserAccountId)
   const links = TICKET_LINKS.flatMap(([key, prefix, fact]) => {
@@ -170,12 +170,9 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   if (ticket.closedAt !== null) facts.Closed = shownOn(ticket.closedAt, project.timezone)
   const linked = Object.fromEntries(TICKET_LINKS.map(([key, prefix]) => [key, ticket.links[key] === null ? "" : webIdVia(context, prefix, ticket.links[key] as string)]))
   return {
-    id: webIdOf(TICKET_PREFIX, ticket.id),
     name: ticket.subject,
     context: CONTEXT_LINKS.flatMap((key) => links.find((link) => link.key === key)?.name ?? []).join(" · "),
     status: statusLabel(ticket.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(ticket, context.now),
     owner: assignee ?? "Unassigned",
     value: ticket.dueAt === null ? "No due date" : `Due ${shownOn(ticket.dueAt, project.timezone)}`,
     description: ticket.description,
@@ -586,7 +583,7 @@ export const ticketAdapter: ResourceAdapter<Ticket> = {
   create: (client, body) => create<Ticket>(client, "/tickets", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Ticket>(client, `/tickets/${serverId}`, body),
   commands: { ...TICKET_COMMANDS_BY_NAME, [REPLY_WITH_EVIDENCE]: REPLY },
-  actions: { [COMMENT_ON_TICKET]: COMMENT as RecordAction<unknown> },
+  actions: { [COMMENT_ON_TICKET]: COMMENT },
 }
 
 /** Operate › Tickets: the cases the office and the consumer open, worked through their commands and their history. */

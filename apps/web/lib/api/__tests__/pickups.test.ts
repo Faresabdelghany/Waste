@@ -24,7 +24,7 @@ import { NO_ONE } from "../../data/properties"
 import { contaminantCodeOptions } from "../../data/routes"
 import { FIXTURE_GAZETTEER } from "@waste/fixtures/gazetteer"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { containerAdapter } from "../records/containers"
 import { containerTypeAdapter, contaminantCodeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
@@ -104,14 +104,14 @@ const third = pickupOf("01a0d2a4-a280-7033-8000-000000000003", bin44831.id, 3)
 // What the store has loaded when the pickups load: the organisation, the master data, the containers, the routes.
 const noResolve = (resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ resolve: resolver, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
-const projectRecord = projectAdapter.toRecord(copenhagen, noResolve())
-const masterRecords = [wasteFractionAdapter.toRecord(residual, noResolve()), containerTypeAdapter.toRecord(bin240, noResolve())]
+const projectRecord = recordFrom(projectAdapter, copenhagen, noResolve())
+const masterRecords = [recordFrom(wasteFractionAdapter, residual, noResolve()), recordFrom(containerTypeAdapter, bin240, noResolve())]
 const before: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
   ["configure.master", loaded({ records: masterRecords, serverIds: serverIdsOf(masterRecords, [residual.id, bin240.id]) }, 1)],
 ])
-const containerRecords = [bin82014, bin66420, bin44831].map((row) => containerAdapter.toRecord({ ...row, placements: [] }, noResolve(resolverOver(before))))
-const routeRecord = routeAdapter.toRecord(route, noResolve(resolverOver(before)))
+const containerRecords = [bin82014, bin66420, bin44831].map((row) => recordFrom(containerAdapter, { ...row, placements: [] }, noResolve(resolverOver(before))))
+const routeRecord = recordFrom(routeAdapter, route, noResolve(resolverOver(before)))
 const state: ServerRecordsState = new Map([
   ...before,
   ["resources.containers", loaded({ records: containerRecords, serverIds: serverIdsOf(containerRecords, [bin82014.id, bin66420.id, bin44831.id]) }, 1)],
@@ -145,7 +145,7 @@ describe("the pickups module", () => {
 
 describe("a pickup", () => {
   test("is the stop the Pickups table, the route's stops and the map read", () => {
-    const record = pickupAdapter.toRecord(second, context())
+    const record = recordFrom(pickupAdapter, second, context())
     assert.equal(record.id, `pickup-${second.id}`)
     assert.equal(record.name, "Stop 2 · BIN-66420")
     assert.equal(record.context, "RC-1042 · Residual")
@@ -180,7 +180,7 @@ describe("a pickup", () => {
   test("a stop the office added says so, and an address-only one is named by the place it is collected at, with no container (#111)", () => {
     const parkvej: BusinessRecord = { ...projectRecord, id: `property-${second.propertyId}`, name: "Parkvej 18", recordKind: "Property", facts: { Address: "Parkvej 18, 2100 København Ø" } }
     const withPlaces: ServerRecordsState = new Map([...state, ["customers.properties", loaded({ records: [parkvej], serverIds: new Map([[parkvej.id, second.propertyId as string]]) }, 1)]])
-    const addressOnly = pickupAdapter.toRecord({ ...second, containerId: null, origin: "office", position: 4, note: "Re-collection of T-1001" }, context(resolverOver(withPlaces)))
+    const addressOnly = recordFrom(pickupAdapter, { ...second, containerId: null, origin: "office", position: 4, note: "Re-collection of T-1001" }, context(resolverOver(withPlaces)))
     assert.equal(addressOnly.name, "Stop 4 · Parkvej 18")
     // Named by its place, and its Address column the place's street address.
     assert.deepEqual([addressOnly.facts.Address, addressOnly.facts["Added by"], addressOnly.facts["Container ID"]], ["Parkvej 18, 2100 København Ø", "The office", undefined])
@@ -188,33 +188,33 @@ describe("a pickup", () => {
     assert.deepEqual([addressOnly.submittedValues?.propertyId, addressOnly.submittedValues?.origin], [parkvej.id, "office"])
     assert.match(addressOnly.description, /^A stop the office added to its route, at an address with no container/)
     // Before the places load it is named by its id chip, never left blank.
-    assert.equal(pickupAdapter.toRecord({ ...second, containerId: null, origin: "office" }, context()).name, `Stop 2 · property-${second.propertyId}`)
+    assert.equal(recordFrom(pickupAdapter, { ...second, containerId: null, origin: "office" }, context()).name, `Stop 2 · property-${second.propertyId}`)
     // An office stop at a container is named by the container, and still says whose it is.
-    const officeContainer = pickupAdapter.toRecord({ ...second, origin: "office" }, context())
+    const officeContainer = recordFrom(pickupAdapter, { ...second, origin: "office" }, context())
     assert.deepEqual([officeContainer.name, officeContainer.facts["Added by"], officeContainer.facts.Address], ["Stop 2 · BIN-66420", "The office", undefined])
-    assert.equal(pickupAdapter.toRecord(second, context()).facts["Added by"], undefined, "a generated stop says nothing of the kind")
+    assert.equal(recordFrom(pickupAdapter, second, context()).facts["Added by"], undefined, "a generated stop says nothing of the kind")
   })
 
   test("a delivery says its subscription, a removal its warehouse, a swap its replacement and its warehouse, by id chip until their modules load (O3b of #290)", () => {
     const subscription = "01a0d2a4-a280-7021-8000-000000000001"
     const warehouse = "01a0d2a4-a280-7009-8000-000000000001"
     const office = { ...second, origin: "office" } as const
-    const delivery = pickupAdapter.toRecord({ ...office, service: "deliver", subscriptionId: subscription }, context())
+    const delivery = recordFrom(pickupAdapter, { ...office, service: "deliver", subscriptionId: subscription }, context())
     assert.deepEqual([delivery.facts.Type, delivery.facts.Subscription, delivery.facts["Back to warehouse"], delivery.facts.Replacement], ["Delivery", `subscription-${subscription}`, undefined, undefined])
-    const removal = pickupAdapter.toRecord({ ...office, service: "remove", warehouseId: warehouse }, context())
+    const removal = recordFrom(pickupAdapter, { ...office, service: "remove", warehouseId: warehouse }, context())
     assert.deepEqual([removal.facts.Type, removal.facts.Subscription, removal.facts["Back to warehouse"]], ["Removal", undefined, `warehouse-${warehouse}`])
-    const swap = pickupAdapter.toRecord({ ...office, service: "swap", warehouseId: warehouse, replacementContainerId: bin44831.id }, context())
+    const swap = recordFrom(pickupAdapter, { ...office, service: "swap", warehouseId: warehouse, replacementContainerId: bin44831.id }, context())
     assert.deepEqual([swap.facts.Type, swap.facts.Replacement, swap.facts["Back to warehouse"]], ["Swap", "BIN-44831", `warehouse-${warehouse}`])
-    assert.equal(pickupAdapter.toRecord({ ...office, service: "swap", warehouseId: warehouse, replacementContainerId: subscription }, context()).facts.Replacement, `asset-${subscription}`, "a replacement the store has not loaded is its id chip")
+    assert.equal(recordFrom(pickupAdapter, { ...office, service: "swap", warehouseId: warehouse, replacementContainerId: subscription }, context()).facts.Replacement, `asset-${subscription}`, "a replacement the store has not loaded is its id chip")
   })
 
   test("a decided stop says when, on the project's clock, and why it was missed", () => {
-    const done = pickupAdapter.toRecord(first, context())
+    const done = recordFrom(pickupAdapter, first, context())
     assert.equal(done.status, "Completed")
     assert.equal(done.value, "06:15 · Completed")
     assert.equal(done.facts["Arrived at"], "06:12")
     assert.equal(done.facts["Completed at"], "06:15", "the map's playback reads the actual time here")
-    const removed = pickupAdapter.toRecord({ ...second, status: "skipped", reason: "removed-by-dispatcher", note: "Blocked by roadworks", outcomeAt: "2026-10-01T04:40:00.000Z" }, context())
+    const removed = recordFrom(pickupAdapter, { ...second, status: "skipped", reason: "removed-by-dispatcher", note: "Blocked by roadworks", outcomeAt: "2026-10-01T04:40:00.000Z" }, context())
     assert.equal(removed.status, "Skipped")
     assert.equal(removed.value, "06:40 · Skipped")
     assert.equal(removed.facts.Reason, "Removed by dispatcher")
@@ -224,7 +224,7 @@ describe("a pickup", () => {
   })
 
   test("names its route, container and fraction by id chip until their modules load", () => {
-    const record = pickupAdapter.toRecord(second, context(NOTHING_RESOLVED))
+    const record = recordFrom(pickupAdapter, second, context(NOTHING_RESOLVED))
     assert.equal(record.name, `Stop 2 · asset-${bin66420.id}`)
     assert.equal(record.facts.Route, `route-${route.id}`)
     assert.equal(record.submittedValues?.routeId, `route-${route.id}`)
@@ -233,7 +233,7 @@ describe("a pickup", () => {
   })
 
   test("the map draws an API route through the API's containers where they stand, each stop under its container's label (#184)", () => {
-    const pickups = [first, second, third].map((pickup) => pickupAdapter.toRecord(pickup, context()))
+    const pickups = [first, second, third].map((pickup) => recordFrom(pickupAdapter, pickup, context()))
     const [drawn] = routesInWindow([routeRecord], pickups, placedContainers, null, FIXTURE_GAZETTEER)
     assert.ok(drawn, "the route is drawable")
     assert.equal(drawn.id, routeRecord.id)
@@ -250,7 +250,7 @@ describe("a pickup", () => {
   test("a listed stop is named by its sequence, the order its route's Plan visits it in (#219), beside the baseline position; the map draws the route in that order", () => {
     // The Plan visits the third bin first: `GET /pickups` carries each stop's sequence beside its position.
     const listed = [{ ...first, sequence: 2 }, { ...second, sequence: 3 }, { ...third, sequence: 1 }]
-    const records = listed.map((pickup) => pickupAdapter.toRecord(pickup, context()))
+    const records = listed.map((pickup) => recordFrom(pickupAdapter, pickup, context()))
     assert.deepEqual(
       records.map((record) => record.name),
       ["Stop 2 · BIN-82014", "Stop 3 · BIN-66420", "Stop 1 · BIN-44831"],
@@ -277,8 +277,8 @@ describe("a pickup", () => {
   test("is never created or edited here", async () => {
     assert.equal(pickupAdapter.toCreateBody, undefined)
     assert.equal(pickupAdapter.statuses, undefined)
-    const record = pickupAdapter.toRecord(second, context())
-    assert.deepEqual(pickupAdapter.toPatchBody(record, { ...record, name: "Stop 9" }, context()), { path: "", message: "A pickup is changed by its commands: remove it from a route that has not started, or correct its outcome" })
+    const record = recordFrom(pickupAdapter, second, context())
+    assert.deepEqual(pickupAdapter.toPatchBody?.(record, { ...record, name: "Stop 9" }, context()), { path: "", message: "A pickup is changed by its commands: remove it from a route that has not started, or correct its outcome" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, second.id]]) }, 1)
     assert.equal((await writeRecord(clientOver(fetch), pickupsModule, current, { ...record, status: "Completed" }, options)).kind, "refused")
@@ -287,7 +287,7 @@ describe("a pickup", () => {
 })
 
 describe("the pickup's commands", () => {
-  const record = pickupAdapter.toRecord(second, context())
+  const record = recordFrom(pickupAdapter, second, context())
   const current = loaded({ records: [record], serverIds: new Map([[record.id, second.id]]) }, 1)
   const remove = pickupAdapter.commands?.[REMOVE_PICKUP]
   const correct = pickupAdapter.commands?.[CORRECT_PICKUP]
@@ -377,7 +377,7 @@ describe("the pickup's commands", () => {
 
 describe("a stop's contaminant code (M5 of #293)", () => {
   const plastic: ContaminantCode = { id: "01a0d2a4-a280-702a-8000-000000000001", ...STAMPS, code: "plastic-in-residual", name: "Plastic in residual", status: "active", wasteFractionIds: [residual.id] }
-  const codeRecord = contaminantCodeAdapter.toRecord(plastic, context())
+  const codeRecord = recordFrom(contaminantCodeAdapter, plastic, context())
   const withCode: ServerRecordsState = new Map([
     ...state,
     ["configure.master", loaded({ records: [...masterRecords, codeRecord], serverIds: serverIdsOf([...masterRecords, codeRecord], [residual.id, bin240.id, plastic.id]) }, 1)],
@@ -386,13 +386,13 @@ describe("a stop's contaminant code (M5 of #293)", () => {
   const correct = pickupAdapter.commands?.[CORRECT_PICKUP]
 
   test("a stop tagged with a code names it by the master data's row, its web id beside its name", () => {
-    const tagged = pickupAdapter.toRecord({ ...second, status: "failed", reason: "contamination", contaminantCodeId: plastic.id, outcomeAt: "2026-10-01T05:00:00.000Z" }, over())
+    const tagged = recordFrom(pickupAdapter, { ...second, status: "failed", reason: "contamination", contaminantCodeId: plastic.id, outcomeAt: "2026-10-01T05:00:00.000Z" }, over())
     assert.deepEqual([tagged.facts["Contaminant code"], tagged.submittedValues?.contaminantCodeId], ["Plastic in residual", codeRecord.id])
-    assert.equal(pickupAdapter.toRecord(second, over()).facts["Contaminant code"], undefined, "an untagged stop says nothing")
+    assert.equal(recordFrom(pickupAdapter, second, over()).facts["Contaminant code"], undefined, "an untagged stop says nothing")
   })
 
   test("a correction names the code by its server id with contamination or a completion, None untags, and absent keeps the stop's", () => {
-    const record = pickupAdapter.toRecord(second, over())
+    const record = recordFrom(pickupAdapter, second, over())
     const tagged = correct?.toBody?.({ outcome: "failed", reason: "contamination", note: "Plastic bags", contaminantCodeId: codeRecord.id }, record, over())
     assert.deepEqual(tagged, { outcome: "failed", reason: "contamination", note: "Plastic bags", contaminantCodeId: plastic.id })
     assert.ok(PickupCorrection.safeParse(tagged).success)
@@ -406,7 +406,7 @@ describe("a stop's contaminant code (M5 of #293)", () => {
     const glassOnly = { ...codeRecord, id: "contaminant-code-glass", name: "Food in glass", submittedValues: { ...codeRecord.submittedValues, wasteFractionIds: "fraction-glass" } }
     const everyFraction = { ...codeRecord, id: "contaminant-code-any", name: "Hazardous", submittedValues: { ...codeRecord.submittedValues, wasteFractionIds: "" } }
     const retired = { ...codeRecord, id: "contaminant-code-old", name: "Textiles", submittedValues: { ...codeRecord.submittedValues, status: "inactive", wasteFractionIds: "" } }
-    const stop = pickupAdapter.toRecord(second, over())
+    const stop = recordFrom(pickupAdapter, second, over())
     const offered = (on: BusinessRecord) => contaminantCodeOptions([codeRecord, glassOnly, everyFraction, retired], on).map((option) => option.label)
     assert.deepEqual(offered(stop), ["None", "Plastic in residual", "Hazardous"])
     assert.deepEqual(offered({ ...stop, submittedValues: { ...stop.submittedValues, contaminantCodeId: retired.id } }), ["None", "Plastic in residual", "Hazardous", "Textiles · Retired"], "a stop keeps its own code")

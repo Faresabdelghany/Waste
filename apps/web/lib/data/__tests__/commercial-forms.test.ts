@@ -14,7 +14,7 @@ import { CreditNoteCreate, type Invoice, type InvoiceDetail } from "@waste/contr
 import type { Project } from "@waste/contracts/organisation"
 import { PriceListCreate, PriceListPatch, PriceListRowCreate, PriceListRowPatch, PriceResolveQuery, type PriceList } from "@waste/contracts/price-lists"
 
-import { isLocalRefusal, NOTHING_RESOLVED, type CommandInput, type MappingContext } from "../../api/records/adapter"
+import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type CommandInput, type MappingContext } from "../../api/records/adapter"
 import { agreementAdapter } from "../../api/records/agreements"
 import { billableEventAdapter, billingRunAdapter, billingRunBody, invoiceAdapter } from "../../api/records/billing"
 import { containerTypeAdapter, wasteFractionAdapter } from "../../api/records/master-data"
@@ -66,9 +66,9 @@ const invoice: Invoice = { id: "01a0d2a4-a280-7080-8000-000000000001", recordedA
 
 const bare = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
-const projectRecord = projectAdapter.toRecord(copenhagen, bare())
-const customerRecord = customerAdapter.toRecord(osterbro, bare())
-const master = [wasteFractionAdapter.toRecord(residual, bare()), containerTypeAdapter.toRecord(bin240, bare())]
+const projectRecord = recordFrom(projectAdapter, copenhagen, bare())
+const customerRecord = recordFrom(customerAdapter, osterbro, bare())
+const master = [recordFrom(wasteFractionAdapter, residual, bare()), recordFrom(containerTypeAdapter, bin240, bare())]
 const areaRecord: BusinessRecord = { ...projectRecord, id: `area-${AREA}`, name: "Østerbro", recordKind: "Planning area" }
 const base: ServerRecordsState = new Map([
   ["configure.organization", moduleOf([projectRecord], [copenhagen.id])],
@@ -77,11 +77,11 @@ const base: ServerRecordsState = new Map([
   ["configure.areas", moduleOf([areaRecord], [AREA])],
 ])
 const at = (state: ServerRecordsState): MappingContext => ({ ...bare(), resolve: resolverOver(state) })
-const agreementRecord = agreementAdapter.toRecord(agreement, at(base))
-const productRecord = productAdapter.toRecord(product, at(base))
+const agreementRecord = recordFrom(agreementAdapter, agreement, at(base))
+const productRecord = recordFrom(productAdapter, product, at(base))
 const withCatalogue = new Map([...base, ["customers.agreements", moduleOf([agreementRecord], [agreement.id])], ["commercial.products", moduleOf([productRecord], [product.id])]])
-const listRecord = priceListAdapter.toRecord(list, at(withCatalogue))
-const invoiceRecord = invoiceAdapter.toRecord({ ...invoice, createdAt: invoice.recordedAt, updatedAt: invoice.recordedAt, creditedGrossMinor: 0, creditNoteCount: 0 }, at(withCatalogue))
+const listRecord = recordFrom(priceListAdapter, list, at(withCatalogue))
+const invoiceRecord = recordFrom(invoiceAdapter, { ...invoice, createdAt: invoice.recordedAt, updatedAt: invoice.recordedAt, creditedGrossMinor: 0, creditNoteCount: 0 }, at(withCatalogue))
 const state: ServerRecordsState = new Map([...withCatalogue, ["commercial.price-rows", moduleOf([listRecord], [list.id])], ["commercial.invoices", moduleOf([invoiceRecord], [invoice.id])]])
 const context = at(state)
 
@@ -116,7 +116,7 @@ describe("the Price Engine's Pilot forms", () => {
     assert.equal(opened.status, "active")
     const edited = updateProductRecord(productRecord, { ...opened, status: "inactive", invoiceCode: "RES-240", containerType: NO_ONE })
     assert.equal(edited.status, "Inactive")
-    const patch = productAdapter.toPatchBody(productRecord, edited, context)
+    const patch = productAdapter.toPatchBody?.(productRecord, edited, context)
     assert.deepEqual(patch, { status: "inactive", containerTypeId: null, invoiceCode: "RES-240" })
     assert.ok(ProductPatch.safeParse(patch).success)
   })
@@ -130,7 +130,7 @@ describe("the Price Engine's Pilot forms", () => {
     const edit = priceListEditForm(listRecord)
     for (const held of ["projectId", "code", "currency"]) assert.ok(edit.sections.flatMap((section) => section.fields).find((field) => field.id === held)?.readOnly, held)
     const edited = updatePriceListRecord(listRecord, { name: "Copenhagen 2026", validTo: "2026-12-31" }, "2026-09-30")
-    const patch = priceListAdapter.toPatchBody(listRecord, edited, context)
+    const patch = priceListAdapter.toPatchBody?.(listRecord, edited, context)
     assert.deepEqual(patch, { name: "Copenhagen 2026", validTo: "2027-01-01" })
     assert.ok(PriceListPatch.safeParse(patch).success)
   })

@@ -17,7 +17,7 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 
 import { create, get, listAll, patch, put, remove } from "../client"
-import { NO_PRESENTATION, ofKind, patchOf, stampFacts, typed, webIdOf, type LocalRefusal, type RecordAction, type ResourceAdapter } from "./adapter"
+import { ofKind, patchOf, typed, type LocalRefusal, type RecordAction, type ResourceAdapter } from "./adapter"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
@@ -40,23 +40,20 @@ const actions: Readonly<Record<string, RecordAction<unknown>>> = {
   },
 }
 
-export const holidayListAdapter: ResourceAdapter<HolidayList> = {
+export const holidayListAdapter: ResourceAdapter<HolidayList, unknown, HolidayListWrite> = {
   prefix: HOLIDAY_LIST_PREFIX,
   auditTable: "holiday_list",
   owns: ofKind(HOLIDAY_LIST_PREFIX, [HOLIDAY_LIST_KIND]),
   // No status on the wire: a list is in use by the projects that name it.
   statuses: undefined,
   list: (client) => listAll<HolidayList>(client, "/holiday-lists"),
-  toRecord: (list, context) => {
+  toRecord: (list) => {
     const { holidayDates, holidayNames } = holidayEntryValues(list.holidays.map((holiday) => ({ date: holiday.day, name: holiday.name ?? "" })))
     const projects = `${list.projectCount} ${list.projectCount === 1 ? "project" : "projects"}`
     return {
-      id: webIdOf(HOLIDAY_LIST_PREFIX, list.id),
       name: list.name,
       context: `${list.country} · ${projects}`,
       status: "Active",
-      ...NO_PRESENTATION,
-      ...stampFacts(list, context.now),
       value: "—",
       facts: { Country: list.country, Holidays: String(list.holidays.length), Projects: String(list.projectCount) },
       projectIds: [],
@@ -87,8 +84,7 @@ export const holidayListAdapter: ResourceAdapter<HolidayList> = {
   },
   create: (client, body) => create<HolidayList>(client, "/holiday-lists", body).then((created) => created.body),
   // The list first, then the days; the answer is the list as it now stands.
-  update: async (client, serverId, body) => {
-    const write = body as HolidayListWrite
+  update: async (client, serverId, write) => {
     let list: HolidayList | undefined
     if (write.list !== undefined) list = await patch<HolidayList>(client, `/holiday-lists/${serverId}`, write.list)
     if (write.holidays !== undefined) list = await put<HolidayList>(client, `/holiday-lists/${serverId}/holidays`, { holidays: write.holidays })

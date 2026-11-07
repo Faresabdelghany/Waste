@@ -24,7 +24,7 @@ import {
 import { type BusinessRecord } from "../../data/business-modules"
 import { assignmentsOf } from "../../data/provider-money"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -61,8 +61,8 @@ const before: ServiceAreaAssignment = { ...held, id: "01a0d2a4-a280-7091-8000-00
 
 const bare = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
-const projectRecord = projectAdapter.toRecord(copenhagen, bare())
-const fractionRecords = [organic, paper].map((fraction) => wasteFractionAdapter.toRecord(fraction, bare()))
+const projectRecord = recordFrom(projectAdapter, copenhagen, bare())
+const fractionRecords = [organic, paper].map((fraction) => recordFrom(wasteFractionAdapter, fraction, bare()))
 const plain = (id: string, name: string, recordKind: string): BusinessRecord => ({ ...projectRecord, id, name, recordKind, submittedValues: {} })
 const areaRecords = [plain(`area-${OSTERBRO}`, "Østerbro Zone 2", "Planning area"), plain(`area-${NORDHAVN}`, "Nordhavn", "Planning area")]
 const providerRecords = [plain(`service-provider-${NORDREN}`, "NordRen ApS", "Service provider"), plain(`service-provider-${CITYHAUL}`, "CityHaul A/S", "Service provider")]
@@ -76,9 +76,9 @@ const context = (at: ServerRecordsState = state): MappingContext => ({ ...bare()
 
 /** The module as the store holds it once loaded: the area, then its assignments. */
 function withAreas(at: ServerRecordsState = state): ServerRecordsState {
-  const areaRecord = serviceAreaAdapter.toRecord({ ...area, assignments: [before, held] }, context(at))
+  const areaRecord = recordFrom(serviceAreaAdapter, { ...area, assignments: [before, held] }, context(at))
   const listed = new Map([...at, ["service-providers.service-areas", moduleOf([areaRecord], [area.id])]])
-  const assignmentRecords = [before, held].map((assignment) => assignmentAdapter.toRecord(assignment, context(listed)))
+  const assignmentRecords = [before, held].map((assignment) => recordFrom(assignmentAdapter, assignment, context(listed)))
   return new Map([...at, ["service-providers.service-areas", moduleOf([areaRecord, ...assignmentRecords], [area.id, before.id, held.id])]])
 }
 const loadedState = withAreas()
@@ -119,7 +119,7 @@ describe("the service areas module", () => {
   })
 
   test("read again over an award made this session, files its assignments under the id it was made under, the one the read keeps (#240)", async () => {
-    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: MINTED }
+    const minted = { ...recordFrom(serviceAreaAdapter, { ...area, assignments: [held] }, context()), id: MINTED }
     const before_ = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
     const { fetch } = scripted([() => pageOf([area]), () => pageOf([held])])
     const result = await loadModule(clientOver(fetch), serviceAreasModule, { state: before_, now: NOW })
@@ -128,12 +128,12 @@ describe("the service areas module", () => {
   })
 
   test("an award made this session and edited holds its provider: an answer without its assignments finds them by the award's server id", () => {
-    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: MINTED }
+    const minted = { ...recordFrom(serviceAreaAdapter, { ...area, assignments: [held] }, context()), id: MINTED }
     const listed = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
-    const assignmentRecord = assignmentAdapter.toRecord(held, context(listed))
+    const assignmentRecord = recordFrom(assignmentAdapter, held, context(listed))
     const at = new Map([...state, ["service-providers.service-areas", moduleOf([minted, assignmentRecord], [area.id, held.id])]])
     // A patch's answer is the bare area; the holder comes from the assignments the store holds under the session's id.
-    assert.equal(serviceAreaAdapter.toRecord(area, context(at)).facts["Service provider"], "NordRen ApS")
+    assert.equal(recordFrom(serviceAreaAdapter, area, context(at)).facts["Service provider"], "NordRen ApS")
   })
 
   test("shows an area as the set of planning areas and fractions it covers, its period a reading of the day, its fields the form's", () => {
@@ -177,7 +177,7 @@ describe("the service areas module", () => {
 
   test("maps the create's answer, the first assignment beside it, under the provider it names", () => {
     const created: ServiceAreaCreated = { ...area, id: "01a0d2a4-a280-7090-8000-000000000099", assignment: { ...held, id: "01a0d2a4-a280-7091-8000-000000000099", serviceAreaId: "01a0d2a4-a280-7090-8000-000000000099" } }
-    const record = serviceAreaAdapter.toRecord(created, context(loadedState))
+    const record = recordFrom(serviceAreaAdapter, created, context(loadedState))
     assert.equal(record.facts["Service provider"], "NordRen ApS")
   })
 
@@ -185,13 +185,13 @@ describe("the service areas module", () => {
     const current = loadedState.get("service-providers.service-areas")!
     const record = current.records[0]
     const edited = { ...record, submittedValues: { ...record.submittedValues, areaName: "Østerbro award", validTo: "", zoneIds: `area-${OSTERBRO}` } }
-    const body = serviceAreaAdapter.toPatchBody(record, edited, context(loadedState)) as { patch?: unknown; planningAreaIds?: unknown; wasteFractionIds?: unknown }
+    const body = serviceAreaAdapter.toPatchBody?.(record, edited, context(loadedState)) as { patch?: unknown; planningAreaIds?: unknown; wasteFractionIds?: unknown }
     assert.deepEqual(body, { patch: { name: "Østerbro award", validTo: null }, planningAreaIds: { ids: [OSTERBRO] } })
     assert.ok(ServiceAreaPatch.safeParse(body.patch).success)
     assert.ok(ServiceAreaPlanningAreasSet.safeParse(body.planningAreaIds).success)
-    assert.deepEqual(serviceAreaAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, areaCode: "CA-Ø-3" } }, context(loadedState)), { path: "areaCode", message: "An award keeps its code: the contract spells it" })
-    assert.deepEqual(serviceAreaAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, zoneIds: "" } }, context(loadedState)), { path: "zoneIds", message: NO_PLANNING_AREA })
-    const fractionsOnly = serviceAreaAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: `fraction-${paper.id}` } }, context(loadedState)) as { wasteFractionIds?: unknown }
+    assert.deepEqual(serviceAreaAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, areaCode: "CA-Ø-3" } }, context(loadedState)), { path: "areaCode", message: "An award keeps its code: the contract spells it" })
+    assert.deepEqual(serviceAreaAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, zoneIds: "" } }, context(loadedState)), { path: "zoneIds", message: NO_PLANNING_AREA })
+    const fractionsOnly = serviceAreaAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: `fraction-${paper.id}` } }, context(loadedState)) as { wasteFractionIds?: unknown }
     assert.deepEqual(fractionsOnly, { wasteFractionIds: { ids: [paper.id] } })
     assert.ok(ServiceAreaWasteFractionsSet.safeParse(fractionsOnly.wasteFractionIds).success)
 
@@ -216,10 +216,10 @@ describe("the service areas module", () => {
     const given = assignmentAdapter.toCreateBody!({ ...made_, submittedValues: { ...made_.submittedValues, validTo: "2028-09-30" } }, context(loadedState)) as { body: { validTo?: string } }
     assert.equal(given.body.validTo, "2028-10-01", "an end given is the assignment's own")
     assert.ok(ServiceAreaAssignmentCreate.safeParse(body.body).success)
-    const ended = assignmentAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, validTo: "2028-12-31" } }, context(loadedState))
+    const ended = assignmentAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, validTo: "2028-12-31" } }, context(loadedState))
     assert.deepEqual(ended, { validTo: "2029-01-01" })
     assert.ok(ServiceAreaAssignmentPatch.safeParse(ended).success)
-    assert.deepEqual(assignmentAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, serviceProviderId: `service-provider-${CITYHAUL}` } }, context(loadedState)), { path: "serviceProviderId", message: "A transfer ends this assignment and adds another" })
+    assert.deepEqual(assignmentAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, serviceProviderId: `service-provider-${CITYHAUL}` } }, context(loadedState)), { path: "serviceProviderId", message: "A transfer ends this assignment and adds another" })
 
     const { fetch, calls } = scripted([() => json({ ...held, id: "01a0d2a4-a280-7091-8000-000000000098", serviceProviderId: CITYHAUL, notes: "Interim", validFrom: "2029-01-01" }, 201, { location: "/service-area-assignments/x" })])
     const outcome = await writeRecord(clientOver(fetch), serviceAreasModule, loadedState.get("service-providers.service-areas")!, made_, { state: loadedState, now: NOW })
@@ -230,10 +230,10 @@ describe("the service areas module", () => {
 
   test("names the provider an award not yet in force is awarded to: its first upcoming holder", () => {
     const upcoming = { ...area, validFrom: "2027-01-01", validTo: null }
-    const record = serviceAreaAdapter.toRecord({ ...upcoming, assignments: [{ ...held, validFrom: "2027-01-01", validTo: null }] }, context())
+    const record = recordFrom(serviceAreaAdapter, { ...upcoming, assignments: [{ ...held, validFrom: "2027-01-01", validTo: null }] }, context())
     assert.equal(record.facts["Service provider"], "NordRen ApS")
     assert.equal(record.serviceProviderId, `service-provider-${NORDREN}`)
-    const ended = serviceAreaAdapter.toRecord({ ...area, assignments: [before] }, context())
+    const ended = recordFrom(serviceAreaAdapter, { ...area, assignments: [before] }, context())
     assert.equal(ended.facts["Service provider"], undefined, "an ended holder holds nothing")
   })
 

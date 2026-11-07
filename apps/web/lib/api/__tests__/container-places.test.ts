@@ -22,7 +22,7 @@ import { containerLocation } from "@/lib/prototype/map-planning/positions"
 import { resolveStopMatches, servingReadingOf } from "@/lib/prototype/route-schemes/matching"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resource, type ResourceAdapter } from "../records/adapter"
 import { agreementAdapter, subscriptionAdapter } from "../records/agreements"
 import { containerAdapter, type ContainerResource } from "../records/containers"
 import { SERVED_PUBLICLY, SHARED_POINTS } from "../../data/containers"
@@ -80,7 +80,7 @@ const bare: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 let state: ServerRecordsState = new Map()
 function load<R extends Resource>(key: string, adapter: ResourceAdapter<R>, resources: readonly R[]) {
   const context: MappingContext = { ...bare, resolve: resolverOver(state) }
-  const records = resources.map((resource) => adapter.toRecord(resource, context))
+  const records = resources.map((resource) => recordFrom(adapter, resource, context))
   state = new Map([...state, [key, loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, resources[index].id])) }, 1)]])
 }
 load("configure.organization", projectAdapter, [copenhagen])
@@ -89,7 +89,7 @@ load("configure.areas", planningAreaAdapter, [
   { ...osterbroArea, boundaries: [boundaryOf(osterbroArea, "01a0d2a4-a280-7017-8000-000000000002")] },
   { ...parkvejBlock, boundaries: [boundaryOf(parkvejBlock, "01a0d2a4-a280-7017-8000-000000000003", square(12.565, 55.698, 12.575, 55.705))] },
 ])
-const masterRecords = [wasteFractionAdapter.toRecord(residual, bare), containerTypeAdapter.toRecord(bin240, bare)]
+const masterRecords = [recordFrom(wasteFractionAdapter, residual, bare), recordFrom(containerTypeAdapter, bin240, bare)]
 state = new Map([...state, ["configure.master", loaded({ records: masterRecords, serverIds: new Map([[masterRecords[0].id, residual.id], [masterRecords[1].id, bin240.id]]) }, 1)]])
 load("customers.contacts", customerAdapter, [osterbro])
 load("customers.properties", propertyAdapter, [parkvej, dock4])
@@ -104,7 +104,7 @@ state = new Map([
       if (agreements === undefined) throw new Error("no agreements")
       const context: MappingContext = { ...bare, resolve: resolverOver(state) }
       const subscriptions = [atParkvej, atKongens, atDock, endedSubscription, underEnded]
-      const records = subscriptions.map((subscription) => subscriptionAdapter.toRecord(subscription, context))
+      const records = subscriptions.map((subscription) => recordFrom(subscriptionAdapter, subscription, context))
       return loaded({ records: [...agreements.records, ...records], serverIds: new Map([...agreements.serverIds, ...records.map((record, index): [string, string] => [record.id, subscriptions[index].id])]) }, 1)
     })(),
   ],
@@ -117,7 +117,7 @@ function placed(label: string, index: number, subscription: Subscription, validF
   const ordinal = String(index).padStart(12, "0")
   const container = containerOf(`01a0d2a4-a280-7014-8000-${ordinal}`, label)
   const resource: ContainerResource = { ...container, placements: [placementOf(`01a0d2a4-a280-7015-8000-${ordinal}`, container, subscription, validFrom, validTo)] }
-  return containerAdapter.toRecord(resource, context)
+  return recordFrom(containerAdapter, resource, context)
 }
 
 const areaId = `area-${osterbroArea.id}`
@@ -191,7 +191,7 @@ describe("a container placed today", () => {
     const container = containerOf("01a0d2a4-a280-7014-8000-000000000014", "BIN-91014")
     const today = placementOf("01a0d2a4-a280-7015-8000-000000000014", container, atParkvej, "2026-01-01", "2026-11-01")
     const next = placementOf("01a0d2a4-a280-7015-8000-000000000015", container, atKongens, "2026-11-01", null)
-    const record = containerAdapter.toRecord({ ...container, placements: [today, next] }, context)
+    const record = recordFrom(containerAdapter, { ...container, placements: [today, next] }, context)
     assert.equal(record.facts.Placement, "From 2026-01-01 to 2026-10-31")
     assert.equal(record.facts.Property, "Parkvej 18")
     assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: "2026-11-01", areaIds: [areaId, blockId], place: PARKVEJ, shown: true }, { from: "2026-11-01", until: null, areaIds: [], place: KONGENS }), "each placement's own period and areas: a scheme from November is judged on the next")
@@ -218,7 +218,7 @@ describe("a container serving nowhere today", () => {
   })
 
   test("nor one with no placement at all", () => {
-    const record = containerAdapter.toRecord({ ...containerOf("01a0d2a4-a280-7014-8000-000000000009", "BIN-91009"), placements: [] }, context)
+    const record = recordFrom(containerAdapter, { ...containerOf("01a0d2a4-a280-7014-8000-000000000009", "BIN-91009"), placements: [] }, context)
     assert.deepEqual(readingOf(record), serving())
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
@@ -238,7 +238,7 @@ describe("a container serving nowhere today", () => {
     const today = placementOf("01a0d2a4-a280-7015-8000-000000000012", container, atParkvej, "2026-01-01", "2026-10-05")
     const next = placementOf("01a0d2a4-a280-7015-8000-000000000013", container, atKongens, "2026-10-05", null)
     const assetState = { status: "in-service" as const, warehouseId: null, placementId: next.id, since: "2026-09-29T08:00:00.000Z", movementId: "01a0d2a4-a280-7030-8000-000000000001" }
-    const record = containerAdapter.toRecord({ ...container, assetState, placements: [today, next] }, context)
+    const record = recordFrom(containerAdapter, { ...container, assetState, placements: [today, next] }, context)
     assert.equal(record.facts.Placement, "From 2026-10-05, open", "the record shows the placement the ledger serves")
     assert.equal(record.facts.Property, undefined)
     assert.equal(record.facts["Shared collection point"], undefined)
@@ -251,7 +251,7 @@ describe("a container serving nowhere today", () => {
 describe("a public placement (M12 of #293)", () => {
   const litter = containerOf("01a0d2a4-a280-7014-8000-000000000201", "BIN-PUB-1")
   const publicly: ContainerServicePlacement = { ...placementOf("01a0d2a4-a280-7015-8000-000000000201", litter, atKongens, "2026-01-01", null), subscriptionId: null, sharedCollectionPointId: kongens.id }
-  const record = containerAdapter.toRecord({ ...litter, placements: [publicly] }, context)
+  const record = recordFrom(containerAdapter, { ...litter, placements: [publicly] }, context)
   const pointWebId = String(record.submittedValues?.sharedPointId ?? "")
 
   test("stands at the project's own point, served under no subscription and no agreement, and is a stop the rule preview reads like any other", () => {

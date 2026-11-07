@@ -20,7 +20,7 @@ import { driverProfile, vehicleProfile } from "@/lib/prototype/route-schemes/fle
 
 import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
 import {
   compartmentDraftsOf,
   compartmentsOfRecord,
@@ -63,8 +63,8 @@ const jonas: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000004", nam
 
 // The modules loaded before the fleet: the organisation, the providers, the access, the master data, the depots.
 const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve)
-const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve)
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, noResolve)
+const nordrenRecord = recordFrom(serviceProviderAdapter, nordren, noResolve)
 const COPENHAGEN_WEB_ID = webIdOf("project", copenhagen.id)
 const NORDREN_WEB_ID = webIdOf("service-provider", nordren.id)
 const madsAccount: BusinessRecord = { id: "user-mads", name: "Mads Jensen", context: "Company · Copenhagen Central", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "Waste API", freshness: "", recordKind: "User" }
@@ -74,8 +74,8 @@ const plannerRole: BusinessRecord = { ...madsAccount, id: "role-route-planner", 
 const fractions = [residual, glass, mixed]
 const types = [rearLoader, organicSealed, closedTrailer]
 const masterRecords = [
-  ...fractions.map((fraction) => wasteFractionAdapter.toRecord(fraction, noResolve)),
-  ...types.map((type) => vehicleTypeAdapter.toRecord(type, noResolve)),
+  ...fractions.map((fraction) => recordFrom(wasteFractionAdapter, fraction, noResolve)),
+  ...types.map((type) => recordFrom(vehicleTypeAdapter, type, noResolve)),
 ]
 const masterIds = new Map(masterRecords.map((record, index) => [record.id, [...fractions, ...types][index].id]))
 const withoutDepots: ServerRecordsState = new Map([
@@ -84,7 +84,7 @@ const withoutDepots: ServerRecordsState = new Map([
   ["configure.access", loaded({ records: [plannerRole, madsAccount], serverIds: new Map([[plannerRole.id, PLANNER_ROLE_ID], [madsAccount.id, MADS_ACCOUNT_ID]]) }, 1)],
   ["configure.master", loaded({ records: masterRecords, serverIds: masterIds }, 1)],
 ])
-const nordhavnRecord = depotAdapter.toRecord(nordhavn, { resolve: resolverOver(withoutDepots), now: NOW })
+const nordhavnRecord = recordFrom(depotAdapter, nordhavn, { resolve: resolverOver(withoutDepots), now: NOW })
 const state: ServerRecordsState = new Map([...withoutDepots, ["resources.depots", loaded({ records: [nordhavnRecord], serverIds: new Map([[nordhavnRecord.id, nordhavn.id]]) }, 1)]])
 const resolve = resolverOver(state)
 const context = (): MappingContext => ({ resolve, now: NOW })
@@ -139,7 +139,7 @@ describe("the fleet modules", () => {
 })
 
 describe("a vehicle", () => {
-  const record = vehicleAdapter.toRecord(wh24, context())
+  const record = recordFrom(vehicleAdapter, wh24, context())
 
   test("is the record the fixtures spell — callsign · plate, type and tonnage · depot — with the wire's four statuses and typed values under the form's field ids", () => {
     assert.equal(record.id, `vehicle-${wh24.id}`)
@@ -191,7 +191,7 @@ describe("a vehicle", () => {
 
   test("is what the wizard's fleet readers read: the callsign, the canonical type, the tonnage, the licence class; a trailer is a trailer", () => {
     assert.deepEqual(vehicleProfile(record), { id: record.id, callsign: "WH-24", type: "Rear loader", capacityT: 18, licenceClass: "C", isTrailer: false })
-    const towed = vehicleAdapter.toRecord(trailer, context())
+    const towed = recordFrom(vehicleAdapter, trailer, context())
     assert.equal(towed.name, "WH-T12 · TR 12 012")
     assert.equal(towed.context, "Closed trailer 18 t · Nordhavn Depot")
     assert.deepEqual(vehicleProfile(towed), { id: towed.id, callsign: "WH-T12", type: "Closed trailer", capacityT: 18, licenceClass: "CE", isTrailer: true })
@@ -205,7 +205,7 @@ describe("a vehicle", () => {
   })
 
   test("a provider's vehicle names it by the web id the store knows it under, has no base when no depot record is, and shows in the provider's scope", () => {
-    const provided = vehicleAdapter.toRecord(nr08, context())
+    const provided = recordFrom(vehicleAdapter, nr08, context())
     assert.equal(provided.context, "Organic sealed 12 t")
     assert.equal(provided.owner, "NordRen ApS")
     assert.equal(provided.facts.Ownership, "NordRen ApS")
@@ -294,39 +294,39 @@ describe("a vehicle", () => {
 
   test("an edit is a patch of the vehicle, the whole list of compartments, or both; the same fractions in another order are no change", () => {
     const renamed: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, assetReference: "WH-24A", capacity: "17000" } }
-    const body = vehicleAdapter.toPatchBody(record, renamed, context()) as { vehicle?: unknown; compartments?: unknown[] }
+    const body = vehicleAdapter.toPatchBody?.(record, renamed, context()) as { vehicle?: unknown; compartments?: unknown[] }
     assert.deepEqual(body, { vehicle: { callsign: "WH-24A", capacityKg: 17_000 } })
     assert.ok(VehiclePatch.safeParse(body.vehicle).success)
     const refilled: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: `${fractionWebId(residual)},${fractionWebId(glass)}` } }
-    const set = vehicleAdapter.toPatchBody(record, refilled, context()) as { compartments: unknown[] }
+    const set = vehicleAdapter.toPatchBody?.(record, refilled, context()) as { compartments: unknown[] }
     assert.deepEqual(set, { compartments: [{ wasteFractionIds: [residual.id, glass.id] }] })
     assert.ok(VehicleCompartmentsSet.safeParse(set).success)
     const widened: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, volumeCapacity: "22" } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(record, widened, context()), { compartments: [{ volumeLitres: 22_000, wasteFractionIds: [residual.id, mixed.id] }] })
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(record, widened, context()), { compartments: [{ volumeLitres: 22_000, wasteFractionIds: [residual.id, mixed.id] }] })
     const reordered: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: `${fractionWebId(mixed)},${fractionWebId(residual)}` } }
-    assert.equal(vehicleAdapter.toPatchBody(record, reordered, context()), null)
+    assert.equal(vehicleAdapter.toPatchBody?.(record, reordered, context()), null)
     const retired: BusinessRecord = { ...record, status: "Retired" }
-    assert.deepEqual(vehicleAdapter.toPatchBody(record, retired, context()), { vehicle: { status: "retired" } })
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(record, retired, context()), { vehicle: { status: "retired" } })
     const both: BusinessRecord = { ...record, status: "Maintenance", submittedValues: { ...record.submittedValues, wasteFractionIds: fractionWebId(glass), gpsDeviceId: "GPS-9" } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(record, both, context()), { vehicle: { telematicsDeviceId: "GPS-9", status: "maintenance" }, compartments: [{ wasteFractionIds: [glass.id] }] })
-    assert.equal(vehicleAdapter.toPatchBody(record, record, context()), null)
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(record, both, context()), { vehicle: { telematicsDeviceId: "GPS-9", status: "maintenance" }, compartments: [{ wasteFractionIds: [glass.id] }] })
+    assert.equal(vehicleAdapter.toPatchBody?.(record, record, context()), null)
   })
 
   test("a compartment keeps its name and capacities when its fractions move; a vehicle of several compartments is not re-cut from the form; what is set once stays", () => {
-    const named = vehicleAdapter.toRecord({ ...wh24, compartments: [compartment([residual.id], { name: "Body", capacityKg: 12_000, volumeLitres: 18_000 })] }, context())
+    const named = recordFrom(vehicleAdapter, { ...wh24, compartments: [compartment([residual.id], { name: "Body", capacityKg: 12_000, volumeLitres: 18_000 })] }, context())
     const moved: BusinessRecord = { ...named, submittedValues: { ...named.submittedValues, wasteFractionIds: fractionWebId(glass) } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(named, moved, context()), { compartments: [{ name: "Body", capacityKg: 12_000, volumeLitres: 18_000, wasteFractionIds: [glass.id] }] })
-    const split = vehicleAdapter.toRecord({ ...wh24, compartments: [compartment([residual.id], { name: "Left" }), compartment([mixed.id], { position: 2, name: "Right" })] }, context())
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(named, moved, context()), { compartments: [{ name: "Body", capacityKg: 12_000, volumeLitres: 18_000, wasteFractionIds: [glass.id] }] })
+    const split = recordFrom(vehicleAdapter, { ...wh24, compartments: [compartment([residual.id], { name: "Left" }), compartment([mixed.id], { position: 2, name: "Right" })] }, context())
     assert.equal(split.facts.Compartments, "2")
     assert.equal(split.submittedValues?.compartments, "Left: Residual; Right: Mixed")
     const recut: BusinessRecord = { ...split, submittedValues: { ...split.submittedValues, wasteFractionIds: fractionWebId(glass) } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(split, recut, context()), { path: "wasteFractionIds", message: "WH-24 has 2 compartments: set their fractions under Compartments in its details" })
-    assert.deepEqual(vehicleAdapter.toPatchBody(split, { ...split, submittedValues: { ...split.submittedValues, capacity: "17000" } }, context()), { vehicle: { capacityKg: 17_000 } }, "the vehicle itself still patches")
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(split, recut, context()), { path: "wasteFractionIds", message: "WH-24 has 2 compartments: set their fractions under Compartments in its details" })
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(split, { ...split, submittedValues: { ...split.submittedValues, capacity: "17000" } }, context()), { vehicle: { capacityKg: 17_000 } }, "the vehicle itself still patches")
     const emptied: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: "" } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(record, emptied, context()), { path: "wasteFractionIds", message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT })
-    const towed = vehicleAdapter.toRecord(trailer, context())
-    assert.deepEqual(vehicleAdapter.toPatchBody(towed, { ...towed, submittedValues: { ...towed.submittedValues, wasteFractionIds: fractionWebId(glass) } }, context()), { compartments: [{ wasteFractionIds: [glass.id] }] }, "a trailer may carry a compartment")
-    const patch = (over: Record<string, string>) => vehicleAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(record, emptied, context()), { path: "wasteFractionIds", message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT })
+    const towed = recordFrom(vehicleAdapter, trailer, context())
+    assert.deepEqual(vehicleAdapter.toPatchBody?.(towed, { ...towed, submittedValues: { ...towed.submittedValues, wasteFractionIds: fractionWebId(glass) } }, context()), { compartments: [{ wasteFractionIds: [glass.id] }] }, "a trailer may carry a compartment")
+    const patch = (over: Record<string, string>) => vehicleAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ resourceKind: "trailer" }), { path: "resourceKind", message: "A vehicle keeps its kind: a powered vehicle does not become a trailer" })
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A vehicle stays in its project" })
     assert.deepEqual(patch({ ownershipType: "leased", serviceProviderId: NORDREN_WEB_ID }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
@@ -338,7 +338,7 @@ describe("a vehicle", () => {
   })
 
   describe("the compartments, set whole from the vehicle's details (O7 of #290)", () => {
-    const split = () => vehicleAdapter.toRecord({ ...wh24, compartments: [compartment([residual.id, mixed.id], { name: "Body", capacityKg: 8_000, volumeLitres: 16_000 }), compartment([glass.id], { position: 2, capacityKg: 3_000 })] }, context())
+    const split = () => recordFrom(vehicleAdapter, { ...wh24, compartments: [compartment([residual.id, mixed.id], { name: "Body", capacityKg: 8_000, volumeLitres: 16_000 }), compartment([glass.id], { position: 2, capacityKg: 3_000 })] }, context())
     const set = (record: BusinessRecord, input: unknown) => vehicleAdapter.commands?.[SET_COMPARTMENTS].toBody?.(input as Record<string, unknown>, record, context())
 
     test("are read back as the editor's drafts, each compartment's fractions by the web id the store knows them under", () => {
@@ -346,7 +346,7 @@ describe("a vehicle", () => {
         { name: "Body", capacityKg: "8000", volumeLitres: "16000", wasteFractionIds: [fractionWebId(residual), fractionWebId(mixed)] },
         { name: "", capacityKg: "3000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] },
       ])
-      assert.deepEqual(compartmentDraftsOf(vehicleAdapter.toRecord(trailer, context())), [])
+      assert.deepEqual(compartmentDraftsOf(recordFrom(vehicleAdapter, trailer, context())), [])
     })
 
     test("go out as the PUT's body the contract accepts, a blank name or figure left out", () => {
@@ -367,7 +367,7 @@ describe("a vehicle", () => {
       assert.deepEqual(set(split(), { compartments: [{ ...draft, capacityKg: "3.5" }] }), { path: "compartments.0.capacityKg", message: "A compartment's capacity is a whole number of kilograms, 1 or more" })
       assert.deepEqual(set(split(), { compartments: [{ ...draft, volumeLitres: "0" }] }), { path: "compartments.0.volumeLitres", message: "A compartment's volume is a whole number of litres, 1 or more" })
       assert.deepEqual(set(split(), { compartments: [{ ...draft, wasteFractionIds: ["fraction-unknown"] }] }), { path: "compartments.0.wasteFractionIds", message: "Pick fractions the API holds" })
-      assert.deepEqual(set(vehicleAdapter.toRecord(trailer, context()), { compartments: [] }), { compartments: [] }, "a trailer may carry none")
+      assert.deepEqual(set(recordFrom(vehicleAdapter, trailer, context()), { compartments: [] }), { compartments: [] }, "a trailer may carry none")
     })
 
     test("are put through the vehicle's own route by the store's command, which answers the vehicle as it now stands", async () => {
@@ -387,12 +387,12 @@ describe("a vehicle", () => {
     const patched = { ...wh24, callsign: "WH-24A" }
     const reset = { ...patched, compartments: [compartment([glass.id])] }
     const { fetch, calls } = scripted([() => json(patched), () => json(reset)])
-    const answer = await vehicleAdapter.update(clientOver(fetch), wh24.id, { vehicle: { callsign: "WH-24A" }, compartments: [{ wasteFractionIds: [glass.id] }] })
+    const answer = await vehicleAdapter.update!(clientOver(fetch), wh24.id, { vehicle: { callsign: "WH-24A" }, compartments: [{ wasteFractionIds: [glass.id] }] })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/vehicles/${wh24.id}`, `PUT http://api.test/vehicles/${wh24.id}/compartments`])
     assert.deepEqual(bodyOf(calls[1]), { compartments: [{ wasteFractionIds: [glass.id] }] })
     assert.deepEqual(answer.compartments, reset.compartments)
     const setOnly = scripted([() => json(reset)])
-    await vehicleAdapter.update(clientOver(setOnly.fetch), wh24.id, { compartments: [{ wasteFractionIds: [glass.id] }] })
+    await vehicleAdapter.update!(clientOver(setOnly.fetch), wh24.id, { compartments: [{ wasteFractionIds: [glass.id] }] })
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/vehicles/${wh24.id}/compartments`])
   })
 
@@ -417,7 +417,7 @@ describe("a vehicle", () => {
 })
 
 describe("a driver", () => {
-  const record = driverAdapter.toRecord(lars, context())
+  const record = recordFrom(driverAdapter, lars, context())
 
   test("is a record with its licence kept literal — the class and the last day it holds — its employer, and typed values under the form's field ids", () => {
     assert.equal(record.id, `driver-${lars.id}`)
@@ -456,12 +456,12 @@ describe("a driver", () => {
     assert.deepEqual(driverAdapter.statuses, DRIVER_STATUSES)
     assert.ok(driverAdapter.owns(record))
     assert.ok(driverAdapter.owns(made("drivers", "Driver workforce profile", "Invited", "Sofie Eriksen", {})))
-    assert.ok(!driverAdapter.owns(vehicleAdapter.toRecord(wh24, context())))
+    assert.ok(!driverAdapter.owns(recordFrom(vehicleAdapter, wh24, context())))
   })
 
   test("is what the licence rule reads, unjudged here: the expired licence stays the expired licence, the new hire has none on record", () => {
     assert.deepEqual(driverProfile(record), { id: record.id, name: "Lars Møller", licenceClass: "C", licenceExpiry: "2026-09-05" })
-    const hire = driverAdapter.toRecord(jonas, context())
+    const hire = recordFrom(driverAdapter, jonas, context())
     assert.equal(hire.facts.Licence, "Not on record")
     assert.equal(hire.submittedValues?.licenceClass, "")
     assert.equal(hire.submittedValues?.licenceExpiry, "")
@@ -469,7 +469,7 @@ describe("a driver", () => {
   })
 
   test("a driver with a login names the account by the web id the store knows it under", () => {
-    const bound = driverAdapter.toRecord(mads, context())
+    const bound = recordFrom(driverAdapter, mads, context())
     assert.equal(bound.context, "Company · employee")
     assert.equal(bound.facts.Employer, "Company")
     assert.equal(bound.facts["App access"], "Mads Jensen")
@@ -536,17 +536,17 @@ describe("a driver", () => {
     const body = driverAdapter.toCreateBody?.(hired(shifted), context()) as { shift?: unknown }
     assert.deepEqual(body.shift, shift)
     assert.ok(DriverCreate.safeParse(body).success)
-    const read = driverAdapter.toRecord({ ...mads, shift }, context())
+    const read = recordFrom(driverAdapter, { ...mads, shift }, context())
     assert.equal(read.facts?.Shift, "07:00–15:00 · 30 min break 11:00–12:30")
     assert.deepEqual(
       Object.fromEntries(Object.keys(shifted).map((key) => [key, read.submittedValues?.[key]])),
       shifted,
     )
     const later: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftEnd: "16:00" } }
-    assert.deepEqual(driverAdapter.toPatchBody(read, later, context()), { shift: { ...shift, to: "16:00" } }, "whole, the break with it")
+    assert.deepEqual(driverAdapter.toPatchBody?.(read, later, context()), { shift: { ...shift, to: "16:00" } }, "whole, the break with it")
     const cleared: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftStart: "", shiftEnd: "", breakMinutes: "", breakWindowStart: "", breakWindowEnd: "" } }
-    assert.deepEqual(driverAdapter.toPatchBody(read, cleared, context()), { shift: null })
-    assert.equal(driverAdapter.toRecord(mads, context()).facts?.Shift, "None on record")
+    assert.deepEqual(driverAdapter.toPatchBody?.(read, cleared, context()), { shift: null })
+    assert.equal(recordFrom(driverAdapter, mads, context()).facts?.Shift, "None on record")
   })
 
   test("a shift the API would refuse is refused here, at its field, in the domain's words", () => {
@@ -561,14 +561,14 @@ describe("a driver", () => {
 
   test("a patch says what moved — a licence renewal, an account unlinked as null, a status the lifecycle moved — holds the project and the provider rule, and the contract accepts it", () => {
     const renewed: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, licenceClass: "CE", licenceExpiry: "2031-09-05" } }
-    const body = driverAdapter.toPatchBody(record, renewed, context())
+    const body = driverAdapter.toPatchBody?.(record, renewed, context())
     assert.deepEqual(body, { licenceClass: "ce", licenceExpiry: "2031-09-05" })
     assert.ok(DriverPatch.safeParse(body).success)
-    const bound = driverAdapter.toRecord(mads, context())
-    assert.deepEqual(driverAdapter.toPatchBody(bound, { ...bound, submittedValues: { ...bound.submittedValues, driverAppAccess: false } }, context()), { userAccountId: null })
-    assert.deepEqual(driverAdapter.toPatchBody(record, { ...record, status: "Suspended" }, context()), { status: "suspended" })
-    assert.equal(driverAdapter.toPatchBody(record, record, context()), null)
-    const patch = (over: Record<string, string | boolean>) => driverAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
+    const bound = recordFrom(driverAdapter, mads, context())
+    assert.deepEqual(driverAdapter.toPatchBody?.(bound, { ...bound, submittedValues: { ...bound.submittedValues, driverAppAccess: false } }, context()), { userAccountId: null })
+    assert.deepEqual(driverAdapter.toPatchBody?.(record, { ...record, status: "Suspended" }, context()), { status: "suspended" })
+    assert.equal(driverAdapter.toPatchBody?.(record, record, context()), null)
+    const patch = (over: Record<string, string | boolean>) => driverAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context())
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A driver stays in its project" })
     assert.deepEqual(patch({ employmentType: "employee" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT }, "the rule is held against the row the patch leaves behind")
     assert.deepEqual(patch({ employmentType: "employee", serviceProviderId: "" }), { employment: "employee", serviceProviderId: null })

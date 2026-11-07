@@ -22,7 +22,7 @@ import { DISPATCH_MANY_MAX } from "@waste/domain/execution/routes"
 import type { BusinessRecord } from "../../data/business-modules"
 import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -113,12 +113,12 @@ const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail =>
 
 // What the store has loaded when the routes load: the organisation, the places, the fleet.
 const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
-const projectRecord = projectAdapter.toRecord(copenhagen, noResolve)
-const depotRecord = depotAdapter.toRecord(nordhavn, noResolve)
-const stationRecord = unloadingStationAdapter.toRecord(arc, noResolve)
+const projectRecord = recordFrom(projectAdapter, copenhagen, noResolve)
+const depotRecord = recordFrom(depotAdapter, nordhavn, noResolve)
+const stationRecord = recordFrom(unloadingStationAdapter, arc, noResolve)
 const organisationState = (): ServerRecordsState => new Map([["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)]])
-const vehicleRecords = [wh24, wh31, trailer].map((vehicle) => vehicleAdapter.toRecord(vehicle, { ...noResolve, resolve: resolverOver(organisationState()) }))
-const driverRecords = [mads, freja].map((driver) => driverAdapter.toRecord(driver, { ...noResolve, resolve: resolverOver(organisationState()) }))
+const vehicleRecords = [wh24, wh31, trailer].map((vehicle) => recordFrom(vehicleAdapter, vehicle, { ...noResolve, resolve: resolverOver(organisationState()) }))
+const driverRecords = [mads, freja].map((driver) => recordFrom(driverAdapter, driver, { ...noResolve, resolve: resolverOver(organisationState()) }))
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
@@ -170,7 +170,7 @@ describe("a route", () => {
   })
 
   test("is the record the Routes table, the map and the route's details read", () => {
-    const record = routeAdapter.toRecord(planned, context())
+    const record = recordFrom(routeAdapter, planned, context())
     assert.equal(record.id, `route-${planned.id}`)
     assert.equal(record.name, "RC-1042")
     assert.equal(record.status, "Planned")
@@ -214,7 +214,7 @@ describe("a route", () => {
   })
 
   test("names its references by id chip until their modules load, and its scheme by the scheme's web id", () => {
-    const record = routeAdapter.toRecord(planned, context(NOTHING_RESOLVED))
+    const record = recordFrom(routeAdapter, planned, context(NOTHING_RESOLVED))
     assert.equal(record.facts.Vehicle, `vehicle-${wh24.id}`)
     assert.equal(record.facts.Driver, `driver-${mads.id}`)
     assert.equal(record.submittedValues?.vehicleId, `vehicle-${wh24.id}`)
@@ -228,25 +228,25 @@ describe("a route", () => {
   test("once the schemes are loaded, names its scheme and files itself under the scheme's planning area", () => {
     const schemeRecord: BusinessRecord = { ...projectRecord, id: `scheme-${schemeId}`, name: "RS-Central · Week A", recordKind: "Route Scheme", facts: { "Planning area": "Indre By Operations" } }
     const withSchemes: ServerRecordsState = new Map([...state, ["route-studio.schemes", loaded({ records: [schemeRecord], serverIds: new Map([[schemeRecord.id, schemeId]]) }, 1)]])
-    const record = routeAdapter.toRecord(planned, context(resolverOver(withSchemes)))
+    const record = recordFrom(routeAdapter, planned, context(resolverOver(withSchemes)))
     assert.equal(record.facts["Route scheme"], "RS-Central · Week A")
     assert.equal(record.facts.Area, "Indre By Operations", "the Routes table's Area column")
     assert.equal(record.context, "Copenhagen Central · Indre By Operations")
     assert.equal(record.description, "Generated from RS-Central · Week A for 2026-10-01.")
     assert.equal(record.submittedValues?.schemeId, schemeRecord.id)
-    const moved = routeAdapter.toRecord({ ...planned, operatingDate: "2026-10-02" }, context(resolverOver(withSchemes)))
+    const moved = recordFrom(routeAdapter, { ...planned, operatingDate: "2026-10-02" }, context(resolverOver(withSchemes)))
     assert.equal(moved.description, "Generated from RS-Central · Week A for 2026-10-01, running 2026-10-02.")
   })
 
   test("reads each status as the table, the map and the lifecycle spell it", () => {
     const words = { planned: "Planned", ready: "Ready", active: "Active", completed: "Completed", cancelled: "Cancelled" } as const
     for (const [token, word] of Object.entries(words)) {
-      assert.equal(routeAdapter.toRecord({ ...planned, status: token as Route["status"] }, context()).status, word)
+      assert.equal(recordFrom(routeAdapter, { ...planned, status: token as Route["status"] }, context()).status, word)
     }
   })
 
   test("its value counts the stops, and the ones decided once any are", () => {
-    const valueOf = (progress: Route["progress"]) => routeAdapter.toRecord({ ...planned, progress }, context()).value
+    const valueOf = (progress: Route["progress"]) => recordFrom(routeAdapter, { ...planned, progress }, context()).value
     assert.equal(valueOf({ planned: 1, completed: 0, skipped: 0, failed: 0, total: 1, fraction: 0 }), "1 stop")
     assert.equal(valueOf({ planned: 1, completed: 1, skipped: 1, failed: 0, total: 3, fraction: 2 / 3 }), "2/3 stops")
     assert.equal(valueOf({ planned: 0, completed: 3, skipped: 0, failed: 0, total: 3, fraction: 1 }), "3/3 stops")
@@ -254,7 +254,7 @@ describe("a route", () => {
   })
 
   test("its Stops fact counts every stop it has, decided or not: the scheme's routes table reads it (#252)", () => {
-    const stopsOf = (progress: Route["progress"]) => routeAdapter.toRecord({ ...planned, progress }, context()).facts.Stops
+    const stopsOf = (progress: Route["progress"]) => recordFrom(routeAdapter, { ...planned, progress }, context()).facts.Stops
     assert.equal(stopsOf({ planned: 4, completed: 0, skipped: 0, failed: 0, total: 4, fraction: 0 }), "4")
     assert.equal(stopsOf({ planned: 0, completed: 2, skipped: 1, failed: 1, total: 4, fraction: 1 }), "4")
     assert.equal(stopsOf({ planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 }), "0")
@@ -271,7 +271,7 @@ describe("a route", () => {
       actual: { vehicleId: wh31.id, driverId: freja.id, trailerId: trailer.id },
       planned: { ...planned.planned, trailerId: trailer.id },
     }
-    const record = routeAdapter.toRecord(cancelled, context())
+    const record = recordFrom(routeAdapter, cancelled, context())
     assert.equal(record.facts.Deviation, "Road closed on Nørrebrogade")
     assert.equal(record.facts["Dispatched at"], "2026-10-01 06:10", "on the project's clock: Copenhagen is two hours ahead in summer time")
     assert.equal(record.facts["Started at"], "2026-10-01 06:31")
@@ -282,28 +282,28 @@ describe("a route", () => {
   })
 
   test("held by the office's move, says so on its row and in its details, and what ends the hold (#209)", () => {
-    const held = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
+    const held = recordFrom(routeAdapter, { ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
     assert.equal(held.description, "Generated from its route scheme for 2026-10-01. Held by the office since 2026-09-30 10:15.", "the row's line, on the project's clock")
     assert.equal(held.facts.Hold, "Moved by the office 2026-09-30 10:15: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops")
     assert.equal(held.facts["Hold released by"], "Release hold; an edit of its scheme's start, depot or unloading station, or of its group's vehicle, driver or provider; a day taken from its collection; a dispatch or a cancel")
     assert.ok(isHeldRoute(held))
-    const free = routeAdapter.toRecord(planned, context())
+    const free = recordFrom(routeAdapter, planned, context())
     assert.deepEqual([free.facts.Hold, free.facts["Hold released by"]], [undefined, undefined])
     assert.ok(!isHeldRoute(free))
     assert.doesNotMatch(free.description, /Held/)
   })
 
   test("carries the active Plan the read gives it, as JSON under the key the map reads, and nothing when the read says nothing", () => {
-    assert.equal(routeAdapter.toRecord(planned, context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], undefined, "GET /routes carries no activePlan yet (#173 adds it)")
-    assert.equal(routeAdapter.toRecord(detailOf(planned), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], "null")
-    assert.deepEqual(JSON.parse(String(routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY])), plan)
+    assert.equal(recordFrom(routeAdapter, planned, context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], undefined, "GET /routes carries no activePlan yet (#173 adds it)")
+    assert.equal(recordFrom(routeAdapter, detailOf(planned), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], "null")
+    assert.deepEqual(JSON.parse(String(recordFrom(routeAdapter, detailOf(planned, { activePlan: plan }), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY])), plan)
   })
 
   test("is never edited here: its commands move it", async () => {
     assert.equal(routeAdapter.statuses, undefined, "a route's status moves by command alone")
-    const record = routeAdapter.toRecord(planned, context())
+    const record = recordFrom(routeAdapter, planned, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, plannedStartTime: "07:00" } }
-    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops" })
+    assert.deepEqual(routeAdapter.toPatchBody?.(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
     const moved = await writeRecord(clientOver(fetch), routesModule, current, { ...record, status: "Ready" }, options)
@@ -318,7 +318,7 @@ describe("the office's ad-hoc route (#111)", () => {
   const adHoc: Route = { ...planned, id: "01a0d2a4-a280-7030-8000-000000000009", routeSchemeId: null, collectionGroupId: null, number: 1100, label: "RC-1100", generationRunId: null, plannedStartTime: null, note: "Re-collections", progress: { planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 } }
 
   test("says whose it is where a generated route names its scheme, and names no scheme and no group", () => {
-    const record = routeAdapter.toRecord(adHoc, context())
+    const record = recordFrom(routeAdapter, adHoc, context())
     assert.equal(record.facts.Origin, MADE_BY_THE_OFFICE)
     assert.equal(record.facts["Route scheme"], undefined)
     // Its note is New route's, under its own name: no scheme to deviate from.
@@ -326,7 +326,7 @@ describe("the office's ad-hoc route (#111)", () => {
     assert.equal(record.description, "The office's own route, with no scheme, for 2026-10-01.")
     assert.deepEqual([record.submittedValues?.schemeId, record.submittedValues?.collectionGroupId], ["", ""])
     assert.equal(record.value, "0 stops")
-    assert.equal(routeAdapter.toRecord(planned, context()).facts.Origin, undefined, "a generated route says nothing of the kind")
+    assert.equal(recordFrom(routeAdapter, planned, context()).facts.Origin, undefined, "a generated route says nothing of the kind")
   })
 
   test("New route's record is the create body the contract accepts: the project and the day, its ends and crew by server id, its note", () => {
@@ -365,7 +365,7 @@ describe("the office's ad-hoc route (#111)", () => {
 })
 
 describe("the route's commands", () => {
-  const record = routeAdapter.toRecord(planned, context())
+  const record = recordFrom(routeAdapter, planned, context())
   const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
   const assign = routeAdapter.commands?.[ASSIGN_ROUTE]
   const reschedule = routeAdapter.commands?.[RESCHEDULE_ROUTE]
@@ -506,7 +506,7 @@ describe("the route's commands", () => {
 
   test("release-hold posts its empty body and answers the route back on its scheme, its hold cleared (#226)", async () => {
     const { fetch, calls } = scripted([() => json(detailOf(planned))])
-    const heldRecord = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
+    const heldRecord = recordFrom(routeAdapter, { ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
     const outcome = await commandRecord(clientOver(fetch), routesModule, current, heldRecord, RELEASE_HOLD, undefined, options)
     assert.equal(calls[0].url, `http://api.test/routes/${planned.id}/release-hold`)
     assert.equal(calls[0].init.method, "POST")
@@ -627,54 +627,54 @@ describe("the route's commands", () => {
 })
 
 describe("the dispatch day's tooling (O5 of #290)", () => {
-  const record = routeAdapter.toRecord(planned, context())
+  const record = recordFrom(routeAdapter, planned, context())
   const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
   const providerId = "01a0d2a4-a280-7003-8000-000000000009"
   const nordren: BusinessRecord = { ...projectRecord, id: `service-provider-${providerId}`, name: "NordRen ApS", recordKind: "Service provider company", facts: {}, submittedValues: {} }
   const withProvider: ServerRecordsState = new Map([...state, ["service-providers.service-providers", loaded({ records: [nordren], serverIds: serverIdsOf([nordren], [providerId]) }, 1)]])
 
   test("a route measured by its active Plan says its distance and duration; one unmeasured says neither", () => {
-    const measured = routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context())
+    const measured = recordFrom(routeAdapter, detailOf(planned, { activePlan: plan }), context())
     assert.deepEqual([measured.facts.Distance, measured.facts.Duration], ["18.4 km", "45 min"])
-    const calculating = routeAdapter.toRecord(detailOf(planned, { activePlan: { ...plan, status: "calculating", distanceMetres: null, durationSeconds: null } }), context())
+    const calculating = recordFrom(routeAdapter, detailOf(planned, { activePlan: { ...plan, status: "calculating", distanceMetres: null, durationSeconds: null } }), context())
     assert.deepEqual([calculating.facts.Distance, calculating.facts.Duration], [undefined, undefined])
     assert.deepEqual([record.facts.Distance, record.facts.Duration], [undefined, undefined], "a list row without a Plan reading says nothing")
   })
 
   test("a route's stops add their time at the kerb to the Plan's drive, and its expected load reads against the vehicle's payload (O10 of #290)", () => {
     const loads = { stopSeconds: 5_400, expectedKg: 8_200, unexpectedStops: 0, capacityKg: 12_000, overCapacityKg: 0 }
-    const measured = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, workload: loads }), context())
+    const measured = recordFrom(routeAdapter, detailOf(planned, { activePlan: plan, workload: loads }), context())
     assert.deepEqual([measured.facts.Duration, measured.facts["Stop time"], measured.facts["Expected load"]], ["2 h 15 min", "1 h 30 min", "8,200 kg of 12,000 kg"])
-    const over = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
+    const over = recordFrom(routeAdapter, detailOf(planned, { activePlan: plan, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
     assert.equal(over.facts["Expected load"], "14,200 kg of 12,000 kg: over by 2,200 kg, plan a tip")
     // Its Plan unloads on the way (O15 of #290): no tip left to plan, and how often the vehicle empties before its last stop.
     const unloads = [{ afterPickupId: "01a0d2a4-a280-7031-8000-000000000003", unloadingStationId: "01a0d2a4-a280-7031-8000-000000000009" }]
-    const reloaded = routeAdapter.toRecord(detailOf(planned, { activePlan: { ...plan, unloads }, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
+    const reloaded = recordFrom(routeAdapter, detailOf(planned, { activePlan: { ...plan, unloads }, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
     assert.deepEqual(
       [reloaded.facts["Expected load"], reloaded.facts["Unloads on the way"]],
       ["14,200 kg of 12,000 kg: over by 2,200 kg, so its Plan unloads on the way", "1 visit to the unloading station before the last stop, where the vehicle is full"],
     )
     assert.equal(over.facts["Unloads on the way"], undefined)
-    const partly = routeAdapter.toRecord(detailOf(planned, { workload: { ...loads, capacityKg: null, overCapacityKg: null, unexpectedStops: 3 } }), context())
+    const partly = recordFrom(routeAdapter, detailOf(planned, { workload: { ...loads, capacityKg: null, overCapacityKg: null, unexpectedStops: 3 } }), context())
     assert.deepEqual([partly.facts.Duration, partly.facts["Stop time"], partly.facts["Expected load"]], [undefined, "1 h 30 min", "8,200 kg, 3 stops not counted"], "no Plan, no drive to add the stops to")
-    const unknown = routeAdapter.toRecord(detailOf(planned, { workload: NO_WORKLOAD }), context())
+    const unknown = recordFrom(routeAdapter, detailOf(planned, { workload: NO_WORKLOAD }), context())
     assert.deepEqual([unknown.facts["Stop time"], unknown.facts["Expected load"]], [undefined, undefined], "a route with no stops says neither")
   })
 
   test("a route reads its planned driver's shift and the server's over-shift verdict, and says nothing of a shift a driver lacks (O14 of #290)", () => {
     const shift = { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } }
-    const over = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, shift: { shift, startsAt: "07:30", workSeconds: 30_600, overShiftSeconds: 3_600 } }), context())
+    const over = recordFrom(routeAdapter, detailOf(planned, { activePlan: plan, shift: { shift, startsAt: "07:30", workSeconds: 30_600, overShiftSeconds: 3_600 } }), context())
     assert.deepEqual([over.facts.Shift, over.facts["Shift check"]], ["07:00–15:00 · 30 min break 11:00–12:30", "Over shift by 1 h 00 min: 8 h 30 min of work from 07:30"])
-    const within = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, shift: { shift: { ...shift, breakMinutes: null, breakWindow: null }, startsAt: "07:00", workSeconds: 3_600, overShiftSeconds: 0 } }), context())
+    const within = recordFrom(routeAdapter, detailOf(planned, { activePlan: plan, shift: { shift: { ...shift, breakMinutes: null, breakWindow: null }, startsAt: "07:00", workSeconds: 3_600, overShiftSeconds: 0 } }), context())
     assert.deepEqual([within.facts.Shift, within.facts["Shift check"]], ["07:00–15:00", "Within the shift: 1 h 00 min of work from 07:00"])
-    const unmeasured = routeAdapter.toRecord(detailOf(planned, { shift: { shift, startsAt: "07:00", workSeconds: null, overShiftSeconds: null } }), context())
+    const unmeasured = recordFrom(routeAdapter, detailOf(planned, { shift: { shift, startsAt: "07:00", workSeconds: null, overShiftSeconds: null } }), context())
     assert.deepEqual([unmeasured.facts.Shift, unmeasured.facts["Shift check"]], ["07:00–15:00 · 30 min break 11:00–12:30", undefined], "no verdict before a Plan is measured")
-    const none = routeAdapter.toRecord(detailOf(planned), context())
+    const none = recordFrom(routeAdapter, detailOf(planned), context())
     assert.deepEqual([none.facts.Shift, none.facts["Shift check"]], [undefined, undefined])
   })
 
   test("a Plan that holds stops outside their service window names each by its place in the order and says why (O14 of #290)", () => {
-    const warned = routeAdapter.toRecord(
+    const warned = recordFrom(routeAdapter, 
       detailOf(planned, {
         activePlan: {
           ...plan,
@@ -691,7 +691,7 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
       warned.facts["Window warnings"],
       "Stop 2: its property's access hours and its agreement's service window never overlap, so it was planned without a window; Stop 5: no order reached it inside its service window, so it was planned outside it",
     )
-    assert.equal(routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context()).facts["Window warnings"], undefined)
+    assert.equal(recordFrom(routeAdapter, detailOf(planned, { activePlan: plan }), context()).facts["Window warnings"], undefined)
   })
 
   test("assign names the service provider by server id, a cleared one as null, and the route reads it back", () => {
@@ -700,7 +700,7 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     assert.deepEqual(named, { serviceProviderId: providerId })
     assert.ok(RouteAssign.safeParse(named).success)
     assert.deepEqual(assign?.toBody?.({ serviceProviderId: "NordRen" }, record, context(resolverOver(withProvider))), { path: "serviceProviderId", message: "Pick a service provider the API holds" })
-    const provided = routeAdapter.toRecord({ ...planned, planned: { ...planned.planned, serviceProviderId: providerId } }, context(resolverOver(withProvider)))
+    const provided = recordFrom(routeAdapter, { ...planned, planned: { ...planned.planned, serviceProviderId: providerId } }, context(resolverOver(withProvider)))
     assert.deepEqual([provided.submittedValues?.serviceProviderId, provided.facts["Service provider"]], [nordren.id, "NordRen ApS"])
     assert.deepEqual(assign?.toBody?.({ serviceProviderId: "" }, provided, context(resolverOver(withProvider))), { serviceProviderId: null })
     assert.equal(record.submittedValues?.serviceProviderId, "", "none planned")
@@ -802,6 +802,6 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     const { fetch, calls } = scripted([() => json(detailOf(planned, { activePlan: plan }))])
     const read = await routeAdapter.read?.(clientOver(fetch), planned.id)
     assert.equal(calls[0].url, `http://api.test/routes/${planned.id}`)
-    assert.equal(routeAdapter.toRecord(read as Route, context()).facts.Distance, "18.4 km")
+    assert.equal(recordFrom(routeAdapter, read as Route, context()).facts.Distance, "18.4 km")
   })
 })

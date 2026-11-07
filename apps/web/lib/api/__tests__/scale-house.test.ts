@@ -9,7 +9,7 @@ import { ScaleTicketComplete, ScaleTicketCreate, ScaleTicketVoid, VehicleTareCre
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND } from "../../data/scale-house"
-import { isLocalRefusal, type MappingContext } from "../records/adapter"
+import { isLocalRefusal, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import {
   COMPLETE_TICKET,
@@ -120,7 +120,7 @@ describe("Operate › Scale house", () => {
   })
 
   test("reads a ticket with its number, its party, its weighings and its lines in the window's words", () => {
-    const record = scaleTicketAdapter.toRecord(ticket, context)
+    const record = recordFrom(scaleTicketAdapter, ticket, context)
     assert.equal(record.id, `scale-ticket-${ticket.id}`)
     assert.equal(record.name, "ST-1004 · AB 12 345")
     assert.equal(record.status, "Completed")
@@ -134,11 +134,11 @@ describe("Operate › Scale house", () => {
 
   test("offers Weigh out and Void while open, Void once completed, nothing once voided or written as a route's unload", () => {
     assert.deepEqual(ticketCommandsOffered({ submittedValues: { status: "open" } }), [COMPLETE_TICKET, VOID_TICKET])
-    assert.deepEqual(ticketCommandsOffered(scaleTicketAdapter.toRecord(ticket, context)), [VOID_TICKET])
-    assert.deepEqual(ticketCommandsOffered(scaleTicketAdapter.toRecord({ ...ticket, routeId: UNLOAD, unloadId: UNLOAD }, context)), [])
+    assert.deepEqual(ticketCommandsOffered(recordFrom(scaleTicketAdapter, ticket, context)), [VOID_TICKET])
+    assert.deepEqual(ticketCommandsOffered(recordFrom(scaleTicketAdapter, { ...ticket, routeId: UNLOAD, unloadId: UNLOAD }, context)), [])
     assert.deepEqual(ticketCommandsOffered({ submittedValues: { status: "voided" } }), [])
-    assert.deepEqual(tareCommandsOffered(vehicleTareAdapter.toRecord(tare, context)), [REWEIGH_TARE, RETIRE_TARE])
-    assert.deepEqual(tareCommandsOffered(vehicleTareAdapter.toRecord({ ...tare, status: "retired" }, context)), [REACTIVATE_TARE])
+    assert.deepEqual(tareCommandsOffered(recordFrom(vehicleTareAdapter, tare, context)), [REWEIGH_TARE, RETIRE_TARE])
+    assert.deepEqual(tareCommandsOffered(recordFrom(vehicleTareAdapter, { ...tare, status: "retired" }, context)), [REACTIVATE_TARE])
   })
 
   test("weighs a walk-in in, and an account under its customer and agreement, by the server's ids", () => {
@@ -194,7 +194,7 @@ describe("Operate › Scale house", () => {
 
   test("voids with a reason, and another reason with its note", () => {
     const toBody = SCALE_TICKET_COMMANDS[VOID_TICKET]!.toBody!
-    const record = scaleTicketAdapter.toRecord(ticket, context)
+    const record = recordFrom(scaleTicketAdapter, ticket, context)
     assert.deepEqual(ScaleTicketVoid.parse(toBody({ reason: "duplicate" }, record, context)), { reason: "duplicate" })
     const refused = toBody({ reason: "other" }, record, context)
     assert.equal(isLocalRefusal(refused) ? refused.path : undefined, "note")

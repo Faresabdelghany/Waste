@@ -9,7 +9,7 @@ import type { Customer } from "@waste/contracts/customers"
 import type { Me } from "@waste/contracts/me"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
 import { ME_PROJECTS } from "../records/me-projects"
 import { createRecordStore, type RecordStore, type RecordStoreNotices } from "../records/record-store"
 import { customerAdapter } from "../records/registry"
@@ -73,7 +73,7 @@ describe("the record store's controller", () => {
       if (call.init.method === "POST") return json(made, 201, { location: `/customers/${made.id}` })
       return json({ ...made, name: (bodyOf(call) as { name: string }).name })
     })
-    const typed = (name: string): BusinessRecord => ({ ...customerAdapter.toRecord(made, { resolve: NOTHING_RESOLVED }), id: "contacts-company-1700000000000", name, submittedValues: { partyType: "company", displayName: name } })
+    const typed = (name: string): BusinessRecord => ({ ...recordFrom(customerAdapter, made, { resolve: NOTHING_RESOLVED }), id: "contacts-company-1700000000000", name, submittedValues: { partyType: "company", displayName: name } })
     const route = { apiConfigured: true, label: "Customers" }
     const first = store.write("customers", "contacts", typed("Nørrebro Boligselskab"), route)
     const second = store.write("customers", "contacts", typed("Nørrebro Bolig"), route)

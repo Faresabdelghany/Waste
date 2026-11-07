@@ -19,7 +19,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { COLLECTION_CALENDARS_MODULE, createCollectionCalendarRecord } from "../../data/collection-calendars"
 import { createPlanningAreaRecord, PLANNING_AREAS_MODULE, planningAreaFormValues, planningAreaPurpose, planningAreaTableRow } from "../../data/planning-areas"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { companyAdapter, projectAdapter } from "../records/organisation"
 import {
@@ -78,9 +78,9 @@ const central2026: CollectionCalendar = {
 const harborCalendar: CollectionCalendar = { ...central2026, id: "01a0d2a4-a280-7018-8000-000000000003", projectId: harbor.id, name: "Harbor Offices service calendar", validFrom: "2026-09-01", validTo: "2027-09-01" }
 
 // The organisation module as the store has it when the planning modules load.
-const companyRecord = companyAdapter.toRecord(company, context())
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, context())
-const harborRecord = projectAdapter.toRecord(harbor, context())
+const companyRecord = recordFrom(companyAdapter, company, context())
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, context())
+const harborRecord = recordFrom(projectAdapter, harbor, context())
 const copenhagenWebId = webIdOf("project", copenhagen.id)
 const harborWebId = webIdOf("project", harbor.id)
 const state: ServerRecordsState = new Map([
@@ -109,7 +109,7 @@ describe("a planning area read", () => {
   })
 
   test("an area is area-<uuid>, with the version in force as its geometry, its dates and its Active status", () => {
-    const record = planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext())
+    const record = recordFrom(planningAreaAdapter, withBoundaries(indreby, [indrebyBoundary]), areaContext())
     assert.equal(record.id, webIdOf("area", indreby.id))
     assert.equal(record.name, "Indre By Operations")
     assert.equal(record.context, "Route planning · Copenhagen Central")
@@ -137,20 +137,20 @@ describe("a planning area read", () => {
   })
 
   test("the status is a reading of the versions against the day: none is Draft, only an upcoming one Upcoming, only an ended one Expired; the dates are the version's, the end as the last day in force", () => {
-    const undrawn = planningAreaAdapter.toRecord(withBoundaries(nordhavn, []), areaContext())
+    const undrawn = recordFrom(planningAreaAdapter, withBoundaries(nordhavn, []), areaContext())
     assert.equal(undrawn.id, webIdOf("area", nordhavn.id))
     assert.equal(undrawn.status, "Draft")
     assert.equal(undrawn.submittedValues?.geometry, undefined)
     assert.equal(undrawn.facts["Effective from"], undefined)
 
-    const upcoming = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired, valbyUpcoming]), areaContext())
+    const upcoming = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired, valbyUpcoming]), areaContext())
     assert.equal(upcoming.id, webIdOf("area", valby.id))
     assert.equal(upcoming.status, "Upcoming")
     assert.equal(upcoming.submittedValues?.effectiveFrom, "2027-01-01")
     assert.equal(upcoming.submittedValues?.boundaryId, valbyUpcoming.id)
     assert.equal(upcoming.facts["Area purpose"], "Notification zone")
 
-    const expired = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
+    const expired = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext())
     assert.equal(expired.status, "Expired")
     assert.equal(expired.submittedValues?.effectiveTo, "2025-12-31", "the wire's first day out of force is the day after the last day in")
     assert.equal(expired.facts["Effective to"], "2025-12-31")
@@ -158,20 +158,20 @@ describe("a planning area read", () => {
 
   test("a version in force on the day wins over an ended and an upcoming one", () => {
     const inForce: PlanningAreaBoundary = { ...indrebyBoundary, id: "019995e0-0000-7000-8000-0000000000e4", planningAreaId: valby.id, validFrom: "2026-01-01", validTo: "2027-01-01" }
-    const record = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired, inForce, valbyUpcoming]), areaContext())
+    const record = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired, inForce, valbyUpcoming]), areaContext())
     assert.equal(record.status, "Active")
     assert.equal(record.submittedValues?.boundaryId, inForce.id)
     assert.equal(record.submittedValues?.effectiveTo, "2026-12-31")
   })
 
   test("only the version in force lends the record its geometry: an upcoming or ended version keeps its dates and id for the form, and the map has nothing to draw", () => {
-    const upcoming = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyUpcoming]), areaContext())
+    const upcoming = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyUpcoming]), areaContext())
     assert.equal(upcoming.submittedValues?.geometry, undefined)
     assert.equal(upcoming.submittedValues?.boundaryId, valbyUpcoming.id)
-    const expired = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
+    const expired = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext())
     assert.equal(expired.submittedValues?.geometry, undefined)
     assert.equal(expired.submittedValues?.boundaryId, valbyExpired.id)
-    assert.equal(planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext()).submittedValues?.geometryConfirmed, true, "a drawn version is the form's confirmation")
+    assert.equal(recordFrom(planningAreaAdapter, withBoundaries(indreby, [indrebyBoundary]), areaContext()).submittedValues?.geometryConfirmed, true, "a drawn version is the form's confirmation")
   })
 
   test("the day is read in the project's own timezone, so the version in force is the project's and not the browser's", () => {
@@ -179,12 +179,12 @@ describe("a planning area read", () => {
     lateEvening.now = new Date("2026-09-30T23:30:00Z")
     const fromOctober: PlanningAreaBoundary = { ...indrebyBoundary, validFrom: "2026-10-01" }
     // Copenhagen is already on 1 October at 23:30Z; the record reads the version as in force.
-    assert.equal(planningAreaAdapter.toRecord(withBoundaries(indreby, [fromOctober]), lateEvening).status, "Active")
-    const newYorkProject = projectAdapter.toRecord({ ...harbor, timezone: "America/New_York" }, context())
+    assert.equal(recordFrom(planningAreaAdapter, withBoundaries(indreby, [fromOctober]), lateEvening).status, "Active")
+    const newYorkProject = recordFrom(projectAdapter, { ...harbor, timezone: "America/New_York" }, context())
     const newYork: ServerRecordsState = new Map([["configure.organization", loaded({ records: [newYorkProject], serverIds: new Map([[newYorkProject.id, harbor.id]]) }, 1)]])
     const evening = context(resolverOver(newYork))
     evening.now = new Date("2026-09-30T23:30:00Z")
-    assert.equal(planningAreaAdapter.toRecord(withBoundaries(nordhavn, [{ ...fromOctober, projectId: harbor.id, planningAreaId: nordhavn.id }]), evening).status, "Upcoming")
+    assert.equal(recordFrom(planningAreaAdapter, withBoundaries(nordhavn, [{ ...fromOctober, projectId: harbor.id, planningAreaId: nordhavn.id }]), evening).status, "Upcoming")
   })
 
   test("an area has no status on the wire: the adapter lists none and every move is refused before the API", () => {
@@ -283,27 +283,27 @@ describe("the record the Areas & Zones pane writes", () => {
 })
 
 describe("an edited planning area", () => {
-  const before = planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext())
+  const before = recordFrom(planningAreaAdapter, withBoundaries(indreby, [indrebyBoundary]), areaContext())
   const edited = (values: Record<string, string>): BusinessRecord => ({ ...before, name: values.areaName ?? before.name, submittedValues: { ...before.submittedValues, ...values } })
 
   test("a new name or purpose is a PlanningAreaPatch; the reference and the project do not move", () => {
-    const body = planningAreaAdapter.toPatchBody(before, edited({ areaName: "Indre By", purpose: "service-operations" }), areaContext())
+    const body = planningAreaAdapter.toPatchBody?.(before, edited({ areaName: "Indre By", purpose: "service-operations" }), areaContext())
     assert.deepEqual(body, { area: { name: "Indre By", purpose: "service-operations" } })
     assert.ok(PlanningAreaPatch.safeParse((body as { area: unknown }).area).success)
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ areaCode: "OP-CEN-02" }), areaContext()), { path: "areaCode", message: "The reference is set once: an area that needs another reference is another area" })
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ projectId: harborWebId }), areaContext()), { path: "projectId", message: "An area stays in its project" })
-    assert.equal(planningAreaAdapter.toPatchBody(before, before, areaContext()), null, "nothing moved, nothing sent")
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, edited({ areaCode: "OP-CEN-02" }), areaContext()), { path: "areaCode", message: "The reference is set once: an area that needs another reference is another area" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, edited({ projectId: harborWebId }), areaContext()), { path: "projectId", message: "An area stays in its project" })
+    assert.equal(planningAreaAdapter.toPatchBody?.(before, before, areaContext()), null, "nothing moved, nothing sent")
   })
 
   test("a redrawn boundary or a moved end is a patch of the version in force; the start does not move", () => {
     const redrawn = JSON.stringify(RING.slice(0, 4).map(([lng, lat]) => [lng + 0.01, lat]))
-    const body = planningAreaAdapter.toPatchBody(before, edited({ geometry: redrawn, effectiveTo: "2026-12-31" }), areaContext()) as { boundary: { id: string; patch: unknown } }
+    const body = planningAreaAdapter.toPatchBody?.(before, edited({ geometry: redrawn, effectiveTo: "2026-12-31" }), areaContext()) as { boundary: { id: string; patch: unknown } }
     assert.equal(body.boundary.id, indrebyBoundary.id)
     assert.deepEqual(body.boundary.patch, { boundary: parsePolygonText(redrawn), validTo: "2027-01-01" })
     assert.ok(PlanningAreaBoundaryPatch.safeParse(body.boundary.patch).success)
-    const reopened = planningAreaAdapter.toPatchBody(planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext()), { ...planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext()), submittedValues: { ...planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext()).submittedValues, effectiveTo: "" } }, areaContext())
+    const reopened = planningAreaAdapter.toPatchBody?.(recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext()), { ...recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext()), submittedValues: { ...recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext()).submittedValues, effectiveTo: "" } }, areaContext())
     assert.deepEqual(reopened, { boundary: { id: valbyExpired.id, patch: { validTo: null } } }, "a cleared end reopens the version")
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, edited({ effectiveFrom: "2026-02-01" }), areaContext()), { path: "effectiveFrom", message: "A version's start does not move: end this one and draw the next" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, edited({ effectiveFrom: "2026-02-01" }), areaContext()), { path: "effectiveFrom", message: "A version's start does not move: end this one and draw the next" })
   })
 
   test("through the store's write, the renamed row keeps its web id, so one server row is one row here", async () => {
@@ -329,22 +329,22 @@ describe("an edited planning area", () => {
   })
 
   test("on an area whose version has ended, a new polygon and a new start are the next version, never a patch of the ended one", () => {
-    const ended = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
+    const ended = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext())
     const drawn: BusinessRecord = { ...ended, submittedValues: { ...ended.submittedValues, geometry: JSON.stringify(polygon), effectiveFrom: "2026-10-01" } }
-    assert.deepEqual(planningAreaAdapter.toPatchBody(ended, drawn, areaContext()), { boundary: { create: { boundary: polygon, validFrom: "2026-10-01" } } })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(ended, drawn, areaContext()), { boundary: { create: { boundary: polygon, validFrom: "2026-10-01" } } })
     const sameStart: BusinessRecord = { ...ended, submittedValues: { ...ended.submittedValues, geometry: JSON.stringify(polygon) } }
-    assert.deepEqual(planningAreaAdapter.toPatchBody(ended, sameStart, areaContext()), { path: "effectiveFrom", message: "This version has ended: give the day the next one comes into force" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(ended, sameStart, areaContext()), { path: "effectiveFrom", message: "This version has ended: give the day the next one comes into force" })
     const malformed: BusinessRecord = { ...before, submittedValues: { ...before.submittedValues, geometry: JSON.stringify({ type: "FeatureCollection", features: [] }) } }
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, malformed, areaContext()), { path: "geometry", message: NOT_A_POLYGON })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, malformed, areaContext()), { path: "geometry", message: NOT_A_POLYGON })
   })
 
   test("a first drawing on an area registered undrawn is a new version", () => {
-    const undrawn = planningAreaAdapter.toRecord(withBoundaries(nordhavn, []), areaContext())
+    const undrawn = recordFrom(planningAreaAdapter, withBoundaries(nordhavn, []), areaContext())
     const drawn: BusinessRecord = { ...undrawn, submittedValues: { ...undrawn.submittedValues, geometry: JSON.stringify(polygon), effectiveFrom: "2026-10-01" } }
-    const body = planningAreaAdapter.toPatchBody(undrawn, drawn, areaContext()) as { boundary: { create: unknown } }
+    const body = planningAreaAdapter.toPatchBody?.(undrawn, drawn, areaContext()) as { boundary: { create: unknown } }
     assert.deepEqual(body, { boundary: { create: { boundary: polygon, validFrom: "2026-10-01" } } })
     assert.ok(PlanningAreaBoundaryCreate.safeParse(body.boundary.create).success)
-    assert.deepEqual(planningAreaAdapter.toPatchBody(undrawn, { ...drawn, submittedValues: { ...drawn.submittedValues, effectiveFrom: "" } }, areaContext()), { path: "effectiveFrom", message: "A drawn area needs the day its boundary comes into force" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(undrawn, { ...drawn, submittedValues: { ...drawn.submittedValues, effectiveFrom: "" } }, areaContext()), { path: "effectiveFrom", message: "A drawn area needs the day its boundary comes into force" })
   })
 
   test("the update sends the version first, the area second, and reads the versions back, so the request most likely to be refused goes before anything is written", async () => {
@@ -353,7 +353,7 @@ describe("an edited planning area", () => {
       () => json(renamed),
       () => json({ items: [indrebyBoundary], nextCursor: null }),
     ])
-    const answer = await planningAreaAdapter.update(clientOver(fetch), indreby.id, { area: { name: "Indre By" } })
+    const answer = await planningAreaAdapter.update!(clientOver(fetch), indreby.id, { area: { name: "Indre By" } })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/planning-areas/${indreby.id}`, `GET http://api.test/planning-areas/${indreby.id}/boundaries?limit=200`])
     assert.deepEqual(bodyOf(calls[0]), { name: "Indre By" })
     assert.equal(answer.name, "Indre By")
@@ -361,58 +361,58 @@ describe("an edited planning area", () => {
 
     const ended = { ...indrebyBoundary, validTo: "2027-01-01" }
     const second = scripted([() => json(ended), () => json(renamed), () => json({ items: [ended], nextCursor: null })])
-    const answer2 = await planningAreaAdapter.update(clientOver(second.fetch), indreby.id, { area: { name: "Indre By" }, boundary: { id: indrebyBoundary.id, patch: { validTo: "2027-01-01" } } })
+    const answer2 = await planningAreaAdapter.update!(clientOver(second.fetch), indreby.id, { area: { name: "Indre By" }, boundary: { id: indrebyBoundary.id, patch: { validTo: "2027-01-01" } } })
     assert.deepEqual(second.calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/planning-area-boundaries/${indrebyBoundary.id}`, `PATCH http://api.test/planning-areas/${indreby.id}`, `GET http://api.test/planning-areas/${indreby.id}/boundaries?limit=200`])
     assert.equal(answer2.boundaries[0].validTo, "2027-01-01")
 
     const third = scripted([() => json(indrebyBoundary, 201, { location: `/planning-area-boundaries/${indrebyBoundary.id}` }), () => json(indreby), () => json({ items: [indrebyBoundary], nextCursor: null })])
-    await planningAreaAdapter.update(clientOver(third.fetch), indreby.id, { boundary: { create: { boundary: polygon, validFrom: "2026-01-01" } } })
+    await planningAreaAdapter.update!(clientOver(third.fetch), indreby.id, { boundary: { create: { boundary: polygon, validFrom: "2026-01-01" } } })
     assert.deepEqual(third.calls.map((call) => `${call.init.method} ${call.url}`), [`POST http://api.test/planning-areas/${indreby.id}/boundaries`, `GET http://api.test/planning-areas/${indreby.id}`, `GET http://api.test/planning-areas/${indreby.id}/boundaries?limit=200`])
 
     const refused = scripted([() => problem(409, "This planning area already has a boundary in force over that period; end it first")])
-    await assert.rejects(() => planningAreaAdapter.update(clientOver(refused.fetch), indreby.id, { area: { name: "Indre By" }, boundary: { id: indrebyBoundary.id, patch: { validTo: "2027-01-01" } } }))
+    await assert.rejects(() => planningAreaAdapter.update!(clientOver(refused.fetch), indreby.id, { area: { name: "Indre By" }, boundary: { id: indrebyBoundary.id, patch: { validTo: "2027-01-01" } } }))
     assert.equal(refused.calls.length, 1, "the area's patch is never sent when the version's is refused")
   })
 })
 
 describe("an area's boundary version history (O21 of #290)", () => {
   test("the record carries every version by the day each starts, its last day in force and how it stands on the project's day", () => {
-    const record = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyUpcoming, valbyExpired, { ...indrebyBoundary, id: "019995e0-0000-7000-8000-0000000000e4", planningAreaId: valby.id, validFrom: "2026-01-01", validTo: "2027-01-01" }]), areaContext())
+    const record = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyUpcoming, valbyExpired, { ...indrebyBoundary, id: "019995e0-0000-7000-8000-0000000000e4", planningAreaId: valby.id, validFrom: "2026-01-01", validTo: "2027-01-01" }]), areaContext())
     assert.equal(typeof record.submittedValues?.[BOUNDARY_VERSIONS_KEY], "string")
     assert.deepEqual(boundaryVersionsOf(record), [
       { id: valbyExpired.id, validFrom: "2025-01-01", lastDay: "2025-12-31", standing: "ended" },
       { id: "019995e0-0000-7000-8000-0000000000e4", validFrom: "2026-01-01", lastDay: "2026-12-31", standing: "in force" },
       { id: valbyUpcoming.id, validFrom: "2027-01-01", lastDay: null, standing: "upcoming" },
     ])
-    assert.deepEqual(boundaryVersionsOf(planningAreaAdapter.toRecord(withBoundaries(nordhavn, []), areaContext())), [])
+    assert.deepEqual(boundaryVersionsOf(recordFrom(planningAreaAdapter, withBoundaries(nordhavn, []), areaContext())), [])
   })
 
-  const before = planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext())
+  const before = recordFrom(planningAreaAdapter, withBoundaries(indreby, [indrebyBoundary]), areaContext())
   const asking = (record: BusinessRecord, values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
 
   test("next version from a day ends the version in force there and adds the next from it", () => {
-    const body = planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext())
+    const body = planningAreaAdapter.toPatchBody?.(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext())
     assert.deepEqual(body, { boundary: { successor: { endId: indrebyBoundary.id, create: { boundary: polygon, validFrom: "2027-01-01" } } } })
     assert.ok(PlanningAreaBoundaryCreate.safeParse((body as { boundary: { successor: { create: unknown } } }).boundary.successor.create).success)
   })
 
   test("a version that ended before the day is left as it stands, and the next is added after the gap", () => {
-    const ended = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
-    assert.deepEqual(planningAreaAdapter.toPatchBody(ended, asking(ended, { [NEXT_VERSION_FROM_KEY]: "2026-11-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), {
+    const ended = recordFrom(planningAreaAdapter, withBoundaries(valby, [valbyExpired]), areaContext())
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(ended, asking(ended, { [NEXT_VERSION_FROM_KEY]: "2026-11-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), {
       boundary: { successor: { endId: null, create: { boundary: polygon, validFrom: "2026-11-01" } } },
     })
   })
 
   test("is refused before the API on or before the latest version's start, and without a drawing a map can draw", () => {
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2026-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), { path: NEXT_VERSION_FROM_KEY, message: nextVersionAfter("2026-01-01") })
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: "The next version needs its boundary: give the polygon it draws" })
-    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: "[]" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: NOT_A_POLYGON })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2026-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), { path: NEXT_VERSION_FROM_KEY, message: nextVersionAfter("2026-01-01") })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: "The next version needs its boundary: give the polygon it draws" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody?.(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: "[]" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: NOT_A_POLYGON })
   })
 
   test("the update ends the version first and adds the next second, since the API refuses an overlap, then reads the versions back", async () => {
     const next = { ...indrebyBoundary, id: "01a0d2a4-a280-7017-8000-0000000000aa", validFrom: "2027-01-01" }
     const { fetch, calls } = scripted([() => json({ ...indrebyBoundary, validTo: "2027-01-01" }), () => json(next, 201), () => json(indreby), () => json({ items: [{ ...indrebyBoundary, validTo: "2027-01-01" }, next], nextCursor: null })])
-    const answer = await planningAreaAdapter.update(clientOver(fetch), indreby.id, { boundary: { successor: { endId: indrebyBoundary.id, create: { boundary: polygon, validFrom: "2027-01-01" } } } })
+    const answer = await planningAreaAdapter.update!(clientOver(fetch), indreby.id, { boundary: { successor: { endId: indrebyBoundary.id, create: { boundary: polygon, validFrom: "2027-01-01" } } } })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [
       `PATCH http://api.test/planning-area-boundaries/${indrebyBoundary.id}`,
       `POST http://api.test/planning-areas/${indreby.id}/boundaries`,
@@ -427,7 +427,7 @@ describe("an area's boundary version history (O21 of #290)", () => {
 
 describe("a collection calendar read", () => {
   test("is calendar-<uuid> under its project's web id: the project's calendars are found by project", () => {
-    const record = collectionCalendarAdapter.toRecord(central2026, calendarContext())
+    const record = recordFrom(collectionCalendarAdapter, central2026, calendarContext())
     assert.equal(record.id, `calendar-${central2026.id}`)
     assert.equal(record.name, "Copenhagen Central 2026")
     assert.equal(record.status, "Active")
@@ -444,14 +444,14 @@ describe("a collection calendar read", () => {
   })
 
   test("the domain reads its period as it reads a fixture calendar's, and the project's holidays are its list's, not the calendar's", () => {
-    const record = collectionCalendarAdapter.toRecord(central2026, calendarContext())
+    const record = recordFrom(collectionCalendarAdapter, central2026, calendarContext())
     const calendar = calendarFromRecord(record)
     assert.equal(calendar?.validFrom, "2026-01-01")
     assert.equal(calendar?.validTo, "2026-12-31")
     const resolved = resolveProjectCalendar(copenhagenWebId, { projects: [copenhagenRecord], calendars: [record] })
     assert.equal(resolved.list?.name, "Danish public holidays")
     assert.equal(resolved.list?.dates.size, 0, "no list record of that name among the calendars, so no days")
-    const open = collectionCalendarAdapter.toRecord({ ...harborCalendar, validTo: null }, calendarContext())
+    const open = recordFrom(collectionCalendarAdapter, { ...harborCalendar, validTo: null }, calendarContext())
     assert.equal(open.submittedValues?.validTo, undefined, "an open period has no last day")
     assert.equal(open.facts.Validity, "2026-09-01 – open")
   })
@@ -505,26 +505,26 @@ describe("the record the Collection calendars pane writes", () => {
 })
 
 describe("an edited collection calendar", () => {
-  const before = collectionCalendarAdapter.toRecord(central2026, calendarContext())
+  const before = recordFrom(collectionCalendarAdapter, central2026, calendarContext())
   const edited = (values: Record<string, string>): BusinessRecord => ({ ...before, name: values.calendarName ?? before.name, submittedValues: { ...before.submittedValues, ...values } })
 
   test("a new name or period is a CollectionCalendarPatch, the end as the first day out of force and a cleared end null; the project does not move", () => {
-    const body = collectionCalendarAdapter.toPatchBody(before, edited({ calendarName: "Copenhagen Central 2026 (revised)", validTo: "2026-06-30" }), calendarContext())
+    const body = collectionCalendarAdapter.toPatchBody?.(before, edited({ calendarName: "Copenhagen Central 2026 (revised)", validTo: "2026-06-30" }), calendarContext())
     assert.deepEqual(body, { name: "Copenhagen Central 2026 (revised)", validTo: "2026-07-01" })
     assert.ok(CollectionCalendarPatch.safeParse(body).success)
-    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ validTo: "" }), calendarContext()), { validTo: null })
-    assert.deepEqual(collectionCalendarAdapter.toPatchBody(before, edited({ projectId: harborWebId }), calendarContext()), { path: "projectId", message: "A calendar stays in its project" })
-    assert.equal(collectionCalendarAdapter.toPatchBody(before, before, calendarContext()), null)
+    assert.deepEqual(collectionCalendarAdapter.toPatchBody?.(before, edited({ validTo: "" }), calendarContext()), { validTo: null })
+    assert.deepEqual(collectionCalendarAdapter.toPatchBody?.(before, edited({ projectId: harborWebId }), calendarContext()), { path: "projectId", message: "A calendar stays in its project" })
+    assert.equal(collectionCalendarAdapter.toPatchBody?.(before, before, calendarContext()), null)
   })
 
   test("holidays left on a record are no change: a calendar carries none", () => {
-    assert.equal(collectionCalendarAdapter.toPatchBody(before, edited({ holidayDates: "2026-12-24" }), calendarContext()), null)
+    assert.equal(collectionCalendarAdapter.toPatchBody?.(before, edited({ holidayDates: "2026-12-24" }), calendarContext()), null)
   })
 
   test("the update is the one PATCH, and answers the calendar as it now stands", async () => {
     const renamed = { ...central2026, name: "Copenhagen Central 2026 (revised)" }
     const { fetch, calls } = scripted([() => json(renamed)])
-    const answer = await collectionCalendarAdapter.update(clientOver(fetch), central2026.id, { name: "Copenhagen Central 2026 (revised)" })
+    const answer = await collectionCalendarAdapter.update!(clientOver(fetch), central2026.id, { name: "Copenhagen Central 2026 (revised)" })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/collection-calendars/${central2026.id}`])
     assert.deepEqual(bodyOf(calls[0]), { name: "Copenhagen Central 2026 (revised)" })
     assert.equal(answer.name, "Copenhagen Central 2026 (revised)")

@@ -18,7 +18,7 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch, post, type ApiClient } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { commandOf, isLocalRefusal, ofKind, typed, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
@@ -44,7 +44,7 @@ export function itemsOfRecord(record: BusinessRecord): BulkyItem[] {
   }
 }
 
-export function toBulkyBookingRecord(booking: BulkyBooking, context: MappingContext): BusinessRecord {
+export function toBulkyBookingRecord(booking: BulkyBooking, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(booking.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", booking.projectId)
   const customer = nameVia(context, CUSTOMER_PREFIX, booking.customerId)
@@ -65,12 +65,9 @@ export function toBulkyBookingRecord(booking: BulkyBooking, context: MappingCont
   }
   const reference = (prefix: string, serverId: string | null) => (serverId === null ? "" : webIdVia(context, prefix, serverId))
   return {
-    id: webIdOf(BULKY_BOOKING_PREFIX, booking.id),
     name: `Bulky collection · ${place} · ${formatShortDay(booking.day)}`,
     context: `${customer} · ${place}`,
     status: BULKY_STATUS_LABELS[booking.status],
-    ...NO_PRESENTATION,
-    ...stampFacts(booking, context.now),
     value: booking.day,
     description: items,
     facts,
@@ -157,16 +154,15 @@ function routeBodyOf(input: CommandInput, _record: BusinessRecord, context: Mapp
 }
 
 export const BULKY_BOOKING_COMMANDS: Readonly<Record<string, RecordCommand<BulkyBooking>>> = {
-  [ROUTE_BOOKING]: {
+  [ROUTE_BOOKING]: commandOf({
     toBody: routeBodyOf,
-    run: async (client, serverId, body) => {
-      const { routeId } = body as { routeId: string }
+    run: async (client, serverId, { routeId }) => {
       await post(client, `/routes/${routeId}/pickups`, { service: "bulky", bulkyBookingId: serverId })
       return await get<BulkyBooking>(client, `/bulky-bookings/${serverId}`)
     },
     refused: (record) => `${record.name} was not routed`,
     touches: ["route-studio.routes", "route-studio.pickups", "route-studio.live"],
-  },
+  }),
   [CANCEL_BOOKING]: {
     toBody: (input) => ({ reason: typeof input.reason === "string" ? input.reason : "" }),
     run: (client, serverId, body) => command<BulkyBooking>(client, `/bulky-bookings/${serverId}/cancel`, body),
@@ -180,7 +176,7 @@ export function bulkyAvailability(client: ApiClient, place: { propertyId?: strin
   return get<BulkyAvailability>(client, `/bulky-bookings/availability?${query.toString()}`).then((answer) => answer.days)
 }
 
-export const bulkyBookingAdapter: ResourceAdapter<BulkyBooking> = {
+export const bulkyBookingAdapter: ResourceAdapter<BulkyBooking, BulkyBookingCreate, BulkyBookingPatch> = {
   prefix: BULKY_BOOKING_PREFIX,
   auditTable: "bulky_booking",
   // A row the dialog has just made is `bulky-bookings-bulky-booking-<clock>` until the server answers: owned by its recordKind.

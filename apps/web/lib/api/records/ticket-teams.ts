@@ -20,7 +20,7 @@ import { NO_ONE } from "@/lib/data/properties"
 import { TICKET_TEAMS_MODULE, TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 
 import { create, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, ofKind, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, patchOf, statusLabel, statusToken, typed, type LocalRefusal, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { userAdapter } from "./organisation"
 import { sameSet } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -54,15 +54,12 @@ function teamFieldsOf(record: BusinessRecord): { name: string; status: "active" 
   return { name, status }
 }
 
-export function toTicketTeamRecord(team: Team, context: MappingContext): BusinessRecord {
+export function toTicketTeamRecord(team: Team, context: MappingContext): RecordFields {
   const members = team.memberUserAccountIds.map((id) => nameVia(context, "user", id))
   return {
-    id: webIdOf(TICKET_TEAM_PREFIX, team.id),
     name: team.name,
     context: members.length === 1 ? "1 member" : `${members.length} members`,
     status: statusLabel(team.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(team, context.now),
     description: "A team the company's tickets wait with.",
     facts: { Members: members.length === 0 ? "None" : members.join(", "), Status: statusLabel(team.status) },
     projectIds: [],
@@ -78,7 +75,7 @@ export function toTicketTeamRecord(team: Team, context: MappingContext): Busines
 /** An edit's two halves: the team's own fields, and the whole set of members where the form changed it. */
 type TeamWrite = { team?: TeamPatch; memberUserAccountIds?: string[] }
 
-export const ticketTeamAdapter: ResourceAdapter<Team> = {
+export const ticketTeamAdapter: ResourceAdapter<Team, unknown, TeamWrite> = {
   prefix: TICKET_TEAM_PREFIX,
   auditTable: "team",
   owns: isTicketTeamRecord,
@@ -113,8 +110,7 @@ export const ticketTeamAdapter: ResourceAdapter<Team> = {
   },
   create: (client, body) => create<Team>(client, "/teams", body).then((created) => created.body),
   // The team first, then the whole set through its own route; the answer is the team as it now stands.
-  update: async (client, serverId, body) => {
-    const write = body as TeamWrite
+  update: async (client, serverId, write) => {
     let team: Team | undefined
     if (write.team !== undefined) team = await patch<Team>(client, `/teams/${serverId}`, write.team)
     if (write.memberUserAccountIds !== undefined) team = await put<Team>(client, `/teams/${serverId}/members`, { memberUserAccountIds: write.memberUserAccountIds })

@@ -16,6 +16,7 @@ import { propertiesModule } from "../records/properties"
 import { watchReads, type RecordStoreContext } from "../records/record-store"
 import { loaded, readModuleInto, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { clientOver, json, problem } from "./scripted-fetch"
+import { recordFrom } from "../records/adapter"
 
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
@@ -25,7 +26,7 @@ const NOON = Date.parse("2026-10-24T10:00:00Z")
 
 /** The organisation holding the project under `name`. */
 const organisation = (name: string) => {
-  const record = projectAdapter.toRecord({ ...copenhagen, name }, { resolve: resolverOver(new Map()) })
+  const record = recordFrom(projectAdapter, { ...copenhagen, name }, { resolve: resolverOver(new Map()) })
   return loaded({ records: [record], serverIds: new Map([[record.id, copenhagen.id]]) }, NOON)
 }
 

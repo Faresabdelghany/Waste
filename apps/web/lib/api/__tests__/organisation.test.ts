@@ -12,7 +12,7 @@ import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-ca
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope, isProjectRecordId, projectRecordsOf, type ProjectRecordId } from "../../data/project-scope"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import {
   accessMapOf,
   accessModule,
@@ -96,7 +96,7 @@ function resolverOver(entries: Array<[BusinessRecord, string]>): Resolver {
 
 describe("the company", () => {
   test("the tenant's row is company-<uuid>, named by its legal name, with the wire's fields as its facts", () => {
-    const record = companyAdapter.toRecord(company, context())
+    const record = recordFrom(companyAdapter, company, context())
     assert.equal(record.id, webIdOf("company", COMPANY_ID))
     assert.equal(record.name, "Kystbyen Renovation A/S")
     assert.equal(record.status, "Active")
@@ -107,21 +107,21 @@ describe("the company", () => {
   })
 
   test("a patch says only what moved, and the contracts accept it", () => {
-    const before = companyAdapter.toRecord(company, context())
+    const before = recordFrom(companyAdapter, company, context())
     const after = { ...before, submittedValues: { ...before.submittedValues, legalName: "Kystbyen Renovation ApS", country: "Denmark" } }
-    const body = companyAdapter.toPatchBody(before, after, context())
+    const body = companyAdapter.toPatchBody?.(before, after, context())
     assert.deepEqual(body, { legalName: "Kystbyen Renovation ApS" })
     assert.ok(CompanyPatch.safeParse(body).success)
-    assert.equal(companyAdapter.toPatchBody(before, before, context()), null, "nothing moved, nothing sent")
+    assert.equal(companyAdapter.toPatchBody?.(before, before, context()), null, "nothing moved, nothing sent")
   })
 
   test("the registration number travels from the typed value alone; a fact is presentation and is never read back", () => {
-    const before = companyAdapter.toRecord(company, context())
+    const before = recordFrom(companyAdapter, company, context())
     assert.equal(before.submittedValues?.registrationNumber, "12345678", "the read seeds the form, so the value is always typed")
     const factOnly = { ...before, facts: { ...before.facts, CVR: "99999999" } }
-    assert.equal(companyAdapter.toPatchBody(before, factOnly, context()), null, "a changed fact moves nothing")
+    assert.equal(companyAdapter.toPatchBody?.(before, factOnly, context()), null, "a changed fact moves nothing")
     const typedChange = { ...before, submittedValues: { ...before.submittedValues, registrationNumber: "87654321" } }
-    assert.deepEqual(companyAdapter.toPatchBody(before, typedChange, context()), { registrationNumber: "87654321" })
+    assert.deepEqual(companyAdapter.toPatchBody?.(before, typedChange, context()), { registrationNumber: "87654321" })
   })
 
   test("the company's status is the API's to state: the adapter lists no status a patch may carry", () => {
@@ -129,10 +129,10 @@ describe("the company", () => {
   })
 
   test("the tenant's record is told from a customer organisation by kind, not by the company- prefix both carry", () => {
-    const tenant = companyAdapter.toRecord(company, context())
+    const tenant = recordFrom(companyAdapter, company, context())
     assert.ok(isCompanyRecord(tenant))
     const osterbroId = "01a0d2a4-a280-700b-8000-000000000002"
-    const osterbro = customerAdapter.toRecord(
+    const osterbro = recordFrom(customerAdapter, 
       { id: osterbroId, ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" },
       context(),
     )
@@ -142,36 +142,36 @@ describe("the company", () => {
   })
 
   test("the invoice identity (#291 C4) reads back as facts and typed values, and a patch sets it and clears it", () => {
-    const before = companyAdapter.toRecord(company, context())
+    const before = recordFrom(companyAdapter, company, context())
     assert.equal(before.facts["VAT number"], undefined, "no identity, no fact")
     assert.equal(before.submittedValues?.vatNumber, undefined)
     const set = { ...before, submittedValues: { ...before.submittedValues, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" } }
-    const body = companyAdapter.toPatchBody(before, set, context())
+    const body = companyAdapter.toPatchBody?.(before, set, context())
     assert.deepEqual(body, { vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" })
     assert.ok(CompanyPatch.safeParse(body).success)
-    const read = companyAdapter.toRecord({ ...company, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }, context())
+    const read = recordFrom(companyAdapter, { ...company, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }, context())
     assert.equal(read.facts["VAT number"], "DK12345678")
     assert.equal(read.facts.IBAN, "DK5000400440116243")
     assert.equal(read.facts.BIC, "DABADKKK")
     assert.equal(read.facts["FIK creditor"], "85123456")
     assert.equal(read.submittedValues?.fikCreditorNumber, "85123456")
-    assert.equal(companyAdapter.toPatchBody(read, read, context()), null, "an identity read back moves nothing")
+    assert.equal(companyAdapter.toPatchBody?.(read, read, context()), null, "an identity read back moves nothing")
     const cleared = { ...read, submittedValues: { ...read.submittedValues, fikCreditorNumber: "" } }
-    assert.deepEqual(companyAdapter.toPatchBody(read, cleared, context()), { fikCreditorNumber: null })
+    assert.deepEqual(companyAdapter.toPatchBody?.(read, cleared, context()), { fikCreditorNumber: null })
   })
 
   test("the postal address (#291 C5) reads back as a fact and a typed value, a patch sets it whole and a blank clears it", () => {
-    const before = companyAdapter.toRecord(company, context())
+    const before = recordFrom(companyAdapter, company, context())
     assert.equal(before.facts["Postal address"], undefined)
     const address = "Havnegade 4\n2100 København Ø"
     const set = { ...before, submittedValues: { ...before.submittedValues, postalAddress: address } }
-    const body = companyAdapter.toPatchBody(before, set, context())
+    const body = companyAdapter.toPatchBody?.(before, set, context())
     assert.deepEqual(body, { postalAddress: address })
     assert.ok(CompanyPatch.safeParse(body).success)
-    const read = companyAdapter.toRecord({ ...company, postalAddress: address }, context())
+    const read = recordFrom(companyAdapter, { ...company, postalAddress: address }, context())
     assert.equal(read.facts["Postal address"], "Havnegade 4, 2100 København Ø", "one line in a fact")
     assert.equal(read.submittedValues?.postalAddress, address)
-    assert.deepEqual(companyAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, postalAddress: "  " } }, context()), { postalAddress: null })
+    assert.deepEqual(companyAdapter.toPatchBody?.(read, { ...read, submittedValues: { ...read.submittedValues, postalAddress: "  " } }, context()), { postalAddress: null })
   })
 
   test("the company is not created here", () => {
@@ -182,7 +182,7 @@ describe("the company", () => {
 
 describe("the projects", () => {
   test("a project is project-<uuid>, with the wire's fields as its facts", () => {
-    const record = projectAdapter.toRecord(copenhagen, context())
+    const record = recordFrom(projectAdapter, copenhagen, context())
     assert.equal(record.id, webIdOf("project", copenhagen.id))
     assert.equal(record.name, "Copenhagen Central")
     assert.equal(record.context, "Project · municipality")
@@ -196,7 +196,7 @@ describe("the projects", () => {
   })
 
   test("a project without a holiday list carries neither the fact nor the typed value", () => {
-    const record = projectAdapter.toRecord(harbor, context())
+    const record = recordFrom(projectAdapter, harbor, context())
     assert.equal(record.id, webIdOf("project", harbor.id))
     assert.equal(record.status, "Onboarding")
     assert.equal(record.facts["Holiday list"], undefined)
@@ -204,7 +204,7 @@ describe("the projects", () => {
   })
 
   test("resolveProjectCalendar reads a server project's weekend and holiday list", () => {
-    const projects = [copenhagen, harbor, aarhus].map((project) => projectAdapter.toRecord(project, context()))
+    const projects = [copenhagen, harbor, aarhus].map((project) => recordFrom(projectAdapter, project, context()))
     const calendar = resolveProjectCalendar(projects[0].id, { projects, calendars: [] })
     assert.equal(calendar.list?.name, "Danish public holidays")
     assert.deepEqual(calendar.weekend, ["saturday", "sunday"])
@@ -214,12 +214,12 @@ describe("the projects", () => {
   })
 
   test("a project's project-<uuid> is what the scope vocabulary reads as a project record", () => {
-    const record = projectAdapter.toRecord(aarhus, context())
+    const record = recordFrom(projectAdapter, aarhus, context())
     assert.equal(record.id, `project-${aarhus.id}`)
     assert.ok(isProjectRecordId(record.id))
     assert.equal(record.facts.Weekend, "Fri–Sat")
     assert.equal(record.owner, "")
-    const organisation = [companyAdapter.toRecord(company, context()), record]
+    const organisation = [recordFrom(companyAdapter, company, context()), record]
     assert.deepEqual(
       projectRecordsOf(organisation).map((project) => project.id),
       [record.id],
@@ -228,7 +228,7 @@ describe("the projects", () => {
 
   test("a record the workspace made becomes a ProjectCreate the contracts accept, the weekend and list included", () => {
     const record: BusinessRecord = {
-      ...projectAdapter.toRecord(aarhus, context()),
+      ...recordFrom(projectAdapter, aarhus, context()),
       id: "organization-project-1700000000000",
       submittedValues: { name: "Aarhus North", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", weekend: "friday, saturday" },
     }
@@ -239,67 +239,67 @@ describe("the projects", () => {
   })
 
   test("a create missing what the API requires is refused here, naming the field", () => {
-    const record: BusinessRecord = { ...projectAdapter.toRecord(aarhus, context()), submittedValues: { name: "X", kind: "Contract" } }
+    const record: BusinessRecord = { ...recordFrom(projectAdapter, aarhus, context()), submittedValues: { name: "X", kind: "Contract" } }
     assert.deepEqual(projectAdapter.toCreateBody?.(record, context()), { path: "language", message: "A project needs a language" })
   })
 
   test("the Holiday lists pane's write becomes a patch of the weekend and the list, and a taken-away list is null", () => {
-    const before = projectAdapter.toRecord(copenhagen, context())
+    const before = recordFrom(projectAdapter, copenhagen, context())
     const renamed = { ...before, submittedValues: { ...before.submittedValues, weekend: "friday, saturday", holidayList: "Egyptian public holidays" } }
-    assert.deepEqual(projectAdapter.toPatchBody(before, renamed, context()), { weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" })
+    assert.deepEqual(projectAdapter.toPatchBody?.(before, renamed, context()), { weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" })
     const withoutList = { ...before, submittedValues: { ...before.submittedValues } }
     delete withoutList.submittedValues.holidayList
-    const body = projectAdapter.toPatchBody(before, withoutList, context())
+    const body = projectAdapter.toPatchBody?.(before, withoutList, context())
     assert.deepEqual(body, { holidayList: null })
     assert.ok(ProjectPatch.safeParse(body).success)
   })
 
   test("Settings › Portals & branding publishes a project under a slug and takes it down again (#293, #487): the public address reads back as a fact and a typed value", () => {
-    const before = projectAdapter.toRecord(copenhagen, context())
+    const before = recordFrom(projectAdapter, copenhagen, context())
     assert.equal(before.submittedValues?.publicSlug, undefined)
     const published = { ...before, submittedValues: { ...before.submittedValues, publicSlug: "kystbyen" } }
-    const body = projectAdapter.toPatchBody(before, published, context())
+    const body = projectAdapter.toPatchBody?.(before, published, context())
     assert.deepEqual(body, { publicSlug: "kystbyen" })
     assert.ok(ProjectPatch.safeParse(body).success)
-    const read = projectAdapter.toRecord({ ...copenhagen, publicSlug: "kystbyen" }, context())
+    const read = recordFrom(projectAdapter, { ...copenhagen, publicSlug: "kystbyen" }, context())
     assert.equal(read.facts["Public address"], "/p/kystbyen")
     assert.equal(read.submittedValues?.publicSlug, "kystbyen")
     const unpublished = { ...read, submittedValues: { ...read.submittedValues } }
     delete unpublished.submittedValues.publicSlug
-    assert.deepEqual(projectAdapter.toPatchBody(read, unpublished, context()), { publicSlug: null })
+    assert.deepEqual(projectAdapter.toPatchBody?.(read, unpublished, context()), { publicSlug: null })
   })
 
   test("Settings › Finance & invoicing sets a project's payment terms and reference scheme (#291 C4): they read back as facts and typed values, and a patch says only what moved", () => {
-    const before = projectAdapter.toRecord(copenhagen, context())
+    const before = recordFrom(projectAdapter, copenhagen, context())
     assert.equal(before.facts["Payment terms"], "30 days")
     assert.equal(before.facts["Payment reference"], "None")
     assert.equal(before.submittedValues?.paymentTermsDays, "30")
     assert.equal(before.submittedValues?.paymentReferenceScheme, "none")
-    assert.equal(projectAdapter.toPatchBody(before, before, context()), null, "terms read back move nothing")
+    assert.equal(projectAdapter.toPatchBody?.(before, before, context()), null, "terms read back move nothing")
     const after = { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: "14", paymentReferenceScheme: "fik-71" } }
-    const body = projectAdapter.toPatchBody(before, after, context())
+    const body = projectAdapter.toPatchBody?.(before, after, context())
     assert.deepEqual(body, { paymentTermsDays: 14, paymentReferenceScheme: "fik-71" })
     assert.ok(ProjectPatch.safeParse(body).success)
-    const read = projectAdapter.toRecord({ ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context())
+    const read = recordFrom(projectAdapter, { ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context())
     assert.equal(read.facts["Payment terms"], "14 days")
     assert.equal(read.facts["Payment reference"], "FIK 71")
   })
 
   test("Settings › Finance & invoicing holds a project's hires and jobs for review (M14 of #293): a flag read back as a fact and patched only when it moved", () => {
-    const before = projectAdapter.toRecord(copenhagen, context())
+    const before = recordFrom(projectAdapter, copenhagen, context())
     assert.equal(before.facts["Hires and jobs"], "Billed as charged")
     assert.equal(before.submittedValues?.holdForReview, false)
-    const body = projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, holdForReview: true } }, context())
+    const body = projectAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, holdForReview: true } }, context())
     assert.deepEqual(body, { holdForReview: true })
     assert.ok(ProjectPatch.safeParse(body).success)
-    assert.equal(projectAdapter.toRecord({ ...copenhagen, holdForReview: true }, context()).facts["Hires and jobs"], "Held for review")
+    assert.equal(recordFrom(projectAdapter, { ...copenhagen, holdForReview: true }, context()).facts["Hires and jobs"], "Held for review")
   })
 
   test("terms the API would refuse are refused here, naming the field, on a patch and a create", () => {
-    const before = projectAdapter.toRecord(copenhagen, context())
+    const before = recordFrom(projectAdapter, copenhagen, context())
     const refused = { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" }
     for (const terms of ["", "4.5", "366", "thirty"]) {
-      assert.deepEqual(projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: terms } }, context()), refused, terms)
+      assert.deepEqual(projectAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: terms } }, context()), refused, terms)
     }
     const made = { ...before, id: "organization-project-1700000000000", submittedValues: { name: "Odense", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", paymentTermsDays: "400" } }
     assert.deepEqual(projectAdapter.toCreateBody?.(made, context()), refused)
@@ -309,13 +309,13 @@ describe("the projects", () => {
   })
 
   test("a controlled action that moved the status is a status patch; the adapter lists exactly the statuses the wire has, so the store refuses the rest before a patch is built", () => {
-    const before = projectAdapter.toRecord(harbor, context())
-    const body = projectAdapter.toPatchBody(before, { ...before, status: "Active" }, context())
+    const before = recordFrom(projectAdapter, harbor, context())
+    const body = projectAdapter.toPatchBody?.(before, { ...before, status: "Active" }, context())
     assert.deepEqual(body, { status: "active" })
     assert.ok(ProjectPatch.safeParse(body).success)
     assert.deepEqual(projectAdapter.statuses, ["active", "onboarding"])
     // A patch to a status the wire has no word for says nothing — which is why writeRecord refuses it first (server-records.test.ts).
-    assert.equal(projectAdapter.toPatchBody(before, { ...before, status: "Suspended" }, context()), null)
+    assert.equal(projectAdapter.toPatchBody?.(before, { ...before, status: "Suspended" }, context()), null)
   })
 
   test("weekendLabel spells two consecutive days with a dash and anything else with commas", () => {
@@ -329,7 +329,7 @@ describe("the projects", () => {
 
 describe("the service providers", () => {
   test("a provider is service-provider-<uuid>, its own provider, its country and registration number its context, with the wire's fields as its facts", () => {
-    const record = serviceProviderAdapter.toRecord(nordren, context())
+    const record = recordFrom(serviceProviderAdapter, nordren, context())
     assert.equal(record.id, webIdOf("service-provider", nordren.id))
     assert.equal(record.serviceProviderId, record.id)
     assert.equal(record.context, "Denmark · 40291188")
@@ -349,14 +349,14 @@ describe("the service providers", () => {
 
   test("the create body spells the country as a code and the contracts accept it", () => {
     const record: BusinessRecord = {
-      ...serviceProviderAdapter.toRecord(nordren, context()),
+      ...recordFrom(serviceProviderAdapter, nordren, context()),
       id: "service-providers-service-provider-company-1",
       submittedValues: { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "Norway", contactName: "Kari", contactEmail: "kari@fjord.example" },
     }
     const body = serviceProviderAdapter.toCreateBody?.(record, context())
     assert.deepEqual(body, { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "NO", contactName: "Kari", contactEmail: "kari@fjord.example" })
     assert.ok(ServiceProviderCreate.safeParse(body).success)
-    const patch = serviceProviderAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, contactName: "Ola" } }, context())
+    const patch = serviceProviderAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, contactName: "Ola" } }, context())
     assert.deepEqual(patch, { contactName: "Ola" })
     assert.ok(ServiceProviderPatch.safeParse(patch).success)
   })
@@ -366,7 +366,7 @@ describe("the roles", () => {
   test("a seeded role's web id is role-<key>, the id the charter defaults are keyed by; a custom role's is the server's", () => {
     assert.equal(roleWebIdOf(administrator), "role-company-administrator")
     assert.equal(roleWebIdOf(custom), `role-${custom.id}`)
-    const record = roleAdapter.toRecord(administrator, context())
+    const record = recordFrom(roleAdapter, administrator, context())
     assert.equal(record.id, "role-company-administrator")
     assert.equal(record.facts.Type, "System")
     assert.equal(record.value, "4 permissions")
@@ -379,21 +379,21 @@ describe("the roles", () => {
   })
 
   test("a custom role the Settings dialog made becomes a RoleCreate the contracts accept", () => {
-    const record: BusinessRecord = { ...roleAdapter.toRecord(custom, context()), id: "role-mint-1", submittedValues: { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" } }
+    const record: BusinessRecord = { ...recordFrom(roleAdapter, custom, context()), id: "role-mint-1", submittedValues: { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" } }
     const body = roleAdapter.toCreateBody?.(record, context())
     assert.deepEqual(body, { name: "Night Dispatch", scope: "Assigned projects", description: "Night shift" })
     assert.ok(RoleCreate.safeParse(body).success)
-    const patch = roleAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, description: "Nights and weekends" } }, context())
+    const patch = roleAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, description: "Nights and weekends" } }, context())
     assert.ok(RolePatch.safeParse(patch).success)
     assert.deepEqual(patch, { description: "Nights and weekends" })
   })
 })
 
 describe("the users", () => {
-  const roleRecord = roleAdapter.toRecord(administrator, context())
-  const customRecord = roleAdapter.toRecord(custom, context())
-  const copenhagenRecord = projectAdapter.toRecord(copenhagen, context())
-  const nordrenRecord = serviceProviderAdapter.toRecord(nordren, context())
+  const roleRecord = recordFrom(roleAdapter, administrator, context())
+  const customRecord = recordFrom(roleAdapter, custom, context())
+  const copenhagenRecord = recordFrom(projectAdapter, copenhagen, context())
+  const nordrenRecord = recordFrom(serviceProviderAdapter, nordren, context())
   const copenhagenScope = copenhagenRecord.id as ProjectRecordId
   const resolve = resolverOver([
     [roleRecord, administrator.id],
@@ -403,7 +403,7 @@ describe("the users", () => {
   ])
 
   test("a user is user-<uuid>, its role, projects and provider read through the resolver", () => {
-    const record = userAdapter.toRecord(olivia, context(resolve))
+    const record = recordFrom(userAdapter, olivia, context(resolve))
     assert.equal(record.id, webIdOf("user", olivia.id))
     assert.equal(record.status, "Active")
     assert.equal(record.facts.Roles, "Company Administrator")
@@ -418,7 +418,7 @@ describe("the users", () => {
   })
 
   test("a provider's user carries the provider and an invited status, and is company-wide too", () => {
-    const record = userAdapter.toRecord(lars, context(resolve))
+    const record = recordFrom(userAdapter, lars, context(resolve))
     assert.equal(record.status, "Invited")
     assert.equal(record.facts.Identity, "Invitation pending")
     assert.equal(record.facts["Service provider"], "NordRen ApS")
@@ -429,7 +429,7 @@ describe("the users", () => {
   })
 
   test("a user with Project Access is scoped to those projects by web id", () => {
-    const record = userAdapter.toRecord(viewer, context(resolve))
+    const record = recordFrom(userAdapter, viewer, context(resolve))
     assert.equal(record.id, `user-${viewer.id}`)
     assert.deepEqual(record.projectIds, [webIdOf("project", copenhagen.id)])
     assert.equal(record.facts.Projects, "Copenhagen Central")
@@ -439,13 +439,13 @@ describe("the users", () => {
   })
 
   test("a role the resolver does not know reads as Role and keeps the server id, so the row still shows", () => {
-    const record = userAdapter.toRecord(viewer, context())
+    const record = recordFrom(userAdapter, viewer, context())
     assert.equal(record.facts.Roles, "Role")
     assert.equal(record.submittedValues?.roleId, custom.id)
   })
 
   test("an invitation becomes a UserInvite the contracts accept, one way of reaching things at a time", () => {
-    const base = userAdapter.toRecord(viewer, context(resolve))
+    const base = recordFrom(userAdapter, viewer, context(resolve))
     const allProjects: BusinessRecord = { ...base, id: "user-mint-1", submittedValues: { fullName: "New Person", email: "new@kystbyen.example", roleId: "role-company-administrator", projectAccess: ALL_PROJECTS_ACCESS } }
     const invite = userAdapter.toCreateBody?.(allProjects, context(resolve))
     assert.deepEqual(invite, { email: "new@kystbyen.example", fullName: "New Person", roleId: administrator.id, allProjects: true })
@@ -463,7 +463,7 @@ describe("the users", () => {
   })
 
   test("an invitation naming a role or a project the server does not hold is refused here", () => {
-    const base = userAdapter.toRecord(viewer, context(resolve))
+    const base = recordFrom(userAdapter, viewer, context(resolve))
     const noRole: BusinessRecord = { ...base, id: "user-mint-2", submittedValues: { fullName: "X", email: "x@y.example", roleId: "role-nowhere", projectAccess: ALL_PROJECTS_ACCESS } }
     assert.deepEqual(userAdapter.toCreateBody?.(noRole, context(resolve)), { path: "roleId", message: "Pick a role" })
     const noProjects: BusinessRecord = { ...base, id: "user-mint-3", projectIds: ["project-nowhere"], submittedValues: { fullName: "X", email: "x@y.example", roleId: "role-company-administrator", projectAccess: "Nowhere", projectIds: "project-nowhere" } }
@@ -471,8 +471,8 @@ describe("the users", () => {
   })
 
   test("a renamed or re-roled user is a UserPatch the contracts accept", () => {
-    const before = userAdapter.toRecord(viewer, context(resolve))
-    const body = userAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, fullName: "Viewer Renamed", roleId: "role-company-administrator" } }, context(resolve))
+    const before = recordFrom(userAdapter, viewer, context(resolve))
+    const body = userAdapter.toPatchBody?.(before, { ...before, submittedValues: { ...before.submittedValues, fullName: "Viewer Renamed", roleId: "role-company-administrator" } }, context(resolve))
     assert.deepEqual(body, { fullName: "Viewer Renamed", roleId: administrator.id })
     assert.ok(UserPatch.safeParse(body).success)
   })

@@ -34,7 +34,7 @@ import { ASSIGNMENT_PREFIX, ASSIGNMENT_RECORD_KIND, isAssignmentRecord, isServic
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, PartialWrite, patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { serviceProviderAdapter } from "./organisation"
 import { planningAreaAdapter } from "./planning"
 import { projectDay } from "./pricing"
@@ -122,7 +122,7 @@ function assignmentsOnce(client: Client): Promise<ServiceAreaAssignment[]> {
 /** What an area's edit carries: the patch, and each set to replace whole. */
 type AreaWrite = { patch?: object; planningAreaIds?: { ids: string[] }; wasteFractionIds?: { ids: string[] } }
 
-export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
+export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource, unknown, AreaWrite> = {
   prefix: SERVICE_AREA_PREFIX,
   auditTable: "service_area",
   owns: isServiceAreaRecord,
@@ -147,8 +147,6 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
       name: area.name,
       context: fractionNames === "" ? area.code : `${area.code} · ${fractionNames}`,
       status: periodReading(area.validFrom, area.validTo, day),
-      ...NO_PRESENTATION,
-      ...stampFacts(area, context.now),
       value: periodLabel(area.validFrom, area.validTo),
       description: area.boundaryText,
       facts: {
@@ -230,8 +228,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
   },
   create: (client, body) => create<ServiceAreaCreated>(client, "/service-areas", body).then((created) => created.body),
   // The patch, then each moved set replaced whole: a refusal after a request landed is a PartialWrite with the row as it then stands.
-  update: async (client, serverId, body) => {
-    const write = body as AreaWrite
+  update: async (client, serverId, write) => {
     const path = `/service-areas/${serverId}`
     let row: ServiceArea | undefined
     const step = async (request: () => Promise<ServiceArea>) => {
@@ -256,7 +253,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
 /** What an assignment's create carries: the area it is posted under, and the body the contract accepts. */
 type AssignmentWrite = { serviceAreaId: string; body: unknown }
 
-export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
+export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment, AssignmentWrite> = {
   prefix: ASSIGNMENT_PREFIX,
   auditTable: "service_area_assignment",
   owns: isAssignmentRecord,
@@ -273,12 +270,9 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
     const project = referenced(context, "project", assignment.projectId)
     const lastDay = assignment.validTo === null ? undefined : lastDayIn(assignment.validTo)
     return {
-      id: webIdOf(ASSIGNMENT_PREFIX, assignment.id),
       name: `${code} · ${providerName}`,
       context: periodLabel(assignment.validFrom, assignment.validTo),
       status: periodReading(assignment.validFrom, assignment.validTo, projectDay(assignment.projectId, context)),
-      ...NO_PRESENTATION,
-      ...stampFacts(assignment, context.now),
       value: periodLabel(assignment.validFrom, assignment.validTo),
       description: `${providerName} holds ${area?.name ?? code}.`,
       facts: {
@@ -333,8 +327,7 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
       return { notes: typed(record, "notes") ?? null, validTo: lastDay === undefined ? null : firstDayOut(lastDay) }
     })
   },
-  create: (client, body) => {
-    const write = body as AssignmentWrite
+  create: (client, write) => {
     return create<ServiceAreaAssignment>(client, `/service-areas/${write.serviceAreaId}/assignments`, write.body).then((created) => created.body)
   },
   update: (client, serverId, body) => patch<ServiceAreaAssignment>(client, `/service-area-assignments/${serverId}`, body),

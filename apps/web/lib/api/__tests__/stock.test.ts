@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 import { StockMinimumsSet } from "@waste/contracts/stock"
 
 import { type BusinessRecord } from "../../data/business-modules"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { warehouseAdapter, warehousesModule } from "../records/places"
 import { actOnRecord, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { SET_STOCK_MINIMUMS, stockLine, stockMinimumsBody } from "../records/stock"
@@ -20,7 +20,7 @@ const BIN_ID = "01a0d2a4-a280-700c-8000-000000000001"
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
 
 const bin: BusinessRecord = { id: `container-type-${BIN_ID}`, name: "240 L bin", status: "Active", recordKind: "Container type", facts: {}, submittedValues: {} } as BusinessRecord
-const record = warehouseAdapter.toRecord(
+const record = recordFrom(warehouseAdapter, 
   { id: WAREHOUSE_ID, ...STAMPS, projectId: "01a0d2a4-a280-7002-8000-000000000001", code: "WH-WEST", name: "Warehouse West", address: "Sundkrogsgade 1", location: null, depotId: null, status: "active", notes: null },
   { resolve: NOTHING_RESOLVED, now: NOW },
 )

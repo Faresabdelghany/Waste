@@ -12,13 +12,12 @@
 import type { SiteVisit } from "@waste/contracts/site-visits"
 
 import { AGREEMENT_PREFIX, PROPERTY_PREFIX } from "@/lib/data/agreements"
-import { type BusinessRecord } from "@/lib/data/business-modules"
 import { PRODUCT_PREFIX } from "@/lib/data/commercial"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { chargeBasisSentence, IDENTIFICATION_LABELS, OUTCOME_LABELS, REFUSAL_LABELS, SITE_VISITS_MODULE, SOURCE_LABELS, VISIT_VOIDED_KEY, visitStatusOf } from "@/lib/data/site-visits"
 
 import { command, get, listAll, type ApiClient } from "../client"
-import { NO_PRESENTATION, ofKind, stampFacts, webIdOf, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayAndTimeOn, projectTimezoneOf } from "./clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
@@ -52,7 +51,7 @@ function chargeOf(visit: SiteVisit, context: MappingContext): string {
   return visit.charge.productId === null ? basis : `${basis}: ${nameVia(context, PRODUCT_PREFIX, visit.charge.productId)}`
 }
 
-export function toSiteVisitRecord(visit: SiteVisit, context: MappingContext): BusinessRecord {
+export function toSiteVisitRecord(visit: SiteVisit, context: MappingContext): RecordFields {
   const project = context.resolve.byServerId(visit.projectId)
   const projectWebId = project?.id ?? webIdVia(context, "project", visit.projectId)
   const site = nameVia(context, SITE_PREFIX, visit.siteId)
@@ -81,12 +80,9 @@ export function toSiteVisitRecord(visit: SiteVisit, context: MappingContext): Bu
     ...(project?.name === undefined ? {} : { Project: project.name }),
   }
   return {
-    id: webIdOf(SITE_VISIT_PREFIX, visit.id),
     name: `${identifier === "" ? "Visitor" : identifier} · ${when}`,
     context: `${site} · ${identifier}`,
     status: visitStatusOf(visit),
-    ...NO_PRESENTATION,
-    ...stampFacts(visit, context.now),
     value: charge,
     description: brought.length === 0 ? "Nothing recorded" : brought.join(", "),
     facts,
@@ -130,7 +126,6 @@ export const siteVisitAdapter: ResourceAdapter<SiteVisit> = {
   list: (client: ApiClient) => listAll<SiteVisit>(client, "/site-visits", { from: siteVisitsWindowFrom() }),
   toRecord: toSiteVisitRecord,
   toPatchBody: () => refusal("note", LEDGER_KEPT),
-  update: () => Promise.reject(new Error(LEDGER_KEPT)),
   read: (client, serverId) => get<SiteVisit>(client, `/site-visits/${serverId}`),
   commands: SITE_VISIT_COMMANDS,
 }

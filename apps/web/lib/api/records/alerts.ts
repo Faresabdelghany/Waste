@@ -24,7 +24,7 @@ import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-mo
 import { NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, said, statusLabel, statusToken, typed, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter, vehicleAdapter } from "./fleet"
@@ -57,7 +57,7 @@ const CHANGED_BY_COMMANDS = "An alert is raised, acknowledged, resolved and link
 const stamp = (at: string | null, by: string | null, context: MappingContext, timezone: string | undefined) =>
   at === null ? undefined : [shownOn(at, timezone), by === null ? undefined : nameVia(context, "user", by)].filter(Boolean).join(" · ")
 
-export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRecord {
+export function toAlertRecord(alert: Alert, context: MappingContext): RecordFields {
   const projectRecord = context.resolve.byServerId(alert.projectId)
   const project = referenced(context, "project", alert.projectId)
   const timezone = projectRecord === undefined ? undefined : typed(projectRecord, "timezone")
@@ -83,13 +83,10 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
   if (resolved !== undefined) facts.Resolved = resolved
   if (alert.resolutionNote !== null) facts["Resolution note"] = alert.resolutionNote
   return {
-    id: webIdOf(ALERT_PREFIX, alert.id),
     name: alert.title,
     // An overdue ticket's alert is about the ticket alone: its context is the ticket.
     context: subjects.length === 0 ? (ticketName ?? "") : subjects.map((subject) => subject.name).join(" · "),
     status: statusLabel(alert.status),
-    ...NO_PRESENTATION,
-    ...stampFacts(alert, context.now),
     owner: alert.acknowledgedBy === null ? "Unacknowledged" : nameVia(context, "user", alert.acknowledgedBy),
     value: statusLabel(alert.severity),
     description: alert.details,
@@ -186,7 +183,6 @@ export const alertAdapter: ResourceAdapter<Alert> = {
   toCreateBody: toAlertCreateBody,
   toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
   create: (client, body) => create<Alert>(client, "/alerts", body).then((created) => created.body),
-  update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),
   // A ticket opened from the alert links it on the server's account: the alert is read back.
   read: (client, serverId) => get<Alert>(client, `/alerts/${serverId}`),
   commands: ALERT_COMMANDS,

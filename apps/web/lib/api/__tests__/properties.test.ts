@@ -33,7 +33,7 @@ import { SET_MAX } from "@waste/domain/requests"
 import type { BusinessRecord } from "../../data/business-modules"
 import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecord, NO_ONE, PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE } from "../../data/properties"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { subscriptionAdapter } from "../records/agreements"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -131,9 +131,9 @@ const kongens: SharedCollectionPoint = {
 }
 
 // The organisation and the customers as the store has them when the properties load.
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 const customers = [mikkel, osterbro, kab]
-const customerRecords = customers.map((customer) => customerAdapter.toRecord(customer, { resolve: NOTHING_RESOLVED, now: NOW }))
+const customerRecords = customers.map((customer) => recordFrom(customerAdapter, customer, { resolve: NOTHING_RESOLVED, now: NOW }))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["customers.contacts", loaded({ records: customerRecords, serverIds: new Map(customerRecords.map((record, index) => [record.id, customers[index].id])) }, 1)],
@@ -142,7 +142,7 @@ const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({
 
 /** The properties module as the store holds it once loaded, for the groups, the points and the subscriptions that name its rows. */
 function withProperties(properties: readonly Property[], base: ServerRecordsState = state): ServerRecordsState {
-  const records = properties.map((property) => propertyAdapter.toRecord(property, context(resolverOver(base))))
+  const records = properties.map((property) => recordFrom(propertyAdapter, property, context(resolverOver(base))))
   return new Map([...base, ["customers.properties", loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, properties[index].id])) }, 1)]])
 }
 const withAll = withProperties([parkvej, ryesgade, jagtvej])
@@ -177,7 +177,7 @@ describe("the three modules", () => {
 
   test("a subscription loaded after them names its property by the row the store holds", () => {
     const sub: Subscription = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, agreementId: "01a0d2a4-a280-7012-8000-000000000001", productId: "01a0d2a4-a280-700a-8000-000000000001", propertyId: parkvej.id, sharedCollectionPointId: null, quantity: 1, validFrom: "2026-01-01", validTo: null }
-    const record = subscriptionAdapter.toRecord(sub, contextAll())
+    const record = recordFrom(subscriptionAdapter, sub, contextAll())
     assert.equal(record.facts.Property, "Parkvej 18")
     assert.equal(record.submittedValues?.propertyId, `property-${parkvej.id}`)
   })
@@ -193,7 +193,7 @@ describe("a property", () => {
   })
 
   test("is the wire's fields, its parties by role through the switched contacts module, scoped to its project", () => {
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     assert.equal(record.id, `property-${parkvej.id}`)
     assert.equal(record.name, "Parkvej 18")
     assert.equal(record.context, "Østerbro Housing · Payer Østerbro Housing")
@@ -239,7 +239,7 @@ describe("a property", () => {
   })
 
   test("an unlocated, inactive property of a project not loaded names a customer the store lacks by its id chip", () => {
-    const record = propertyAdapter.toRecord(dock4, context())
+    const record = recordFrom(propertyAdapter, dock4, context())
     assert.equal(record.status, "Inactive")
     assert.deepEqual(record.allowedTransitions, ["Active"])
     assert.equal(record.context, `customer-${HARBOR_PROPERTIES} · No payer`)
@@ -262,16 +262,16 @@ describe("a property", () => {
         { customerId: HARBOR_PROPERTIES, role: "tenant", validFrom: "2026-11-01", validTo: null },
       ],
     }
-    const record = propertyAdapter.toRecord(moving, context())
+    const record = recordFrom(propertyAdapter, moving, context())
     assert.equal(record.facts.Tenants, "KAB Bolig", "the tenant moving in on 1 November is not a tenant on 30 September")
     assert.equal(record.submittedValues?.tenantIds, `company-${kab.id}`)
     assert.equal(record.facts["Booked ahead"], `KAB Bolig leaves as tenant on 2026-11-01 · customer-${HARBOR_PROPERTIES} joins as tenant on 2026-11-01`, "the move booked ahead, said in its details: who leaves first, then who joins, on the day")
-    assert.equal(propertyAdapter.toRecord(dock4, context()).facts["Booked ahead"], undefined, "nothing booked, nothing said")
+    assert.equal(recordFrom(propertyAdapter, dock4, context()).facts["Booked ahead"], undefined, "nothing booked, nothing said")
   })
 
   test("says exactly the wire's two statuses, so the store refuses the lifecycle's Prospect, On hold and Archived before the API", () => {
     assert.deepEqual(propertyAdapter.statuses, ["active", "inactive"])
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     assert.ok(spellsStatus(propertiesModule, record, "Inactive"))
     assert.ok(spellsStatus(propertiesModule, record, "Active"))
     assert.ok(!spellsStatus(propertiesModule, record, "Prospect"))
@@ -332,35 +332,35 @@ describe("a property", () => {
     const typed = propertyAdapter.toCreateBody?.(createPropertyRecord(PROPERTY_VALUES, { now: MINTED }), context()) as Record<string, unknown>
     assert.deepEqual([typed.address, typed.addressId], [PROPERTY_VALUES.serviceAddress, undefined])
 
-    const record = propertyAdapter.toRecord({ ...parkvej, addressId: DAR, addressParts: { streetName: "Parkvej", houseNumber: "18", floor: null, door: null, postcode: "2100", postTown: "København Ø", municipalityCode: "0101" } }, context())
+    const record = recordFrom(propertyAdapter, { ...parkvej, addressId: DAR, addressParts: { streetName: "Parkvej", houseNumber: "18", floor: null, door: null, postcode: "2100", postTown: "København Ø", municipalityCode: "0101" } }, context())
     assert.equal(record.facts?.["Address register"], "Found in the register")
     const edit = (values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
     const OTHER = "0a3f50a0-75ba-32b8-e044-0003ba298006"
-    const moved = propertyAdapter.toPatchBody(record, edit({ addressId: OTHER, serviceAddress: "Parkvej 20, 2100 København Ø" }), context())
+    const moved = propertyAdapter.toPatchBody?.(record, edit({ addressId: OTHER, serviceAddress: "Parkvej 20, 2100 København Ø" }), context())
     assert.deepEqual(moved, { property: { addressId: OTHER } })
     assert.ok(PropertyPatch.safeParse((moved as { property: unknown }).property).success)
-    const typedOver = propertyAdapter.toPatchBody(record, edit({ addressId: "", serviceAddress: "Parkvej 18 (back gate), 2100 København Ø" }), context())
+    const typedOver = propertyAdapter.toPatchBody?.(record, edit({ addressId: "", serviceAddress: "Parkvej 18 (back gate), 2100 København Ø" }), context())
     assert.deepEqual(typedOver, { property: { address: "Parkvej 18 (back gate), 2100 København Ø", addressId: null } })
     assert.ok(PropertyPatch.safeParse((typedOver as { property: unknown }).property).success)
   })
 
   test("a patch says what moved of the property — a cleared registry id and notes as null, a point dropped as null, a status — and the parties as one whole set", () => {
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     const edit = (values: Record<string, string>, status = record.status): BusinessRecord => ({ ...record, status, submittedValues: { ...record.submittedValues, ...values } })
-    const renamed = propertyAdapter.toPatchBody(record, edit({ displayName: "Parkvej 18A", registryId: "", specialConditions: "" }), context())
+    const renamed = propertyAdapter.toPatchBody?.(record, edit({ displayName: "Parkvej 18A", registryId: "", specialConditions: "" }), context())
     assert.deepEqual(renamed, { property: { name: "Parkvej 18A", registryId: null, notes: null } })
     assert.ok(PropertyPatch.safeParse((renamed as { property: unknown }).property).success)
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "Gate code 9001" }), context()), { property: { driverInstructions: "Gate code 9001" } }, "the driver's instructions move on their own")
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "" }), context()), { property: { driverInstructions: null } }, "and a cleared one is a null")
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ driverInstructions: "Gate code 9001" }), context()), { property: { driverInstructions: "Gate code 9001" } }, "the driver's instructions move on their own")
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ driverInstructions: "" }), context()), { property: { driverInstructions: null } }, "and a cleared one is a null")
     // Its access hours (O14 of #290): whole, and a blank pair is a null.
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ serviceWindowStart: "07:00", serviceWindowEnd: "12:00" }), context()), { property: { serviceWindow: { from: "07:00", to: "12:00" } } })
-    const hours = propertyAdapter.toRecord({ ...parkvej, serviceWindow: { from: "07:00", to: "12:00" } }, context())
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ serviceWindowStart: "07:00", serviceWindowEnd: "12:00" }), context()), { property: { serviceWindow: { from: "07:00", to: "12:00" } } })
+    const hours = recordFrom(propertyAdapter, { ...parkvej, serviceWindow: { from: "07:00", to: "12:00" } }, context())
     assert.equal(hours.facts?.["Access hours"], "07:00–12:00")
-    assert.deepEqual(propertyAdapter.toPatchBody(hours, { ...hours, submittedValues: { ...hours.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { property: { serviceWindow: null } })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ serviceWindowStart: "12:00", serviceWindowEnd: "07:00" }), context()), { path: "serviceWindowEnd", message: "A window closes after it opens, on the same day" })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ latitude: "", longitude: "" }), context()), { property: { location: null } })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({}, "Inactive"), context()), { property: { status: "inactive" } })
-    const tenanted = propertyAdapter.toPatchBody(record, edit({ tenantIds: `company-${kab.id}` }), context())
+    assert.deepEqual(propertyAdapter.toPatchBody?.(hours, { ...hours, submittedValues: { ...hours.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { property: { serviceWindow: null } })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ serviceWindowStart: "12:00", serviceWindowEnd: "07:00" }), context()), { path: "serviceWindowEnd", message: "A window closes after it opens, on the same day" })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ latitude: "", longitude: "" }), context()), { property: { location: null } })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({}, "Inactive"), context()), { property: { status: "inactive" } })
+    const tenanted = propertyAdapter.toPatchBody?.(record, edit({ tenantIds: `company-${kab.id}` }), context())
     assert.deepEqual(tenanted, {
       parties: [
         { customerId: osterbro.id, role: "owner" },
@@ -370,38 +370,38 @@ describe("a property", () => {
       ],
     })
     assert.ok(PropertyPartiesSet.safeParse(tenanted).success)
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ ownerIds: "", payerIds: "", serviceContactIds: "" }), context()), { parties: [] }, "an empty set is a property nobody is billed for")
-    const both = propertyAdapter.toPatchBody(record, edit({ propertyType: "mixed", serviceContactIds: "" }), context())
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ ownerIds: "", payerIds: "", serviceContactIds: "" }), context()), { parties: [] }, "an empty set is a property nobody is billed for")
+    const both = propertyAdapter.toPatchBody?.(record, edit({ propertyType: "mixed", serviceContactIds: "" }), context())
     assert.deepEqual(both, { property: { kind: "mixed" }, parties: [{ customerId: osterbro.id, role: "owner" }, { customerId: osterbro.id, role: "payer" }] })
-    assert.equal(propertyAdapter.toPatchBody(record, edit({}), context()), null)
+    assert.equal(propertyAdapter.toPatchBody?.(record, edit({}), context()), null)
   })
 
   test("a patch is refused for a project moved, half a point or a party the API does not hold", () => {
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     const edit = (values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ projectId: "project-harbor" }), context()), { path: "projectId", message: "A property stays in its project" })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ longitude: "" }), context()), { path: "longitude", message: "Give both the latitude and the longitude, or neither" })
-    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ payerIds: "company-nowhere" }), context()), { path: "payerIds", message: "Pick customers the API holds" })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ projectId: "project-harbor" }), context()), { path: "projectId", message: "A property stays in its project" })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ longitude: "" }), context()), { path: "longitude", message: "Give both the latitude and the longitude, or neither" })
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, edit({ payerIds: "company-nowhere" }), context()), { path: "payerIds", message: "Pick customers the API holds" })
   })
 
   test("the update patches the property, then replaces its parties through their own route, and answers the property as the last request left it", async () => {
     const renamed = { ...parkvej, name: "Parkvej 18A" }
     const partied = { ...renamed, parties: [] }
     const { fetch, calls } = scripted([() => json(renamed), () => json(partied)])
-    const answer = await propertyAdapter.update(clientOver(fetch), parkvej.id, { property: { name: "Parkvej 18A" }, parties: [] })
+    const answer = await propertyAdapter.update!(clientOver(fetch), parkvej.id, { property: { name: "Parkvej 18A" }, parties: [] })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/properties/${parkvej.id}`, `PUT http://api.test/properties/${parkvej.id}/parties`])
     assert.deepEqual(bodyOf(calls[0]), { name: "Parkvej 18A" })
     assert.deepEqual(bodyOf(calls[1]), { parties: [] })
     assert.deepEqual(answer, partied)
     const setOnly = scripted([() => json(partied)])
-    await propertyAdapter.update(clientOver(setOnly.fetch), parkvej.id, { parties: [] })
+    await propertyAdapter.update!(clientOver(setOnly.fetch), parkvej.id, { parties: [] })
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/properties/${parkvej.id}/parties`])
   })
 
   test("a set the API refuses after the patch landed comes back as the row the patch left, under the refusal", async () => {
     const renamed: Property = { ...parkvej, name: "Parkvej 18A" }
     const { fetch, calls } = scripted([() => json(renamed), () => problem(400, "The request body is invalid", [{ path: "parties.2.customerId", message: "Not a customer of this company" }])])
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     const edited: BusinessRecord = { ...record, name: "Parkvej 18A", submittedValues: { ...record.submittedValues, displayName: "Parkvej 18A", tenantIds: `company-${kab.id}` } }
     const current = loaded({ records: [record], serverIds: new Map([[record.id, parkvej.id]]) }, 1)
     const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, edited, { state, now: NOW })
@@ -418,12 +418,12 @@ describe("a property", () => {
     const partiesOfLength = (count: number) => Array.from({ length: count }, (_, index) => ({ customerId: `01a0d2a4-a280-700b-8000-${String(index).padStart(12, "0")}`, role: "owner" as const }))
     assert.ok(PropertyPartiesSet.safeParse({ parties: partiesOfLength(SET_MAX) }).success, "the contract takes the bound")
     assert.ok(!PropertyPartiesSet.safeParse({ parties: partiesOfLength(SET_MAX + 1) }).success, "and refuses one past it")
-    const record = propertyAdapter.toRecord(parkvej, context())
+    const record = recordFrom(propertyAdapter, parkvej, context())
     const many = Array.from({ length: 201 }, (_, index) => `customer-01a0d2a4-a280-700b-8000-${String(1000 + index).padStart(12, "0")}`).join(",")
-    assert.deepEqual(propertyAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, tenantIds: many } }, context()), { path: "tenantIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
-    const group = propertyGroupAdapter.toRecord(osterbroEast, contextAll())
+    assert.deepEqual(propertyAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, tenantIds: many } }, context()), { path: "tenantIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
+    const group = recordFrom(propertyGroupAdapter, osterbroEast, contextAll())
     const members = Array.from({ length: 201 }, (_, index) => `property-01a0d2a4-a280-700c-8000-${String(1000 + index).padStart(12, "0")}`).join(",")
-    assert.deepEqual(propertyGroupAdapter.toPatchBody(group, { ...group, submittedValues: { ...group.submittedValues, memberPropertyIds: members } }, contextAll()), { path: "memberPropertyIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
+    assert.deepEqual(propertyGroupAdapter.toPatchBody?.(group, { ...group, submittedValues: { ...group.submittedValues, memberPropertyIds: members } }, contextAll()), { path: "memberPropertyIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
   })
 
   test("through the store's write, a create posts with its parties and the API's 409 for a name taken comes back as its sentence", async () => {
@@ -485,7 +485,7 @@ describe("a property group", () => {
 
   test("says exactly the wire's three statuses", () => {
     assert.deepEqual(propertyGroupAdapter.statuses, ["draft", "active", "inactive"])
-    const record = propertyGroupAdapter.toRecord(osterbroEast, contextAll())
+    const record = recordFrom(propertyGroupAdapter, osterbroEast, contextAll())
     assert.ok(spellsStatus(propertyGroupsModule, record, "Inactive"))
     assert.ok(!spellsStatus(propertyGroupsModule, record, "Archived"))
   })
@@ -525,25 +525,25 @@ describe("a property group", () => {
   })
 
   test("a patch says what moved of the group, and the members as one whole set in which a member already there keeps its role", () => {
-    const record = propertyGroupAdapter.toRecord(osterbroEast, contextAll())
+    const record = recordFrom(propertyGroupAdapter, osterbroEast, contextAll())
     const edit = (values: Record<string, string>, status = record.status): BusinessRecord => ({ ...record, status, submittedValues: { ...record.submittedValues, ...values } })
-    const renamed = propertyGroupAdapter.toPatchBody(record, edit({ name: "Østerbro East", responsibleCustomerId: "" }), contextAll())
+    const renamed = propertyGroupAdapter.toPatchBody?.(record, edit({ name: "Østerbro East", responsibleCustomerId: "" }), contextAll())
     assert.deepEqual(renamed, { group: { name: "Østerbro East", responsibleCustomerId: null } })
     assert.ok(PropertyGroupPatch.safeParse((renamed as { group: unknown }).group).success)
-    assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({ responsibleCustomerId: NO_ONE }), contextAll()), { group: { responsibleCustomerId: null } }, "None, picked, is no customer")
-    assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({}, "Inactive"), contextAll()), { group: { status: "inactive" } })
-    const regathered = propertyGroupAdapter.toPatchBody(record, edit({ memberPropertyIds: `property-${ryesgade.id},property-${jagtvej.id}`, memberRole: "payer" }), contextAll())
+    assert.deepEqual(propertyGroupAdapter.toPatchBody?.(record, edit({ responsibleCustomerId: NO_ONE }), contextAll()), { group: { responsibleCustomerId: null } }, "None, picked, is no customer")
+    assert.deepEqual(propertyGroupAdapter.toPatchBody?.(record, edit({}, "Inactive"), contextAll()), { group: { status: "inactive" } })
+    const regathered = propertyGroupAdapter.toPatchBody?.(record, edit({ memberPropertyIds: `property-${ryesgade.id},property-${jagtvej.id}`, memberRole: "payer" }), contextAll())
     assert.deepEqual(regathered, { members: [{ propertyId: ryesgade.id, role: "administrator" }, { propertyId: jagtvej.id, role: "payer" }] })
     assert.ok(PropertyGroupMembersSet.safeParse(regathered).success)
-    assert.equal(propertyGroupAdapter.toPatchBody(record, edit({ memberRole: "reporting" }), contextAll()), null, "the role for new members moves nobody already there")
-    assert.equal(propertyGroupAdapter.toPatchBody(record, edit({ memberPropertyIds: `property-${ryesgade.id}, property-${parkvej.id}` }), contextAll()), null, "the order the members were ticked in is not a change")
-    assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({ projectId: "project-harbor" }), contextAll()), { path: "projectId", message: "A property group stays in its project" })
-    assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({ memberPropertyIds: "property-nowhere" }), contextAll()), { path: "memberPropertyIds", message: "Pick properties the API holds" })
+    assert.equal(propertyGroupAdapter.toPatchBody?.(record, edit({ memberRole: "reporting" }), contextAll()), null, "the role for new members moves nobody already there")
+    assert.equal(propertyGroupAdapter.toPatchBody?.(record, edit({ memberPropertyIds: `property-${ryesgade.id}, property-${parkvej.id}` }), contextAll()), null, "the order the members were ticked in is not a change")
+    assert.deepEqual(propertyGroupAdapter.toPatchBody?.(record, edit({ projectId: "project-harbor" }), contextAll()), { path: "projectId", message: "A property group stays in its project" })
+    assert.deepEqual(propertyGroupAdapter.toPatchBody?.(record, edit({ memberPropertyIds: "property-nowhere" }), contextAll()), { path: "memberPropertyIds", message: "Pick properties the API holds" })
   })
 
   test("the update patches the group, then replaces its members through their own route", async () => {
     const { fetch, calls } = scripted([() => json({ ...osterbroEast, name: "Østerbro East" }), () => json({ ...osterbroEast, name: "Østerbro East", members: [] })])
-    const answer = await propertyGroupAdapter.update(clientOver(fetch), osterbroEast.id, { group: { name: "Østerbro East" }, members: [] })
+    const answer = await propertyGroupAdapter.update!(clientOver(fetch), osterbroEast.id, { group: { name: "Østerbro East" }, members: [] })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/property-groups/${osterbroEast.id}`, `PUT http://api.test/property-groups/${osterbroEast.id}/members`])
     assert.deepEqual(bodyOf(calls[1]), { members: [] })
     assert.deepEqual(answer.members, [])
@@ -598,7 +598,7 @@ describe("a shared collection point", () => {
 
   test("says exactly the wire's four statuses, so a point is closed and drafted again by the lifecycle", () => {
     assert.deepEqual(sharedPointAdapter.statuses, ["draft", "open", "restricted", "closed"])
-    const record = sharedPointAdapter.toRecord(kongens, contextAll())
+    const record = recordFrom(sharedPointAdapter, kongens, contextAll())
     assert.ok(spellsStatus(sharedPointsModule, record, "Closed"))
     assert.ok(spellsStatus(sharedPointsModule, record, "Draft"))
     assert.ok(!spellsStatus(sharedPointsModule, record, "Billing issue"))
@@ -666,24 +666,24 @@ describe("a shared collection point", () => {
   })
 
   test("a patch says what moved of the point and the members as one whole set; the point keeps a location", () => {
-    const record = sharedPointAdapter.toRecord(kongens, contextAll())
+    const record = recordFrom(sharedPointAdapter, kongens, contextAll())
     const edit = (values: Record<string, string>, status = record.status): BusinessRecord => ({ ...record, status, submittedValues: { ...record.submittedValues, ...values } })
-    assert.deepEqual(sharedPointAdapter.toPatchBody(record, edit({}, "Closed"), contextAll()), { point: { status: "closed" } })
-    const moved = sharedPointAdapter.toPatchBody(record, edit({ eligibilityDistance: "", availability: "", accessConditions: "Key from the caretaker", latitude: "55.681" }), contextAll())
+    assert.deepEqual(sharedPointAdapter.toPatchBody?.(record, edit({}, "Closed"), contextAll()), { point: { status: "closed" } })
+    const moved = sharedPointAdapter.toPatchBody?.(record, edit({ eligibilityDistance: "", availability: "", accessConditions: "Key from the caretaker", latitude: "55.681" }), contextAll())
     assert.deepEqual(moved, { point: { location: { type: "Point", coordinates: [12.5855, 55.681] }, eligibilityDistanceM: null, accessConditions: "Key from the caretaker", availability: null } })
     assert.ok(SharedCollectionPointPatch.safeParse((moved as { point: unknown }).point).success)
-    assert.deepEqual(sharedPointAdapter.toPatchBody(record, edit({ driverInstructions: "Code 2210 on the enclosure" }), contextAll()), { point: { driverInstructions: "Code 2210 on the enclosure" } })
-    const joined = sharedPointAdapter.toPatchBody(record, edit({ memberPropertyIds: `property-${parkvej.id}`, memberRole: "notification-contact" }), contextAll())
+    assert.deepEqual(sharedPointAdapter.toPatchBody?.(record, edit({ driverInstructions: "Code 2210 on the enclosure" }), contextAll()), { point: { driverInstructions: "Code 2210 on the enclosure" } })
+    const joined = sharedPointAdapter.toPatchBody?.(record, edit({ memberPropertyIds: `property-${parkvej.id}`, memberRole: "notification-contact" }), contextAll())
     assert.deepEqual(joined, { members: [{ propertyId: parkvej.id, role: "notification-contact" }] })
     assert.ok(SharedCollectionPointMembersSet.safeParse(joined).success)
-    assert.deepEqual(sharedPointAdapter.toPatchBody(record, edit({ latitude: "", longitude: "" }), contextAll()), { path: "latitude", message: "A shared collection point keeps a location: give the latitude and longitude" })
-    assert.deepEqual(sharedPointAdapter.toPatchBody(record, edit({ projectId: "project-harbor" }), contextAll()), { path: "projectId", message: "A shared collection point stays in its project" })
-    assert.equal(sharedPointAdapter.toPatchBody(record, edit({}), contextAll()), null)
+    assert.deepEqual(sharedPointAdapter.toPatchBody?.(record, edit({ latitude: "", longitude: "" }), contextAll()), { path: "latitude", message: "A shared collection point keeps a location: give the latitude and longitude" })
+    assert.deepEqual(sharedPointAdapter.toPatchBody?.(record, edit({ projectId: "project-harbor" }), contextAll()), { path: "projectId", message: "A shared collection point stays in its project" })
+    assert.equal(sharedPointAdapter.toPatchBody?.(record, edit({}), contextAll()), null)
   })
 
   test("the update patches the point, then replaces its members through their own route", async () => {
     const { fetch, calls } = scripted([() => json({ ...kongens, status: "closed" }), () => json({ ...kongens, status: "closed", members: [{ propertyId: parkvej.id, role: "service-member" }] })])
-    await sharedPointAdapter.update(clientOver(fetch), kongens.id, { point: { status: "closed" }, members: [{ propertyId: parkvej.id, role: "service-member" }] })
+    await sharedPointAdapter.update!(clientOver(fetch), kongens.id, { point: { status: "closed" }, members: [{ propertyId: parkvej.id, role: "service-member" }] })
     assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PATCH http://api.test/shared-collection-points/${kongens.id}`, `PUT http://api.test/shared-collection-points/${kongens.id}/members`])
     assert.deepEqual(bodyOf(calls[1]), { members: [{ propertyId: parkvej.id, role: "service-member" }] })
   })

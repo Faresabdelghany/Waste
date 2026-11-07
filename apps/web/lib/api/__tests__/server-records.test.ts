@@ -625,7 +625,7 @@ describe("what a module's mapping read", () => {
   test("a row it named that moves only in what it never read moves nothing: a live route's position, under the stop that names its route", async () => {
     const naming: ServerModule = {
       ...childrenOf([]),
-      resources: [{ ...thingAdapter("c", [thing("c1", "Child", "p1")]), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Route: context.resolve.byServerId(candidate.parentId ?? "")?.facts.Name ?? "" } }) }],
+      resources: [{ ...thingAdapter("c", [thing("c1", "Child", "p1")]), toRecord: (candidate: Thing, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Route: context.resolve.byServerId(candidate.parentId ?? "")?.facts.Name ?? "" } }) }],
     }
     const route = (position: string, name = "RC-1042") => record("p-p1", name, { facts: { Name: name, "Last position": position } })
     const store = await read(new Map([["configure.organization", ready([route("55.70, 12.57")])]]), naming)
@@ -678,7 +678,7 @@ describe("what a module's mapping read", () => {
   test("a module it scanned is read whole: any new rows there move it", async () => {
     const scanning: ServerModule = {
       ...childrenOf([]),
-      resources: [{ ...thingAdapter("c", [thing("c1", "Child")]), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Areas: String(context.resolve.filter("configure.areas", () => true).length) } }) }],
+      resources: [{ ...thingAdapter("c", [thing("c1", "Child")]), toRecord: (candidate: Thing, context) => record(`c-${candidate.id}`, candidate.name, { facts: { Areas: String(context.resolve.filter("configure.areas", () => true).length) } }) }],
     }
     const store = await read(new Map([["configure.areas", ready([record("area-1", "Indre By")])]]), scanning)
     assert.equal(store.getSnapshot().get("resources.inventory")?.records[0].facts.Areas, "1")
@@ -724,7 +724,7 @@ describe("what a module's mapping read", () => {
     const evening = new Date("2026-10-24T21:00:00Z") // 23:00 in Copenhagen, summer time
     const dated: ServerModule = {
       ...childrenOf([]),
-      resources: [{ ...thingAdapter("c", []), toRecord: (candidate, context) => record(`c-${candidate.id}`, candidate.name, { value: todayIn(context, "Europe/Copenhagen") }) }],
+      resources: [{ ...thingAdapter("c", []), toRecord: (candidate: Thing, context) => record(`c-${candidate.id}`, candidate.name, { value: todayIn(context, "Europe/Copenhagen") }) }],
     }
     const result = mapModule(dated, [[thing("c1", "Child")]], { state: new Map(), now: evening })
     assert.equal(result.records[0].value, "2026-10-24")

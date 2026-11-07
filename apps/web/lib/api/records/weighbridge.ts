@@ -14,7 +14,7 @@ import { WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { TICKET_STATUS_LABELS, UNMATCHED_LABELS, WEIGHBRIDGE_MODULE, WEIGHBRIDGE_PREFIX, WEIGHBRIDGE_RECORD_KIND } from "@/lib/data/weighbridge"
 
 import { command, get, listAll, type ApiFile } from "../client"
-import { NO_PRESENTATION, said, stampFacts, typed, webIdOf, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, typed, webIdOf, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
@@ -56,12 +56,9 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
     const route = ticket.routeId === null ? undefined : nameVia(context, "route", ticket.routeId)
     const product = [ticket.fractionKey, ticket.wasteCode].filter((part) => part !== null).join(" · ")
     return {
-      id: webIdOf(WEIGHBRIDGE_PREFIX, ticket.id),
       name: `${ticket.ticketNumber} · ${ticket.vehicleRegistration}`,
       context: `${station} · ${route ?? "No route"}`,
       status: TICKET_STATUS_LABELS[ticket.status],
-      ...NO_PRESENTATION,
-      ...stampFacts(ticket, context.now),
       value: kilograms(ticket.netKg),
       description:
         ticket.status === "unmatched" && ticket.unmatchedReason !== null
@@ -92,8 +89,6 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
     }
   },
   toPatchBody: () => refusal("status", "A weighbridge ticket is the weighbridge's: match it to a route or dismiss it"),
-  // Never reached: every patch is refused above, since the wire has no patch route for a ticket.
-  update: () => Promise.reject(new Error("A weighbridge ticket has no patch route")),
   commands: {
     [MATCH_TICKET]: {
       toBody: (input, _record, context) => {

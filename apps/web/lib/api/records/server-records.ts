@@ -80,7 +80,7 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, PartialWrite, recordFrom, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn } from "./clock"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed" | "kept-on-api"
@@ -438,7 +438,7 @@ export function mapModule(module: ServerModule, lists: ModuleLists, { state, now
     if (resources === null) continue
     const context: MappingContext = { resolve: resolverOver(state, { key, records, serverIds, byServerId }, noted), now, today }
     for (const resource of resources) {
-      const mapped = adapter.toRecord(resource, context)
+      const mapped = recordFrom(adapter, resource, context)
       // A row the mapping names by an id another row holds or is held under
       // keeps the server's id instead, so no two rows share a web id — a
       // write or a command looks the server id up by it and would reach the
@@ -879,25 +879,27 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
       const resource = (await adapter.create(requests.client, body)) as Resource | undefined
       // The API said 201 whatever its answer holds: one that names no row has landed, and only the module's read again finds it.
       if (typeof resource?.id !== "string") return { kind: "landed", recordId: record.id, problem: genericProblem(0, "The API's answer named no row") }
-      return mappedAnswer(record, resource.id, () => ({ kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }))
+      return mappedAnswer(record, resource.id, () => ({ kind: "created", record: recordFrom(adapter, resource, context), serverId: resource.id, optimisticId: record.id }))
     }
     const before = current.records.find((candidate) => candidate.id === record.id) ?? record
     if (before.status !== record.status && !spellsStatus(module, record, record.status)) {
       return { kind: "refused", recordId: record.id, problem: statusRefusal(adapter, record.status) }
     }
+    if (adapter.toPatchBody === undefined) return { kind: "refused", recordId: record.id, problem: genericProblem(400, `A ${adapter.prefix} is not changed here`) }
     const body = adapter.toPatchBody(before, record, context)
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
+    if (adapter.update === undefined) return { kind: "refused", recordId: record.id, problem: genericProblem(400, `A ${adapter.prefix} is not changed here`) }
     const resource = await adapter.update(requests.client, serverId, body)
     // Under the row's own web id, whatever the mapping would now derive, so
     // one server row stays one row here, as `withCreated` keeps a minted id.
-    return mappedAnswer(record, serverId, () => ({ kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId }))
+    return mappedAnswer(record, serverId, () => ({ kind: "updated", record: { ...recordFrom(adapter, resource, context), id: record.id }, serverId }))
   } catch (error) {
     if (error instanceof PartialWrite) {
       // The part that landed, as the server holds it — unless it cannot be mapped either, when the refusal stands alone.
       let landed: BusinessRecord | undefined
       try {
-        landed = { ...adapter.toRecord(error.resource, context), id: record.id }
+        landed = { ...recordFrom(adapter, error.resource, context), id: record.id }
       } catch {
         landed = undefined
       }
@@ -1003,7 +1005,7 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
     sent = true
     const resource = await command.run(requests.client, serverId, body)
-    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches }
+    return { kind: "done", record: { ...recordFrom(adapter, resource, context), id: record.id }, serverId: resource.id, touches }
   } catch (error) {
     const problem = namingRow(problemOfError(error), serverId, record.name)
     // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed; where
@@ -1077,7 +1079,7 @@ export async function rereadRecord(client: ApiClient, module: ServerModule, curr
   const context: MappingContext = { resolve: resolverOver(options.state), now: options.now }
   try {
     const resource = await adapter.read(client, serverId)
-    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
+    return { kind: "done", record: { ...recordFrom(adapter, resource, context), id: record.id }, serverId: resource.id }
   } catch (error) {
     return refused(problemOfError(error))
   }

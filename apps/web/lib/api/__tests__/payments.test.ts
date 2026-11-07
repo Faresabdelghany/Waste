@@ -16,7 +16,7 @@ import { bankFileOf } from "@waste/domain/finance/payments"
 import { type BusinessRecord } from "../../data/business-modules"
 import { createPaymentRecord, PAYMENT_FORM } from "../../data/commercial-forms"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { invoiceAdapter } from "../records/billing"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -37,15 +37,15 @@ const creditNote: Invoice = { ...invoice, id: "01a0d2a4-a280-7080-8000-000000000
 
 const NO_CONTEXT = (): MappingContext => ({ resolve: NOTHING_RESOLVED, now: NOW })
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
-const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT())
-const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT())
+const copenhagenRecord = recordFrom(projectAdapter, copenhagen, NO_CONTEXT())
+const osterbroRecord = recordFrom(customerAdapter, osterbro, NO_CONTEXT())
 const asRead = (document: Invoice) => ({ ...document, createdAt: document.recordedAt, updatedAt: document.recordedAt })
 const base: ServerRecordsState = new Map([
   ["configure.organization", moduleOf([copenhagenRecord], [copenhagen.id])],
   ["configure.access", moduleOf([{ ...copenhagenRecord, id: `user-${ADMIN}`, name: "Fares Abdelghany", recordKind: "User" }], [ADMIN])],
   ["customers.contacts", moduleOf([osterbroRecord], [osterbro.id])],
 ])
-const invoiceRecords = [invoice, creditNote].map((document) => invoiceAdapter.toRecord(asRead(document), { ...NO_CONTEXT(), resolve: resolverOver(base) }))
+const invoiceRecords = [invoice, creditNote].map((document) => recordFrom(invoiceAdapter, asRead(document), { ...NO_CONTEXT(), resolve: resolverOver(base) }))
 const state: ServerRecordsState = new Map([...base, ["commercial.invoices", moduleOf(invoiceRecords, [invoice.id, creditNote.id])]])
 const context = (): MappingContext => ({ resolve: resolverOver(state), now: NOW })
 const [invoiceRecord, creditNoteRecord] = invoiceRecords
@@ -75,7 +75,7 @@ describe("an invoice's standing", () => {
     assert.deepEqual([invoiceRecord.facts.Payment, invoiceRecord.facts.Paid, invoiceRecord.facts.Outstanding], ["Partially paid", "DKK 300.00", "DKK 533.13"])
     assert.equal(invoiceRecord.status, "Issued", "the status stays the credit standing")
     assert.equal(creditNoteRecord.facts.Payment, undefined)
-    assert.equal(invoiceAdapter.toRecord(asRead({ ...invoice, paymentStatus: "overdue" }), context()).facts.Payment, "Overdue")
+    assert.equal(recordFrom(invoiceAdapter, asRead({ ...invoice, paymentStatus: "overdue" }), context()).facts.Payment, "Overdue")
   })
 })
 
@@ -98,7 +98,7 @@ describe("the payments module", () => {
     assert.equal(unmatched.status, "Unmatched")
     assert.equal(unmatched.context, "Betaling okt · 2026-10-12")
     assert.equal(unmatched.facts.Payer, "Nobody yet")
-    const whole = paymentAdapter.toRecord({ ...payment, createdAt: payment.recordedAt, updatedAt: payment.recordedAt }, context())
+    const whole = recordFrom(paymentAdapter, { ...payment, createdAt: payment.recordedAt, updatedAt: payment.recordedAt }, context())
     assert.deepEqual(whole.related, ["Østerbro Housing", "INV-26007188"], "a payment read whole names the invoices it pays")
   })
 
@@ -123,12 +123,12 @@ describe("the payments module", () => {
   })
 
   test("is never edited: a wrong match is undone by its reversal", () => {
-    const record = paymentAdapter.toRecord({ ...payment, createdAt: payment.recordedAt, updatedAt: payment.recordedAt }, context())
-    assert.deepEqual(paymentAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, paidOn: "2026-10-13" } }, context()), { path: "paidOn", message: PAYMENT_NEVER_CHANGES })
+    const record = recordFrom(paymentAdapter, { ...payment, createdAt: payment.recordedAt, updatedAt: payment.recordedAt }, context())
+    assert.deepEqual(paymentAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, paidOn: "2026-10-13" } }, context()), { path: "paidOn", message: PAYMENT_NEVER_CHANGES })
   })
 
   test("is matched to an invoice by command, all that remains where no amount is given, and its match undone by the allocation's reversal; both re-read the invoices", async () => {
-    const record = paymentAdapter.toRecord({ ...loose, createdAt: loose.recordedAt, updatedAt: loose.recordedAt }, context())
+    const record = recordFrom(paymentAdapter, { ...loose, createdAt: loose.recordedAt, updatedAt: loose.recordedAt }, context())
     const current = moduleOf([record], [loose.id])
     const matchedDetail: PaymentDetail = { ...loose, customerId: osterbro.id, allocatedMinor: 55000, unallocatedMinor: 0, allocations: [{ ...payment.allocations[0], id: "01a0d2a4-a280-7091-8000-000000000002", paymentId: loose.id, amountMinor: 55000 }] }
     const { fetch, calls } = scripted([() => json(matchedDetail, 201), () => problem(409, "Invoice INV-26007188 owes only 533.13 DKK"), () => json({ ...matchedDetail, allocatedMinor: 0, unallocatedMinor: 55000 }, 201)])

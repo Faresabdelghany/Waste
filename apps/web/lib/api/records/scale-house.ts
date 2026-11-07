@@ -9,7 +9,7 @@
 // A completed ticket of one of our own vehicles is its route's Unload, which
 // Weight Control reads again (`touches`). The words are
 // lib/data/scale-house.ts'.
-import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, VehicleTare, VehicleTareCreate } from "@waste/contracts/scale-house"
+import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, ScaleTicketPatch, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "@waste/contracts/scale-house"
 import { LITRES_PER_M3 } from "@waste/domain/finance/window"
 import { scaleTicketLabel } from "@waste/domain/numbering"
 import { FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE } from "@waste/domain/registry/address"
@@ -36,7 +36,7 @@ import {
 } from "@/lib/data/scale-house"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, said, stampFacts, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, said, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference } from "./references"
@@ -75,7 +75,7 @@ export const ticketCommandsOffered = (record: { submittedValues?: Record<string,
   return []
 }
 
-export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext): BusinessRecord {
+export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext): RecordFields {
   const project = referenced(context, "project", ticket.projectId)
   const projectRecord = context.resolve.byServerId(ticket.projectId)
   const timezone = projectRecord === undefined ? undefined : typed(projectRecord, "timezone")
@@ -95,12 +95,9 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
     ]),
   )
   return {
-    id: webIdOf(SCALE_TICKET_PREFIX, ticket.id),
     name: `${scaleTicketLabel(ticket.number)} · ${ticket.vehiclePlate}`,
     context: `${site} · ${party}`,
     status: SCALE_TICKET_STATUS_LABELS[ticket.status],
-    ...NO_PRESENTATION,
-    ...stampFacts(ticket, context.now),
     value: ticket.netKg === null ? kilograms(ticket.grossKg) : kilograms(ticket.netKg),
     description:
       ticket.status === "open"
@@ -231,7 +228,7 @@ export const SCALE_TICKET_COMMANDS: Readonly<Record<string, RecordCommand<ScaleT
   },
 }
 
-export const scaleTicketAdapter: ResourceAdapter<ScaleTicket> = {
+export const scaleTicketAdapter: ResourceAdapter<ScaleTicket, ScaleTicketCreate, ScaleTicketPatch> = {
   prefix: SCALE_TICKET_PREFIX,
   auditTable: "scale_ticket",
   // A ticket Weigh in has just made is `scale-house-scale-ticket-<clock>` until the server answers: owned by its recordKind.
@@ -258,17 +255,14 @@ export const REACTIVATE_TARE = "reactivate"
 /** Re-weigh and Retire while active; Take back once retired. */
 export const tareCommandsOffered = (record: { submittedValues?: Record<string, unknown> }): string[] => (record.submittedValues?.status === "active" ? [REWEIGH_TARE, RETIRE_TARE] : [REACTIVATE_TARE])
 
-export function toVehicleTareRecord(tare: VehicleTare, context: MappingContext): BusinessRecord {
+export function toVehicleTareRecord(tare: VehicleTare, context: MappingContext): RecordFields {
   const project = referenced(context, "project", tare.projectId)
   const keys = [tare.plate, tare.trailerPlate, tare.containerRef].filter((part) => part !== null).join(" + ")
   const owner = tare.customerId === null ? undefined : nameVia(context, CUSTOMER_PREFIX, tare.customerId)
   return {
-    id: webIdOf(VEHICLE_TARE_PREFIX, tare.id),
     name: tare.label === null ? keys : `${keys} · ${tare.label}`,
     context: `Registered tare${owner === undefined ? "" : ` · ${owner}`}`,
     status: VEHICLE_TARE_STATUS_LABELS[tare.status],
-    ...NO_PRESENTATION,
-    ...stampFacts(tare, context.now),
     value: kilograms(tare.tareKg),
     description: `Weighed empty on ${tare.weighedOn}.`,
     facts: {
@@ -325,7 +319,7 @@ export const VEHICLE_TARE_COMMANDS: Readonly<Record<string, RecordCommand<Vehicl
   },
 }
 
-export const vehicleTareAdapter: ResourceAdapter<VehicleTare> = {
+export const vehicleTareAdapter: ResourceAdapter<VehicleTare, VehicleTareCreate, VehicleTarePatch> = {
   prefix: VEHICLE_TARE_PREFIX,
   auditTable: "vehicle_tare",
   owns: ofKind(VEHICLE_TARE_PREFIX, [VEHICLE_TARE_RECORD_KIND]),

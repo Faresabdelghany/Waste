@@ -15,14 +15,14 @@
 // the invoices are read again after either. A bank statement's lines and a
 // customer's statement are reads the surfaces ask through the client
 // (`importBankLines`, `customerStatement`), as Run billing's preview is.
-import type { BankLine, BankLines, BankLinesResult, CustomerStatement, Payment, PaymentDetail } from "@waste/contracts/payments"
+import type { BankLine, BankLines, BankLinesResult, CustomerStatement, Payment, PaymentCreate, PaymentDetail } from "@waste/contracts/payments"
 import type { BankFile } from "@waste/domain/finance/payments"
 
 import { formatMinor, minorOf } from "@/lib/commercial/money"
 import { INVOICE_PREFIX, INVOICES_MODULE, isInvoiceDocument, isPaymentRecord, PAYMENT_PREFIX, PAYMENT_RECORD_KIND, PAYMENT_SOURCE_LABELS, PAYMENTS_MODULE, paymentRecordStatus } from "@/lib/data/commercial"
 
 import { command, create, get, listAll } from "../client"
-import { NO_PRESENTATION, moduleKeyOf, said, stampFacts, typed, webIdOf, type Client, type ResourceAdapter, type ServerModule } from "./adapter"
+import { commandOf, moduleKeyOf, said, typed, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
 import { amountRefusal, firstMoved, named, projectOf } from "./billing"
 import { refusal } from "./places"
 import { nameVia, typedReference } from "./references"
@@ -63,7 +63,7 @@ export function customerStatement(client: Client, customerServerId: string, quer
 /** What a match of a payment to an invoice carries, as the store's command input names it. */
 const ALLOCATION_KEYS = { invoiceId: "invoiceId", amount: "amount", allocationId: "allocationId" } as const
 
-export const paymentAdapter: ResourceAdapter<PaymentResource> = {
+export const paymentAdapter: ResourceAdapter<PaymentResource, PaymentCreate> = {
   prefix: PAYMENT_PREFIX,
   owns: isPaymentRecord,
   statuses: undefined,
@@ -78,12 +78,9 @@ export const paymentAdapter: ResourceAdapter<PaymentResource> = {
     const invoices = [...new Set((allocations ?? []).map((allocation) => allocation.invoiceId))].flatMap((id) => named(context, INVOICE_PREFIX, id) ?? [])
     const from = payer?.name ?? payment.payerText ?? "Nobody yet"
     return {
-      id: webIdOf(PAYMENT_PREFIX, payment.id),
       name: `${money(payment.amountMinor)} · ${payment.paidOn}`,
       context: `${from} · ${payment.paidOn}`,
       status,
-      ...NO_PRESENTATION,
-      ...stampFacts(payment, context.now),
       value: money(payment.amountMinor),
       description:
         status === "Unmatched"
@@ -154,7 +151,6 @@ export const paymentAdapter: ResourceAdapter<PaymentResource> = {
   },
   toPatchBody: (before, after) => refusal(firstMoved(before, after), PAYMENT_NEVER_CHANGES),
   create: (client, body) => create<PaymentDetail>(client, "/payments", body).then((created) => stamped(created.body)),
-  update: () => Promise.reject(new Error("A payment has no patch route")),
   commands: {
     // The office's match: what remains of the payment, or part of it, to one invoice of its project.
     allocate: {
@@ -174,15 +170,15 @@ export const paymentAdapter: ResourceAdapter<PaymentResource> = {
       touches: [moduleKeyOf(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)],
     },
     // A wrong match undone: the allocation's negative, naming it. The row is the payment; the allocation travels in the body.
-    reverse: {
-      toBody: (input) => {
+    reverse: commandOf({
+      toBody: (input: CommandInput) => {
         const allocationId = said(input, ALLOCATION_KEYS.allocationId)
         return allocationId === undefined ? refusal(ALLOCATION_KEYS.allocationId, "Pick the match to undo") : { allocationId }
       },
-      run: (client, _serverId, body) => command<PaymentDetail>(client, `/payment-allocations/${(body as { allocationId: string }).allocationId}/reverse`).then(stamped),
+      run: (client, _serverId, body) => command<PaymentDetail>(client, `/payment-allocations/${body.allocationId}/reverse`).then(stamped),
       refused: (record) => `${record.name}'s match was not undone`,
       touches: [moduleKeyOf(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)],
-    },
+    }),
   },
 }
 

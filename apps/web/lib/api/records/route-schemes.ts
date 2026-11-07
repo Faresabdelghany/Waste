@@ -88,11 +88,9 @@ import { PLAN_AHEAD_DAYS_KEY, ROUTE_SCHEMES_MODULE } from "@/lib/data/route-sche
 
 import { create, get, listAll, patch, post, withQuery } from "../client"
 import {
-  NO_PRESENTATION,
   isLocalRefusal,
   moduleKeyOf,
   ofKind,
-  stampFacts,
   statusLabel,
   statusToken,
   typed,
@@ -559,12 +557,9 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
     const provider = sharedServiceProvider(groups)
     const lastDay = scheme.validTo === null ? "" : lastDayIn(scheme.validTo)
     return {
-      id: webIdOf(SCHEME_PREFIX, scheme.id),
       name: scheme.name,
       context: project?.name ?? "Project",
       status: statusLabel(scheme.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(scheme, context.now),
       value: "—",
       facts: {
         Project: project?.name ?? "Project",

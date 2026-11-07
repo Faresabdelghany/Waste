@@ -54,7 +54,7 @@ import { isSharedPointRecord } from "@/lib/data/properties"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn, todayIn } from "./clock"
 import { containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
@@ -326,7 +326,7 @@ export function containerMovements(client: Client, serverId: string): Promise<St
   return listAll<StockMovement>(client, `/containers/${serverId}/movements`)
 }
 
-export const containerAdapter: ResourceAdapter<ContainerResource> = {
+export const containerAdapter: ResourceAdapter<ContainerResource, unknown, ContainerWrite> = {
   prefix: CONTAINER_PREFIX,
   auditTable: "container",
   owns: ofKind(CONTAINER_PREFIX, ["Container"]),
@@ -376,12 +376,9 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     const place = containerPlace(placement, resource.placements, projectWebId, timezone, context)
     Object.assign(facts, place.facts)
     return {
-      id: webIdOf(CONTAINER_PREFIX, resource.id),
       name: resource.label,
       context: [typeName, project?.name].filter(Boolean).join(" · "),
       status,
-      ...NO_PRESENTATION,
-      ...stampFacts(resource, context.now),
       description: "A container of the registry; where it stands is its Stock Movement ledger's reading.",
       facts,
       projectIds: [projectWebId],
@@ -458,8 +455,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
   },
   // The container first, then its placement, then the row read back with its
   // placements, so what the write answers is what the next load reads.
-  update: async (client, serverId, body) => {
-    const write = body as ContainerWrite
+  update: async (client, serverId, write) => {
     let container: Container | undefined
     if (write.container !== undefined) container = await patch<Container>(client, `/containers/${serverId}`, write.container)
     if (write.placement !== undefined) await patch<ContainerServicePlacement>(client, `/placements/${write.placement.id}`, write.placement.patch)
@@ -532,13 +528,10 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
     if (movement.placementId !== null) facts.Placement = movement.placementId
     if (movement.correctsMovementId !== null) facts.Corrects = webIdOf(MOVEMENT_PREFIX, movement.correctsMovementId)
     return {
-      id: webIdOf(MOVEMENT_PREFIX, movement.id),
       name: `${kind} · ${container}`,
       context: `${from} → ${to}`,
       status: kind,
-      ...NO_PRESENTATION,
       value: shownOn(movement.occurredAt, timezone).slice(0, 10),
-      ...stampFacts(movement, context.now),
       description: "A Stock Movement of the container ledger, append-only.",
       facts,
       projectIds: [projectWebId],
@@ -547,7 +540,6 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
     }
   },
   toPatchBody: () => refusal("kind", APPEND_ONLY),
-  update: () => Promise.reject(new Error(APPEND_ONLY)),
 }
 
 /** Resources › Inventory: the ledger, after the containers its rows name. */

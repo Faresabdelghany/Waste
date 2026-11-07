@@ -26,7 +26,7 @@
 // the contract's own sentence — are lib/data/master-data.ts's, the same the
 // pane shows at the field before a submit; the adapter reads them again
 // here, so a body reaches the API only when it can be accepted.
-import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
+import type { ContainerType, ContainerTypeCreate, ContainerTypePatch, ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFraction } from "@waste/contracts/catalogue"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { DecommissionReason } from "@waste/contracts/stock"
 import type { VehicleType, VehicleTypeCreate } from "@waste/contracts/vehicle-types"
@@ -47,7 +47,7 @@ import {
 } from "@/lib/data/master-data"
 
 import { create, get, listAll, patch, put } from "../client"
-import { NO_PRESENTATION, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "./adapter"
+import { patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordFields, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -79,7 +79,7 @@ function lookupsOver(context: MappingContext): MasterDataLookups {
 }
 
 /** The record a resource of a kind is: identity and stamps here, the presentation the values give (lib/data/master-data.ts). */
-function recordOf(kind: MasterDataKind, resource: Resource, values: BusinessFormValues, context: MappingContext): BusinessRecord {
+function recordOf(kind: MasterDataKind, resource: Resource, values: BusinessFormValues, context: MappingContext): RecordFields {
   const details = MASTER_DATA_KIND_DETAILS[kind]
   const fields = masterDataFieldsOf(kind, values)
   const shown = presentMasterData(fields, lookupsOver(context))
@@ -89,8 +89,6 @@ function recordOf(kind: MasterDataKind, resource: Resource, values: BusinessForm
     context: shown.context,
     // No status on the wire: a row the API holds is in force, in the module's own word.
     status: "Effective",
-    ...NO_PRESENTATION,
-    ...stampFacts(resource, context.now),
     value: shown.value,
     description: `${details.label} of the company's master data.`,
     facts: shown.facts,
@@ -156,7 +154,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
 // Container types
 // ---------------------------------------------------------------------------
 
-export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
+export const containerTypeAdapter: ResourceAdapter<ContainerType, ContainerTypeCreate, ContainerTypePatch> = {
   prefix: CONTAINER_TYPE_PREFIX,
   auditTable: "container_type",
   owns: (record) => masterDataKindOf(record) === "container-type",
@@ -186,7 +184,7 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
 // Service frequencies
 // ---------------------------------------------------------------------------
 
-export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency> = {
+export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch> = {
   prefix: MASTER_DATA_KIND_DETAILS["service-frequency"].prefix,
   auditTable: "service_frequency",
   owns: (record) => masterDataKindOf(record) === "service-frequency",
@@ -270,7 +268,7 @@ function containerTypeServerIds(webIds: readonly string[], context: MappingConte
 /** Whether two sets of container types differ as sets: the form's order is the order they were ticked in, not a change. */
 const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",")
 
-export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
+export const vehicleTypeAdapter: ResourceAdapter<VehicleType, unknown, VehicleTypeWrite> = {
   prefix: MASTER_DATA_KIND_DETAILS["vehicle-type"].prefix,
   auditTable: "vehicle_type",
   owns: (record) => masterDataKindOf(record) === "vehicle-type",
@@ -325,8 +323,7 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
   // before a set the transport loses stays patched, and the store says it was
   // saved only in part, keeps the row as typed and reads the module again
   // (#263) — as for the planning adapters.
-  update: async (client, serverId, body) => {
-    const write = body as VehicleTypeWrite
+  update: async (client, serverId, write) => {
     let type: VehicleType | undefined
     if (write.type !== undefined) type = await patch<VehicleType>(client, `/vehicle-types/${serverId}`, write.type)
     if (write.containerTypeIds !== undefined) type = await put<VehicleType>(client, `/vehicle-types/${serverId}/container-types`, { containerTypeIds: write.containerTypeIds })
@@ -355,7 +352,7 @@ function fractionServerIds(webIds: readonly string[], context: MappingContext): 
   return ids
 }
 
-export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode> = {
+export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode, unknown, ContaminantCodeWrite> = {
   prefix: MASTER_DATA_KIND_DETAILS["contaminant-code"].prefix,
   auditTable: "contaminant_code",
   owns: (record) => masterDataKindOf(record) === "contaminant-code",
@@ -406,8 +403,7 @@ export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode> = {
   },
   create: (client, body) => create<ContaminantCode>(client, "/contaminant-codes", body).then((created) => created.body),
   // The code first, then the whole set through its own route, as a vehicle type's; two requests are two (#263).
-  update: async (client, serverId, body) => {
-    const write = body as ContaminantCodeWrite
+  update: async (client, serverId, write) => {
     let code: ContaminantCode | undefined
     if (write.code !== undefined) code = await patch<ContaminantCode>(client, `/contaminant-codes/${serverId}`, write.code)
     if (write.wasteFractionIds !== undefined) code = await put<ContaminantCode>(client, `/contaminant-codes/${serverId}/fractions`, { wasteFractionIds: write.wasteFractionIds })

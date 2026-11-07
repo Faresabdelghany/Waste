@@ -16,7 +16,7 @@ import { type BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"
 import { createTicketTeamRecord, NO_TEAM, PICK_A_HELD_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, updateTicketTeamRecord } from "../../data/ticket-teams"
 import { ticketListReaders, updateTicketRecord } from "../../data/tickets"
-import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -28,7 +28,7 @@ const NOW = new Date("2026-10-28T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-28T08:00:00.000Z", updatedAt: "2026-10-28T08:00:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
-const projectRecord = projectAdapter.toRecord(copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
+const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: NOTHING_RESOLVED, now: NOW })
 
 const oliviaId = "01a0d2a4-a280-7004-8000-000000000001"
 const larsId = "01a0d2a4-a280-7004-8000-000000000002"
@@ -49,8 +49,8 @@ const baseState: ServerRecordsState = new Map([
 ])
 const context: MappingContext = { resolve: resolverOver(baseState), now: NOW }
 
-const deskRecord = ticketTeamAdapter.toRecord(desk, context)
-const yardRecord = ticketTeamAdapter.toRecord(yard, context)
+const deskRecord = recordFrom(ticketTeamAdapter, desk, context)
+const yardRecord = recordFrom(ticketTeamAdapter, yard, context)
 const teamsState = loaded({ records: [deskRecord, yardRecord], serverIds: new Map([[deskRecord.id, deskId], [yardRecord.id, yardId]]) }, 1)
 const state: ServerRecordsState = new Map([...baseState, ["configure.templates", teamsState]])
 const withTeams: MappingContext = { ...context, resolve: resolverOver(state) }
@@ -136,23 +136,23 @@ describe("a ticket's team", () => {
   }
 
   test("reads as the team's name once the teams are loaded, its id chip before, and No team for none", () => {
-    const record = ticketAdapter.toRecord(ticket, withTeams)
+    const record = recordFrom(ticketAdapter, ticket, withTeams)
     assert.equal(record.facts.Team, "Container desk")
     assert.equal(record.submittedValues?.teamId, deskRecord.id)
-    assert.equal(ticketAdapter.toRecord(ticket, context).facts.Team, `team-${deskId}`)
-    const none = ticketAdapter.toRecord({ ...ticket, teamId: null }, withTeams)
+    assert.equal(recordFrom(ticketAdapter, ticket, context).facts.Team, `team-${deskId}`)
+    const none = recordFrom(ticketAdapter, { ...ticket, teamId: null }, withTeams)
     assert.equal(none.facts.Team, "No team")
     assert.equal(none.submittedValues?.teamId, NO_ONE)
   })
 
   test("the list's Team category reads it: with Open and Unassigned, the team's queue", () => {
     const readers = ticketListReaders(null)
-    assert.deepEqual(readers.teams?.(ticketAdapter.toRecord(ticket, withTeams)), ["Container desk"])
-    assert.deepEqual(readers.assignees?.(ticketAdapter.toRecord(ticket, withTeams)), ["Unassigned"])
+    assert.deepEqual(readers.teams?.(recordFrom(ticketAdapter, ticket, withTeams)), ["Container desk"])
+    assert.deepEqual(readers.assignees?.(recordFrom(ticketAdapter, ticket, withTeams)), ["Unassigned"])
   })
 
   test("the patch hands the case to another team or to none, and moves nothing when the team stands", () => {
-    const record = ticketAdapter.toRecord(ticket, withTeams)
+    const record = recordFrom(ticketAdapter, ticket, withTeams)
     const handed = ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { teamId: yardRecord.id }), withTeams)
     assert.deepEqual(handed, { teamId: yardId })
     assert.ok(TicketPatch.safeParse(handed).success)
@@ -160,7 +160,7 @@ describe("a ticket's team", () => {
     assert.equal(ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { priority: "none" }), withTeams), null)
     assert.deepEqual(ticketAdapter.toPatchBody?.(record, updateTicketRecord(record, { teamId: "team-unknown" }), withTeams), { path: "teamId", message: "Pick a team the API holds" })
     // A role that may not read the teams holds the ticket's team as its id chip, and an edit of something else moves nothing of it.
-    const chipped = ticketAdapter.toRecord(ticket, context)
+    const chipped = recordFrom(ticketAdapter, ticket, context)
     assert.deepEqual(ticketAdapter.toPatchBody?.(chipped, updateTicketRecord(chipped, { priority: "high" }), context), { priority: "high" })
   })
 })

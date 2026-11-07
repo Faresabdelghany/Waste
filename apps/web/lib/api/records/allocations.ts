@@ -33,7 +33,7 @@ import { type BusinessRecord, type ModuleLocation } from "@/lib/data/business-mo
 import { masterDataKindOf } from "@/lib/data/master-data"
 
 import { command, create, listAll } from "../client"
-import { NO_PRESENTATION, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, patchOf, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, wallClockIn } from "./clock"
 import { driverAdapter, vehicleAdapter } from "./fleet"
 import { depotAdapter, projectMoved, refusal } from "./places"
@@ -156,12 +156,9 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
     if (capacity !== "") facts["Required capacity"] = capacity
     if (allocation.note !== null) facts.Note = allocation.note
     return {
-      id: webIdOf(ALLOCATION_PREFIX, allocation.id),
       name: `${dayLabel(start)} · ${vehicle}`,
       context: `${driver ?? "No driver"} · ${start.slice(11)}–${end.slice(11)}`,
       status: statusLabel(allocation.status),
-      ...NO_PRESENTATION,
-      ...stampFacts(allocation, context.now),
       value: capacity,
       description: "A time-bounded reservation of a vehicle, and where it applies a driver, for expected work.",
       facts,
