@@ -198,21 +198,25 @@ export type BulkyBookingInput = {
   bookedBy: string | null
 }
 
-/** The agreement a booking names, as its rules read it on the day. */
-async function bookedAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "agreementId" | "day">): Promise<{ number: string; customerId: string; status: string; inForce: boolean }> {
+/**
+ * The agreement a booking names, as its rules read it on the day, held to
+ * the first of them: it is the customer's, an invalid `customerId` where it
+ * is another's.
+ */
+async function customersAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "day">): Promise<{ number: string; status: string; inForce: boolean }> {
   const [row] = await tx
     .select({ number: agreement.number, customerId: agreement.customerId, status: agreement.status, inForce: sql<boolean>`${validOn(agreement, input.day)}` })
     .from(agreement)
     .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.projectId, scope.projectId), eq(agreement.id, input.agreementId)))
     .limit(1)
   if (row === undefined) throw new Error(`a bulky booking's agreement ${input.agreementId} was proved the project's and then not there`)
+  if (row.customerId !== input.customerId) throw Refused.invalid("customerId", NOT_THE_CUSTOMERS)
   return row
 }
 
-/** The first of the agreement's rules alone, for a caller that judges every 400 of its body before any 409: the agreement is the customer's, an invalid `customerId` where it is another's. */
+/** The first of the agreement's rules alone, for a caller that judges every 400 of its body before any 409. */
 export async function requireCustomersAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "day">): Promise<void> {
-  const row = await bookedAgreement(tx, scope, input)
-  if (row.customerId !== input.customerId) throw Refused.invalid("customerId", NOT_THE_CUSTOMERS)
+  await customersAgreement(tx, scope, input)
 }
 
 /**
@@ -221,8 +225,7 @@ export async function requireCustomersAgreement(tx: Tx, scope: Scope, input: Pic
  * day (a conflict each, in that order).
  */
 export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pick<BulkyBookingInput, "customerId" | "agreementId" | "place" | "day">): Promise<void> {
-  const row = await bookedAgreement(tx, scope, input)
-  if (row.customerId !== input.customerId) throw Refused.invalid("customerId", NOT_THE_CUSTOMERS)
+  const row = await customersAgreement(tx, scope, input)
   if (row.status !== "active") throw Refused.conflict(agreementNotSigned(row.number, row.status))
   if (!row.inForce) throw Refused.conflict(agreementNotInForce(row.number, input.day))
   const [serving] = await tx

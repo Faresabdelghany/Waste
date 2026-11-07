@@ -50,7 +50,7 @@
 // `nextNumber` from here, so a route reads them where it always did. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
-import { Refused } from "@waste/domain/refusal"
+import { Refused, type Refusal } from "@waste/domain/refusal"
 import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-orm"
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
@@ -96,7 +96,7 @@ export async function refuseOverlap<T>(sentences: Readonly<Record<string, string
 }
 
 /** What a check the caller named refuses: the input whose value will not do, and why. */
-export type CheckRefusal = { input: string; sentence: string }
+export type CheckRefusal = Omit<Extract<Refusal, { reason: "invalid" }>, "reason">
 
 /**
  * The door one SQLSTATE further along: a check violation (23514) the caller

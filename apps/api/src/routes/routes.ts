@@ -405,7 +405,7 @@ async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date)
 }
 
 /** A route's own refusal in a bulk dispatch, by the rule every command over many rows reads (`refusalOf`): the status and the sentence its dispatch answers — a 404 for a route not here, a 409 for one its state refuses — or undefined for anything else, which fails the request. */
-function dispatchRefusalOf(error: unknown): { status: 404 | 409; detail: string } | undefined {
+export function dispatchRefusalOf(error: unknown): { status: 404 | 409; detail: string } | undefined {
   const refused = refusalOf(error)
   if (refused === undefined) return undefined
   const { status, detail } = refused.body

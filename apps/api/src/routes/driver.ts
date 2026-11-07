@@ -95,8 +95,8 @@
 // leaves nothing of itself behind and the batch goes on. Two races the lock
 // does not see are each one command's answer and never the batch's. Two
 // uploads of one batch meeting on a primary key — the receipt's, or that of
-// the row the command makes with the same id — is the fourth door, `replayed`
-// in routes/shared.ts: the savepoint rolls the loser's rows back and the first
+// the row the command makes with the same id — is the replay door, `replayed`
+// in @waste/db/commands/shared: the savepoint rolls the loser's rows back and the first
 // receipt is read and answered as `replayed`, a 200 and never a 409, because
 // here the key is the command and the command has already happened; the same
 // key held by a command that is not this driver's — another device minted the

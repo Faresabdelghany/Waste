@@ -31,7 +31,7 @@ import { defineJob, type JobContext } from "./definition"
 
 export const COLLECTION_REMINDERS_QUEUE = "messaging.collection-reminders"
 
-/** The customers one transaction queues. */
+/** The customers one fenced transaction queues: what commits together, so a run that fails partway keeps the reminders of the chunks before, and the next hour's run reads only the customers left. */
 export const REMINDER_CHUNK = 50
 
 export type CollectionRemindersData = {
