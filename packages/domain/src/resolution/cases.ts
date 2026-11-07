@@ -19,8 +19,8 @@
 // words, and the problems folded into it since, are copied onto the missed
 // collection; one a person made or works stays as the office left it, and
 // each case names the other. Where a stop has both open, its missed
-// collection is the case a later event folds into. A problem on the route
-// alone names no stop and belongs to no case but its own.
+// collection is the case a later event folds into. A problem on the route,
+// naming no stop, belongs to no case but its own.
 import { boundedDescription, type EventFacts, type TicketDraft } from "./from-event"
 import type { TicketKind, TicketStatus } from "./vocabulary"
 
@@ -41,7 +41,7 @@ export type CaseRule = {
 /** The rule for an event the consumer makes `draft` of; undefined for one that belongs to no case but its own. */
 export function caseRuleOf(facts: EventFacts, draft: TicketDraft): CaseRule | undefined {
   if (facts.kind === "command-rejected") return { by: "driver", id: facts.driverId, foldsInto: ["rejected-command"], supersedes: [] }
-  if (!("pickupId" in facts) || facts.pickupId === null) return undefined
+  if (!("pickupId" in facts)) return undefined
   if (draft.kind === "reported-problem") return { by: "pickup", id: facts.pickupId, foldsInto: [...STOP_CASE_KINDS], supersedes: [] }
   if (draft.kind === "missed-collection") return { by: "pickup", id: facts.pickupId, foldsInto: ["missed-collection"], supersedes: ["reported-problem"] }
   return undefined

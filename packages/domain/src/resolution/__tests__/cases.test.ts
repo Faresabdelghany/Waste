@@ -54,8 +54,8 @@ describe("caseRuleOf", () => {
     }
   })
 
-  test("a problem on the route alone names no stop and belongs to no case but its own", () => {
-    assert.equal(ruleOf(pickupEvent("pickup-problem-reported", { pickupId: null, containerId: null, propertyId: null, reason: "safety" })), undefined)
+  test("a problem on the route names no stop and belongs to no case but its own", () => {
+    assert.equal(ruleOf({ kind: "route-problem-reported", routeId: "route", reason: "safety", note: null, actualDriverId: "mads" }), undefined)
   })
 })
 

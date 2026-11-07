@@ -142,8 +142,8 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual((await events(pickupId)).map((event) => [event.kind, event.aggregateKind]), [["pickup-problem-reported", "pickup"]])
       const onRoute = valueOf(await applied(envelope("report-problem", route.id, { reason: "other", note: "Road closed at Parkvej" }, { occurredAt: at("07:01") })), "proof", ProofOfService)
       assert.deepEqual([onRoute.kind, onRoute.pickupId], ["problem", null])
-      const problemReported = (await events(route.id)).find((event) => event.kind === "pickup-problem-reported")
-      assert.ok(problemReported, "a route-level problem is the route's event")
+      const problemReported = (await events(route.id)).find((event) => event.kind === "route-problem-reported")
+      assert.ok(problemReported, "a route-level problem is the route's own kind of event")
       assert.equal(problemReported.aggregateKind, "route")
       // The payload is the route with the problem proof, so the reason and the note travel with the event the way a stop's do inside its pickup.
       const reported = problemReported.payload as { id: string; status: string; proofs: unknown[] }

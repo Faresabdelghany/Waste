@@ -26,7 +26,7 @@
 // sweep plans tomorrow through that many days ahead, 7 unless the office says
 // otherwise and at most 28, four weeks, since every run re-plans and asks a
 // Plan for each route it reshapes. The routing horizon keeps its own fixed
-// week (apps/worker's routing-horizon.ts), since it spends the routing quota.
+// week (apps/worker's routing/horizon.ts), since it spends the routing quota.
 import { addDays } from "../days"
 import type { ExistingRoute, GenerationWindow, RouteDecision } from "./generation"
 

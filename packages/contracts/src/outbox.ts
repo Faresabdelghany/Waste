@@ -4,15 +4,15 @@
 // — but the relay and its test read rows of this shape, and a consumer reads
 // `payload`, which is the wire resource as the write left it.
 //
-// Which resource that is depends on the kind and the aggregate the event is
-// about (@waste/domain/outbox/vocabulary), so `OutboxEvent` carries it as
-// JSON and `OUTBOX_PAYLOADS` says, kind by kind, what it is: the writer's
+// Which resource that is depends on the kind, and so on the aggregate the
+// event is about (@waste/domain/outbox/vocabulary), so `OutboxEvent` carries
+// it as JSON and `OUTBOX_PAYLOADS` says, kind by kind, what it is: the writer's
 // `emit` takes that schema's input, and a consumer reads the event's payload
 // through the same schema. A payload outlives the release that wrote it — an
 // event waits on its queue until a consumer works it — so a field a resource
 // gains later is read with a default where the payload may lack it (the
 // Pickup's own, and the route's hold and cancel reason here).
-import { aggregateOf, OUTBOX_AGGREGATES, OUTBOX_KINDS, type AggregateOf, type OutboxKind as Kind } from "@waste/domain/outbox/vocabulary"
+import { OUTBOX_AGGREGATES, OUTBOX_KINDS, type OutboxKind as Kind } from "@waste/domain/outbox/vocabulary"
 import * as z from "zod"
 
 import { Alert } from "./alerts"
@@ -50,7 +50,7 @@ export const OutboxEvent = z.object({
   aggregateId: Id,
   /** The command's instant, not the request's. */
   occurredAt: IsoDateTime,
-  /** The wire resource as the write left it: what it is, `OUTBOX_PAYLOADS` says by the kind and the aggregate. */
+  /** The wire resource as the write left it: what it is, `OUTBOX_PAYLOADS` says by the kind. */
   payload: z.json(),
   /** Stamped by the relay; null until it is. */
   publishedAt: IsoDateTime.nullable(),
@@ -64,7 +64,7 @@ const routeEventFields = { ...routeFields, heldAt: routeFields.heldAt.default(nu
 export const RouteEvent = z.object(routeEventFields)
 export type RouteEvent = z.infer<typeof RouteEvent>
 
-/** A problem reported on the route alone: the `Route` with the problem proof the command made. */
+/** A problem reported on the route, naming no stop: the `Route` with the problem proof the command made. */
 export const RouteProblem = z.object({ ...routeEventFields, proofs: z.array(ProofOfService) })
 export type RouteProblem = z.infer<typeof RouteProblem>
 
@@ -72,47 +72,46 @@ export type RouteProblem = z.infer<typeof RouteProblem>
 export const PickupEvent = Pickup.extend({ proofs: z.array(ProofOfService).optional() })
 export type PickupEvent = z.infer<typeof PickupEvent>
 
-/** Each kind's payload by the aggregate its event is about: that aggregate's wire resource as the write left it. */
+/** Each kind's payload: the wire resource of the aggregate its event is about, as the write left it. */
 export const OUTBOX_PAYLOADS = {
-  "route-dispatched": { route: RouteEvent },
-  "route-started": { route: RouteEvent },
-  "route-completed": { route: RouteEvent },
-  "route-cancelled": { route: RouteEvent },
-  "route-reassigned": { route: RouteEvent },
-  "pickup-completed": { pickup: PickupEvent },
-  "pickup-failed": { pickup: PickupEvent },
-  "pickup-skipped": { pickup: PickupEvent },
-  "pickup-problem-reported": { pickup: PickupEvent, route: RouteProblem },
-  "pickup-corrected": { pickup: PickupEvent },
-  "unload-recorded": { unload: Unload },
-  "command-rejected": { command: DriverCommandReceipt },
-  "ticket-opened": { ticket: Ticket },
-  "ticket-completed": { ticket: Ticket },
-  "ticket-rejected": { ticket: Ticket },
-  "invoice-issued": { invoice: InvoiceDetail },
-  "settlement-closed": { settlement: SettlementDetail },
-  "application-decided": { application: Application },
-  "site-visit-recorded": { "site-visit": SiteVisit },
-  "site-visit-voided": { "site-visit": SiteVisit },
-  "alert-raised": { alert: Alert },
-  "ticket-assigned": { ticket: Ticket },
-  "bulky-booking-booked": { "bulky-booking": BulkyBooking },
-  "bulky-booking-cancelled": { "bulky-booking": BulkyBooking },
-  "ticket-replied": { ticket: TicketEvent },
-  "weight-reviewed": { unload: WeightReview },
-  "scale-ticket-completed": { "scale-ticket": ScaleTicket },
-  "scale-ticket-voided": { "scale-ticket": ScaleTicket },
-} as const satisfies { [K in Kind]: { [A in AggregateOf<K>]: z.ZodType } }
+  "route-dispatched": RouteEvent,
+  "route-started": RouteEvent,
+  "route-completed": RouteEvent,
+  "route-cancelled": RouteEvent,
+  "route-reassigned": RouteEvent,
+  "route-problem-reported": RouteProblem,
+  "pickup-completed": PickupEvent,
+  "pickup-failed": PickupEvent,
+  "pickup-skipped": PickupEvent,
+  "pickup-problem-reported": PickupEvent,
+  "pickup-corrected": PickupEvent,
+  "unload-recorded": Unload,
+  "command-rejected": DriverCommandReceipt,
+  "ticket-opened": Ticket,
+  "ticket-completed": Ticket,
+  "ticket-rejected": Ticket,
+  "invoice-issued": InvoiceDetail,
+  "settlement-closed": SettlementDetail,
+  "application-decided": Application,
+  "site-visit-recorded": SiteVisit,
+  "site-visit-voided": SiteVisit,
+  "alert-raised": Alert,
+  "ticket-assigned": Ticket,
+  "bulky-booking-booked": BulkyBooking,
+  "bulky-booking-cancelled": BulkyBooking,
+  "ticket-replied": TicketEvent,
+  "weight-reviewed": WeightReview,
+  "scale-ticket-completed": ScaleTicket,
+  "scale-ticket-voided": ScaleTicket,
+} as const satisfies { [K in Kind]: z.ZodType }
 
-type PayloadSchema<K extends Kind, A extends AggregateOf<K>> = A extends keyof (typeof OUTBOX_PAYLOADS)[K] ? (typeof OUTBOX_PAYLOADS)[K][A] : never
+/** What an event of the kind carries, as a consumer reads it. */
+export type OutboxPayload<K extends Kind> = z.output<(typeof OUTBOX_PAYLOADS)[K]>
+/** What an event of the kind carries, as its writer hands it in. */
+export type OutboxPayloadInput<K extends Kind> = z.input<(typeof OUTBOX_PAYLOADS)[K]>
 
-/** What an event of the kind about the aggregate carries, as a consumer reads it. */
-export type OutboxPayload<K extends Kind, A extends AggregateOf<K> = AggregateOf<K>> = z.output<PayloadSchema<K, A>>
-/** What an event of the kind about the aggregate carries, as its writer hands it in. */
-export type OutboxPayloadInput<K extends Kind, A extends AggregateOf<K> = AggregateOf<K>> = z.input<PayloadSchema<K, A>>
-
-/** An event's payload read through its kind's schema for the aggregate it is about; throws where it is not that resource. */
-export function outboxPayloadOf<K extends Kind, A extends AggregateOf<K>>(kind: K, aggregate: A, payload: unknown): OutboxPayload<K, A> {
-  const schemas: Readonly<Record<string, z.ZodType>> = OUTBOX_PAYLOADS[kind]
-  return schemas[aggregateOf(kind, aggregate)].parse(payload) as OutboxPayload<K, A>
+/** An event's payload read through its kind's schema; throws where it is not that resource. */
+export function outboxPayloadOf<K extends Kind>(kind: K, payload: unknown): OutboxPayload<K> {
+  const schema: z.ZodType = OUTBOX_PAYLOADS[kind]
+  return schema.parse(payload) as OutboxPayload<K>
 }
