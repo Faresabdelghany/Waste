@@ -167,7 +167,7 @@ const ticketTypeBodies = resourceBodies(
     status: TicketTypeStatus.default("active"),
     isDefault: z.boolean().default(false).describe("Defaults to false: true makes it its kind's default in place of the one that was."),
   },
-  { keys: ["kind"], patch: { isDefault: z.literal(true).optional() } },
+  { createOnly: { kind: true }, patch: { isDefault: z.literal(true).optional() } },
 )
 
 export const TicketTypeCreate = ticketTypeBodies.create.refine(defaultIsActive, defaultTypeOffered)

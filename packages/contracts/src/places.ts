@@ -84,7 +84,7 @@ const warehouseBodies = resourceBodies(
     status: WarehouseStatus.default("active").describe("Defaults to active when absent: a warehouse is registered because stock already moves through it."),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId", "code"] },
+  { createOnly: { projectId: true, code: true } },
 )
 
 export const WarehouseCreate = warehouseBodies.create
@@ -131,7 +131,7 @@ const depotBodies = resourceBodies(
     status: DepotStatus.default("active").describe("Defaults to active when absent: a depot is registered because routes already leave from it."),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId", "code"] },
+  { createOnly: { projectId: true, code: true } },
 )
 
 export const DepotCreate = depotBodies.create.refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership).refine(hoursShapeGiven, bothHoursOrNeither)
@@ -186,7 +186,7 @@ const unloadingStationBodies = resourceBodies(
     notes: Paragraph.nullable().optional(),
     wasteFractionIds: WasteFractionIdsBody.default([]).describe("The fractions the station starts out accepting; none when absent."),
   },
-  { keys: ["code", "wasteFractionIds"] },
+  { createOnly: { code: true, wasteFractionIds: true } },
 )
 
 export const UnloadingStationCreate = unloadingStationBodies.create

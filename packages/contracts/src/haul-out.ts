@@ -117,7 +117,7 @@ const outboundLoadBodies = resourceBodies(
     note: Paragraph.optional(),
   },
   {
-    keys: ["projectId", "fromStationId", "toStationId", "wasteFractionId", "vehicleId", "serviceProviderId", "vehicleRegistration", "departedAt", "netKg", "grossKg", "tareKg"],
+    createOnly: { projectId: true, fromStationId: true, toStationId: true, wasteFractionId: true, vehicleId: true, serviceProviderId: true, vehicleRegistration: true, departedAt: true, netKg: true, grossKg: true, tareKg: true },
     patch: {
       outboundTicket: Label.nullable().optional(),
       haulCostMinor: NonNegativeInt.nullable().optional(),

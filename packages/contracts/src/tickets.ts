@@ -289,7 +289,7 @@ const ticketBodies = resourceBodies(
      */
     answerFromRecord: z.boolean().default(true).describe("Defaults to true: a missed collection the stop's record answers is answered, not opened."),
   },
-  { keys: ["projectId", "source", "occurredAt", "assigneeUserAccountId", "alertId", "answerFromRecord"], patch: { fieldValues: TicketFieldValuesPatch.optional() } },
+  { createOnly: { projectId: true, source: true, occurredAt: true, assigneeUserAccountId: true, alertId: true, answerFromRecord: true }, patch: { fieldValues: TicketFieldValuesPatch.optional() } },
 )
 
 export const TicketCreate = ticketBodies.create

@@ -122,7 +122,7 @@ const vehicleBodies = resourceBodies(
     notes: Paragraph.nullable().optional(),
     compartments: CompartmentsBody.default([]).describe("The compartments in position order, 1..n; a powered vehicle has at least one, a trailer may have none."),
   },
-  { keys: ["projectId", "kind", "compartments"] },
+  { createOnly: { projectId: true, kind: true, compartments: true } },
 )
 
 export const VehicleCreate = vehicleBodies.create
@@ -178,7 +178,7 @@ const driverBodies = resourceBodies(
     notes: Paragraph.nullable().optional(),
     shift: DriverShift.nullable().optional(),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const DriverCreate = driverBodies.create.refine((body) => providerShapeGiven(body.employment, body), providerWithProviderEmployment)

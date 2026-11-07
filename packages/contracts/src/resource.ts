@@ -51,10 +51,10 @@ export const somethingToChange = { message: SOMETHING_TO_CHANGE }
  * stored — nor the description the create gives it, which says what its
  * absence means there.
  */
-export type PatchField<Field extends z.core.SomeType> = Field extends z.ZodOptional<infer Inner> | z.ZodDefault<infer Inner> ? z.ZodOptional<Inner> : z.ZodOptional<Field>
+type PatchField<Field extends z.core.SomeType> = Field extends z.ZodOptional<infer Inner> | z.ZodDefault<infer Inner> ? z.ZodOptional<Inner> : z.ZodOptional<Field>
 
-type PatchShape<Fields extends z.core.$ZodShape, Key extends keyof Fields, Patch extends z.core.$ZodShape> = {
-  [Name in Exclude<keyof Fields, Key> | keyof Patch]: Name extends keyof Patch ? Patch[Name] : Name extends keyof Fields ? PatchField<Fields[Name]> : never
+type PatchShape<Fields extends z.core.$ZodShape, CreateOnly extends keyof Fields, Patch extends z.core.$ZodShape> = {
+  [Name in Exclude<keyof Fields, CreateOnly> | keyof Patch]: Name extends keyof Patch ? Patch[Name] : Name extends keyof Fields ? PatchField<Fields[Name]> : never
 }
 
 /** The field without the description a create gave it: a copy made from its definition has no parent, which is where zod's registry would find the description. */
@@ -76,23 +76,25 @@ export function holding<Schema extends z.ZodObject, Value>(schema: Schema, holds
  * A resource's two write bodies from the one list of fields a create takes:
  * the create strict, and the patch every field of it optional — a default
  * dropped, since a patch that leaves a field out keeps it — and at least one
- * given. `keys` are set once, by the create: a project, a code, the parent
- * the record hangs from. `patch` is what the patch takes otherwise: a field
- * it spells differently (a null that clears what a create leaves out) in the
- * create's place, and a field only a patch takes after the rest.
+ * given. `createOnly` masks the fields only a create takes, as zod's `omit`
+ * does: what is set once (a project, a code, the parent the record hangs
+ * from) and a set the create starts with that has a route of its own.
+ * `patch` is what the patch takes otherwise: a field it spells differently (a
+ * null that clears what a create leaves out) in the create's place, and a
+ * field only a patch takes after the rest.
  */
-export function resourceBodies<Fields extends z.core.$ZodShape, Key extends keyof Fields & string = never, Patch extends z.core.$ZodShape = Record<never, never>>(
+export function resourceBodies<Fields extends z.core.$ZodShape, CreateOnly extends keyof Fields & string = never, Patch extends z.core.$ZodShape = Record<never, never>>(
   fields: Fields,
-  options: { keys?: readonly Key[]; patch?: Patch } = {},
+  options: { createOnly?: { readonly [Name in CreateOnly]: true }; patch?: Patch } = {},
 ) {
-  const keys: ReadonlySet<string> = new Set(options.keys)
+  const createOnly: ReadonlySet<string> = new Set(Object.keys(options.createOnly ?? {}))
   const patch: z.core.$ZodShape = options.patch ?? {}
   const patchShape: Record<string, z.core.SomeType> = {}
-  for (const [name, field] of Object.entries(fields)) if (!keys.has(name)) patchShape[name] = patch[name] ?? patchField(field as z.ZodType)
+  for (const [name, field] of Object.entries(fields)) if (!createOnly.has(name)) patchShape[name] = patch[name] ?? patchField(field as z.ZodType)
   for (const [name, field] of Object.entries(patch)) if (!(name in patchShape)) patchShape[name] = field
   return {
     create: z.strictObject(fields),
-    patch: z.strictObject(patchShape as PatchShape<Fields, Key, Patch>).refine(changesSomething, somethingToChange),
+    patch: z.strictObject(patchShape as PatchShape<Fields, CreateOnly, Patch>).refine(changesSomething, somethingToChange),
   }
 }
 

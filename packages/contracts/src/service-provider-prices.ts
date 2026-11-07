@@ -64,7 +64,7 @@ const priceBodies = effectiveDatedBodies(
     unitPriceMinor: NonNegativeMinor.optional().describe("The bid when absent: a price starts at what was bid."),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["serviceAreaAssignmentId", "productId", "bidMinor", "unitPriceMinor", "validFrom"] },
+  { createOnly: { serviceAreaAssignmentId: true, productId: true, bidMinor: true, unitPriceMinor: true, validFrom: true } },
 )
 
 export const ServiceProviderPriceCreate = priceBodies.create

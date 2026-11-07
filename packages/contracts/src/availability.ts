@@ -34,7 +34,7 @@ export const VehicleUnavailability = effectiveDated(z.object({ ...stamped, proje
 export type VehicleUnavailability = z.infer<typeof VehicleUnavailability>
 
 /** `POST /driver-absences`: the driver, why, a note, the first day away and the first day back (absent while not known). A patch moves the period, the reason or the note; never whose it is. */
-const driverAbsenceBodies = effectiveDatedBodies({ driverId: Id, reason: DriverAbsenceReason, note: Paragraph.nullable().optional() }, { keys: ["driverId"] })
+const driverAbsenceBodies = effectiveDatedBodies({ driverId: Id, reason: DriverAbsenceReason, note: Paragraph.nullable().optional() }, { createOnly: { driverId: true } })
 
 export const DriverAbsenceCreate = driverAbsenceBodies.create
 export type DriverAbsenceCreate = z.infer<typeof DriverAbsenceCreate>
@@ -44,7 +44,7 @@ export const DriverAbsencePatch = driverAbsenceBodies.patch
 export type DriverAbsencePatch = z.infer<typeof DriverAbsencePatch>
 
 /** `POST /vehicle-unavailability`: the vehicle or trailer, why, a note, and the period. */
-const vehicleUnavailabilityBodies = effectiveDatedBodies({ vehicleId: Id, reason: VehicleUnavailabilityReason, note: Paragraph.nullable().optional() }, { keys: ["vehicleId"] })
+const vehicleUnavailabilityBodies = effectiveDatedBodies({ vehicleId: Id, reason: VehicleUnavailabilityReason, note: Paragraph.nullable().optional() }, { createOnly: { vehicleId: true } })
 
 export const VehicleUnavailabilityCreate = vehicleUnavailabilityBodies.create
 export type VehicleUnavailabilityCreate = z.infer<typeof VehicleUnavailabilityCreate>

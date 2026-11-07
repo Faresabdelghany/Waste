@@ -68,7 +68,7 @@ export type ServiceAreaAssignment = z.infer<typeof ServiceAreaAssignment>
  * the end, a null reopening the assignment; never the provider or the area,
  * since a transfer is a new assignment.
  */
-const assignmentBodies = effectiveDatedBodies({ serviceProviderId: Id, notes: Paragraph.nullable().optional() }, { keys: ["serviceProviderId", "validFrom"] })
+const assignmentBodies = effectiveDatedBodies({ serviceProviderId: Id, notes: Paragraph.nullable().optional() }, { createOnly: { serviceProviderId: true, validFrom: true } })
 
 export const ServiceAreaAssignmentCreate = assignmentBodies.create
 export type ServiceAreaAssignmentCreate = z.infer<typeof ServiceAreaAssignmentCreate>
@@ -125,7 +125,7 @@ const serviceAreaBodies = effectiveDatedBodies(
     wasteFractionIds: IdSet.default([]).describe("The waste fractions the award is for; none when absent."),
     assignment: FirstAssignment.optional(),
   },
-  { keys: ["projectId", "code", "planningAreaIds", "wasteFractionIds", "assignment"] },
+  { createOnly: { projectId: true, code: true, planningAreaIds: true, wasteFractionIds: true, assignment: true } },
 )
 
 export const ServiceAreaCreate = serviceAreaBodies.create

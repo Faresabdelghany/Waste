@@ -57,12 +57,12 @@ export function effectiveDated<Shape extends z.core.$ZodShape, Config extends z.
  * The create and the patch of an effective-dated resource (`resourceBodies`):
  * its fields, then the period, each body held to run forward. A patch that
  * names one bound is judged by the route against the stored row's other
- * (apps/api periods.ts); a patch that may not move the start names
- * `validFrom` among its keys.
+ * (apps/api periods.ts); a patch that may not move the start masks
+ * `validFrom` as the create's alone.
  */
-export function effectiveDatedBodies<Fields extends z.core.$ZodShape, Key extends keyof (Fields & typeof periodWritten) & string = never, Patch extends z.core.$ZodShape = Record<never, never>>(
+export function effectiveDatedBodies<Fields extends z.core.$ZodShape, CreateOnly extends keyof (Fields & typeof periodWritten) & string = never, Patch extends z.core.$ZodShape = Record<never, never>>(
   fields: Fields,
-  options: { keys?: readonly Key[]; patch?: Patch } = {},
+  options: { createOnly?: { readonly [Name in CreateOnly]: true }; patch?: Patch } = {},
 ) {
   const { create, patch } = resourceBodies({ ...fields, ...periodWritten }, options)
   return { create: holding(create, validityOrdered, endsAfterItStarts), patch: holding(patch, validityOrdered, endsAfterItStarts) }

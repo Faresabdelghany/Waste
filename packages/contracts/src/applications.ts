@@ -90,7 +90,7 @@ const applicationBodies = resourceBodies(
     subscriptionId: Id.nullable().optional(),
     statement: Paragraph,
   },
-  { keys: ["projectId", "customerId"] },
+  { createOnly: { projectId: true, customerId: true } },
 )
 
 export const ApplicationCreate = applicationBodies.create.refine(onePlace, onePlaceAt)

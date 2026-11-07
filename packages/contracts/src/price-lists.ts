@@ -77,7 +77,7 @@ const priceListBodies = effectiveDatedBodies(
     isDefault: z.boolean().default(false).describe("Defaults to false when absent: a named list an agreement is priced under, not the project's tariff."),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId", "code", "currency"] },
+  { createOnly: { projectId: true, code: true, currency: true } },
 )
 
 export const PriceListCreate = priceListBodies.create
@@ -144,7 +144,7 @@ const priceListRowBodies = effectiveDatedBodies(
     fromQuantity: PositiveInt.nullable().optional(),
     note: Paragraph.nullable().optional(),
   },
-  { keys: ["productId", "planningAreaId", "customerKind", "containerTypeId", "wasteFractionId", "customerId", "fromQuantity", "validFrom"] },
+  { createOnly: { productId: true, planningAreaId: true, customerKind: true, containerTypeId: true, wasteFractionId: true, customerId: true, fromQuantity: true, validFrom: true } },
 )
 
 export const PriceListRowCreate = priceListRowBodies.create

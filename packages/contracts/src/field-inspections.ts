@@ -80,7 +80,7 @@ const fieldInspectionBodies = resourceBodies(
     findings: z.array(InspectionFinding).max(INSPECTION_FINDINGS.length).default([]),
     note: Paragraph.nullable().optional(),
   },
-  { keys: ["containerId", "propertyId"] },
+  { createOnly: { containerId: true, propertyId: true } },
 )
 
 export const FieldInspectionCreate = fieldInspectionBodies.create.refine(oneSubject, { message: ONE_SUBJECT, path: ["containerId"] }).superRefine(findingsAgree)

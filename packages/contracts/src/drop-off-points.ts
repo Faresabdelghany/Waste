@@ -100,7 +100,7 @@ const dropOffPointBodies = resourceBodies(
     hours: Hours.default([]).describe("Its weekly windows; none when absent."),
     exceptions: Exceptions.default([]).describe("Its dated exceptions; none when absent."),
   },
-  { keys: ["projectId", "code", "wasteFractionIds", "hours", "exceptions"] },
+  { createOnly: { projectId: true, code: true, wasteFractionIds: true, hours: true, exceptions: true } },
 )
 
 export const DropOffPointCreate = dropOffPointBodies.create

@@ -21,7 +21,7 @@ const { create, patch } = resourceBodies(
     status: z.enum(["draft", "active"]).default("draft").describe("Defaults to draft when absent."),
     code: Label.describe("The reference a person quotes."),
   },
-  { keys: ["projectId"], patch: { notes: Paragraph.nullable().optional(), retired: z.boolean().optional() } },
+  { createOnly: { projectId: true }, patch: { notes: Paragraph.nullable().optional(), retired: z.boolean().optional() } },
 )
 
 describe("resourceBodies", () => {

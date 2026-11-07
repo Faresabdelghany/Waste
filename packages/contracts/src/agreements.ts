@@ -96,7 +96,7 @@ const agreementBodies = effectiveDatedBodies(
     priceListId: Id.nullable().optional(),
     serviceWindow: TimeWindow.nullable().optional(),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const AgreementCreate = agreementBodies.create
@@ -136,7 +136,7 @@ const subscriptionBodies = effectiveDatedBodies(
     sharedCollectionPointId: Id.nullable().optional(),
     quantity: Quantity.default(1).describe("Defaults to one when absent: one of the product at the place."),
   },
-  { keys: ["productId", "propertyId", "sharedCollectionPointId"] },
+  { createOnly: { productId: true, propertyId: true, sharedCollectionPointId: true } },
 )
 
 export const SubscriptionCreate = subscriptionBodies.create.refine((body) => placesNamed(body) === 1, { message: ONE_PLACE })

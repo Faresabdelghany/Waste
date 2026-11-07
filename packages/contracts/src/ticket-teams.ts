@@ -45,7 +45,7 @@ const teamBodies = resourceBodies(
     status: TeamStatus.default("active"),
     memberUserAccountIds: MemberIdsBody.default([]).describe("The accounts the team starts with; none when absent."),
   },
-  { keys: ["memberUserAccountIds"] },
+  { createOnly: { memberUserAccountIds: true } },
 )
 
 export const TeamCreate = teamBodies.create.refine((body) => eachOnce(body.memberUserAccountIds), eachMemberOnce)

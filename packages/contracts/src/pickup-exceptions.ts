@@ -58,7 +58,7 @@ const contaminantCodeBodies = resourceBodies(
     status: ContaminantCodeStatus.default("active"),
     wasteFractionIds: FractionIds.default([]),
   },
-  { keys: ["code", "wasteFractionIds"] },
+  { createOnly: { code: true, wasteFractionIds: true } },
 )
 
 export const ContaminantCodeCreate = contaminantCodeBodies.create
@@ -114,7 +114,7 @@ const pickupExceptionRuleBodies = effectiveDatedBodies(
     windowDays: WindowDays,
     ladder: Ladder,
   },
-  { keys: ["projectId", "outcome", "reason", "contaminantCodeId", "validFrom"] },
+  { createOnly: { projectId: true, outcome: true, reason: true, contaminantCodeId: true, validFrom: true } },
 )
 
 export const PickupExceptionRuleCreate = pickupExceptionRuleBodies.create.refine(reasonAndCode, reasonAndCodeAt)

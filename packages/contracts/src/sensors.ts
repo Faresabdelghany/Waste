@@ -106,7 +106,7 @@ const sensorBodies = resourceBodies(
     network: SensorNetwork,
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId"], patch: { status: SensorStatus.optional() } },
+  { createOnly: { projectId: true }, patch: { status: SensorStatus.optional() } },
 )
 
 export const SensorCreate = sensorBodies.create
@@ -122,7 +122,7 @@ const sensorPairingBodies = effectiveDatedBodies(
     fullThresholdPercent: ThresholdPercent.default(DEFAULT_FULL_THRESHOLD_PERCENT).describe(`Defaults to ${DEFAULT_FULL_THRESHOLD_PERCENT} when absent.`),
     booksEmptying: z.boolean().default(false).describe("Off when absent: a pairing books no stop until the office asks."),
   },
-  { keys: ["containerId", "validFrom"] },
+  { createOnly: { containerId: true, validFrom: true } },
 )
 
 export const SensorPairingCreate = sensorPairingBodies.create

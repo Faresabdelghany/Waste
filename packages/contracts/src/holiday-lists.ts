@@ -57,7 +57,7 @@ const holidayListBodies = resourceBodies(
     name: Label,
     holidays: HolidaysBody.default([]).describe("The days the list starts with; none when absent."),
   },
-  { keys: ["holidays"] },
+  { createOnly: { holidays: true } },
 )
 
 export const HolidayListCreate = holidayListBodies.create.refine((body) => noRepeatedDay(body.holidays), oneHolidayPerDay)

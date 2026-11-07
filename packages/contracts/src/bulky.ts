@@ -64,7 +64,7 @@ const bulkyScheduleBodies = effectiveDatedBodies(
     slotsPerDay: SlotsPerDay,
     productId: Id,
   },
-  { keys: ["projectId", "planningAreaId", "frequency", "serviceDays", "weekRotation", "holidayPolicy", "validFrom"] },
+  { createOnly: { projectId: true, planningAreaId: true, frequency: true, serviceDays: true, weekRotation: true, holidayPolicy: true, validFrom: true } },
 )
 
 export const BulkyScheduleCreate = bulkyScheduleBodies.create.refine(weekRotationShape, weekRotationWithFortnightly)
@@ -129,7 +129,7 @@ const bulkyBookingBodies = resourceBodies(
     items: Items,
     note: Paragraph.nullable().optional(),
   },
-  { keys: ["customerId", "agreementId", "propertyId", "sharedCollectionPointId", "wasteFractionId"] },
+  { createOnly: { customerId: true, agreementId: true, propertyId: true, sharedCollectionPointId: true, wasteFractionId: true } },
 )
 
 export const BulkyBookingCreate = bulkyBookingBodies.create.refine(onePlace, { message: ONE_PLACE, path: ["propertyId"] })

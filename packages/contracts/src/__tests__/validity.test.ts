@@ -47,7 +47,7 @@ describe("effectiveDated", () => {
 })
 
 describe("effectiveDatedBodies", () => {
-  const { create, patch } = effectiveDatedBodies({ name: Label }, { keys: ["name"] })
+  const { create, patch } = effectiveDatedBodies({ name: Label }, { createOnly: { name: true } })
 
   test("a create takes the start, required, and an end absent, null or a day", () => {
     assert.deepEqual(create.parse({ name: "A", validFrom: "2026-01-01" }), { name: "A", validFrom: "2026-01-01" })
@@ -65,7 +65,7 @@ describe("effectiveDatedBodies", () => {
   })
 
   test("a start the patch may not move is a key like any other", () => {
-    const { patch: endOnly } = effectiveDatedBodies({ note: Label.optional() }, { keys: ["validFrom"] })
+    const { patch: endOnly } = effectiveDatedBodies({ note: Label.optional() }, { createOnly: { validFrom: true } })
     assert.deepEqual(Object.keys(endOnly.shape), ["note", "validTo"])
     assert.deepEqual(refusal(endOnly.safeParse({ validFrom: "2026-01-01", note: "Moved" })).map((issue) => issue.path), [""])
   })

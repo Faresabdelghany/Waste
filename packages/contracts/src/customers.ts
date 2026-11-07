@@ -299,7 +299,7 @@ const propertyBodies = resourceBodies(
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   },
-  { keys: ["projectId", "parties"], patch: { addressId: AddressId.nullable().optional() } },
+  { createOnly: { projectId: true, parties: true }, patch: { addressId: AddressId.nullable().optional() } },
 )
 
 export const PropertyCreate = propertyBodies.create
@@ -356,7 +356,7 @@ const propertyGroupBodies = resourceBodies(
     status: PropertyGroupStatus.default("draft").describe("Defaults to draft when absent: a group is gathered before it is used."),
     members: GroupMembersBody.default([]).describe("The properties the group starts with; none when absent."),
   },
-  { keys: ["projectId", "members"] },
+  { createOnly: { projectId: true, members: true } },
 )
 
 export const PropertyGroupCreate = propertyGroupBodies.create.refine((body) => noRepeatedGroupMember(body.members), groupMembersNamedOnce)
@@ -427,7 +427,7 @@ const sharedCollectionPointBodies = resourceBodies(
     status: SharedCollectionPointStatus.default("draft").describe("Defaults to draft when absent: a point is planned before it takes waste."),
     members: PointMembersBody.default([]).describe("The properties the point starts with; none when absent."),
   },
-  { keys: ["projectId", "members"] },
+  { createOnly: { projectId: true, members: true } },
 )
 
 export const SharedCollectionPointCreate = sharedCollectionPointBodies.create.refine((body) => noRepeatedPointMember(body.members), pointMembersNamedOnce)

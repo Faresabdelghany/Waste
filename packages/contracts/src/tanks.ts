@@ -77,7 +77,7 @@ const tankInstallationBodies = effectiveDatedBodies(
     lastEmptiedOn: IsoDate.nullable().optional(),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["propertyId", "containerId", "validFrom"] },
+  { createOnly: { propertyId: true, containerId: true, validFrom: true } },
 )
 
 export const TankInstallationCreate = tankInstallationBodies.create

@@ -79,7 +79,7 @@ const maintenancePlanBodies = resourceBodies(
     lastDoneHours: NonNegativeInt.optional().describe("The engine hours then; required with an hours interval."),
   },
   {
-    keys: ["vehicleId"],
+    createOnly: { vehicleId: true },
     patch: {
       intervalDays: IntervalDays.nullable().optional(),
       intervalKm: IntervalKm.nullable().optional(),

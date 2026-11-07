@@ -100,7 +100,7 @@ const userBodies = resourceBodies(
     roleId: Id,
     ...access,
   },
-  { keys: ["email"] },
+  { createOnly: { email: true } },
 )
 
 export const UserInvite = userBodies.create.refine((body) => waysGiven(body) === 1, exactlyOneWay)
@@ -131,7 +131,7 @@ const roleBodies = resourceBodies(
     description: Label,
     grants: z.array(Grant).default([]).describe("Defaults to none when absent: a role that may do nothing until its matrix is set."),
   },
-  { keys: ["grants"] },
+  { createOnly: { grants: true } },
 )
 
 export const RoleCreate = roleBodies.create

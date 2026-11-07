@@ -52,6 +52,10 @@ describe("requiredDayWindow", () => {
     assert.deepEqual(refusal(Query.safeParse({ from: "2026-10-02", to: "2026-10-01" })), [{ path: "to", message: DAY_WINDOW_ORDERED }], "a backward window is told once")
   })
 
+  test("tells an end that is not a day its own issue and no second one: a window it cannot measure is the day's to refuse", () => {
+    assert.deepEqual(refusal(Query.safeParse({ from: "2026-10-01", to: "x" })).map((issue) => issue.path), ["to"])
+  })
+
   test("takes the day a context bounds further", () => {
     const Late = requiredDayWindow(z.object({}), { day: z.iso.date().refine((day) => day >= "2000-01-01", "Too early") })
     assert.deepEqual(refusal(Late.safeParse({ from: "1999-12-31", to: "2000-01-01" })), [{ path: "from", message: "Too early" }])

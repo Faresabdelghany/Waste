@@ -74,7 +74,7 @@ export type PlanningAreaBoundary = z.infer<typeof PlanningAreaBoundary>
  * move, since a version begins where the earlier one ended. Whether the new
  * end still meets the next version is the route's question.
  */
-const boundaryBodies = effectiveDatedBodies({ boundary: FlatPolygon }, { keys: ["validFrom"] })
+const boundaryBodies = effectiveDatedBodies({ boundary: FlatPolygon }, { createOnly: { validFrom: true } })
 
 export const PlanningAreaBoundaryCreate = boundaryBodies.create
 export type PlanningAreaBoundaryCreate = z.infer<typeof PlanningAreaBoundaryCreate>
@@ -96,7 +96,7 @@ const planningAreaBodies = resourceBodies(
     purpose: PlanningAreaPurpose,
     boundary: PlanningAreaBoundaryCreate.optional(),
   },
-  { keys: ["projectId", "code", "boundary"] },
+  { createOnly: { projectId: true, code: true, boundary: true } },
 )
 
 export const PlanningAreaCreate = planningAreaBodies.create

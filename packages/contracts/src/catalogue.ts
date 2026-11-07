@@ -113,7 +113,7 @@ const wasteFractionBodies = resourceBodies(
     densityKgPerCubicMetre: Density.nullable().optional(),
     hazardous: z.boolean().optional(),
   },
-  { keys: ["key"] },
+  { createOnly: { key: true } },
 )
 
 export const WasteFractionCreate = wasteFractionBodies.create.refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
@@ -179,7 +179,7 @@ const serviceFrequencyBodies = resourceBodies(
     weeksBetween: Count.nullable().optional(),
     daysBetween: Count.nullable().optional(),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const ServiceFrequencyCreate = serviceFrequencyBodies.create.refine((body) => serviceFrequencyShape(asStored(body)), oneCadence)
@@ -234,7 +234,7 @@ const productBodies = resourceBodies(
     vatPercent: VatPercent.nullable().optional(),
     freeDays: FreeDays.nullable().optional(),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const ProductCreate = productBodies.create.refine((body) => body.freeDays == null || body.unit === HIRE_UNIT, { message: FREE_DAYS_ARE_A_HIRES, path: ["freeDays"] })

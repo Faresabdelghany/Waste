@@ -31,7 +31,7 @@ export const CollectionCalendar = effectiveDated(
 export type CollectionCalendar = z.infer<typeof CollectionCalendar>
 
 /** A patch changes the name and the period; a null end reopens it. */
-const collectionCalendarBodies = effectiveDatedBodies({ projectId: Id, name: Label }, { keys: ["projectId"] })
+const collectionCalendarBodies = effectiveDatedBodies({ projectId: Id, name: Label }, { createOnly: { projectId: true } })
 
 export const CollectionCalendarCreate = collectionCalendarBodies.create
 export type CollectionCalendarCreate = z.infer<typeof CollectionCalendarCreate>

@@ -183,7 +183,7 @@ const decommissionReasonBodies = resourceBodies(
     name: Label,
     status: DecommissionReasonStatus.default("active"),
   },
-  { keys: ["code"] },
+  { createOnly: { code: true } },
 )
 
 export const DecommissionReasonCreate = decommissionReasonBodies.create

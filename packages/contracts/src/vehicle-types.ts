@@ -54,7 +54,7 @@ const vehicleTypeBodies = resourceBodies(
     description: Paragraph.nullable().optional(),
     containerTypeIds: ContainerTypeIdsBody.default([]).describe("The container types the vehicle type starts out servicing; none when absent, and then no typed rule matches through it."),
   },
-  { keys: ["key", "containerTypeIds"] },
+  { createOnly: { key: true, containerTypeIds: true } },
 )
 
 export const VehicleTypeCreate = vehicleTypeBodies.create.refine((body) => eachOnce(body.containerTypeIds), eachContainerTypeOnce)

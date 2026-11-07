@@ -86,7 +86,7 @@ const containerBodies = resourceBodies(
     ownership: ContainerOwnership.default("company").describe("Defaults to company when absent: a container the company bought is the common case."),
     notes: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const ContainerCreate = containerBodies.create
@@ -149,7 +149,7 @@ const placementBodies = resourceBodies(
     occurredAt: IsoDateTime.optional(),
     reference: Label.optional(),
   },
-  { keys: ["subscriptionId", "sharedCollectionPointId", "validFrom", "occurredAt", "reference"], patch: { validTo: IsoDate.optional() } },
+  { createOnly: { subscriptionId: true, sharedCollectionPointId: true, validFrom: true, occurredAt: true, reference: true }, patch: { validTo: IsoDate.optional() } },
 )
 
 export const ContainerServicePlacementCreate = placementBodies.create.refine(servedOnce, servedByOne)

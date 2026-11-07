@@ -82,7 +82,7 @@ const accessCredentialBodies = effectiveDatedBodies(
     agreementId: Id.nullable().optional(),
     propertyId: Id.nullable().optional(),
   },
-  { keys: ["projectId", "kind", "value", "customerId", "agreementId", "propertyId", "validFrom"] },
+  { createOnly: { projectId: true, kind: true, value: true, customerId: true, agreementId: true, propertyId: true, validFrom: true } },
 )
 
 export const AccessCredentialCreate = accessCredentialBodies.create.refine(oneHolder, oneHolderAt)

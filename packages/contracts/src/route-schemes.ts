@@ -197,7 +197,7 @@ const collectionGroupBody = {
  * the days, the provider, the vehicle and the driver; the source, the rule
  * and the list never move through one.
  */
-const collectionGroupBodies = resourceBodies(collectionGroupBody, { keys: ["stopSource", "rule", "containerIds"] })
+const collectionGroupBodies = resourceBodies(collectionGroupBody, { createOnly: { stopSource: true, rule: true, containerIds: true } })
 
 export const CollectionGroupCreate = collectionGroupBodies.create.refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
@@ -400,7 +400,7 @@ const routeSchemeBodies = effectiveDatedBodies(
     collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
     seasons: SchemeSeasons.default([]).describe("Defaults to none when absent: the scheme runs at its own cadence all year."),
   },
-  { keys: ["projectId"], patch: { collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional() } },
+  { createOnly: { projectId: true }, patch: { collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional() } },
 )
 
 export const RouteSchemeCreate = routeSchemeBodies.create

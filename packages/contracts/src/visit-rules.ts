@@ -63,7 +63,7 @@ const visitRuleBodies = effectiveDatedBodies(
     tradeThreshold: TradeThreshold.nullable().optional(),
     tradeWindowDays: TradeWindowDays.nullable().optional(),
   },
-  { keys: ["projectId", "validFrom"] },
+  { createOnly: { projectId: true, validFrom: true } },
 )
 
 export const VisitRuleCreate = visitRuleBodies.create.refine(tradeTogether, tradeTogetherAt)

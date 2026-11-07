@@ -72,7 +72,7 @@ const vehicleTareBodies = resourceBodies(
     customerId: Id.nullable().optional(),
     label: Label.nullable().optional(),
   },
-  { keys: ["projectId", "plate", "trailerPlate", "containerRef"], patch: { status: VehicleTareStatus.optional() } },
+  { createOnly: { projectId: true, plate: true, trailerPlate: true, containerRef: true }, patch: { status: VehicleTareStatus.optional() } },
 )
 
 export const VehicleTareCreate = vehicleTareBodies.create
@@ -160,7 +160,7 @@ const scaleTicketBodies = resourceBodies(
     weighedInAt: IsoDateTime.optional(),
     note: Paragraph.nullable().optional(),
   },
-  { keys: ["projectId", "unloadingStationId", "vehiclePlate", "trailerPlate", "containerRef", "party", "customerId", "agreementId", "grossKg", "weighedInAt"] },
+  { createOnly: { projectId: true, unloadingStationId: true, vehiclePlate: true, trailerPlate: true, containerRef: true, party: true, customerId: true, agreementId: true, grossKg: true, weighedInAt: true } },
 )
 
 export const ScaleTicketCreate = scaleTicketBodies.create.refine(partyShaped, { message: PARTY_SHAPE, path: ["customerId"] })

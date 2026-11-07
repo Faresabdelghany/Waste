@@ -71,7 +71,7 @@ const messageTemplateBodies = resourceBodies(
     body: TemplateBody,
     status: MessageTemplateStatus.default("active").describe("Defaults to active when absent: a template is written to be used."),
   },
-  { keys: ["projectId"] },
+  { createOnly: { projectId: true } },
 )
 
 export const MessageTemplateCreate = messageTemplateBodies.create.superRefine((template, context) => {
