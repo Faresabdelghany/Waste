@@ -41,7 +41,7 @@ import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { productAdapter } from "../records/pricing"
 import { customerAdapter } from "../records/registry"
-import { commandRecord, loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -240,7 +240,7 @@ describe("the billable events module", () => {
   test("moves by its two commands alone: no status on a patch, no edit", () => {
     const record = recordFrom(billableEventAdapter, ready, context())
     for (const status of ["Ready", "Blocked", "Cancelled", "Invoiced"]) assert.ok(!spellsStatus(eventsModule, record, status), status)
-    assert.deepEqual(billableEventAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }, context()), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
+    assert.deepEqual(keptRefusal(billableEventAdapter, record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
   })
 
   test("offers a command only where the API moves the event by it: reprice a blocked one, hold a ready one, release a held one, cancel any of them, never a reversal (#281, M14 of #293)", () => {
@@ -445,7 +445,7 @@ describe("the billing runs module", () => {
   test("is a record of what it did: no status move, no edit", () => {
     const record = recordFrom(billingRunAdapter, run, context())
     assert.ok(!spellsStatus(billingModule, record, "Failed"))
-    assert.deepEqual(billingRunAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, note: "Moved" } }, context()), { path: "note", message: "A billing run is a record of what it did: nothing on it changes" })
+    assert.deepEqual(keptRefusal(billingRunAdapter, record, { ...record, submittedValues: { ...record.submittedValues, note: "Moved" } }), { path: "note", message: "A billing run is a record of what it did: nothing on it changes" })
   })
 })
 
@@ -512,7 +512,7 @@ describe("the invoices module", () => {
     const credit = recordFrom(invoiceAdapter, { ...creditNote, createdAt: creditNote.recordedAt, updatedAt: creditNote.recordedAt }, context())
     const withCredit = new Map([...state, ["commercial.invoices", moduleOf([credit], [creditNote.id])]])
     assert.deepEqual(invoiceAdapter.toCreateBody!(made("invoices-credit-note-1", "Credit note", { creditsInvoiceId: credit.id, reason: "duplicate", scope: "all" }, "Issued"), context(withCredit)), { path: "creditsInvoiceId", message: "Pick an invoice the API holds: a credit note is not credited" })
-    assert.deepEqual(invoiceAdapter.toPatchBody?.(credit, { ...credit, name: "CN-1" }, context()), { path: "status", message: "An issued document never changes: correct an invoice with a credit note" })
+    assert.deepEqual(keptRefusal(invoiceAdapter, credit, { ...credit, name: "CN-1" }), { path: "status", message: "An issued document never changes: correct an invoice with a credit note" })
     assert.ok(!spellsStatus(invoicesModule, credit, "Credited"))
   })
 })

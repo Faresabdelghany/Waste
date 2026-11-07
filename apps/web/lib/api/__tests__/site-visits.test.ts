@@ -22,6 +22,7 @@ import { ACCESS_CREDENTIAL_COMMANDS, accessCredentialAdapter, BLOCK_CREDENTIAL, 
 import { LEDGER_KEPT, SITE_VISIT_COMMANDS, siteVisitAdapter, siteVisitsWindowFrom, VOID_VISIT } from "../records/site-visits"
 import { checkInVisit, readFrequentVisitors, readVisitSites, searchVisitAddresses } from "../site-visits"
 import { clientOver, json, scripted } from "./scripted-fetch"
+import { keptRefusal } from "../records/server-records"
 
 const NOW = new Date("2027-03-04T12:00:00Z")
 const STAMPS = { createdAt: "2027-03-01T09:00:00.000Z", updatedAt: "2027-03-01T09:30:00.000Z" }
@@ -171,7 +172,7 @@ describe("a site visit as a record", () => {
 
   test("takes no patch, and Void says why", async () => {
     const record = recordFrom(siteVisitAdapter, admitted, context)
-    const patch = siteVisitAdapter.toPatchBody?.(record, { ...record, name: "Another" }, context)
+    const patch = keptRefusal(siteVisitAdapter, record, { ...record, name: "Another" })
     assert.ok(isLocalRefusal(patch) && patch.message === LEDGER_KEPT)
     assert.equal(siteVisitAdapter.toCreateBody, undefined, "the check-in writes the ledger, never a form")
     const voidVisit = SITE_VISIT_COMMANDS[VOID_VISIT]

@@ -47,7 +47,7 @@ import {
 } from "@/lib/data/master-data"
 
 import { create, get, listAll, patch, put } from "../client"
-import { patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordFields, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -78,13 +78,12 @@ function lookupsOver(context: MappingContext): MasterDataLookups {
   }
 }
 
-/** The record a resource of a kind is: identity and stamps here, the presentation the values give (lib/data/master-data.ts). */
-function recordOf(kind: MasterDataKind, resource: Resource, values: BusinessFormValues, context: MappingContext): RecordFields {
+/** The fields a resource of a kind shows: the presentation the values give (lib/data/master-data.ts). */
+function recordOf(kind: MasterDataKind, values: BusinessFormValues, context: MappingContext): RecordFields {
   const details = MASTER_DATA_KIND_DETAILS[kind]
   const fields = masterDataFieldsOf(kind, values)
   const shown = presentMasterData(fields, lookupsOver(context))
   return {
-    id: webIdOf(details.prefix, resource.id),
     name: fields.name,
     context: shown.context,
     // No status on the wire: a row the API holds is in force, in the module's own word.
@@ -121,7 +120,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   statuses: undefined,
   list: (client) => listAll<WasteFraction>(client, "/waste-fractions"),
   toRecord: (fraction, context) =>
-    recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "", densityKgPerCubicMetre: spelled(fraction.densityKgPerCubicMetre), hazardous: fraction.hazardous }, context),
+    recordOf("waste-fraction", { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "", densityKgPerCubicMetre: spelled(fraction.densityKgPerCubicMetre), hazardous: fraction.hazardous }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("waste-fraction", record)
     if (refused) return refused
@@ -160,7 +159,7 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType, ContainerTypeC
   owns: (record) => masterDataKindOf(record) === "container-type",
   statuses: undefined,
   list: (client) => listAll<ContainerType>(client, "/container-types"),
-  toRecord: (type, context) => recordOf("container-type", type, { name: type.name, volumeLitres: spelled(type.volumeLitres), serviceSeconds: spelled(type.serviceSeconds) }, context),
+  toRecord: (type, context) => recordOf("container-type", { name: type.name, volumeLitres: spelled(type.volumeLitres), serviceSeconds: spelled(type.serviceSeconds) }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("container-type", record)
     if (refused) return refused
@@ -194,7 +193,6 @@ export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency, ServiceF
     const project = context.resolve.byServerId(frequency.projectId)
     return recordOf(
       "service-frequency",
-      frequency,
       {
         name: frequency.name,
         projectId: project?.id ?? webIdOf("project", frequency.projectId),
@@ -277,7 +275,6 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType, unknown, VehicleTy
   toRecord: (type, context) =>
     recordOf(
       "vehicle-type",
-      type,
       {
         name: type.name,
         key: type.key,
@@ -362,7 +359,6 @@ export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode, unknown, C
   toRecord: (code, context) =>
     recordOf(
       "contaminant-code",
-      code,
       {
         name: code.name,
         key: code.code,
@@ -419,7 +415,7 @@ export const decommissionReasonAdapter: ResourceAdapter<DecommissionReason> = {
   // The status is a field of the form, not a lifecycle move: retiring a reason is an edit.
   statuses: undefined,
   list: (client) => listAll<DecommissionReason>(client, "/decommission-reasons"),
-  toRecord: (reason, context) => recordOf("decommission-reason", reason, { name: reason.name, key: reason.code, status: reason.status }, context),
+  toRecord: (reason, context) => recordOf("decommission-reason", { name: reason.name, key: reason.code, status: reason.status }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("decommission-reason", record)
     if (refused) return refused

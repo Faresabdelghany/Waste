@@ -98,13 +98,6 @@ export const RUN_NEVER_CHANGES = "A billing run is a record of what it did: noth
 /** What an edit of an invoice or a credit note is told. */
 export const DOCUMENT_NEVER_CHANGES = "An issued document never changes: correct an invoice with a credit note"
 
-/** The key of the first typed value an edit moved — the field a refusal names — or `status` for a move of the status alone. */
-export function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
-  const was = before.submittedValues ?? {}
-  const is = after.submittedValues ?? {}
-  return Object.keys({ ...was, ...is }).find((key) => JSON.stringify(was[key]) !== JSON.stringify(is[key])) ?? "status"
-}
-
 /** A form's count: the number for a whole one of 1 or more, NaN for anything else. */
 function countOf(value: string | undefined): number {
   const number = Number(value)
@@ -367,7 +360,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent, BillableEventC
       ...(unitPriceMinor === undefined ? {} : { unitPriceMinor, overrideReason }),
     }
   },
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), EVENT_MOVES_BY_COMMAND),
+  kept: { message: EVENT_MOVES_BY_COMMAND },
   create: (client, body) => create<BillableEvent>(client, "/billable-events", body).then((created) => created.body),
   commands: {
     reprice: {
@@ -493,7 +486,7 @@ export const billingRunAdapter: ResourceAdapter<BillingRun, BillingRunCreate> = 
     }
   },
   toCreateBody: (record, context) => billingRunBody(record.submittedValues ?? {}, context.resolve),
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), RUN_NEVER_CHANGES),
+  kept: { message: RUN_NEVER_CHANGES },
   create: (client, body) => create<BillingRunDetail>(client, "/billing-runs", body).then((created) => created.body),
 }
 
@@ -629,7 +622,7 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource, CreditNoteWrite> =
     const write: CreditNoteWrite = { invoiceId, body: { reason, ...(note === undefined ? {} : { note }), lines } }
     return write
   },
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), DOCUMENT_NEVER_CHANGES),
+  kept: { message: DOCUMENT_NEVER_CHANGES },
   create: (client, write) => {
     return create<InvoiceDetail>(client, `/invoices/${write.invoiceId}/credit-notes`, write.body).then((created) => stamped(created.body))
   },

@@ -121,6 +121,28 @@ describe("the store's watcher", () => {
     assert.equal(stores.server.getSnapshot().get(PROPERTIES)?.problem, null)
   })
 
+  test("arms nothing once stopped: a read again still out when the watcher stops is not asked for again half a minute on", async (t) => {
+    const { client } = propertiesApi()
+    const stores = await storesAfterTheLoad(client)
+    const answers: ((response: Response) => void)[] = []
+    stores.client.set(clientOver((async () => new Promise<Response>((resolve) => answers.push(resolve))) as typeof fetch))
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: NOON })
+    const stop = watchReads(stores, { onReturn: () => () => {} })
+    renamed(stores, "Copenhagen Centre")
+    t.mock.timers.tick(1_000)
+    await settled()
+    assert.equal(answers.length, 1, "the read again is out")
+    stop()
+    answers[0](problem(400, "Not now"))
+    await settled()
+    assert.ok(stores.server.getSnapshot().get(PROPERTIES)?.problem, "the read again failed")
+    for (const step of [30_000, 1_000, 1_000]) {
+      t.mock.timers.tick(step)
+      await settled()
+    }
+    assert.equal(answers.length, 1, "never asked for again")
+  })
+
   test("tells a development build of a module read again and again for what it read, once", async (t) => {
     const loops: string[] = []
     const { api, stores } = await watching(t, { onLoop: (key) => loops.push(key) })

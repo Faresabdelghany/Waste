@@ -57,7 +57,7 @@ import {
   routesModule,
   routesWindowFrom,
 } from "../records/routes"
-import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -303,7 +303,7 @@ describe("a route", () => {
     assert.equal(routeAdapter.statuses, undefined, "a route's status moves by command alone")
     const record = recordFrom(routeAdapter, planned, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, plannedStartTime: "07:00" } }
-    assert.deepEqual(routeAdapter.toPatchBody?.(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops" })
+    assert.deepEqual(keptRefusal(routeAdapter, record, edited), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
     const moved = await writeRecord(clientOver(fetch), routesModule, current, { ...record, status: "Ready" }, options)

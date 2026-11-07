@@ -23,7 +23,7 @@ import { INVOICE_PREFIX, INVOICES_MODULE, isInvoiceDocument, isPaymentRecord, PA
 
 import { command, create, get, listAll } from "../client"
 import { commandOf, moduleKeyOf, said, typed, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
-import { amountRefusal, firstMoved, named, projectOf } from "./billing"
+import { amountRefusal, named, projectOf } from "./billing"
 import { refusal } from "./places"
 import { nameVia, typedReference } from "./references"
 
@@ -149,7 +149,7 @@ export const paymentAdapter: ResourceAdapter<PaymentResource, PaymentCreate> = {
       ...(note === undefined ? {} : { note }),
     }
   },
-  toPatchBody: (before, after) => refusal(firstMoved(before, after), PAYMENT_NEVER_CHANGES),
+  kept: { message: PAYMENT_NEVER_CHANGES },
   create: (client, body) => create<PaymentDetail>(client, "/payments", body).then((created) => stamped(created.body)),
   commands: {
     // The office's match: what remains of the payment, or part of it, to one invoice of its project.

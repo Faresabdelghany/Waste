@@ -9,7 +9,7 @@
 // A completed ticket of one of our own vehicles is its route's Unload, which
 // Weight Control reads again (`touches`). The words are
 // lib/data/scale-house.ts'.
-import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, ScaleTicketPatch, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "@waste/contracts/scale-house"
+import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, VehicleTare, VehicleTareCreate } from "@waste/contracts/scale-house"
 import { LITRES_PER_M3 } from "@waste/domain/finance/window"
 import { scaleTicketLabel } from "@waste/domain/numbering"
 import { FOUR_DIGITS_PATTERN, MUNICIPALITY_CODE_SHAPE } from "@waste/domain/registry/address"
@@ -228,7 +228,7 @@ export const SCALE_TICKET_COMMANDS: Readonly<Record<string, RecordCommand<ScaleT
   },
 }
 
-export const scaleTicketAdapter: ResourceAdapter<ScaleTicket, ScaleTicketCreate, ScaleTicketPatch> = {
+export const scaleTicketAdapter: ResourceAdapter<ScaleTicket, ScaleTicketCreate> = {
   prefix: SCALE_TICKET_PREFIX,
   auditTable: "scale_ticket",
   // A ticket Weigh in has just made is `scale-house-scale-ticket-<clock>` until the server answers: owned by its recordKind.
@@ -238,9 +238,8 @@ export const scaleTicketAdapter: ResourceAdapter<ScaleTicket, ScaleTicketCreate,
   list: (client: ApiClient) => listAll<ScaleTicket>(client, "/scale-tickets"),
   toRecord: toScaleTicketRecord,
   toCreateBody: toScaleTicketCreateBody,
-  toPatchBody: () => refusal("vehiclePlate", KEPT),
+  kept: { path: "vehiclePlate", message: KEPT },
   create: (client, body) => create<ScaleTicket>(client, "/scale-tickets", body).then((created) => created.body),
-  update: (client, serverId, body) => patch<ScaleTicket>(client, `/scale-tickets/${serverId}`, body),
   read: (client, serverId) => get<ScaleTicket>(client, `/scale-tickets/${serverId}`),
   commands: SCALE_TICKET_COMMANDS,
 }
@@ -319,7 +318,7 @@ export const VEHICLE_TARE_COMMANDS: Readonly<Record<string, RecordCommand<Vehicl
   },
 }
 
-export const vehicleTareAdapter: ResourceAdapter<VehicleTare, VehicleTareCreate, VehicleTarePatch> = {
+export const vehicleTareAdapter: ResourceAdapter<VehicleTare, VehicleTareCreate> = {
   prefix: VEHICLE_TARE_PREFIX,
   auditTable: "vehicle_tare",
   owns: ofKind(VEHICLE_TARE_PREFIX, [VEHICLE_TARE_RECORD_KIND]),
@@ -328,9 +327,8 @@ export const vehicleTareAdapter: ResourceAdapter<VehicleTare, VehicleTareCreate,
   list: (client: ApiClient) => listAll<VehicleTare>(client, "/vehicle-tares"),
   toRecord: toVehicleTareRecord,
   toCreateBody: toVehicleTareCreateBody,
-  toPatchBody: () => refusal("plate", "A tare's plates and container are what it is: re-weigh or retire it from its details"),
+  kept: { path: "plate", message: "A tare's plates and container are what it is: re-weigh or retire it from its details" },
   create: (client, body) => create<VehicleTare>(client, "/vehicle-tares", body).then((created) => created.body),
-  update: (client, serverId, body) => patch<VehicleTare>(client, `/vehicle-tares/${serverId}`, body),
   read: (client, serverId) => get<VehicleTare>(client, `/vehicle-tares/${serverId}`),
   commands: VEHICLE_TARE_COMMANDS,
 }

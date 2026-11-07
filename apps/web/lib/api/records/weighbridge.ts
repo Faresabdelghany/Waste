@@ -88,7 +88,7 @@ export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {
       submittedValues: { status: ticket.status, ...(ticket.unmatchedReason === null ? {} : { unmatchedReason: ticket.unmatchedReason }), ...(ticket.unloadId === null ? {} : { unloadId: webIdOf("unload", ticket.unloadId) }) },
     }
   },
-  toPatchBody: () => refusal("status", "A weighbridge ticket is the weighbridge's: match it to a route or dismiss it"),
+  kept: { path: "status", message: "A weighbridge ticket is the weighbridge's: match it to a route or dismiss it" },
   commands: {
     [MATCH_TICKET]: {
       toBody: (input, _record, context) => {

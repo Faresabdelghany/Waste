@@ -125,7 +125,7 @@ export const siteVisitAdapter: ResourceAdapter<SiteVisit> = {
   statuses: undefined,
   list: (client: ApiClient) => listAll<SiteVisit>(client, "/site-visits", { from: siteVisitsWindowFrom() }),
   toRecord: toSiteVisitRecord,
-  toPatchBody: () => refusal("note", LEDGER_KEPT),
+  kept: { path: "note", message: LEDGER_KEPT },
   read: (client, serverId) => get<SiteVisit>(client, `/site-visits/${serverId}`),
   commands: SITE_VISIT_COMMANDS,
 }

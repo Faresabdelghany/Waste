@@ -28,7 +28,6 @@ import type { ModuleLocation } from "@/lib/data/business-modules"
 import { get, listAll } from "../client"
 import { ofKind, typed, type Client, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, timeOn } from "./clock"
-import { refusal } from "./places"
 import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */
@@ -150,7 +149,7 @@ export const liveRouteAdapter: ResourceAdapter<LiveRoute> = {
   statuses: undefined,
   list: (client) => listAll<LiveRoute>(client, "/routes/live"),
   toRecord: toLiveRecord,
-  toPatchBody: () => refusal("", READ_ONLY),
+  kept: { path: "", message: READ_ONLY },
 }
 
 /** Route Studio › Live Operations: the routes running or due today, after the routes whose rows they are. */

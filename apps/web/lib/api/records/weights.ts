@@ -205,7 +205,7 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
     const { routeId, body } = posted as { routeId: string; body: unknown }
     return create<Unload>(client, `/routes/${routeId}/unloads`, body).then((created) => stamped(created.body))
   },
-  toPatchBody: () => refusal("status", "An unload is reviewed, never edited: approve it, reject it, or correct it"),
+  kept: { path: "status", message: "An unload is reviewed, never edited: approve it, reject it, or correct it" },
   commands: {
     approve: {
       toBody: (input) => {

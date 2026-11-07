@@ -22,7 +22,7 @@ import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { customerStatement, importBankLines, PAYMENT_NEVER_CHANGES, paymentAdapter, paymentsModule, wireLinesOf } from "../records/payments"
 import { customerAdapter } from "../records/registry"
-import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-12T12:00:00Z")
@@ -124,7 +124,7 @@ describe("the payments module", () => {
 
   test("is never edited: a wrong match is undone by its reversal", () => {
     const record = recordFrom(paymentAdapter, { ...payment, createdAt: payment.recordedAt, updatedAt: payment.recordedAt }, context())
-    assert.deepEqual(paymentAdapter.toPatchBody?.(record, { ...record, submittedValues: { ...record.submittedValues, paidOn: "2026-10-13" } }, context()), { path: "paidOn", message: PAYMENT_NEVER_CHANGES })
+    assert.deepEqual(keptRefusal(paymentAdapter, record, { ...record, submittedValues: { ...record.submittedValues, paidOn: "2026-10-13" } }), { path: "paidOn", message: PAYMENT_NEVER_CHANGES })
   })
 
   test("is matched to an invoice by command, all that remains where no amount is given, and its match undone by the allocation's reversal; both re-read the invoices", async () => {

@@ -179,8 +179,14 @@ export type ResourceAdapter<R extends Resource, Create = unknown, Patch = unknow
   toRecord(resource: R, context: MappingContext): RecordFields
   /** The body of `POST`, or a refusal naming the field the form left wrong; absent for a kind the API does not create (the company). */
   toCreateBody?(record: BusinessRecord, context: MappingContext): Create | LocalRefusal
-  /** The body of `PATCH` for what moved between the two, or null when nothing the wire carries did; a refusal names a field. */
+  /** The body of `PATCH` for what moved between the two, or null when nothing the wire carries did; a refusal names a field. Absent for a kind the API never patches (`kept`). */
   toPatchBody?(before: BusinessRecord, after: BusinessRecord, context: MappingContext): Patch | null | LocalRefusal
+  /**
+   * Why a kind the API never patches — a ledger row, a row that moves by its
+   * commands — refuses an edit: the sentence, at the field it names, else at
+   * the first field the edit moved (`keptRefusal`, server-records.ts).
+   */
+  kept?: { message: string; path?: string }
   /** The collection the resource is created in; `Location` is read there. */
   create?(client: Client, body: Create): Promise<R>
   /** The row's own patch route; absent for a kind that moves by its commands alone. */
@@ -250,7 +256,7 @@ export const ofKind = (prefix: string, recordKinds: readonly string[]) => (recor
   hasPrefix(prefix)(record) || (record.recordKind !== undefined && recordKinds.includes(record.recordKind))
 
 /** What the wire does not carry, the same for every resource: nothing here is read back into a write body. */
-export const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
+const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
 
 /** `active` → `Active`, `service-contact` → `Service contact`: a wire token as a status or a fact reads. */
 export function statusLabel(token: string): string {
@@ -289,7 +295,7 @@ export function relativeDay(iso: string, now = new Date()): string {
 }
 
 /** The stamps every server record shows the same way. */
-export function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updated" | "freshness" | "source"> {
+function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updated" | "freshness" | "source"> {
   const updated = relativeDay(resource.updatedAt, now)
   return { updated, freshness: updated, source: "Waste API" }
 }

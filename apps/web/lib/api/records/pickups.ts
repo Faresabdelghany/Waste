@@ -236,7 +236,7 @@ export const pickupAdapter: ResourceAdapter<Pickup> = {
   // The routes' window (routes.ts): a stop is read with its route.
   list: (client) => listAll<Pickup>(client, "/pickups", { from: routesWindowFrom() }),
   toRecord: toPickupRecord,
-  toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
+  kept: { path: "", message: CHANGED_BY_COMMANDS },
   commands: PICKUP_COMMANDS,
 }
 

@@ -31,7 +31,7 @@ import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REMOVE_PICKUP } from "../records/pickups"
 import { routeAdapter, routesWindowFrom } from "../records/routes"
-import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -278,7 +278,7 @@ describe("a pickup", () => {
     assert.equal(pickupAdapter.toCreateBody, undefined)
     assert.equal(pickupAdapter.statuses, undefined)
     const record = recordFrom(pickupAdapter, second, context())
-    assert.deepEqual(pickupAdapter.toPatchBody?.(record, { ...record, name: "Stop 9" }, context()), { path: "", message: "A pickup is changed by its commands: remove it from a route that has not started, or correct its outcome" })
+    assert.deepEqual(keptRefusal(pickupAdapter, record, { ...record, name: "Stop 9" }), { path: "", message: "A pickup is changed by its commands: remove it from a route that has not started, or correct its outcome" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, second.id]]) }, 1)
     assert.equal((await writeRecord(clientOver(fetch), pickupsModule, current, { ...record, status: "Completed" }, options)).kind, "refused")

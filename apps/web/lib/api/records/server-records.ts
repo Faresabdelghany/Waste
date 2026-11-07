@@ -80,7 +80,7 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, PartialWrite, recordFrom, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, PartialWrite, recordFrom, statusToken, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn } from "./clock"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed" | "kept-on-api"
@@ -795,6 +795,19 @@ export type WriteOutcome =
    */
   | { kind: "landed"; recordId: string; serverId?: string; problem: Problem }
 
+/** The first field an edit moved, by the form's keys; the status where it moved none of them. */
+function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
+  const was = before.submittedValues ?? {}
+  const is = after.submittedValues ?? {}
+  return Object.keys({ ...was, ...is }).find((key) => JSON.stringify(was[key]) !== JSON.stringify(is[key])) ?? "status"
+}
+
+/** Why an edit of a kind the API never patches is refused: its adapter's sentence at the field it names, else at the first field the edit moved; the store's own sentence for a kind that says none. */
+export function keptRefusal(adapter: Pick<ResourceAdapter<Resource>, "prefix" | "kept">, before: BusinessRecord, after: BusinessRecord): LocalRefusal {
+  const kept = adapter.kept
+  return { path: kept?.path ?? firstMoved(before, after), message: kept?.message ?? `A ${adapter.prefix} is not changed here` }
+}
+
 /** The 400 a local refusal stands for, in the API's own shape, so a caller reads one. */
 export function refusalProblem(refusal: { path: string; message: string }): Problem {
   return { type: "about:blank", title: "Bad Request", status: 400, detail: "The request body is invalid", errors: [{ path: refusal.path, message: refusal.message }] }
@@ -885,7 +898,7 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     if (before.status !== record.status && !spellsStatus(module, record, record.status)) {
       return { kind: "refused", recordId: record.id, problem: statusRefusal(adapter, record.status) }
     }
-    if (adapter.toPatchBody === undefined) return { kind: "refused", recordId: record.id, problem: genericProblem(400, `A ${adapter.prefix} is not changed here`) }
+    if (adapter.toPatchBody === undefined) return { kind: "refused", recordId: record.id, problem: refusalProblem(keptRefusal(adapter, before, record)) }
     const body = adapter.toPatchBody(before, record, context)
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }

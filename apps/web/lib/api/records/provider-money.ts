@@ -361,7 +361,7 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
     if (lastDay === undefined) return refusal("validTo", "A settlement settles a period: give its last day")
     return { serviceAreaAssignmentId: assignment.serverId, validFrom, validTo: firstDayOut(lastDay) }
   },
-  toPatchBody: () => refusal("status", SETTLEMENT_MOVES_BY_COMMAND),
+  kept: { path: "status", message: SETTLEMENT_MOVES_BY_COMMAND },
   create: (client, body) => create<SettlementDetail>(client, "/settlements", body).then((created) => created.body),
   commands: Object.fromEntries(
     SETTLEMENT_COMMANDS.map((name) => [

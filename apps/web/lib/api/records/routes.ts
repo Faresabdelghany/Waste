@@ -664,7 +664,7 @@ export const routeAdapter: ResourceAdapter<Route> = {
     return { ...body, ...(note === undefined ? {} : { note }), ...(sameDay ? { acceptSameDay: true } : {}) }
   },
   create: async (client, body) => (await create<RouteDetail>(client, "/routes", body)).body,
-  toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
+  kept: { path: "", message: CHANGED_BY_COMMANDS },
   commands: ROUTE_COMMANDS,
 }
 

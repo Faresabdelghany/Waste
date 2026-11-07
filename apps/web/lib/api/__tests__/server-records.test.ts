@@ -562,6 +562,18 @@ describe("writing a record", () => {
     assert.equal(adapterFor(module(adapter()), record("elsewhere-1", "X")), undefined)
   })
 
+  test("a kind the API never patches refuses every edit in its own sentence, at the field it names or the first the edit moved, and sends nothing", async () => {
+    const current = loaded({ records: [record("t-1", "One", { submittedValues: { note: "a" } })], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const edited = record("t-1", "One", { submittedValues: { note: "b" } })
+    const commandOnly: ResourceAdapter<Thing> = { ...adapter(), toPatchBody: undefined, update: undefined, kept: { path: "", message: "A thing moves by its commands" } }
+    const refused = await writeRecord(client, module(commandOnly), current, edited, options())
+    assert.deepEqual(refused.kind === "refused" ? refused.problem.errors : undefined, [{ path: "", message: "A thing moves by its commands" }])
+    const sayingNone: ResourceAdapter<Thing> = { ...commandOnly, kept: undefined }
+    const unsaid = await writeRecord(client, module(sayingNone), current, edited, options())
+    assert.deepEqual(unsaid.kind === "refused" ? unsaid.problem.errors : undefined, [{ path: "note", message: "A t is not changed here" }], "the store's own sentence, at the field the edit moved")
+    assert.deepEqual((commandOnly as ReturnType<typeof thingAdapter>).calls, [])
+  })
+
   test("a kind the API does not create is refused as such", async () => {
     const readOnly: ResourceAdapter<Thing> = { ...adapter(), toCreateBody: undefined, create: undefined }
     const outcome = await writeRecord(client, module(readOnly), loaded({ records: [], serverIds: new Map() }, 1), record("t-mint", "X"), options())

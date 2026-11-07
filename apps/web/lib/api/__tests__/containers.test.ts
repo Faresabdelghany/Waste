@@ -23,7 +23,7 @@ import { containerAdapter, containerMovements, containersModule, INVENTORY_MODUL
 import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, keptRefusal, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -514,7 +514,7 @@ describe("the inventory module", () => {
   test("is append-only: nothing is created or edited here, and a correction is the container's adjustment", async () => {
     const movement = recordFrom(stockMovementAdapter, ledgerRow(receipt), context(resolverOver(withContainers)))
     assert.equal(stockMovementAdapter.toCreateBody, undefined)
-    assert.deepEqual(stockMovementAdapter.toPatchBody?.(movement, { ...movement, name: "Edited" }, context()), { path: "kind", message: "The ledger is append-only: a wrong movement is corrected by adjusting its container" })
+    assert.deepEqual(keptRefusal(stockMovementAdapter, movement, { ...movement, name: "Edited" }), { path: "kind", message: "The ledger is append-only: a wrong movement is corrected by adjusting its container" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [movement], serverIds: new Map([[movement.id, receipt.id]]) }, 1)
     const outcome = await writeRecord(clientOver(fetch), inventoryModule, current, { ...movement, id: "resources-stock-movement-1", recordKind: "Stock movement" }, { state, now: NOW })

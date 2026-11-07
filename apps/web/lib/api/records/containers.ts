@@ -539,7 +539,7 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
       submittedValues: { containerId: webIdVia(context, CONTAINER_PREFIX, movement.containerId), kind: movement.kind },
     }
   },
-  toPatchBody: () => refusal("kind", APPEND_ONLY),
+  kept: { path: "kind", message: APPEND_ONLY },
 }
 
 /** Resources › Inventory: the ledger, after the containers its rows name. */

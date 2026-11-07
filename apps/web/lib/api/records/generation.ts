@@ -17,10 +17,9 @@ import type { GenerationRun } from "@waste/contracts/generation"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
 import { get, listPage, type ApiClient } from "../client"
-import type { Problem } from "../problem"
 import { PICKUPS_MODULE } from "./pickups"
 import { ROUTES_MODULE } from "./routes"
-import { problemOfError } from "../problem"
+import { problemOfError, type Problem } from "../problem"
 
 /** How often an open run is read again. */
 export const RUN_READ_EVERY_MS = 3_000

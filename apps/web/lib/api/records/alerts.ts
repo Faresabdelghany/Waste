@@ -181,7 +181,7 @@ export const alertAdapter: ResourceAdapter<Alert> = {
   list: (client) => listAll<Alert>(client, "/alerts"),
   toRecord: toAlertRecord,
   toCreateBody: toAlertCreateBody,
-  toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
+  kept: { path: "", message: CHANGED_BY_COMMANDS },
   create: (client, body) => create<Alert>(client, "/alerts", body).then((created) => created.body),
   // A ticket opened from the alert links it on the server's account: the alert is read back.
   read: (client, serverId) => get<Alert>(client, `/alerts/${serverId}`),

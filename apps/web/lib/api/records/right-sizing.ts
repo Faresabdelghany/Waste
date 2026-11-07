@@ -87,7 +87,7 @@ export const rightSizingAdapter: ResourceAdapter<RightSizingProposal> = {
   list: (client) => listAll<RightSizingProposal>(client, "/right-sizing-proposals"),
   read: (client, serverId) => get<RightSizingProposal>(client, `/right-sizing-proposals/${serverId}`),
   toRecord: toProposalRecord,
-  toPatchBody: () => refusal("status", "A proposal is the run's: approve it or dismiss it"),
+  kept: { path: "status", message: "A proposal is the run's: approve it or dismiss it" },
   commands: {
     [APPROVE_PROPOSAL]: {
       toBody: (input, record, context) => {

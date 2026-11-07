@@ -574,7 +574,10 @@ export type WatchOptions = {
  */
 export function watchReads(context: RecordStoreContext, { onReturn = pageReturns, onLoop = warnOfLoop }: WatchOptions = {}): () => void {
   const timers = new Set<ReturnType<typeof setTimeout>>()
+  // Once stopped, nothing is armed again: a read again still out when the watcher stops settles into nothing.
+  let stopped = false
   const after = (ms: number, run: () => void) => {
+    if (stopped) return undefined
     const timer = setTimeout(() => {
       timers.delete(timer)
       run()
@@ -582,7 +585,7 @@ export function watchReads(context: RecordStoreContext, { onReturn = pageReturns
     timers.add(timer)
     return timer
   }
-  const due = new Map<string, ReturnType<typeof setTimeout>>()
+  const due = new Map<string, ReturnType<typeof setTimeout> | undefined>()
   const asked = new Map<string, ReturnType<typeof readSourcesNow>>()
   const sent = new Map<string, number[]>()
   const counted = (key: string) => {
@@ -646,6 +649,7 @@ export function watchReads(context: RecordStoreContext, { onReturn = pageReturns
   const stopReturns = onReturn(() => check(true))
   check(true)
   return () => {
+    stopped = true
     unsubscribe()
     stopReturns()
     for (const timer of timers) clearTimeout(timer)
